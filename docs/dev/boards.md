@@ -4233,6 +4233,10 @@ The claim:
   the claim when it breaks the whole Ready rule (size, card format, outcomes
   and checks), with the words of `move CARD ready`. A card in any other column
   is not held to it.
+- A take that Pomb refuses because another agent holds the card adds
+  `To take it over, run dev board take CARD --from NAME.` to the refusal, with
+  the card's id prefix and the holder. A card with no holder, and a take with
+  `--from`, print no such line.
 
 The output:
 

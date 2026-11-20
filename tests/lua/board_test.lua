@@ -9681,6 +9681,26 @@ testing.test("take loses to another live owner and leaves no loop running", func
     testing.eq(fs.exists(state_file(home)), false)
     testing.eq(read(root, "calls"):find("/owner/renew", 1, true), nil)
     testing.eq(read(root, "calls"):find("/owner/release", 1, true), nil)
+    testing.eq(out:find("To take it over", 1, true), nil, out)
+end)
+
+testing.test("take names --from when another agent holds the card", function()
+    local export = export_with_first_card({
+        description = PLANNED_TEXT,
+        subtasks = SUBTASKS,
+        fields = READY_FIELDS,
+        holder = "dotfiles/other",
+        lease_expires_at = "2999-01-01T00:00:00Z",
+    })
+    local root, home = sandbox({ export = export })
+    assert(fs.write(root .. "/owner_held", ""))
+    local out, code = dev(root, home, { "board", "take", "11111111-a" })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("task owned by dotfiles/other until 2999-01-01T00:00:00Z", 1, true), out)
+    testing.ok(
+        out:find("To take it over, run dev board take 11111111 --from dotfiles/other.", 1, true),
+        out
+    )
 end)
 
 testing.test("take refuses an epic with an open child and grabs nothing", function()

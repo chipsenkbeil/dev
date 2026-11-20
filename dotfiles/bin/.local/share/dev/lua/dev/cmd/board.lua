@@ -4913,6 +4913,16 @@ local function take_once(backend, args)
     end
     local result, fence = claim_card(backend, card, name)
     if not fence then
+        if rival and result.message and result.message:find("owned by", 1, true) then
+            result.message = result.message
+                .. " To take it over, run dev board take "
+                .. short
+                .. " "
+                .. FROM_FLAG
+                .. " "
+                .. card.claimant
+                .. "."
+        end
         return result
     end
     if card.column == stages.ready then
