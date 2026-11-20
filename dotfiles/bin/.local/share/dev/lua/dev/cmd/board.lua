@@ -3349,6 +3349,10 @@ function commands.check(backend, args)
     if not before then
         return failure(message)
     end
+    local stack = land.stack_note(backend.root)
+    if stack then
+        verb.note(stack)
+    end
     local empty = not opts.expect_fail and check.empty_refusal(backend.root)
     if empty then
         return failure(empty)

@@ -466,6 +466,18 @@ local function parent_on_trunk(root)
     return count_lines(parents) == 1 and on_trunk == parents
 end
 
+---Say that the change may be a stack, which land refuses.
+---@param root string the project root
+---@return string? note a sentence when the parent is off trunk, else nil
+function M.stack_note(root)
+    if vcs.backend(root) ~= vcs.JJ or parent_on_trunk(root) then
+        return nil
+    end
+    return "The parent of this change is not on trunk. "
+        .. "Land refuses it when that parent is unlanded, so "
+        .. "squash the commits into one change before the final check."
+end
+
 local function base_revset(commit)
     return string.format("heads((::%s-) ~ (%s))", commit, BARE_LINK)
 end
