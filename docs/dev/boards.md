@@ -438,8 +438,8 @@ What it lays out:
     every run, one line each.
   - Pomb lets only an admin token change this. With the lead token a 403
     prints ``Left the colours enabled as they are, since this token may not
-    change them. Run `dev board init --admin`.``, and the rest of the run
-    still happens.
+    change them. This token may not change this board, so run `dev board init
+    --admin`.``, and the rest of the run still happens.
 - size words off card names: a trailing `(yellow)`, `(green)`, `(blue)`,
   `(red)` or `(red, split)` comes off the name.
   - If the card is still white, has no colour, or has the colour that was the
@@ -468,8 +468,8 @@ What it lays out:
   - A local board has no label settings and says nothing.
   - Pomb needs `labels.manage` for the `PUT`. When a 403 refuses it, `init`
     prints ``Left the highlighted labels as they are, since this token may not
-    change them. Run `dev board init --admin`.``, and the rest of the run still
-    happens.
+    change them. This token may not change this board, so run `dev board init
+    --admin`.``, and the rest of the run still happens.
 
 The board's name comes from `[board]`. In a project with no `[board]`
 section, `--name N` names the board and `init` appends the section to
@@ -4781,8 +4781,9 @@ Details by step:
   on every run, with the card's colour untouched.
 - admin-only colours: Pomb keeps `enabled` admin-only. A 403 on it prints one
   line, ``Left the colours enabled as they are, since this token may not change
-  them. Run `dev board init --admin`.`` The run carries on instead of exiting
-  1.
+  them. This token may not change this board, so run `dev board init --admin`.``
+  The library names the reason and the verb writes the hint. The run carries on
+  instead of exiting 1.
 
 Labels are plain strings on cards in Pomb, so `needs:lead` and `needs:human`
 need no creation.

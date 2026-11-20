@@ -31,6 +31,10 @@ M.HIGHLIGHTS = {
     { label = board.NEEDS_PLANNER, color = "#7a5ab0" },
 }
 
+---Why `run` stopped, when the message alone does not say.
+---@enum dev.board.init.Reason
+M.Reason = { NEEDS_ADMIN = "needs_admin" }
+
 local DEFAULT_VALUE = "white"
 local LIMIT_GROUP_CARDS = 4
 
@@ -73,12 +77,11 @@ local function needs_admin(message)
     return message:lower():find(NEEDS_ADMIN, 1, true) ~= nil
 end
 
-local function advise(message)
-    local ADMIN_HINT = ". This token may not change this board, so run `dev board init --admin`."
+local function stop(message)
     if needs_admin(message) then
-        return (message:gsub("%.$", "")) .. ADMIN_HINT
+        return nil, message, M.Reason.NEEDS_ADMIN
     end
-    return message
+    return nil, message
 end
 
 local function by_name(columns)
@@ -347,8 +350,8 @@ local function limits_step(layout, state, say)
 end
 
 local function enabled_step(layout, state, say)
-    local LEFT_ENABLED = "Left the colours enabled as they are, since this token may not change them. "
-        .. "Run `dev board init --admin`."
+    local LEFT_ENABLED =
+        "Left the colours enabled as they are, since this token may not change them."
     local wanted = {}
     for _, swatch in ipairs(M.PALETTE) do
         wanted[swatch.value] = true
@@ -359,7 +362,7 @@ local function enabled_step(layout, state, say)
                 local ok, message = layout:set_color(color.id, { enabled = enable })
                 if not ok then
                     if needs_admin(message) then
-                        state.warn(LEFT_ENABLED)
+                        state.warn(LEFT_ENABLED, M.Reason.NEEDS_ADMIN)
                         return true
                     end
                     return nil, message
@@ -374,12 +377,12 @@ local function enabled_step(layout, state, say)
 end
 
 local function highlights_step(layout, state, say)
-    local LEFT_HIGHLIGHTS = "Left the highlighted labels as they are, since this token may not change them. "
-        .. "Run `dev board init --admin`."
+    local LEFT_HIGHLIGHTS =
+        "Left the highlighted labels as they are, since this token may not change them."
     local added, message = layout:add_highlights(M.HIGHLIGHTS)
     if added == nil then
         if needs_admin(message) then
-            state.warn(LEFT_HIGHLIGHTS)
+            state.warn(LEFT_HIGHLIGHTS, M.Reason.NEEDS_ADMIN)
             return true
         end
         return nil, message
@@ -509,7 +512,7 @@ end
 ---@field stages? dev.board.Stages the column set to lay out, the standard names when nil
 ---@field lanes? string[] the lanes the board config lists, an empty list when nil
 ---@field warn_first_lane? boolean whether to warn when the first lane is unlisted, false when nil
----@field warn? fun(line: string) prints one warning line, standard error when nil
+---@field warn? fun(line: string, reason: dev.board.init.Reason?) prints one warning line, standard error when nil, with the reason when the token may not change the board
 
 ---Bring a board to the standard, saying each change as it is made.
 ---
@@ -520,6 +523,7 @@ end
 ---@param opts dev.board.Opts? what to lay out and how, the defaults when nil
 ---@return integer? changes how many changes were made
 ---@return string? message why it stopped, with the changes made so far already said
+---@return dev.board.init.Reason? reason `NEEDS_ADMIN` when the token may not change the board
 function M.run(layout, name, say, opts)
     opts = opts or {}
     local state = {
@@ -531,13 +535,13 @@ function M.run(layout, name, say, opts)
     }
     local found, message = layout:find()
     if found == nil then
-        return nil, advise(message)
+        return stop(message)
     end
     if not found then
         local ok, template
         ok, template = layout:create()
         if not ok then
-            return nil, advise(template)
+            return stop(template)
         end
         say(
             "created board "
@@ -549,7 +553,7 @@ function M.run(layout, name, say, opts)
     local layout_state
     layout_state, message = layout:read()
     if not layout_state then
-        return nil, advise(message)
+        return stop(message)
     end
     state.columns, state.colors, state.cards, state.has_checks =
         layout_state.columns, layout_state.colors, layout_state.cards, layout_state.has_checks
@@ -571,7 +575,7 @@ function M.run(layout, name, say, opts)
         local ok
         ok, message = step(layout, state, say)
         if not ok then
-            return nil, advise(message)
+            return stop(message)
         end
     end
     return state.changes

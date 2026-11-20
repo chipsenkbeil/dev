@@ -4976,6 +4976,25 @@ function M.backend_at(root)
     return M.open(settings({ root = root }))
 end
 
+---Write why the layout change stopped.
+---@param message string the backend's message
+---@param reason dev.board.init.Reason? what `init.run` named
+---@return string message the sentence
+local function init_refusal(message, reason)
+    if reason == init.Reason.NEEDS_ADMIN then
+        return (message:gsub("%.$", ""))
+            .. ". This token may not change this board, so run `dev board init --admin`."
+    end
+    return sentence(message)
+end
+
+---Print one warning line from the layout change, with the hint when the token may not change the board.
+---@param line string the warning
+---@param reason dev.board.init.Reason? what `init.run` named
+local function init_warning(line, reason)
+    verb.note(reason and init_refusal(line, reason) or line)
+end
+
 local function init_local(ctx, flags, admin)
     if admin then
         verb.usage_error(ctx, "--admin applies to a Pomb board, not a local one")
@@ -4991,14 +5010,15 @@ local function init_local(ctx, flags, admin)
     if not backend then
         verb.die(message)
     end
-    local changes
-    changes, message = init.run(backend, found.name, verb.say, {
+    local changes, reason
+    changes, message, reason = init.run(backend, found.name, verb.say, {
         stages = backend.stages,
         lanes = board_setup.config_lanes(ctx),
         warn_first_lane = false,
+        warn = init_warning,
     })
     if not changes then
-        verb.die(sentence(message))
+        verb.die(init_refusal(message, reason))
     end
     print(
         changes == 0
@@ -5102,17 +5122,18 @@ M.handlers["board init"] = function(ctx)
         local ok
         ok, message = backend:admin()
         if not ok then
-            verb.die(sentence(message))
+            verb.die(message)
         end
     end
-    local changes
-    changes, message = init.run(backend, name, verb.say, {
+    local changes, init_reason
+    changes, message, init_reason = init.run(backend, name, verb.say, {
         stages = backend.stages,
         lanes = board_setup.config_lanes(ctx),
         warn_first_lane = true,
+        warn = init_warning,
     })
     if not changes then
-        verb.die(sentence(message))
+        verb.die(init_refusal(message, init_reason))
     end
     if missing then
         local written, failed = board_setup.write_section(ctx.root, name)

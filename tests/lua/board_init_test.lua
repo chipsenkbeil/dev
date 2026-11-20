@@ -280,17 +280,18 @@ local function names(columns)
 end
 
 local function run(layout)
-    local lines, warnings = {}, {}
-    local changes, message = init.run(layout, "demo", function(line)
+    local lines, warnings, warned = {}, {}, {}
+    local changes, message, reason = init.run(layout, "demo", function(line)
         if line ~= UNCHANGED_LINE then
             lines[#lines + 1] = line
         end
     end, {
-        warn = function(line)
+        warn = function(line, warning_reason)
             warnings[#warnings + 1] = line
+            warned[#warned + 1] = warning_reason
         end,
     })
-    return changes, message, lines, warnings
+    return changes, message, lines, warnings, reason, warned
 end
 
 local function color(layout, value)
@@ -438,14 +439,14 @@ testing.test("a token that may not change the highlights leaves them and carries
     function layout:add_highlights()
         return nil, "pomb answered 403 permission_denied"
     end
-    local changes, message, lines, warnings = run(layout)
+    local changes, message, lines, warnings, _, warned = run(layout)
     testing.eq(message, nil)
     testing.eq(changes, 0)
     testing.eq(lines, {})
     testing.eq(warnings, {
-        "Left the highlighted labels as they are, since this token may not change them. "
-            .. "Run `dev board init --admin`.",
+        "Left the highlighted labels as they are, since this token may not change them.",
     })
+    testing.eq(warned, { init.Reason.NEEDS_ADMIN })
 end)
 
 testing.test("a failed highlight write that is not a refusal ends the run", function()
@@ -600,19 +601,35 @@ testing.test("split_size takes the five trailing size words and nothing else", f
     testing.eq(init.split_size("A blue"), nil)
 end)
 
-testing.test(
-    "a refused change says to use --admin and stops with the changes so far said",
-    function()
-        local layout = fake_layout({ columns = template_columns() })
-        function layout:set_color()
-            return nil, "Board unavailable: Pomb answered 403: insufficient_scope."
-        end
-        local changes, message, lines = run(layout)
-        testing.eq(changes, nil)
-        testing.ok(message:find("run `dev board init --admin`", 1, true), message)
-        testing.eq(lines[2], "added column Icebox")
+testing.test("run returns the needs-admin reason on a 403", function()
+    local layout = fake_layout({ columns = template_columns() })
+    function layout:set_color()
+        return nil, "Board unavailable: Pomb answered 403: insufficient_scope."
     end
-)
+    local lines = {}
+    local changes, message, reason = init.run(layout, "demo", function(line)
+        if line ~= UNCHANGED_LINE then
+            lines[#lines + 1] = line
+        end
+    end, { warn = function() end })
+    testing.eq(changes, nil)
+    testing.eq(message, "Board unavailable: Pomb answered 403: insufficient_scope.")
+    testing.eq(reason, init.Reason.NEEDS_ADMIN)
+    testing.eq(lines[2], "added column Icebox")
+end)
+
+testing.test("run names no reason for a failure that is not a refusal", function()
+    local layout = fake_layout({ columns = template_columns() })
+    function layout:set_color()
+        return nil, "Pomb answered 500."
+    end
+    local changes, message, reason = init.run(layout, "demo", function() end, {
+        warn = function() end,
+    })
+    testing.eq(changes, nil)
+    testing.eq(message, "Pomb answered 500.")
+    testing.eq(reason, nil)
+end)
 
 local PERMISSIONS = '[{"name":"cards.read","presets":["read","work","lead","admin"]},'
     .. '{"name":"boards.write","presets":["lead","admin"]},'
@@ -733,8 +750,26 @@ case "$last" in
     esac
     ;;
 */api/boards/board-1) body=$(cat "$ROOT/detail.json") ;;
-*/colors) body=$(cat "$ROOT/colors.json") ;;
-*/label-settings) body=$(cat "$ROOT/labels.json") ;;
+*/colors)
+    body=$(cat "$ROOT/colors.json")
+    if [ -f "$ROOT/colors.fail" ]; then
+        line=$(cat "$ROOT/colors.fail")
+        status=${line%%|*}
+        body=${line#*|}
+    fi
+    ;;
+*/label-settings)
+    body=$(cat "$ROOT/labels.json")
+    case " $* " in
+    *" -X PUT "*)
+        if [ -f "$ROOT/labels.fail" ]; then
+            line=$(cat "$ROOT/labels.fail")
+            status=${line%%|*}
+            body=${line#*|}
+        fi
+        ;;
+    esac
+    ;;
 */api/tasks) body='{"id":"33333333-cccc"}' ;;
 */fields)
     case " $* " in
@@ -1026,6 +1061,36 @@ testing.test("a token the approver lowered is refused", function()
     testing.eq(code, 1)
     testing.ok(out:find("The approved token has the work scope, init needs admin.", 1, true), out)
     testing.eq(writes(root), 0)
+end)
+
+testing.test("init tells a token that may not change the board to use --admin", function()
+    local root, home, tmp = sandbox()
+    assert(fs.write(root .. "/colors.fail", '403|{"code":"insufficient_scope","message":"no"}\n'))
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    testing.eq(code, 1)
+    testing.ok(
+        out:find(
+            ". This token may not change this board, so run `dev board init --admin`.\n",
+            1,
+            true
+        ),
+        out
+    )
+end)
+
+testing.test("init writes the hint after the warning when the highlights are refused", function()
+    local root, home, tmp = sandbox({ labels = '{"highlights":[],"show_all":false,"added":[]}' })
+    assert(fs.write(root .. "/labels.fail", '403|{"code":"insufficient_scope","message":"no"}\n'))
+    local out = dev(root, home, tmp, { "board", "init" })
+    testing.ok(
+        out:find(
+            "Left the highlighted labels as they are, since this token may not change them."
+                .. " This token may not change this board, so run `dev board init --admin`.\n",
+            1,
+            true
+        ),
+        out
+    )
 end)
 
 testing.test("init without a lead token or --admin says what to set", function()
@@ -1427,13 +1492,15 @@ testing.test("a token that may not enable colours leaves them and carries on", f
         end
         return set_color(self, id, fields)
     end
-    local changes, message, lines, warnings = run(layout)
+    local changes, message, lines, warnings, _, warned = run(layout)
     testing.eq(message, nil)
     testing.ok(changes > 0)
-    testing.eq(#warnings, 1)
-    testing.ok(warnings[1]:find("Run `dev board init --admin`", 1, true), warnings[1])
+    testing.eq(warnings, {
+        "Left the colours enabled as they are, since this token may not change them.",
+    })
+    testing.eq(warned, { init.Reason.NEEDS_ADMIN })
     for _, line in ipairs(lines) do
-        testing.eq(line:find("Run `dev board init --admin`", 1, true), nil, line)
+        testing.eq(line:find("dev board init --admin", 1, true), nil, line)
     end
     testing.eq(color(layout, "orange").enabled, true)
     testing.eq(color(layout, "white").is_default, true)
@@ -1631,16 +1698,15 @@ testing.test(
                     .. "this token lacks the boards.write permission "
                     .. "on every board; use a token that has it."
         end
-        local _, message = run(layout)
-        testing.ok(message:find("run `dev board init --admin`", 1, true), message)
-        testing.eq(message:find("..", 1, true), nil, message)
+        local _, _, _, _, reason = run(layout)
+        testing.eq(reason, init.Reason.NEEDS_ADMIN)
         function layout:set_color()
             return nil,
                 "Board unavailable: this token has the boards.write permission but is not assigned "
                     .. "to board b; add the board to the token"
         end
-        _, message = run(layout)
-        testing.eq(message:find("--admin", 1, true), nil)
+        _, _, _, _, reason = run(layout)
+        testing.eq(reason, nil)
     end
 )
 
@@ -1943,9 +2009,9 @@ testing.test("init says to use --admin when Pomb refuses the limit group", funct
     function layout:add_limit_group()
         return nil, "Board unavailable: Pomb answered 403: insufficient_scope."
     end
-    local changes, message = run(layout)
+    local changes, _, _, _, reason = run(layout)
     testing.eq(changes, nil)
-    testing.ok(message:find("run `dev board init --admin`", 1, true), message)
+    testing.eq(reason, init.Reason.NEEDS_ADMIN)
 end)
 
 testing.test("a layout with no limits gets no limit group", function()
