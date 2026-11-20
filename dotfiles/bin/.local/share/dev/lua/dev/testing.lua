@@ -35,12 +35,18 @@ local function render(value, seen)
     return "{" .. table.concat(parts, ", ") .. "}"
 end
 
-local function same(a, b)
+local function same(a, b, seen)
     if type(a) ~= "table" or type(b) ~= "table" then
         return a == b
     end
+    seen = seen or {}
+    seen[a] = seen[a] or {}
+    if seen[a][b] then
+        return true
+    end
+    seen[a][b] = true
     for key, value in pairs(a) do
-        if not same(value, b[key]) then
+        if not same(value, b[key], seen) then
             return false
         end
     end
