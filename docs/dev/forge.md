@@ -66,10 +66,10 @@ forge, else `origin`. It must be a remote of the project, or push stops.
 
 A repo with `.jj` uses jj, and a repo with only `.git` uses git.
 
-The jj push is `jj git push --remote <remote> -b <trunk>`, where trunk is the
-`master` or `main` bookmark. The git push goes through `commit-guard`, beside
-dev, which checks commit messages for attribution. `dev push` refuses a
-detached HEAD on git.
+On jj, `dev push` sends the trunk bookmark to the remote through jj's own
+push, where trunk is the `master` or `main` bookmark. The git push goes
+through `commit-guard`, beside dev, which checks commit messages for
+attribution. `dev push` refuses a detached HEAD on git.
 
 ## dev pull
 
