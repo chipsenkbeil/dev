@@ -5504,7 +5504,9 @@ local function replay(backend, pending, say)
         if not result.message then
             say("synced " .. brief(entry))
             return queue.Replay.DONE
-        elseif pomb.unreachable(result.message, idempotent(entry.sub, entry.args)) then
+        elseif
+            pomb.unreachable(backend:failure(result.message), idempotent(entry.sub, entry.args))
+        then
             say("Pomb is still unreachable, " .. brief(entry) .. " stays queued")
             return queue.Replay.STOP
         end
@@ -5863,7 +5865,10 @@ for sub in pairs(commands) do
             if
                 pending
                 and queued
-                and pomb.unreachable(result.message, idempotent(queued[1].sub, queued[1].args))
+                and pomb.unreachable(
+                    backend:failure(result.message),
+                    idempotent(queued[1].sub, queued[1].args)
+                )
             then
                 for _, entry in ipairs(queued) do
                     local ok, why, reason = pending:push(entry.sub, entry.args)

@@ -7430,31 +7430,114 @@ testing.test("pomb refusals are full sentences", function()
     testing.eq(out, "Board unavailable: Cannot reach https://pomb.example (curl exit 7).\n")
 end)
 
-testing.test("unreachable classifies each refusal as before", function()
+testing.test("unreachable classifies each recorded reason", function()
+    local Reason = board.TransportReason
+    local function curl(code)
+        return { reason = Reason.UNREACHABLE, detail = { url = "https://p", code = code } }
+    end
+    local function answered(status)
+        return { reason = Reason.REFUSED, detail = { status = status, message = "down." } }
+    end
     local always = {
-        "Board unavailable: cannot reach https://p (curl exit 5).",
-        "Board unavailable: cannot reach https://p (curl exit 6).",
-        "Board unavailable: cannot reach https://p (curl exit 7).",
-        "Board unavailable: pass timed out.",
-        "Board unavailable: pass is locked or has no entry secrets/worker.",
+        curl(5),
+        curl(6),
+        curl(7),
+        { reason = Reason.PASS_TIMEOUT, detail = {} },
+        { reason = Reason.PASS_ENTRY, detail = { entry = "secrets/worker" } },
     }
     local only_idempotent = {
-        "Board unavailable: cannot reach https://p (curl exit 28).",
-        "Board unavailable: pomb answered 502: bad gateway.",
-        "Board unavailable: pomb answered 503: down.",
-        "Board unavailable: pomb answered 504: slow.",
-        "Board unavailable: pomb sent an answer dev cannot read.",
+        curl(28),
+        answered(502),
+        answered(503),
+        answered(504),
+        { reason = Reason.UNREADABLE, detail = {} },
     }
-    for _, message in ipairs(always) do
-        testing.eq(pomb.unreachable(message, false), true, message)
-        testing.eq(pomb.unreachable(message, true), true, message)
+    local never = {
+        curl(35),
+        answered(403),
+        answered(500),
+        answered(429),
+        { reason = Reason.DENIED, detail = { status = 403 } },
+        { reason = Reason.EXPIRED, detail = { status = 401 } },
+        { reason = Reason.PASS_EMPTY, detail = {} },
+    }
+    for _, failure in ipairs(always) do
+        testing.eq(pomb.unreachable(failure, false), true, failure.reason)
+        testing.eq(pomb.unreachable(failure, true), true, failure.reason)
     end
-    for _, message in ipairs(only_idempotent) do
-        testing.eq(pomb.unreachable(message, false), false, message)
-        testing.eq(pomb.unreachable(message, true), true, message)
+    for _, failure in ipairs(only_idempotent) do
+        testing.eq(pomb.unreachable(failure, false), false, failure.reason)
+        testing.eq(pomb.unreachable(failure, true), true, failure.reason)
     end
-    testing.eq(pomb.unreachable("Board refused: Pomb answered 403: nope.", true), false)
+    for _, failure in ipairs(never) do
+        testing.eq(pomb.unreachable(failure, true), false, failure.reason)
+    end
     testing.eq(pomb.unreachable(nil, true), false)
+end)
+
+testing.test("a pomb backend records why its latest request failed", function()
+    local Reason = board.TransportReason
+    local function failed(curl_script, call, asked, after)
+        local root, home = sandbox()
+        if curl_script then
+            executable(root .. "/bin/curl", curl_script)
+        end
+        local script = string.format(
+            "package.path = %q; local pomb = require('dev.board.pomb'); local json = require('dev.json'); "
+                .. "local b = assert(pomb.new({url = 'https://pomb.example', token = 'pass:secrets/worker/token/pomb', name = 'dotfiles'})); "
+                .. "local _, m = %s; %s; local f = b:failure(%s); "
+                .. "print(json.encode({reason = f and f.reason or false, code = f and f.detail.code, status = f and f.detail.status}))",
+            support.absolute_path(),
+            call,
+            after or "local unused = 0",
+            asked or "m"
+        )
+        local out, code = dev_os.capture({ "luajit", "-e", script }, {
+            env = {
+                PATH = root .. "/bin:" .. os.getenv("PATH"),
+                HOME = home,
+                ROOT = root,
+                DEV_PASS_LOCK = root .. "/pass.lock",
+            },
+            stderr = "stdout",
+        })
+        testing.eq(code, 0, out)
+        return assert(json.decode(out), out)
+    end
+    testing.eq(
+        failed("#!/bin/sh\ncat >/dev/null\nexit 28\n", "b:whoami()"),
+        { reason = Reason.UNREACHABLE, code = 28 }
+    )
+    testing.eq(
+        failed('#!/bin/sh\ncat >/dev/null\nprintf \'{"message":"down"}\\n502\'\n', "b:whoami()"),
+        { reason = Reason.REFUSED, status = 502 }
+    )
+    testing.eq(failed(nil, "b:cards()"), { reason = false })
+    testing.eq(
+        failed(
+            "#!/bin/sh\ncat >/dev/null\nexit 7\n",
+            "b:whoami()",
+            "'Board unavailable: The board has no Nope column.'"
+        ),
+        { reason = false }
+    )
+    testing.eq(
+        failed(
+            "#!/bin/sh\ncat >/dev/null\nexit 7\n",
+            "b:whoami()",
+            "'Card was added but outcome 1 was not: ' .. m"
+        ),
+        { reason = false }
+    )
+    testing.eq(
+        failed(
+            "#!/bin/sh\ncat >/dev/null\ncase \"$*\" in *whoami*) exit 28;; esac\nprintf '{}\\n200'\n",
+            "b:whoami()",
+            nil,
+            "pcall(b.cards, b)"
+        ),
+        { reason = Reason.UNREACHABLE, code = 28 }
+    )
 end)
 
 local SUBTASKS_CARD = {
@@ -11987,7 +12070,11 @@ local function waiter(replies)
         seen.afters[#seen.afters + 1] = after or "none"
         seen.kinds[#seen.kinds + 1] = table.concat(kinds, ",")
         local reply = table.remove(replies, 1)
+        backend.last = reply.message
         return reply.got, reply.message, reply.oldest, reply.refused
+    end
+    function backend:failure()
+        return support.failure_of(backend.last)
     end
     function backend:columns()
         return backend.rows or {}
@@ -12011,21 +12098,27 @@ local function waited(replies, args, opts)
     function backend:cards()
         local down = opts.cards_errors and table.remove(opts.cards_errors, 1)
         if down then
+            backend.last = down
             return nil, down
         end
         if opts.cards_error then
+            backend.last = opts.cards_error
             return nil, opts.cards_error
         end
+        backend.last = nil
         return opts.cards or {}
     end
     if opts.comments then
         function backend:comments(id)
             if opts.comments_errors and table.remove(opts.comments_errors, 1) then
-                return nil, "Pomb refused the read."
+                backend.last = "Pomb refused the read."
+                return nil, backend.last
             end
             if opts.comments_gone and opts.comments_gone[id] then
-                return nil, "Board refused: Pomb answered 404: not found."
+                backend.last = "Board refused: Pomb answered 404: not found."
+                return nil, backend.last
             end
+            backend.last = nil
             if opts.reads then
                 opts.reads[#opts.reads + 1] = id
             end
@@ -12034,8 +12127,10 @@ local function waited(replies, args, opts)
     end
     function backend:blocked(id)
         if opts.blocked_error then
+            backend.last = opts.blocked_error
             return nil, opts.blocked_error
         end
+        backend.last = nil
         return (opts.blockers or {})[id] == true
     end
     local path = opts.path or support.tempdir() .. "/wait"

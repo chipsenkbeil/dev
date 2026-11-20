@@ -54,6 +54,29 @@ function M.listed_card(backend, id)
     return nil, "no card " .. id
 end
 
+---Write the record `Backend:failure` holds after a fake backend answered with a refusal text.
+---@param message string? what the fake returned, nil after an answer that succeeded
+---@return dev.board.pomb.Failure? failure the record, nil when the fake did not fail
+function M.failure_of(message)
+    if type(message) ~= "string" then
+        return nil
+    end
+    local Reason = board.TransportReason
+    local lowered = message:lower()
+    local code = lowered:match("curl exit (%d+)")
+    local status = lowered:match("pomb answered (%d+)")
+    if code then
+        return { reason = Reason.UNREACHABLE, detail = { url = "https://p", code = tonumber(code) } }
+    elseif lowered:find("pass timed out", 1, true) then
+        return { reason = Reason.PASS_TIMEOUT, detail = {} }
+    elseif lowered:find("pass is locked or has no entry", 1, true) then
+        return { reason = Reason.PASS_ENTRY, detail = {} }
+    elseif lowered:find("answer dev cannot read", 1, true) then
+        return { reason = Reason.UNREADABLE, detail = {} }
+    end
+    return { reason = Reason.REFUSED, detail = { status = tonumber(status) } }
+end
+
 ---Put a card in a column of a local board file, the way a landed card arrives, so the proof guard
 ---on a move into Release or Done never reads it.
 ---@param path string the local board file

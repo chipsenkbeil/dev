@@ -4751,8 +4751,10 @@ Queued commands:
 
 - `add`, `move`, `note` (not `--edit` or `--delete`), `size`, `label`,
   `link`, `edit`, `rename` and `outcome` on a Pomb board queue themselves when
-  Pomb could not be asked. That is `dev.board.pomb.unreachable`: `pass` timed
-  out or is locked, or curl could not resolve or connect (exit 5, 6 or 7).
+  Pomb could not be asked. That is `dev.board.pomb.unreachable`, which reads
+  the reason the backend recorded for its latest failed request, never the
+  wording of the message: `pass` timed out or is locked, or curl could not
+  resolve or connect (exit 5, 6 or 7).
 - `move`, `size`, `label`, `link`, `edit`, `rename` and `outcome` with
   `--tick` or `--untick` are safe to apply twice. For them a curl timeout, a
   502, 503 or 504, or an answer that is not JSON also queues.

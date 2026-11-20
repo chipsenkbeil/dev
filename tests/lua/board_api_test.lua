@@ -316,7 +316,14 @@ testing.test("a 4xx answer is a board refusal and a 5xx stays board unavailable"
         local message =
             board.transport_refusal(Reason.REFUSED, { status = status, message = "nope." })
         testing.eq(message, "Board refused: Pomb answered " .. status .. ": nope.")
-        testing.eq(pomb.unreachable(message, true), false, message)
+        testing.eq(
+            pomb.unreachable(
+                { reason = Reason.REFUSED, detail = { status = status, message = "nope." } },
+                true
+            ),
+            false,
+            message
+        )
     end
     for _, status in ipairs({ 500, 502, 503 }) do
         local message =
@@ -329,7 +336,7 @@ testing.test("a 4xx answer is a board refusal and a 5xx stays board unavailable"
     )
     testing.eq(
         pomb.unreachable(
-            board.transport_refusal(Reason.REFUSED, { status = 502, message = "down." }),
+            { reason = Reason.REFUSED, detail = { status = 502, message = "down." } },
             true
         ),
         true

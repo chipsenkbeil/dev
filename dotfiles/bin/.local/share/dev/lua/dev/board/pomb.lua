@@ -14,7 +14,6 @@ local PASSLOCK_SCRIPT = "/board/passlock.sh"
 local KEYCHAIN_SCRIPT = "/board/keychain.sh"
 local KEYCHAIN_SOURCE = "keychain"
 local UNAUTHORIZED = 401
-local UNAVAILABLE = "Board unavailable: "
 local ISSUED_VARIABLE = "DEV_BOARD_TOKEN"
 local ISSUED_REFUSED = "The issued token in DEV_BOARD_TOKEN was refused by Pomb."
 local ISSUED_BAD = "DEV_BOARD_TOKEN holds a token that is not plain text."
@@ -130,6 +129,8 @@ M.Reason = { BAD_URL = "bad_url" }
 ---@field private __filed boolean? true when the token came from the role token file
 ---@field private __limited {tries: integer, waited: number}? retries used and seconds waited
 ---@field private __reread boolean? true once an expired file token has been looked up again
+---@field private __held dev.board.pomb.Failure[]? why the latest requests failed, newest first, and
+---   shared with the backends made for other boards
 ---@field private __detail dev.board.pomb.Detail? the board with its columns
 ---@field private __colors table<string, string>? palette labels by colour id
 ---@field private __values table<string, string>? palette colour values by colour id
@@ -153,11 +154,21 @@ local function denied(doc, role)
     local permission = present(doc.permission) or "needed"
     local board_id = present(doc.board_id)
     local detail = { permission = permission, board_id = board_id, role = role }
-    if board_id then
-        return board.transport_refusal(board.TransportReason.UNASSIGNED, detail)
-    end
-    return board.transport_refusal(board.TransportReason.DENIED, detail)
+    local reason = board_id and board.TransportReason.UNASSIGNED or board.TransportReason.DENIED
+    return board.transport_refusal(reason, detail), reason, detail
 end
+
+---@class dev.board.pomb.Failure
+---@field reason dev.board.TransportReason why the request failed
+---@field detail table<string, any> what the reason names: url and code, or status
+---@field text string? the refusal text it wrote, without its closing period
+
+---Curl exit codes that mean the host could not be reached
+local CURL_UNRESOLVED = { [5] = true, [6] = true, [7] = true }
+local CURL_TIMED_OUT = 28
+---Statuses a gateway answers with while Pomb is down
+local GATEWAY_STATUSES = { [502] = true, [503] = true, [504] = true }
+local FAILURES_KEPT = 8
 
 ---Tell whether a failure means Pomb could not be asked, as opposed to Pomb
 ---refusing the request.
@@ -167,34 +178,24 @@ end
 ---timeout, a gateway error and a page that is not JSON may have followed an
 ---applied change, so they count only for a change that is safe to apply twice.
 ---Any other answer is a refusal.
----@param message string? what a backend call returned
+---@param failure dev.board.pomb.Failure? what `Backend:failure` returned
 ---@param idempotent boolean? whether the change may be applied twice without harm
 ---@return boolean unreachable true when the change may wait for a later sync
-function M.unreachable(message, idempotent)
-    if type(message) ~= "string" then
+function M.unreachable(failure, idempotent)
+    if type(failure) ~= "table" then
         return false
     end
-    message = message:lower():gsub("%.$", "")
-    local reasons = {
-        "cannot reach .* %(curl exit [567]%)$",
-        "pass timed out",
-        "pass is locked or has no entry ",
-    }
-    if idempotent then
-        for _, reason in ipairs({
-            "cannot reach .* %(curl exit 28%)$",
-            "pomb answered 50[234]:",
-            "pomb sent an answer dev cannot read",
-        }) do
-            reasons[#reasons + 1] = reason
-        end
+    local Reason = board.TransportReason
+    local reason, detail = failure.reason, failure.detail or {}
+    if reason == Reason.PASS_TIMEOUT or reason == Reason.PASS_ENTRY then
+        return true
+    elseif reason == Reason.UNREACHABLE then
+        return CURL_UNRESOLVED[detail.code] == true
+            or (idempotent == true and detail.code == CURL_TIMED_OUT)
+    elseif reason == Reason.REFUSED then
+        return idempotent == true and GATEWAY_STATUSES[detail.status] == true
     end
-    for _, reason in ipairs(reasons) do
-        if message:find("^" .. UNAVAILABLE:lower() .. reason) then
-            return true
-        end
-    end
-    return false
+    return reason == Reason.UNREADABLE and idempotent == true
 end
 
 ---@type table<string, string> tokens already read in this process, by `pass` entry
@@ -253,6 +254,7 @@ end
 ---@param ref string `pass:<entry>`
 ---@return string? token the token
 ---@return string? message why it could not be read
+---@return dev.board.pomb.Failure? failure the reason and detail, nil when the reference is bad
 function M.token(ref)
     local entry = entry_of(ref)
     if not entry then
@@ -266,14 +268,22 @@ function M.token(ref)
         stdin = "null",
         stderr = "null",
     })
+    local Reason = board.TransportReason
     if code == TIMED_OUT then
-        return nil, board.transport_refusal(board.TransportReason.PASS_TIMEOUT)
+        return nil,
+            board.transport_refusal(Reason.PASS_TIMEOUT),
+            { reason = Reason.PASS_TIMEOUT, detail = {} }
     elseif code ~= 0 then
-        return nil, board.transport_refusal(board.TransportReason.PASS_ENTRY, { entry = entry })
+        local detail = { entry = entry }
+        return nil,
+            board.transport_refusal(Reason.PASS_ENTRY, detail),
+            { reason = Reason.PASS_ENTRY, detail = detail }
     end
     local token, source = out:match("^([^\n]*)\n?([^\n]*)")
     if not token:find(TOKEN_PATTERN) then
-        return nil, board.transport_refusal(board.TransportReason.PASS_EMPTY)
+        return nil,
+            board.transport_refusal(Reason.PASS_EMPTY),
+            { reason = Reason.PASS_EMPTY, detail = {} }
     end
     tokens[entry] = token
     from_keychain[entry] = source == KEYCHAIN_SOURCE
@@ -343,7 +353,7 @@ function Backend:__request(method, path, body, fence, seconds, file, save)
         self.__exports = nil
     end
     if not self.__secret then
-        local token, message
+        local token, message, why
         if not self.__opts.lead then
             token, message = issued()
         end
@@ -360,9 +370,12 @@ function Backend:__request(method, path, body, fence, seconds, file, save)
             self.__filed = token ~= nil
         end
         if not token then
-            token, message = M.token(self.__opts.token)
+            token, message, why = M.token(self.__opts.token)
         end
         if not token then
+            if why then
+                self:__record(why.reason, why.detail, message)
+            end
             return nil, message
         end
         self.__secret = token
@@ -410,10 +423,7 @@ function Backend:__request(method, path, body, fence, seconds, file, save)
     if code ~= 0 then
         self.__limited = nil
         return nil,
-            board.transport_refusal(
-                board.TransportReason.UNREACHABLE,
-                { url = self.__opts.url, code = code }
-            )
+            self:__refuse(board.TransportReason.UNREACHABLE, { url = self.__opts.url, code = code })
     end
     local text, hint, status = out:match("^(.*)\nretry%-after:([^\n]*)\n(%d+)$")
     if not text then
@@ -433,7 +443,7 @@ function Backend:__request(method, path, body, fence, seconds, file, save)
     status = tonumber(status)
     if not status or doc == nil then
         self.__limited = nil
-        return nil, board.transport_refusal(board.TransportReason.UNREADABLE)
+        return nil, self:__refuse(board.TransportReason.UNREADABLE)
     end
     if status ~= TOO_MANY_REQUESTS then
         self.__limited = nil
@@ -457,10 +467,11 @@ function Backend:__request(method, path, body, fence, seconds, file, save)
         end
     end
     if status == UNAUTHORIZED and self.__issued then
-        return nil,
-            expired and board.transport_refusal(board.TransportReason.EXPIRED) or self.__issued,
-            status,
-            doc
+        local message = self.__issued
+        if expired then
+            message = self:__refuse(board.TransportReason.EXPIRED, { status = status })
+        end
+        return nil, message, status, doc
     end
     if status == UNAUTHORIZED and not self.__healed and forget(self.__opts.token) then
         self.__healed = true
@@ -468,10 +479,13 @@ function Backend:__request(method, path, body, fence, seconds, file, save)
         return self:__request(method, path, body, fence, seconds, file, save)
     end
     if expired then
-        return nil, board.transport_refusal(board.TransportReason.EXPIRED), status, doc
+        return nil, self:__refuse(board.TransportReason.EXPIRED, { status = status }), status, doc
     end
     if status == FORBIDDEN and type(doc) == "table" and doc.code == PERMISSION_DENIED then
-        return nil, denied(doc, self:__role()), status, doc
+        local message, reason, detail = denied(doc, self:__role())
+        detail.status = status
+        self:__record(reason, detail, message)
+        return nil, message, status, doc
     end
     if status == FORBIDDEN and type(doc) == "table" and doc.code == EXCEEDS_GRANT then
         local role = self:__role()
@@ -481,9 +495,9 @@ function Backend:__request(method, path, body, fence, seconds, file, save)
                 or present(doc.message)
                 or "that"
             return nil,
-                board.transport_refusal(
+                self:__refuse(
                     board.TransportReason.EXCEEDS,
-                    { role = role, action = action }
+                    { role = role, action = action, status = status }
                 ),
                 status,
                 doc
@@ -491,9 +505,9 @@ function Backend:__request(method, path, body, fence, seconds, file, save)
     end
     if status == FORBIDDEN and type(doc) == "table" and doc.code == CARD_LOCKED then
         return nil,
-            board.transport_refusal(
+            self:__refuse(
                 board.TransportReason.LOCKED,
-                { message = present(doc.message) }
+                { message = present(doc.message), status = status }
             ),
             status,
             doc
@@ -501,7 +515,7 @@ function Backend:__request(method, path, body, fence, seconds, file, save)
     if status >= HTTP_ERROR then
         local detail = type(doc) == "table" and present(doc.message) or "no message"
         return nil,
-            board.transport_refusal(
+            self:__refuse(
                 board.TransportReason.REFUSED,
                 { status = status, message = tostring(detail) }
             ),
@@ -509,6 +523,56 @@ function Backend:__request(method, path, body, fence, seconds, file, save)
             doc
     end
     return doc
+end
+
+---Say why a call failed, when the message starts with the text a failed request wrote.
+---@param message string? the refusal text a call returned
+---@return dev.board.pomb.Failure? failure the reason and its detail, nil when the message came
+---   from somewhere else
+function Backend:failure(message)
+    if type(message) ~= "string" then
+        return nil
+    end
+    for _, failure in ipairs(self.__held or {}) do
+        if message:sub(1, #failure.text) == failure.text then
+            return failure
+        end
+    end
+    return nil
+end
+
+---Return the failures of the latest requests, shared with the backends made for other boards.
+---@private
+---@return dev.board.pomb.Failure[] held the failures, newest first
+function Backend:__hold()
+    self.__held = self.__held or {}
+    return self.__held
+end
+
+---Remember why a request failed, so a later request cannot erase it.
+---@private
+---@param reason dev.board.TransportReason the fixed reason
+---@param detail table<string, any>? what the reason names
+---@param message string the refusal text written for it
+function Backend:__record(reason, detail, message)
+    local held = self:__hold()
+    table.insert(
+        held,
+        1,
+        { reason = reason, detail = detail or {}, text = (message:gsub("%.$", "")) }
+    )
+    held[FAILURES_KEPT + 1] = nil
+end
+
+---Record why a request failed and write the refusal text for it.
+---@private
+---@param reason dev.board.TransportReason the fixed reason
+---@param detail table<string, any>? what the reason names
+---@return string message the refusal text
+function Backend:__refuse(reason, detail)
+    local message = board.transport_refusal(reason, detail)
+    self:__record(reason, detail, message)
+    return message
 end
 
 ---Pick how long to wait before sending a request again after a 429.
@@ -2345,6 +2409,7 @@ function Backend:other_board(name)
         __filed = self.__filed,
         __reread = self.__reread,
         __healed = self.__healed,
+        __held = self:__hold(),
     }, Backend)
 end
 

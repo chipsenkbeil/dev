@@ -19,19 +19,26 @@ local function fake(script, listing_errors)
     local seen = { naps = {}, reads = 0 }
     local backend = {}
     local listed = 0
+    local last
     local function state()
         return script[math.min(seen.reads, #script)]
+    end
+    function backend:failure()
+        return support.failure_of(last)
     end
     function backend:cards()
         listed = listed + 1
         if listing_errors and listing_errors[listed] then
-            return nil, listing_errors[listed]
+            last = listing_errors[listed]
+            return nil, last
         end
+        last = nil
         return { { id = CARD_ID, column = COLUMN.REVIEW } }
     end
     function backend:card()
         seen.reads = seen.reads + 1
         local now = state()
+        last = now.broken
         if now.broken then
             return nil, now.broken
         end
@@ -150,6 +157,9 @@ local function summary_only(cards, events)
     local backend = {}
     function backend:wait()
         return table.remove(replies, 1)
+    end
+    function backend:failure()
+        return nil
     end
     function backend:cards(opts)
         if opts and opts.summary then

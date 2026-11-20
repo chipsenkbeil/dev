@@ -459,7 +459,7 @@ function M.wait_card(backend, word, opts)
                 return { output = card_change(id, first, state) }
             end
             nap(poll:pace(line))
-        elseif pomb.unreachable(message, true) then
+        elseif pomb.unreachable(backend:failure(message), true) then
             failures = failures + 1
             if failures >= WAIT_RETRIES then
                 return failure(message)
@@ -564,7 +564,7 @@ function M.wait(backend, args, opts)
             if found then
                 leads, skipped = found, second
             else
-                if not pomb.unreachable(second, true) then
+                if not pomb.unreachable(backend:failure(second), true) then
                     return failure(second)
                 end
                 reply, message = nil, second
@@ -679,7 +679,7 @@ function M.wait(backend, args, opts)
             end
             nap(backoff_pause(limited, random))
             limited = limited + 1
-        elseif unread or pomb.unreachable(message, true) then
+        elseif unread or pomb.unreachable(backend:failure(message), true) then
             failures = failures + 1
             if failures >= WAIT_RETRIES then
                 return flush(failure(message))

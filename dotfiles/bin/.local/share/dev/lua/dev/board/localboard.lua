@@ -580,6 +580,12 @@ function Backend:wait()
     return nil, "A local board has nothing to wait on."
 end
 
+---Say why a call failed, which a local board never does.
+---@return nil failure always nil
+function Backend:failure()
+    return nil
+end
+
 function Backend:boards()
     return { self.__opts.name }
 end
