@@ -80,13 +80,12 @@ function M.split_size(name)
     return found, value
 end
 
-local function needs_admin(message)
-    local NEEDS_ADMIN = "pomb answered 403"
-    return message:lower():find(NEEDS_ADMIN, 1, true) ~= nil
+local function needs_admin(layout, message)
+    return board.forbidden(layout:failure(message))
 end
 
-local function stop(message)
-    if needs_admin(message) then
+local function stop(layout, message)
+    if needs_admin(layout, message) then
         return nil, message, M.Reason.NEEDS_ADMIN
     end
     return nil, message
@@ -384,7 +383,7 @@ local function enabled_step(layout, state, say)
             if (wanted[color.value] == true) == enable and color.enabled ~= enable then
                 local ok, message = layout:set_color(color.id, { enabled = enable })
                 if not ok then
-                    if needs_admin(message) then
+                    if needs_admin(layout, message) then
                         state.warn(LEFT_ENABLED, nil, M.Reason.NEEDS_ADMIN)
                         return true
                     end
@@ -404,7 +403,7 @@ local function highlights_step(layout, state, say)
         "Left the highlighted labels as they are, since this token may not change them."
     local added, message = layout:add_highlights(M.HIGHLIGHTS)
     if added == nil then
-        if needs_admin(message) then
+        if needs_admin(layout, message) then
             state.warn(LEFT_HIGHLIGHTS, nil, M.Reason.NEEDS_ADMIN)
             return true
         end
@@ -558,13 +557,13 @@ function M.run(layout, name, say, opts)
     }
     local found, message = layout:find()
     if found == nil then
-        return stop(message)
+        return stop(layout, message)
     end
     if not found then
         local ok, template
         ok, template = layout:create()
         if not ok then
-            return stop(template)
+            return stop(layout, template)
         end
         say(
             "created board "
@@ -576,7 +575,7 @@ function M.run(layout, name, say, opts)
     local layout_state
     layout_state, message = layout:read()
     if not layout_state then
-        return stop(message)
+        return stop(layout, message)
     end
     state.columns, state.colors, state.cards, state.has_checks =
         layout_state.columns, layout_state.colors, layout_state.cards, layout_state.has_checks
@@ -599,7 +598,7 @@ function M.run(layout, name, say, opts)
         local ok
         ok, message = step(layout, state, say)
         if not ok then
-            return stop(message)
+            return stop(layout, message)
         end
     end
     return state.changes

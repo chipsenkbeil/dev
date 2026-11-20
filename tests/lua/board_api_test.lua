@@ -249,6 +249,9 @@ local function column_backend(answer)
     function backend:done_columns()
         return {}
     end
+    function backend:failure(message)
+        return support.failure_of(message)
+    end
     function backend:columns()
         return { { name = support.COLUMN_NAME.RELEASE }, { name = support.COLUMN_NAME.BLOCKED } }
     end
@@ -308,6 +311,22 @@ testing.test("column prints the permission message for a Pomb 403", function()
     testing.eq(result.code, 1)
     testing.ok(result.message:find("Pomb refused the change", 1, true), result.message)
     testing.ok(result.message:find("columns.edit", 1, true), result.message)
+end)
+
+testing.test("column names the lead token by the recorded status, not the wording", function()
+    local backend = column_backend("the token is too small")
+    function backend:failure()
+        return { reason = board.TransportReason.REFUSED, detail = { status = 403 } }
+    end
+    local result =
+        cmd_board.run("column", { support.COLUMN_NAME.RELEASE, "--blocked", "on" }, backend)
+    testing.ok(result.message:find("columns.edit", 1, true), result.message)
+    local worded = column_backend("Board refused: Pomb answered 403: nope.")
+    function worded:failure()
+        return { reason = board.TransportReason.REFUSED, detail = { status = 409 } }
+    end
+    result = cmd_board.run("column", { support.COLUMN_NAME.RELEASE, "--blocked", "on" }, worded)
+    testing.eq(result.message:find("columns.edit", 1, true), nil, result.message)
 end)
 
 testing.test("a 4xx answer is a board refusal and a 5xx stays board unavailable", function()

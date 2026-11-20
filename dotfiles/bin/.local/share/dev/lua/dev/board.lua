@@ -364,6 +364,9 @@ end
 ---   true when one existed
 ---@field find fun(self: dev.board.Layout): boolean?, string? whether the board exists, or nil and a
 ---   message
+---@field failure fun(self: dev.board.Layout, message: string?):
+---   dev.board.pomb.Failure? why the call that wrote the message failed, nil when the backend
+---   recorded no reason
 ---@field create fun(self: dev.board.Layout): boolean?, string? the board made, with the name of the
 ---   template it came from
 ---@field read fun(self: dev.board.Layout): dev.board.LayoutState?, string? the board's columns,
@@ -685,6 +688,21 @@ function M.transport_refusal(reason, detail)
             .. "Set [board.pomb] lead_token in ~/.config/dev/config.toml."
     end
     error("unknown transport reason " .. tostring(reason))
+end
+
+---Tell whether Pomb answered 403 because the token may not change the board, by the status the
+---backend recorded for the failure. A card lock and a token not assigned to the board are 403s
+---that a lead token does not mend.
+---@param failure dev.board.pomb.Failure? the failure `Backend:failure` returned, with its reason and detail
+---@return boolean forbidden true when a token with more permissions would be let through
+function M.forbidden(failure)
+    if type(failure) ~= "table" then
+        return false
+    end
+    local Reason = M.TransportReason
+    local reason, detail = failure.reason, failure.detail or {}
+    local mendable = reason == Reason.REFUSED or reason == Reason.DENIED or reason == Reason.EXCEEDS
+    return mendable and detail.status == 403
 end
 
 ---Write why a claim was not released, from the reason the backend named.

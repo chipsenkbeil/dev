@@ -4690,10 +4690,11 @@ function commands.columns(backend, args)
 end
 
 ---Fail a board edit, naming the lead token when Pomb refused it.
+---@param backend dev.board.Backend the board that refused
 ---@param message string the backend's reason
 ---@return dev.cmd.board.Result result the failure
-local function board_edit_failure(message)
-    if message:lower():find("pomb answered 403", 1, true) then
+local function board_edit_failure(backend, message)
+    if board.forbidden(backend:failure(message)) then
         return failure(
             "Pomb refused the change. This token may not edit the board, "
                 .. "so use a lead token, which holds columns.edit."
@@ -4745,7 +4746,7 @@ function commands.column(backend, args)
     local done
     done, message = backend:set_column(name, fields)
     if not done then
-        return board_edit_failure(message)
+        return board_edit_failure(backend, message)
     end
     return { output = "Set the flags of " .. name .. "." }
 end
@@ -4762,7 +4763,7 @@ local function set_limit(backend, value, words)
     local columns = { stages.progress, stages.review, stages.verify }
     local done, message = backend:set_limit_group(columns, limit)
     if not done then
-        return board_edit_failure(message)
+        return board_edit_failure(backend, message)
     end
     return {
         output = string.format(

@@ -100,6 +100,9 @@ local function fake_layout(opts)
         writes = {},
     }
     local layout = { state = state }
+    function layout:failure(message)
+        return support.failure_of(message)
+    end
     function layout:add_highlights(wanted)
         local held = {}
         for _, highlight in ipairs(state.highlights) do
@@ -1815,6 +1818,32 @@ testing.test(
         testing.eq(reason, nil)
     end
 )
+
+testing.test("needs_admin reads the recorded status and ignores the wording", function()
+    local layout = fake_layout({ columns = template_columns() })
+    function layout:set_color()
+        return nil, "the token is too small"
+    end
+    function layout:failure()
+        return { reason = board.TransportReason.REFUSED, detail = { status = 403 } }
+    end
+    local _, message, reason = init.run(layout, "demo", function() end, { warn = function() end })
+    testing.eq(message, "the token is too small")
+    testing.eq(reason, init.Reason.NEEDS_ADMIN)
+    function layout:set_color()
+        return nil, "Board refused: Pomb answered 403: insufficient_scope."
+    end
+    function layout:failure()
+        return { reason = board.TransportReason.REFUSED, detail = { status = 409 } }
+    end
+    _, _, reason = init.run(layout, "demo", function() end, { warn = function() end })
+    testing.eq(reason, nil)
+    function layout:failure()
+        return nil
+    end
+    _, _, reason = init.run(layout, "demo", function() end, { warn = function() end })
+    testing.eq(reason, nil)
+end)
 
 testing.test("init marks blocked on a new board", function()
     local layout = fake_layout({ exists = false })
