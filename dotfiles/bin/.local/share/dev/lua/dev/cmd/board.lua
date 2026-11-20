@@ -4970,6 +4970,40 @@ local function init_local(ctx, flags, admin)
     return 0
 end
 
+---Write why the device sign-in ended with no token.
+---@param reason dev.board.device.Reason the reason `device.pair` named
+---@param detail dev.board.device.Detail? the url and curl exit, or the status and Pomb's message
+---@return string message the sentence
+local function sign_in_refusal(reason, detail)
+    local Reason = device.Reason
+    if reason == Reason.UNREACHABLE then
+        return "Cannot reach " .. detail.url .. " (curl exit " .. tostring(detail.curl_exit) .. ")."
+    elseif reason == Reason.UNREADABLE then
+        return "Pomb sent an answer dev cannot read."
+    elseif reason == Reason.REFUSED then
+        return sentence(
+            "Pomb answered " .. detail.status .. ": " .. tostring(detail.message or "no message")
+        )
+    elseif reason == Reason.NO_CODE then
+        return "Pomb sent a sign-in with no code."
+    elseif reason == Reason.NO_TEMP then
+        return "Cannot make a temporary file for the sign-in."
+    elseif reason == Reason.WRITE_TEMP then
+        return "Cannot write the temporary file for the sign-in."
+    elseif reason == Reason.BAD_TOKEN then
+        return "Pomb sent a token that is not plain text."
+    elseif reason == Reason.DENIED then
+        return "The sign-in was denied."
+    elseif reason == Reason.EXPIRED then
+        return "The sign-in was not approved in time."
+    elseif reason == Reason.UNKNOWN then
+        return "Pomb no longer knows this sign-in."
+    elseif reason == Reason.QUOTA then
+        return "The account holds too many tokens. Revoke one and run it again."
+    end
+    return "The sign-in ended for a reason dev does not know."
+end
+
 M.handlers["board init"] = function(ctx)
     local rest, admin = {}, false
     for _, arg in ipairs(ctx.args) do
@@ -5011,15 +5045,14 @@ M.handlers["board init"] = function(ctx)
     backend.stages = board.stages(column_map(ctx.root))
     local message
     if admin then
-        local secret
-        secret, message = device.pair({
+        local secret, sign_in_reason, detail = device.pair({
             url = opts.url,
             client_name = ("dev-board-init@" .. board_setup.host()):sub(1, CLIENT_CHARS),
             scope = ADMIN_SCOPE,
             say = print,
         })
         if not secret then
-            verb.die(sentence(message))
+            verb.die(sign_in_refusal(sign_in_reason, detail))
         end
         backend:authorize(secret)
         local ok

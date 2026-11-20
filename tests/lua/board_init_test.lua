@@ -939,15 +939,46 @@ end)
 
 testing.test("an expired or unknown sign-in ends the run", function()
     for _, case in ipairs({
-        { '410|{"code":"device_code_expired","message":"x"}\n', "not approved in time" },
+        {
+            '410|{"code":"device_code_expired","message":"x"}\n',
+            "The sign-in was not approved in time.",
+        },
         { '400|{"code":"invalid_grant","message":"x"}\n', "no longer knows" },
-        { '409|{"code":"quota_exceeded","message":"x"}\n', "revoke one" },
+        { '409|{"code":"quota_exceeded","message":"x"}\n', "Revoke one" },
         { '200|{"token":"bad\\"token","name":"n"}\n', "not plain text" },
     }) do
         local root, home, tmp = sandbox({ script = case[1] })
         local out, code = dev(root, home, tmp, { "board", "init", "--admin" })
         testing.eq(code, 1)
         testing.ok(out:find(case[2], 1, true), out)
+    end
+end)
+
+testing.test("sign-in refusal names each reason", function()
+    for _, case in ipairs({
+        { '403|{"code":"access_denied","message":"x"}\n', "The sign-in was denied.\n" },
+        {
+            '410|{"code":"device_code_expired","message":"x"}\n',
+            "The sign-in was not approved in time.\n",
+        },
+        { '400|{"code":"invalid_grant","message":"x"}\n', "Pomb no longer knows this sign-in.\n" },
+        {
+            '409|{"code":"quota_exceeded","message":"x"}\n',
+            "The account holds too many tokens. Revoke one and run it again.\n",
+        },
+        {
+            '200|{"token":"bad\\"token","name":"n"}\n',
+            "Pomb sent a token that is not plain text.\n",
+        },
+        { '500|{"message":"boom"}\n', "Pomb answered 500: boom.\n" },
+        { '500|{"message":"Server error."}\n', "Pomb answered 500: Server error.\n" },
+        { "200|not json\n", "Pomb sent an answer dev cannot read.\n" },
+    }) do
+        local root, home, tmp = sandbox({ script = case[1] })
+        local out, code = dev(root, home, tmp, { "board", "init", "--admin" })
+        testing.eq(code, 1)
+        testing.ok(out:find(case[2], 1, true), out)
+        testing.eq(out:find("..", 1, true), nil)
     end
 end)
 
