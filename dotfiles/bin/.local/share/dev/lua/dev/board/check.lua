@@ -5,6 +5,7 @@ local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local json = require("dev.json")
 local registry = require("dev.registry")
+local review = require("dev.board.review")
 local vcs = require("dev.vcs")
 local verb = require("dev.verb")
 
@@ -91,7 +92,6 @@ local JJ_TEMPLATE = 'commit_id ++ " " ++ change_id ++ " " ++ if(conflict, "confl
 local JJ_EMPTY_TEMPLATE =
     'if(empty, "empty", "full") ++ " " ++ parents.map(|parent| parent.change_id()).join(" ")'
 local SHOWN_LINES = 12
-local NO_CHANGE = "-"
 local NO_RUN = "-"
 local RUN_LINE = "^run (%x+)$"
 local REASON_INDENT = "  "
@@ -411,7 +411,7 @@ local function git_state(root)
     if code ~= 0 or not head then
         return nil, "The `git` command has no commit at HEAD in " .. root .. "."
     end
-    return { commit = head, change = NO_CHANGE }
+    return { commit = head, change = review.NO_CHANGE }
 end
 
 ---Name the commit a result would belong to.

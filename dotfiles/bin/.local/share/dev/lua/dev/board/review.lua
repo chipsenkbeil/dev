@@ -36,7 +36,8 @@ M.SEAT_VERDICTS = {
 }
 
 local JJ_TEMPLATE = 'commit_id ++ " " ++ change_id ++ "\\n"'
-local NO_CHANGE = "-"
+---The change id a git commit carries, since git has no change ids.
+M.NO_CHANGE = "-"
 
 ---@class dev.board.review.Rev
 ---@field commit string the full commit id
@@ -65,7 +66,7 @@ local function git_rev(root, rev)
     if code ~= 0 or not commit then
         return nil, string.format("%q does not name a commit in %s", rev, root)
     end
-    return { commit = commit, change = NO_CHANGE }
+    return { commit = commit, change = M.NO_CHANGE }
 end
 
 ---Resolve a revision to the one commit it names.

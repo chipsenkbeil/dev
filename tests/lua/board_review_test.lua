@@ -150,6 +150,49 @@ testing.test("review in git ignores an expect-fail check record from a jj change
     testing.eq(#comments(home), 3)
 end)
 
+testing.test("review in git accepts a run check record from a jj change", function()
+    local root, home = git_root()
+    local id = card_in(root, home)
+    local function review()
+        return dev(root, home, {
+            "board",
+            "review",
+            id,
+            "--kind",
+            "code",
+            "--by",
+            "rev1",
+            "--rev",
+            "HEAD",
+            "--verdict",
+            "clean",
+        })
+    end
+
+    -- Record a first review so the card holds a comment to copy
+    local out, code = review()
+    testing.eq(code, 0, out)
+
+    -- Append a run check record that carries a jj change id
+    local file = support.board_file(home, "mine")
+    local doc = assert(json.decode(assert(fs.read(file))))
+    local record = {}
+    for key, value in pairs(doc.cards[1].comments[1]) do
+        record[key] = value
+    end
+    record.body = string.format(
+        "dev-check: commit=%s change=abcdefgh mode=run rows=1 sum=ab5ba36a\n1 pass 28c702",
+        string.rep("a", 40)
+    )
+    table.insert(doc.cards[1].comments, record)
+    assert(fs.write(file, assert(json.encode(doc))))
+
+    -- Review again and expect git to accept the jj change id
+    out, code = review()
+    testing.eq(code, 0, out)
+    testing.eq(#comments(home), 3)
+end)
+
 testing.test("review verdict is required, must be known and is written on the record", function()
     local root, home, head = git_root()
     local id = card_in(root, home)
