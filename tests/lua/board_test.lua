@@ -10857,6 +10857,22 @@ testing.test("role-refusal-denied names the refused permission and the role", fu
     )
 end)
 
+testing.test("role-refusal-denied-board names the role and the board", function()
+    local root, home = sandbox()
+    refusing(
+        root,
+        '{"role_name":"implementer","permissions":[]}',
+        '{"code":"permission_denied","permission":"tasks.edit","message":"m","board_id":"board-9"}\\n403'
+    )
+    local out, code = dev(root, home, { "board", "ls" })
+    testing.eq(code, 1)
+    testing.eq(
+        out,
+        "Board unavailable: This token (role implementer) has the tasks.edit permission "
+            .. "but is not assigned to board board-9. Add the board to the token.\n"
+    )
+end)
+
 testing.test("role-refusal-exceeds-grant names the refused action and the role", function()
     local root, home = sandbox()
     refusing(
