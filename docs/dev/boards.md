@@ -589,7 +589,9 @@ Every card in every column is fair game for an agent unless it is labelled
   - The planner then moves it to Ready.
 - Ready: an agent can run it with no questions.
   - It has size 1 to 3, v4, 3 to 7 outcomes (1 to 3 for an epic) and a checks
-    row, which `dev board` enforces, except for an epic with children.
+    row, which `dev board` enforces, except for an epic with children. Each
+    outcome ends with its deciding check, `(check: ROW)`, where ROW is part of
+    one checks row, or with `(reviewer judgement)`.
   - The top card is next, and the order within Ready is the priority.
   - A runner takes it by size: yellow by a haiku agent, green and blue by a
     sonnet agent.
