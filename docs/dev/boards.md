@@ -3998,7 +3998,8 @@ A move into Ready:
   card, except that it needs no checks row, as its children carry the checks.
 - A move into In Progress of a card that sits in Icebox, Backlog or Ready is
   held to the checks row rule too, with the same words. `take` holds such a
-  card to the whole Ready rule, size included.
+  card to the whole Ready rule, size included, except that a name whose role
+  segment is `planner` or `scoper` takes an Icebox or Backlog card unplanned.
 - A move into any other column, Icebox included, is never checked for the Ready
   rules.
 

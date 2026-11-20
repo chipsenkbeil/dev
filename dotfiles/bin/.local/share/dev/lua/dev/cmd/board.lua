@@ -1498,6 +1498,20 @@ local function before_work(stages, card)
         or card.column == stages.ready
 end
 
+---Roles that take an Icebox or Backlog card unplanned
+local PLANNING_ROLES = { planner = true, scoper = true }
+
+---Say whether a planner or scoper takes a card in the column where it plans.
+---@param stages dev.board.Stages the board's columns
+---@param card dev.board.Card the card
+---@param name string? the agent name from --as, nil for the environment's
+---@return boolean plans true for a planner or scoper taking an Icebox or Backlog card
+local function plans_card(stages, card, name)
+    local role = board.agent_role(name or claimant())
+    return PLANNING_ROLES[role] == true
+        and (card.column == stages.icebox or card.column == stages.backlog)
+end
+
 ---Refuse a card with no checks row and no children.
 ---@param backend dev.board.Backend the board
 ---@param card dev.board.Card the card
@@ -4705,7 +4719,11 @@ function commands.take(backend, args)
             return shaped
         end
     end
-    if card.claimant == nil and before_work(stages, card) then
+    if
+        card.claimant == nil
+        and before_work(stages, card)
+        and not plans_card(stages, card, name)
+    then
         local shape, why_family = family_shape(backend, card)
         if not shape then
             return failure(why_family)

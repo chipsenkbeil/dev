@@ -9438,6 +9438,50 @@ testing.test("take of a Backlog card with no checks row is refused", function()
     testing.eq(read(root, "calls"):find("/owner", 1, true), nil)
 end)
 
+testing.test("take lets a planner take an unplanned Backlog card", function()
+    local export = export_with_first_card({
+        column_id = BACKLOG_COLUMN,
+        description = PLANNED_TEXT,
+        subtasks = SUBTASKS,
+        fields = "{}",
+    })
+    local root, home = sandbox({ export = export })
+    local agent = { agent = PLANNER }
+    local out, code = dev(root, home, { "board", "take", "11111111-a" }, agent)
+    testing.eq(code, 0, out)
+    testing.ok(out:find("^took 11111111"), out)
+    dev(root, home, { "board", "release", "11111111-a" }, agent)
+end)
+
+testing.test("take still refuses an unplanned card for a runner", function()
+    local export = export_with_first_card({
+        column_id = BACKLOG_COLUMN,
+        description = PLANNED_TEXT,
+        subtasks = SUBTASKS,
+        fields = "{}",
+    })
+    local root, home = sandbox({ export = export })
+    local implementer = "dotfiles/implementer/abc"
+    local out, code = dev(root, home, { "board", "take", "11111111-a" }, { agent = implementer })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("has no checks row and cannot enter Ready", 1, true), out)
+    testing.eq(read(root, "calls"):find("/owner", 1, true), nil)
+end)
+
+testing.test("take lets a planner take an unplanned Backlog card but not a Ready one", function()
+    local export = export_with_first_card({
+        column_id = READY_COLUMN,
+        description = PLANNED_TEXT,
+        subtasks = SUBTASKS,
+        fields = "{}",
+    })
+    local root, home = sandbox({ export = export })
+    local out, code = dev(root, home, { "board", "take", "11111111-a" }, { agent = PLANNER })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("has no checks row and cannot enter Ready", 1, true), out)
+    testing.eq(read(root, "calls"):find("/owner", 1, true), nil)
+end)
+
 testing.test("take refuses a Backlog card with an outcome that names no check", function()
     local export = export_with_first_card({
         column_id = BACKLOG_COLUMN,
