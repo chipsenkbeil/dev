@@ -107,7 +107,6 @@ local LAND_TRUNK_REWRITE = "rewrite"
 local KIND_DONE = "done"
 local COMMIT = ("a"):rep(40)
 local OTHER = ("b"):rep(40)
-local PAST_HOLD_SECONDS = 2.2
 local SHORT_CLAIM_SECONDS = 60
 local ASK_TIMEOUT_SECONDS = 30
 local ASK_POLL_SECONDS = 0.2
@@ -451,6 +450,17 @@ end
 local function claim_of(home, id)
     local _, card = read_card(home, id)
     return card.claim
+end
+
+local function lapse_hold(project)
+    local doc = board_doc(project.home)
+    for _, card in ipairs(doc.cards) do
+        if card.name == turn.NAME then
+            card.claim.expires_at = store.stamp(store.now() - SHORT_CLAIM_SECONDS)
+        end
+    end
+    local path = support.board_file(project.home, "mine")
+    assert(fs.write(path, json.encode(doc)), "write failed")
 end
 
 local function landed_calls(log)
@@ -3551,7 +3561,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         local id = in_verify(project)
         approve(project, id)
         must(dev(project, { "board", "turn", id, "--hold", "1" }))
-        dev_os.nap(PAST_HOLD_SECONDS)
+        lapse_hold(project)
         local backend, restore = board_at(project.home)
         local cards = assert(backend:cards())
         for _, card in ipairs(cards) do
@@ -3571,7 +3581,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         local id = in_verify(project)
         approve(project, id)
         must(dev(project, { "board", "turn", id, "--hold", "1" }))
-        dev_os.nap(PAST_HOLD_SECONDS)
+        lapse_hold(project)
         local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 1, out)
         testing.ok(out:find("ran out or was taken by another", 1, true), out)
@@ -3584,7 +3594,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         local id = in_verify(project)
         approve(project, id)
         must(dev(project, { "board", "turn", id, "--hold", "1" }))
-        dev_os.nap(PAST_HOLD_SECONDS)
+        lapse_hold(project)
         must(dev(project, { "board", "turn", id }, { DEV_AGENT = "dotfiles/other" }))
         local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 1, out)
@@ -3595,7 +3605,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
 
     local function lost_hold_taken_by_other(project, id)
         must(dev(project, { "board", "turn", id, "--hold", LOST_HOLD_SECONDS }))
-        dev_os.nap(PAST_HOLD_SECONDS)
+        lapse_hold(project)
         must(dev(project, { "board", "turn", id }, { DEV_AGENT = "dotfiles/other" }))
     end
 
@@ -3862,7 +3872,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
             local id = in_verify(project)
             approve(project, id)
             must(dev(project, { "board", "turn", id, "--hold", "1" }))
-            dev_os.nap(PAST_HOLD_SECONDS)
+            lapse_hold(project)
             local out, code = dev(project, { "board", "turn", id, "--release" })
             testing.eq(code, 0, out)
             testing.ok(out:find("was already gone", 1, true), out)
