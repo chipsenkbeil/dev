@@ -72,7 +72,7 @@ testing.test("git state refuses an empty or undescribed commit", function()
 end)
 
 testing.test("git added and touched list renames at the new path", function()
-    local lines = "one\ntwo\nthree\nfour\nfive\nsix\nseven\n"
+    local lines = table.concat({ "one", "two", "three", "four", "five", "six", "seven", "" }, "\n")
     local root = repo({ ["a.txt"] = "a\n", ["b.txt"] = lines, ["c.txt"] = "c\n" })
     git(root, "mv", "b.txt", "d.txt")
     git(root, "rm", "-q", "c.txt")

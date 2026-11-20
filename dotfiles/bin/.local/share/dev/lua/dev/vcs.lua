@@ -9,7 +9,7 @@ local fs = require("dev.fs")
 ---@class dev.vcs
 ---@field JJ "jj" the jj backend
 ---@field GIT "git" the git backend
----@field LABEL table<dev.vcs.Backend, string> the backend's name at the start of a message
+---@field LABEL table<dev.vcs.Backend, string> mapping of backend -> name at the start of a message
 local M = { JJ = "jj", GIT = "git", LABEL = { jj = "jj", git = "Git" } }
 
 local IGNORE_WORKING_COPY = "--ignore-working-copy"
