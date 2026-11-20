@@ -119,9 +119,15 @@ local function with_read_limits(fd, limits, fn)
     limited[0].c_cc[VTIME] = limits.vtime
     set_attr(fd, limited)
     local ok, result = pcall(fn)
-    set_attr(fd, saved)
+    local restored, restore_err = pcall(set_attr, fd, saved)
+    if not ok and not restored then
+        error(tostring(result) .. " The terminal restore also failed: " .. tostring(restore_err), 0)
+    end
     if not ok then
         error(result, 0)
+    end
+    if not restored then
+        error(restore_err, 0)
     end
     return result
 end
