@@ -2565,8 +2565,11 @@ function Backend:mint(role, name, opts)
     local reason, detail
     ok, message, reason, detail = tokenfile.write(name, raw, expires)
     if not ok then
-        local undone, why = self:revoke(name)
+        local undone, why, gone = self:revoke(name)
         local kept = board.file_refusal(reason, message, detail)
+        if gone then
+            return nil, kept .. " " .. why
+        end
         if not undone then
             return nil, kept .. " The token stays issued. " .. why
         end
@@ -2622,6 +2625,7 @@ end
 ---@param name string the agent name the token was issued as
 ---@return {revoked: boolean}? done whether a token was revoked, false when none was left
 ---@return string? message why it failed
+---@return boolean? gone true when Pomb holds no token of `name` any more and only the file delete failed
 function Backend:revoke(name)
     local revoked, message = self:__drop_child(name)
     if revoked == nil then
@@ -2631,7 +2635,8 @@ function Backend:revoke(name)
     local reason, detail
     ok, message, reason, detail = tokenfile.remove(name)
     if not ok then
-        return nil, "Revoked the token. " .. board.file_refusal(reason, message, detail)
+        local lead = revoked and "Revoked the token. " or "Pomb listed no token to revoke. "
+        return nil, lead .. board.file_refusal(reason, message, detail), true
     end
     return { revoked = revoked }
 end

@@ -305,6 +305,40 @@ testing.test("token-mint-write-none says Pomb listed no token to revoke", functi
     testing.eq(out:find(RAW, 1, true), nil, out)
 end)
 
+testing.test("token-mint-write-and-delete-both-fail names the revoke once", function()
+    local root, home = sandbox()
+
+    -- Resolve the token file path under the sandbox state home
+    local previous_state = os.getenv("XDG_STATE_HOME") or ""
+    local previous_runtime = os.getenv("XDG_RUNTIME_DIR") or ""
+    ffi.C.setenv("XDG_RUNTIME_DIR", "", 1)
+    ffi.C.setenv("XDG_STATE_HOME", home .. "/state", 1)
+    local path = assert(tokenfile.path(NAME))
+    ffi.C.setenv("XDG_STATE_HOME", previous_state, 1)
+    ffi.C.setenv("XDG_RUNTIME_DIR", previous_runtime, 1)
+
+    -- Block both the write and the delete of the token file
+    assert(fs.mkdir(path, { parents = true }))
+    assert(fs.write(path .. "/held", "x"))
+    assert(fs.mkdir(path .. ".new"))
+    assert(fs.write(root .. "/list.json", '[{"id":"tok-child-9","name":"' .. NAME .. '"}]'))
+
+    -- Mint and name the revoke once, never claiming the token stays issued
+    local out, code = mint(root, home)
+    testing.eq(code, 1)
+    testing.ok(
+        out:find(
+            "Cannot write " .. path .. ". Revoked the token. Cannot delete " .. path .. ".",
+            1,
+            true
+        ),
+        out
+    )
+    testing.eq(out:find("stays issued", 1, true), nil, out)
+    testing.ok(read(root, "calls"):find("-X DELETE", 1, true), read(root, "calls"))
+    testing.eq(out:find(RAW, 1, true), nil, out)
+end)
+
 testing.test("token-mint-write-stays says the token stays issued when the revoke fails", function()
     local root, home = sandbox()
     assert(fs.mkdir(home .. "/state", { parents = true }))
