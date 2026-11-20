@@ -21,7 +21,9 @@ local TEMP_TEMPLATE = "/tmp/dev-tools.XXXXXX"
 
 ---@class dev.root
 ---@field Reason table<string, dev.root.Reason> the reasons `manifest_copy` names
-local M = { Reason = Reason }
+---@field MAX_BYTES integer the largest manifest `manifest_copy` reads, in bytes
+---@field MAX_LINE_BYTES integer the longest line `manifest_copy` accepts, in bytes
+local M = { Reason = Reason, MAX_BYTES = MAX_BYTES, MAX_LINE_BYTES = MAX_LINE_BYTES }
 
 ---Say whether dev may run these command words as root.
 ---@param words string[] the command words, a verb and its subcommand

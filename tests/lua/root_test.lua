@@ -5,6 +5,7 @@ local root = require("dev.root")
 local devproject = require("dev.project")
 local support = require("support")
 local tools = require("dev.cmd.tools")
+local verb = require("dev.verb")
 
 local MAIN = dev_os.capture({ "pwd" }):gsub("\n$", "") .. "/dotfiles/bin/.local/share/dev/main.lua"
 local MAX = 262144
@@ -397,6 +398,106 @@ testing.test("a failing fstat is a refusal, not a traceback", function()
     testing.eq(message, nil)
     testing.eq(reason, root.Reason.OPEN)
     testing.eq(detail, manifest)
+    fs.remove(base, { recursive = true })
+end)
+
+local function with_mktemp(stub, fn)
+    local capture = dev_os.capture
+    dev_os.capture = function(argv, ...)
+        if argv[1] == "mktemp" then
+            return stub()
+        end
+        return capture(argv, ...)
+    end
+    local ok, err = pcall(fn)
+    dev_os.capture = capture
+    if not ok then
+        error(err, 0)
+    end
+end
+
+local function failing_mktemp()
+    return "", 1
+end
+
+local function missing_mktemp(base)
+    return function()
+        return base .. "/missing/copy\n", 0
+    end
+end
+
+local function noting(fn)
+    local note = verb.note
+    local lines = {}
+    verb.note = function(text)
+        lines[#lines + 1] = text
+    end
+    local ok, err = pcall(fn)
+    verb.note = note
+    if not ok then
+        error(err, 0)
+    end
+    return lines
+end
+
+testing.test("manifest_copy returns the temp reason when mktemp fails", function()
+    local base = assert(fs.realpath(support.tempdir()))
+    local dir, manifest = project(base, "p", "x\n")
+    local none, message, reason, detail
+    with_mktemp(failing_mktemp, function()
+        none, message, reason, detail = copy_of(dir, manifest)
+    end)
+    testing.eq(none, nil)
+    testing.eq(message, nil)
+    testing.eq(reason, root.Reason.TEMP)
+    testing.eq(detail, nil)
+    fs.remove(base, { recursive = true })
+end)
+
+testing.test("manifest_copy returns the write reason with the copy path", function()
+    local base = assert(fs.realpath(support.tempdir()))
+    local dir, manifest = project(base, "p", "x\n")
+    local before = temp_count()
+    local none, message, reason, detail
+    with_mktemp(missing_mktemp(base), function()
+        none, message, reason, detail = copy_of(dir, manifest)
+    end)
+    testing.eq(none, nil)
+    testing.eq(message, nil)
+    testing.eq(reason, root.Reason.WRITE)
+    testing.eq(detail, base .. "/missing/copy")
+    testing.ok(not fs.exists(base .. "/missing/copy"), "no copy should be left")
+    testing.eq(temp_count(), before)
+    fs.remove(base, { recursive = true })
+end)
+
+testing.test("tools check writes the temp file sentence when mktemp fails", function()
+    local base = assert(fs.realpath(support.tempdir()))
+    local dir = project(base, "p", "name binary pacman\n")
+    local code, seen
+    local lines = noting(function()
+        with_mktemp(failing_mktemp, function()
+            code, seen = run_as_root(dir, "tools check")
+        end)
+    end)
+    testing.eq(code, 1)
+    testing.eq(seen, nil)
+    testing.eq(lines, { "Cannot make a temp file." })
+    fs.remove(base, { recursive = true })
+end)
+
+testing.test("tools check writes the cannot write sentence with the copy path", function()
+    local base = assert(fs.realpath(support.tempdir()))
+    local dir = project(base, "p", "name binary pacman\n")
+    local code, seen
+    local lines = noting(function()
+        with_mktemp(missing_mktemp(base), function()
+            code, seen = run_as_root(dir, "tools check")
+        end)
+    end)
+    testing.eq(code, 1)
+    testing.eq(seen, nil)
+    testing.eq(lines, { "Cannot write " .. base .. "/missing/copy." })
     fs.remove(base, { recursive = true })
 end)
 

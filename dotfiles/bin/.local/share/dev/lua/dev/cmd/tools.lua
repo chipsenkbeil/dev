@@ -100,9 +100,9 @@ local function manifest_refusal(reason, manifest, detail)
             .. tostring(detail)
             .. " must be owned by root and not writable by others."
     elseif reason == Reason.TOO_LARGE then
-        return refusing .. "It is larger than 256 KiB."
+        return refusing .. "It is larger than " .. root.MAX_BYTES / 1024 .. " KiB."
     elseif reason == Reason.LONG_LINE then
-        return refusing .. "A line is longer than 4096 bytes."
+        return refusing .. "A line is longer than " .. root.MAX_LINE_BYTES .. " bytes."
     elseif reason == Reason.TEMP then
         return "Cannot make a temp file."
     elseif reason == Reason.WRITE then
