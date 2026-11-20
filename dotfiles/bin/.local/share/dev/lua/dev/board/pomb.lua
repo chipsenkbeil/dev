@@ -546,6 +546,7 @@ end
 ---@field kind string the credential's kind
 ---@field scope string how far the credential reaches
 ---@field role string? the role the credential holds
+---@field preset string? the preset the credential was minted from
 ---@field label string? the label the credential carries
 ---@field issuer string? who issued the credential
 ---@field expires integer? when the credential expires
@@ -578,6 +579,7 @@ function Backend:whoami()
         kind = present(doc.kind) or "?",
         scope = present(doc.scope) or "?",
         role = present(doc.role_name),
+        preset = present(doc.preset),
         label = present(doc.label),
         issuer = type(doc.parent_token) == "table" and present(doc.parent_token.name) or nil,
         expires = tonumber(doc.expires_at),

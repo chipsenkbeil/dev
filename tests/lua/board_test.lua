@@ -11462,6 +11462,24 @@ local function refusing(root, who, status_line)
     )
 end
 
+testing.test("whoami-preset prints the preset line only when whoami holds one", function()
+    for _, case in ipairs({
+        { who = '{"name":"n","role_name":"implementer","preset":"work"}', line = "preset: work\n" },
+        { who = '{"name":"n","role_name":"implementer","preset":null}', line = nil },
+        { who = '{"name":"n","role_name":"implementer"}', line = nil },
+    }) do
+        local root, home = sandbox()
+        answering(root, "*/api/v1/auth/whoami) printf '" .. case.who .. "\\n200' ;;\n")
+        local out, code = dev(root, home, { "board", "whoami" })
+        testing.eq(code, 0, out)
+        if case.line then
+            testing.ok(out:find("role: implementer\n" .. case.line, 1, true), out)
+        else
+            testing.eq(out:find("preset", 1, true), nil, out)
+        end
+    end
+end)
+
 testing.test("role-refusal-denied names the refused permission and the role", function()
     local root, home = sandbox()
     refusing(

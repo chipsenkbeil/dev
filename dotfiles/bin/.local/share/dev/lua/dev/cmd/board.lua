@@ -4638,6 +4638,9 @@ function commands.whoami(backend, args)
         "boards: " .. list(who.boards),
         "permissions: " .. list(who.permissions),
     }
+    if who.preset then
+        table.insert(lines, 5, "preset: " .. who.preset)
+    end
     return { output = table.concat(lines, "\n") }
 end
 

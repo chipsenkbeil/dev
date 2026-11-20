@@ -1982,8 +1982,10 @@ line.
 `GET /api/v1/auth/whoami`.
 
 - It prints one `key: value` line each for `name`, `kind`, `scope`, `role`,
-  `label`, `issuer`, `expires` (UTC, `never` when the credential does not
-  expire), `boards` (`all`, or the board names) and `permissions`.
+  `preset`, `label`, `issuer`, `expires` (UTC, `never` when the credential does
+  not expire), `boards` (`all`, or the board names) and `permissions`.
+- The `preset` line is the preset the token was minted from, and a token with
+  no preset prints no `preset` line.
 - A token issued as no role shows `none` for `role`, `label` and `issuer`.
 - `issuer` is the name of the lead token that issued it, as it was then.
 - The token is never printed.
@@ -2003,7 +2005,6 @@ line.
 - It prints one `name (group): presets` line per entry, in Pomb's order, with
   the presets that hold it. Compare it with the `permissions` of `whoami` to
   see what a token may do.
-- Pomb's whoami returns no preset field, so dev prints none for the token.
 - The token is never printed.
 - A local board is exit 1, and an extra word is exit 2.
 
