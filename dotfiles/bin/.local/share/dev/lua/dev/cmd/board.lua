@@ -5211,8 +5211,9 @@ end
 ---@param say fun(line: string) prints one line
 ---@return integer? left how many changes are still queued, nil when the queue could not be used
 ---@return string? message why the queue could not be used
+---@return dev.board.queue.Reason? reason the kind of failure when the queue could not be loaded
 local function replay(backend, pending, say)
-    local drained, message = pending:drain(function(entry)
+    local drained, message, reason = pending:drain(function(entry)
         if not QUEUE_RULES[entry.sub] or type(entry.args) ~= "table" then
             say("dropped " .. tostring(entry.sub) .. ": not a change dev queues")
             return queue.Replay.DONE
@@ -5229,7 +5230,7 @@ local function replay(backend, pending, say)
         return queue.Replay.DONE
     end)
     if not drained then
-        return nil, message
+        return nil, message, reason
     end
     return pending:count()
 end
@@ -5450,7 +5451,7 @@ M.handlers["board wait"] = function(ctx)
         if result.code == USAGE then
             verb.usage_error(ctx, result.message)
         end
-        verb.die(sentence(result.message))
+        verb.die(result.message)
     end
     print(result.output)
     return 0
@@ -5477,9 +5478,9 @@ M.handlers["board sync"] = function(ctx)
         verb.die(message)
     end
     local left
-    left, message = replay(backend, pending, print)
+    left, message, reason = replay(backend, pending, print)
     if not left then
-        verb.die(sentence(message))
+        verb.die(queue_unreadable(pending.path, reason, message) .. " The queue is left in place.")
     end
     if left > 0 then
         print("queued: " .. left)
@@ -5583,12 +5584,12 @@ for sub in pairs(commands) do
                 and pomb.unreachable(result.message, idempotent(queued[1].sub, queued[1].args))
             then
                 for _, entry in ipairs(queued) do
-                    local ok, why = pending:push(entry.sub, entry.args)
+                    local ok, why, reason = pending:push(entry.sub, entry.args)
                     if not ok then
                         verb.die(
-                            sentence(result.message)
+                            result.message
                                 .. " The change could not be queued. "
-                                .. sentence(why)
+                                .. queue_unreadable(pending.path, reason, why)
                         )
                     end
                 end

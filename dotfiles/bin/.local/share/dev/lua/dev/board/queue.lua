@@ -115,15 +115,19 @@ end
 ---@param args string[] its arguments as typed
 ---@return true? ok true on success
 ---@return string? message why it could not be kept
+---@return dev.board.queue.Reason? reason the kind of failure when the file could not be loaded
 function Queue:push(sub, args)
-    return locked(self.path, function()
-        local entries, message = load(self.path)
+    local load_reason
+    local ok, failure = locked(self.path, function()
+        local entries, message, reason = load(self.path)
         if not entries then
+            load_reason = reason
             return nil, message
         end
         entries[#entries + 1] = { sub = sub, args = args, at = store.stamp() }
         return save(self.path, entries)
     end)
+    return ok, failure, load_reason
 end
 
 ---Replay the changes in order while holding the queue's lock.
@@ -135,10 +139,13 @@ end
 ---@param replay fun(entry: dev.board.queue.Entry): "done"|"stop" deals with one change
 ---@return integer? handled how many left the queue, nil when the file could not be used
 ---@return string? message why it could not be used
+---@return dev.board.queue.Reason? reason the kind of failure when the file could not be loaded
 function Queue:drain(replay)
-    return locked(self.path, function()
-        local entries, message = load(self.path)
+    local load_reason
+    local drained, failure = locked(self.path, function()
+        local entries, message, reason = load(self.path)
         if not entries then
+            load_reason = reason
             return nil, message
         end
         local handled = 0
@@ -155,6 +162,7 @@ function Queue:drain(replay)
         end
         return handled
     end)
+    return drained, failure, load_reason
 end
 
 return M

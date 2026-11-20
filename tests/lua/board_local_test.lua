@@ -3455,6 +3455,36 @@ testing.test("a write that cannot reach Pomb does not overwrite a malformed queu
     testing.eq(assert(fs.read(queue_path(home))), "not json")
 end)
 
+testing.test("a change that cannot be queued prints both sentences once", function()
+    local root, home = bad_queue("not json")
+    assert(fs.write(root .. "/down", ""))
+    local out = pomb_dev(root, home, { "board", "move", ID_A:sub(1, 8), Column.REVIEW })
+    local _, queued = out:gsub("The change could not be queued%. ", "")
+    testing.eq(queued, 1, out)
+    local _, backend = out:gsub("%(curl exit 7%)%. The change", "")
+    testing.eq(backend, 1, out)
+    testing.ok(out:find(queue_path(home) .. ":1: ", 1, true), out)
+    testing.ok(not out:find(".. ", 1, true), out)
+    testing.ok(out:find("%.%s*$"), out)
+end)
+
+testing.test("a malformed queue file hands drain and push the malformed reason", function()
+    local queue = require("dev.board.queue")
+    local pending = queue.new("unit")
+    pending.path = support.tempdir() .. "/unit.queue"
+    assert(fs.write(pending.path, "not json"))
+    local drained, message, reason = pending:drain(function()
+        return queue.Replay.DONE
+    end)
+    testing.eq(drained, nil)
+    testing.ok(message:find(pending.path .. ":1: ", 1, true), message)
+    testing.eq(reason, queue.Reason.MALFORMED)
+    local ok
+    ok, message, reason = pending:push("move", { "aaaaaaaa" })
+    testing.eq(ok, nil)
+    testing.eq(reason, queue.Reason.MALFORMED)
+end)
+
 testing.test("a local board never queues", function()
     local root, home = local_board()
     dev(root, home, {
