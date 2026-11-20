@@ -35,7 +35,7 @@ local function added(out)
     return assert(out:match("added (%x+)"), out)
 end
 
-testing.test("stale_lists_epic_with_every_child_done", function()
+testing.test("stale lists an epic whose children are all done", function()
     local root, home = local_board()
     local child = added((dev(root, home, {
         "board",

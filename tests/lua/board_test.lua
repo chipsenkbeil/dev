@@ -1684,7 +1684,7 @@ testing.test("an epic moves to Done once every child is Done and its outcome is 
     testing.eq(backend.calls[#backend.calls], { "move", ID_C, support.COLUMN_NAME.DONE })
 end)
 
-testing.test("epic_move_refused", function()
+testing.test("an epic with open children is refused a move into Done", function()
     local card = planned()
     card.column = support.COLUMN_NAME.READY
     card.epic = { done = 1, total = 3 }
@@ -2393,7 +2393,7 @@ testing.test("note and move resolve the card by prefix", function()
     testing.eq(backend.calls[3], { "move", ID_C, support.COLUMN_NAME.REVIEW })
 end)
 
-testing.test("note_mostly_ids_refused", function()
+testing.test("note refuses a body that is mostly ids and paths", function()
     local backend = fake(sample())
     local result = cmd_board.run(
         "note",
@@ -2423,7 +2423,7 @@ testing.test("note posts a body that starts with a single dash", function()
     testing.eq(backend.calls[1], { "note", ID_C, "- first item", {} })
 end)
 
-testing.test("note_one_id_accepted", function()
+testing.test("note accepts a sentence that holds one id", function()
     local backend = fake(sample())
     local result = cmd_board.run(
         "note",
@@ -2433,7 +2433,7 @@ testing.test("note_one_id_accepted", function()
     testing.eq(result.output, "noted cccccccc")
 end)
 
-testing.test("note_short_accepted", function()
+testing.test("note accepts a short body of ids and paths", function()
     local backend = fake(sample())
     local result = cmd_board.run("note", { "cccccccc", "a/b.lua", "2af0e003", "c/d.md" }, backend)
     testing.eq(result.output, "noted cccccccc")
@@ -3274,7 +3274,7 @@ testing.test(
     end
 )
 
-testing.test("epic_add_ready_bare", function()
+testing.test("add places a bare epic in Ready", function()
     local backend = fake(sample())
     local result = cmd_board.run("add", {
         "Big",
@@ -8162,7 +8162,7 @@ testing.test("ls marks an epic and its children", function()
     testing.ok(out:find("children: 1 of 3 done\n", 1, true), out)
 end)
 
-testing.test("epic_move_refused_by_settings", function()
+testing.test("an epic move is refused by the board settings", function()
     local detail = DETAIL:gsub('"name":"Backlog"', '"name":"Backlog","wip_limit":2', 1)
     local export = WORKING_EXPORT:gsub('"done":false', '"done":true'):gsub(
         '"name":"First"',
@@ -8189,7 +8189,7 @@ testing.test("epic_move_refused_by_settings", function()
     testing.ok(read(root, "calls"):find("/move", 1, true), read(root, "calls"))
 end)
 
-testing.test("epic_move_pomb_refusal", function()
+testing.test("an epic move reports the refusal Pomb answers", function()
     local text =
         "the epic still has open children (2), so it cannot enter a WIP-limited or Done column"
     local export = WORKING_EXPORT:gsub(
@@ -8242,7 +8242,7 @@ testing.test("an epic with an open child in the task read is refused", function(
     testing.eq(read(root, "calls"):find("/move", 1, true), nil)
 end)
 
-testing.test("epic_reopen_out_of_done", function()
+testing.test("an epic with open children can be reopened out of Done", function()
     local export = PLANNED_EXPORT:gsub(
         '"name":"First","column_id":"col%-ready"',
         '"name":"First","kind":"epic","children_total":3,"children_done":1,"column_id":"col-done"',

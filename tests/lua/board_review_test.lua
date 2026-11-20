@@ -691,7 +691,7 @@ local function review_as(backend, kind, verdict)
     )
 end
 
-testing.test("board_review_clean_sets_seat_approved_with_revision", function()
+testing.test("a clean or minor review sets the seat approved with the revision", function()
     local root, _, head = git_root()
     for _, verdict in ipairs({ "clean", "minor" }) do
         local backend = seat_backend(root)
@@ -705,7 +705,7 @@ testing.test("board_review_clean_sets_seat_approved_with_revision", function()
     end
 end)
 
-testing.test("board_review_needs_work_sets_changes_needed", function()
+testing.test("a needs-work review sets the seat to changes needed", function()
     local root = git_root()
     local backend = seat_backend(root)
     local result = review_as(backend, "code", "needs-work")
@@ -714,7 +714,7 @@ testing.test("board_review_needs_work_sets_changes_needed", function()
     testing.eq(backend.seats[1].verdict, "changes_needed")
 end)
 
-testing.test("board_review_reports_a_refused_seat", function()
+testing.test("a review reports a seat that Pomb refused", function()
     local root = git_root()
     local backend = seat_backend(
         root,
@@ -745,7 +745,7 @@ local function recheck_of(backend, of)
     }, backend)
 end
 
-testing.test("board_review_recheck_refused_with_seat_held_prints_no_warning", function()
+testing.test("a refused recheck with the seat held prints no warning", function()
     local root = git_root()
     local backend = seat_backend(root, "pomb answered 409: the seat is taken (seat_held)")
     local result = recheck_of(backend, "style")
@@ -762,7 +762,7 @@ testing.test("board_review_recheck_refused_with_seat_held_prints_no_warning", fu
     testing.eq(#backend.notes, 1)
 end)
 
-testing.test("board_review_warns_on_a_code_review_refused_with_seat_held", function()
+testing.test("a code review refused with the seat held warns", function()
     local root = git_root()
     local backend = seat_backend(root, "pomb answered 409: the seat is taken (seat_held)")
     local result = review_as(backend, "code", "clean")
@@ -772,7 +772,7 @@ testing.test("board_review_warns_on_a_code_review_refused_with_seat_held", funct
     testing.eq(result.output:find("already held", 1, true), nil)
 end)
 
-testing.test("board_review_recheck_refused_with_owner_seat_still_warns", function()
+testing.test("a refused recheck with the owner seat still warns", function()
     local root = git_root()
     local backend = seat_backend(
         root,
@@ -784,7 +784,7 @@ testing.test("board_review_recheck_refused_with_owner_seat_still_warns", functio
     testing.ok(result.warnings[1]:find("owner_seat", 1, true), result.warnings[1])
 end)
 
-testing.test("board_review_writes_the_missing_seat_warning_from_its_reason", function()
+testing.test("a review writes the missing seat warning from its reason", function()
     local root = git_root()
     local backend = seat_backend(root, "add refused", board.SeatReason.NO_SEAT)
     local result = review_as(backend, "code", "clean")
@@ -801,7 +801,7 @@ testing.test("board_review_writes_the_missing_seat_warning_from_its_reason", fun
     testing.ok(result.warnings[1]:find("dev board take first.", 1, true), result.warnings[1])
 end)
 
-testing.test("board_review_still_writes_dev_review_comment", function()
+testing.test("a review still writes the dev-review comment", function()
     local root, _, head = git_root()
     local backend = seat_backend(root)
     local result = review_as(backend, "code", "clean")

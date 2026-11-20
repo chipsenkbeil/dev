@@ -4988,7 +4988,7 @@ testing.test("next --for lead on a pomb board skips the planner and owner cards"
     testing.ok(only(out, lead), out)
 end)
 
-testing.test("epic_local_move", function()
+testing.test("a local epic moves through the columns", function()
     local root, home = local_board()
     local function add(name)
         return prefix_of((dev(root, home, {
@@ -5555,7 +5555,7 @@ local function epic_with_child(root, home)
     return epic, child
 end
 
-testing.test("epic_children_need_no_outcomes", function()
+testing.test("an epic with children needs no outcomes to reach Ready", function()
     local root, home = local_board()
     local epic = epic_with_child(root, home)
     local out, code = dev(root, home, { "board", "move", epic, Column.BACKLOG })
@@ -5564,7 +5564,7 @@ testing.test("epic_children_need_no_outcomes", function()
     testing.eq(code, 0, out)
 end)
 
-testing.test("epic_closes_with_open_outcomes", function()
+testing.test("an epic closes while its outcomes are open", function()
     local root, home = local_board()
     local epic, child = epic_with_child(root, home)
     dev(root, home, { "board", "outcome", epic, JUDGED })
