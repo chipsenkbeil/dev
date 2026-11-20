@@ -180,7 +180,7 @@ testing.test("init renames a local In Review column to Review and keeps its card
         end
     end
     local id = review.id
-    review.name = "In Review"
+    review.name = support.COLUMN_NAME.IN_REVIEW
     doc.cards[1].column_id = id
     assert(fs.write(file_of(home), assert(json.encode(doc))))
 

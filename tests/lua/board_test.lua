@@ -12839,10 +12839,10 @@ do
 end
 
 testing.test(
-    "move to review on a board with In Review and no Review names dev board init",
+    "move to review on a board with a legacy review column and no Review names dev board init",
     function()
         local backend = fake({ planned() })
-        backend.limited = { "In Review" }
+        backend.limited = { support.COLUMN_NAME.IN_REVIEW }
         local result = cmd_board.run("move", { "cccccccc", support.Column.REVIEW }, backend)
         testing.eq(result.code, 1)
         testing.ok(
@@ -12854,32 +12854,45 @@ testing.test(
             result.message
         )
         testing.ok(result.message:find("no Review column", 1, true), result.message)
-        result = cmd_board.run("move", { "cccccccc", "In Review" }, backend)
+        result = cmd_board.run("move", { "cccccccc", support.COLUMN_NAME.IN_REVIEW }, backend)
         testing.eq(result.code, 1)
         testing.ok(result.message:find("Run `dev board init` to move", 1, true), result.message)
     end
 )
 
-testing.test("move to review keeps the plain refusal on a board without In Review", function()
-    local backend = fake({ planned() })
-    local result = cmd_board.run("move", { "cccccccc", "In Review" }, backend)
-    testing.eq(result.code, 2)
-    testing.ok(result.message:find("Unknown column In Review", 1, true), result.message)
-end)
+testing.test(
+    "move to review keeps the plain refusal on a board without a legacy review column",
+    function()
+        local backend = fake({ planned() })
+        local result = cmd_board.run("move", { "cccccccc", support.COLUMN_NAME.IN_REVIEW }, backend)
+        testing.eq(result.code, 2)
+        testing.ok(
+            result.message:find("Unknown column " .. support.COLUMN_NAME.IN_REVIEW, 1, true),
+            result.message
+        )
+    end
+)
 
-testing.test("wait on a board with In Review and no Review names dev board init", function()
-    local backend = waiter({})
-    backend.rows = {
-        { name = "In Review", is_done = false },
-        { name = support.COLUMN_NAME.DONE, is_done = true },
-    }
-    local result = cmd_board.wait(backend, {}, { stem = support.tempdir() .. "/wait" })
-    testing.eq(result.code, 1)
-    testing.ok(
-        result.message:find("Run `dev board init` to move the board to the stage columns.", 1, true),
-        result.message
-    )
-end)
+testing.test(
+    "wait on a board with a legacy review column and no Review names dev board init",
+    function()
+        local backend = waiter({})
+        backend.rows = {
+            { name = support.COLUMN_NAME.IN_REVIEW, is_done = false },
+            { name = support.COLUMN_NAME.DONE, is_done = true },
+        }
+        local result = cmd_board.wait(backend, {}, { stem = support.tempdir() .. "/wait" })
+        testing.eq(result.code, 1)
+        testing.ok(
+            result.message:find(
+                "Run `dev board init` to move the board to the stage columns.",
+                1,
+                true
+            ),
+            result.message
+        )
+    end
+)
 
 do
     local ATTACHED = '[{"id":"abcdef12-0000-4000-8000-000000000001","name":"old.png","size":2048,'

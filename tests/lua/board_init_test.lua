@@ -71,7 +71,7 @@ local function template_columns()
         support.COLUMN_NAME.BACKLOG,
         support.COLUMN_NAME.READY,
         support.COLUMN_NAME.PROGRESS,
-        "In Review",
+        support.COLUMN_NAME.IN_REVIEW,
         support.COLUMN_NAME.BLOCKED,
         support.COLUMN_NAME.DONE,
     }) do
@@ -485,14 +485,14 @@ testing.test("an old board keeps its cards and gains what is missing", function(
     testing.eq(again, 0)
 end)
 
-testing.test("an In Review column is renamed to Review with its id and cards kept", function()
+testing.test("a legacy review column is renamed to Review with its id and cards kept", function()
     local layout = fake_layout({ columns = template_columns() })
     local _, message, lines = run(layout)
     testing.eq(message, nil)
     testing.eq(names(layout.state.columns), STANDARD)
     local review = layout.state.columns[5]
-    testing.eq(review.id, "col-In Review")
-    testing.eq(lines[1], "renamed column In Review to Review")
+    testing.eq(review.id, "col-" .. support.COLUMN_NAME.IN_REVIEW)
+    testing.eq(lines[1], "renamed column " .. support.COLUMN_NAME.IN_REVIEW .. " to Review")
     local renames = 0
     for _, write in ipairs(layout.state.writes) do
         renames = renames + (write[1] == "rename_column" and 1 or 0)
@@ -503,7 +503,7 @@ testing.test("an In Review column is renamed to Review with its id and cards kep
     testing.eq(said, {})
 end)
 
-testing.test("a board with both In Review and Review renames nothing", function()
+testing.test("a board with both a legacy review column and Review renames nothing", function()
     local columns = template_columns()
     columns[#columns + 1] =
         { id = "col-Review", name = support.COLUMN_NAME.REVIEW, is_done = false }
@@ -1336,7 +1336,7 @@ testing.test("init on a board with no highlights sets all three and a rerun sets
     testing.eq(writes(root), 0)
 end)
 
-testing.test("init renames In Review to Review through the column update", function()
+testing.test("init renames a legacy review column to Review through the column update", function()
     local root, home, tmp = sandbox()
     local parts = {}
     for _, name in ipairs({
@@ -1344,7 +1344,7 @@ testing.test("init renames In Review to Review through the column update", funct
         support.COLUMN_NAME.BACKLOG,
         support.COLUMN_NAME.READY,
         support.COLUMN_NAME.PROGRESS,
-        "In Review",
+        support.COLUMN_NAME.IN_REVIEW,
         support.COLUMN_NAME.VERIFY,
         support.COLUMN_NAME.RELEASE,
         support.COLUMN_NAME.BLOCKED,
@@ -1364,7 +1364,10 @@ testing.test("init renames In Review to Review through the column update", funct
         ),
         calls_of(root)
     )
-    testing.ok(out:find("renamed column In Review to Review\n", 1, true), out)
+    testing.ok(
+        out:find("renamed column " .. support.COLUMN_NAME.IN_REVIEW .. " to Review\n", 1, true),
+        out
+    )
 end)
 
 testing.test("init makes a missing board from the agent project template", function()

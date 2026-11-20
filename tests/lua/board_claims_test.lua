@@ -107,7 +107,7 @@ end)
 local function take_stub(card)
     local stub = { logged = {} }
     function stub:done_columns()
-        return { "Done" }
+        return { support.COLUMN_NAME.DONE }
     end
     function stub:cards()
         return { card }

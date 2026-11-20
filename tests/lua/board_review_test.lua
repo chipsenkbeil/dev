@@ -537,7 +537,7 @@ testing.test("a review that cannot be written is never reported as recorded", fu
     local card = {
         id = "11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
         name = "Card",
-        column = "In Progress",
+        column = support.COLUMN_NAME.PROGRESS,
         size = "unsized",
         labels = {},
         checks = {},
@@ -545,7 +545,7 @@ testing.test("a review that cannot be written is never reported as recorded", fu
     }
     local backend = { root = root }
     function backend:done_columns()
-        return { "Done" }
+        return { support.COLUMN_NAME.DONE }
     end
     function backend:cards()
         return { card }
