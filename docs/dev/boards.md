@@ -412,7 +412,7 @@ What it lays out:
   - The post needs `roles.grant` and a board the token holds.
     The lead token can run init once the roles exist, as the post is then
     skipped. A `permission_denied` is shown with the missing permission, and an
-    `exceeds_grant` as `Board unavailable: The token (role R) does not hold
+    `exceeds_grant` as `Board refused: The token (role R) does not hold
     board X (ID), so it cannot be granted the standard roles. Add the board to
     the token.` with nothing created.
   - When the refused permission is `roles.grant`, `init` prints ``The agent
@@ -4230,7 +4230,7 @@ The output:
 
 A card another agent owns:
 
-- It is `owner_held`, printed as `Board unavailable: Pomb answered 409: task
+- It is `owner_held`, printed as `Board refused: Pomb answered 409: task
   owned by NAME until TIME.` (exit 1).
 - No loop starts.
 
@@ -4725,8 +4725,11 @@ Writes:
   `oldest_cursor`.
 - a local board's `wait` is `nil, "A local board has nothing to wait on."`.
 
-A curl failure is `Board unavailable: Cannot reach <url> (curl exit N).` An
-HTTP error is `Board unavailable: Pomb answered <status>: <message>.`
+A curl failure is `Board unavailable: Cannot reach <url> (curl exit N).` A
+5xx answer is `Board unavailable: Pomb answered <status>: <message>.` A 4xx
+answer is Pomb refusing the request, so it is `Board refused: Pomb answered
+<status>: <message>.` The 403 permission and exceeds-grant texts take the same
+`Board refused:` prefix.
 
 The Pomb backend writes every refusal as a full sentence itself, through
 `text.sentence`. The other backend messages quoted in this doc are the raw text

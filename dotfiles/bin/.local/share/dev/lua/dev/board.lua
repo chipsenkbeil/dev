@@ -577,6 +577,8 @@ M.TransportReason = {
 }
 
 local UNAVAILABLE = "Board unavailable: "
+local BOARD_REFUSED = "Board refused: "
+local SERVER_ERROR = 500
 local LOCKED_DEFAULT = "comments, moves, edits, reorders and resizes are refused"
     .. " until the owner answers and the label that locks it is removed"
 
@@ -597,18 +599,19 @@ function M.transport_refusal(reason, detail)
     elseif reason == Reason.UNREADABLE then
         return UNAVAILABLE .. "Pomb sent an answer dev cannot read."
     elseif reason == Reason.REFUSED then
-        return UNAVAILABLE .. with_cause("Pomb answered " .. detail.status, detail.message)
+        local prefix = detail.status < SERVER_ERROR and BOARD_REFUSED or UNAVAILABLE
+        return prefix .. with_cause("Pomb answered " .. detail.status, detail.message)
     elseif reason == Reason.EXPIRED then
         return UNAVAILABLE .. "The role token expired. Mint it again from its issuer."
     elseif reason == Reason.DENIED then
-        return UNAVAILABLE
+        return BOARD_REFUSED
             .. "Pomb answered 403. "
             .. token_name(detail)
             .. " lacks the "
             .. detail.permission
             .. " permission on every board. Use a token that has it."
     elseif reason == Reason.UNASSIGNED then
-        return UNAVAILABLE
+        return BOARD_REFUSED
             .. token_name(detail)
             .. " has the "
             .. detail.permission
@@ -616,7 +619,7 @@ function M.transport_refusal(reason, detail)
             .. detail.board_id
             .. ". Add the board to the token."
     elseif reason == Reason.EXCEEDS then
-        return UNAVAILABLE
+        return BOARD_REFUSED
             .. with_cause(
                 "Pomb answered 403",
                 "the " .. detail.role .. " role cannot " .. detail.action
@@ -649,7 +652,7 @@ function M.transport_refusal(reason, detail)
     elseif reason == Reason.NO_TOKEN then
         return UNAVAILABLE .. "Pomb sent no usable token."
     elseif reason == Reason.ROLES_NOT_HELD then
-        return UNAVAILABLE
+        return BOARD_REFUSED
             .. "The token"
             .. (detail.role and (" (role " .. detail.role .. ")") or "")
             .. " does not hold board "
@@ -658,7 +661,7 @@ function M.transport_refusal(reason, detail)
             .. detail.id
             .. "), so it cannot be granted the standard roles. Add the board to the token."
     elseif reason == Reason.ROLES_NO_BOARD then
-        return UNAVAILABLE
+        return BOARD_REFUSED
             .. text.sentence(
                 "Board "
                     .. detail.name
@@ -666,7 +669,7 @@ function M.transport_refusal(reason, detail)
                     .. detail.message
             )
     elseif reason == Reason.ROLES_QUOTA then
-        return UNAVAILABLE
+        return BOARD_REFUSED
             .. text.sentence(
                 "The account is over its quota. The standard roles cannot be created. "
                     .. detail.message

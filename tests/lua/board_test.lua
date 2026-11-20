@@ -7259,7 +7259,7 @@ testing.test("an http error reports the server's message", function()
     )
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
-    testing.ok(out:find("Board unavailable: Pomb answered 403: nope", 1, true), out)
+    testing.ok(out:find("Board refused: Pomb answered 403: nope", 1, true), out)
 end)
 
 testing.test("an unreachable server reports the curl exit", function()
@@ -7318,7 +7318,7 @@ testing.test("unreachable classifies each refusal as before", function()
         testing.eq(pomb.unreachable(message, false), false, message)
         testing.eq(pomb.unreachable(message, true), true, message)
     end
-    testing.eq(pomb.unreachable("Board unavailable: Pomb answered 403: nope.", true), false)
+    testing.eq(pomb.unreachable("Board refused: Pomb answered 403: nope.", true), false)
     testing.eq(pomb.unreachable(nil, true), false)
 end)
 
@@ -11011,7 +11011,7 @@ testing.test("a permission_denied with no board says the token lacks it everywhe
     testing.eq(code, 1)
     testing.eq(
         out,
-        "Board unavailable: Pomb answered 403. This token lacks the tasks.edit permission "
+        "Board refused: Pomb answered 403. This token lacks the tasks.edit permission "
             .. "on every board. Use a token that has it.\n"
     )
 end)
@@ -11027,7 +11027,7 @@ testing.test("a permission_denied with a board says the board is not assigned", 
     testing.eq(code, 1)
     testing.eq(
         out,
-        "Board unavailable: This token has the tasks.edit permission but is not assigned "
+        "Board refused: This token has the tasks.edit permission but is not assigned "
             .. "to board board-9. Add the board to the token.\n"
     )
 end)
@@ -11054,7 +11054,7 @@ testing.test("role-refusal-denied names the refused permission and the role", fu
     testing.eq(code, 1)
     testing.eq(
         out,
-        "Board unavailable: Pomb answered 403. This token (role implementer) lacks the "
+        "Board refused: Pomb answered 403. This token (role implementer) lacks the "
             .. "tasks.edit permission on every board. Use a token that has it.\n"
     )
 end)
@@ -11070,7 +11070,7 @@ testing.test("role-refusal-denied-board names the role and the board", function(
     testing.eq(code, 1)
     testing.eq(
         out,
-        "Board unavailable: This token (role implementer) has the tasks.edit permission "
+        "Board refused: This token (role implementer) has the tasks.edit permission "
             .. "but is not assigned to board board-9. Add the board to the token.\n"
     )
 end)
@@ -11084,10 +11084,7 @@ testing.test("role-refusal-exceeds-grant names the refused action and the role",
     )
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
-    testing.eq(
-        out,
-        "Board unavailable: Pomb answered 403: the implementer role cannot tasks.bin.\n"
-    )
+    testing.eq(out, "Board refused: Pomb answered 403: the implementer role cannot tasks.bin.\n")
 end)
 
 testing.test("role-refusal-norole keeps the refusal text with no role named", function()
@@ -11099,7 +11096,7 @@ testing.test("role-refusal-norole keeps the refusal text with no role named", fu
     )
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
-    testing.eq(out, "Board unavailable: Pomb answered 403: too much.\n")
+    testing.eq(out, "Board refused: Pomb answered 403: too much.\n")
 end)
 
 testing.test("role-refusal-expired says the role token expired and to mint it again", function()
@@ -11123,10 +11120,7 @@ testing.test("an insufficient_scope 403 still reports the server's message", fun
     )
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
-    testing.eq(
-        out,
-        "Board unavailable: Pomb answered 403: insufficient token scope: needs admin.\n"
-    )
+    testing.eq(out, "Board refused: Pomb answered 403: insufficient token scope: needs admin.\n")
 end)
 
 testing.test("a board missing from a token's assigned boards gets its own message", function()
@@ -11521,7 +11515,7 @@ fi
     testing.test("a 429 past the retry cap fails with the rate limit message", function()
         local result = rate_limited(9, "1")
         testing.eq(result.name, nil)
-        testing.eq(result.message, "Board unavailable: Pomb answered 429: slow down.")
+        testing.eq(result.message, "Board refused: Pomb answered 429: slow down.")
         testing.eq(result.naps, { 1, 1, 1 })
         testing.eq(result.calls, 4)
     end)
@@ -11675,7 +11669,7 @@ end)
 testing.test("wait --for ready keeps waiting on a trim and wakes for an unclaimed card", function()
     local cards = { { id = ID_A, column = support.COLUMN_NAME.READY } }
     local result, seen, path = waited({
-        { message = "Board unavailable: pomb answered 410: too old", oldest = "17" },
+        { message = "Board refused: pomb answered 410: too old", oldest = "17" },
         got("18", { kind = "task_added", task_id = ID_A, column = support.COLUMN_NAME.READY }),
     }, { "--for", "ready" }, { cards = cards })
     testing.eq(result.output, "added 11111111 to Ready")
@@ -12418,7 +12412,7 @@ testing.test(
     "wait stores the oldest cursor of an expired one and says events were trimmed",
     function()
         local result, _, path = waited({
-            { message = "Board unavailable: pomb answered 410: too old", oldest = "17" },
+            { message = "Board refused: pomb answered 410: too old", oldest = "17" },
         }, { "--for", "lead" })
         testing.eq(result.output, "Events were trimmed. Check the board.")
         testing.eq(result.message, nil)
@@ -12462,7 +12456,7 @@ testing.test(
 )
 
 local function limited()
-    return { message = "Board unavailable: pomb answered 429: end one", refused = true }
+    return { message = "Board refused: pomb answered 429: end one", refused = true }
 end
 
 testing.test(
@@ -12533,7 +12527,7 @@ end)
 
 testing.test("wait treats a 429 without the too_many_waits flag as a plain refusal", function()
     local result, seen = waited({
-        { message = "Board unavailable: pomb answered 429: slow down" },
+        { message = "Board refused: pomb answered 429: slow down" },
     }, {})
     testing.eq(result.code, 1)
     testing.eq(#seen.naps, 0)
@@ -12541,7 +12535,7 @@ end)
 
 testing.test("wait fails at once on a refusal", function()
     local result, seen = waited({
-        { message = "Board unavailable: pomb answered 401: bad token" },
+        { message = "Board refused: pomb answered 401: bad token" },
     }, {})
     testing.eq(result.code, 1)
     testing.eq(#seen.naps, 0)
@@ -14309,6 +14303,7 @@ end)
 testing.test("transport_refusal writes one sentence per transport reason", function()
     local Reason = board.TransportReason
     local prefix = "Board unavailable: "
+    local refused = "Board refused: "
     testing.eq(
         board.transport_refusal(Reason.UNREACHABLE, { url = "https://p.test", code = 7 }),
         prefix .. "Cannot reach https://p.test (curl exit 7)."
@@ -14327,19 +14322,19 @@ testing.test("transport_refusal writes one sentence per transport reason", funct
     )
     testing.eq(
         board.transport_refusal(Reason.DENIED, { permission = "tasks.edit", role = "lead" }),
-        prefix
+        refused
             .. "Pomb answered 403. This token (role lead) lacks the tasks.edit permission "
             .. "on every board. Use a token that has it."
     )
     testing.eq(
         board.transport_refusal(Reason.UNASSIGNED, { permission = "tasks.edit", board_id = "b9" }),
-        prefix
+        refused
             .. "This token has the tasks.edit permission but is not assigned to board b9. "
             .. "Add the board to the token."
     )
     testing.eq(
         board.transport_refusal(Reason.EXCEEDS, { role = "worker", action = "tasks.bin" }),
-        prefix .. "Pomb answered 403: the worker role cannot tasks.bin."
+        refused .. "Pomb answered 403: the worker role cannot tasks.bin."
     )
     testing.eq(
         board.transport_refusal(Reason.LOCKED, { message = "owner pending" }),
@@ -14351,7 +14346,7 @@ testing.test("transport_refusal writes one sentence per transport reason", funct
     )
     testing.eq(
         board.transport_refusal(Reason.EXCEEDS, { role = "worker", action = "Too much." }),
-        prefix .. "Pomb answered 403: the worker role cannot Too much."
+        refused .. "Pomb answered 403: the worker role cannot Too much."
     )
     testing.eq(
         board.transport_refusal(Reason.LOCKED, {}),
@@ -14382,6 +14377,7 @@ end)
 testing.test("transport_refusal writes the layout lookup sentences", function()
     local Reason = board.TransportReason
     local prefix = "Board unavailable: "
+    local refused = "Board refused: "
     testing.eq(
         board.transport_refusal(Reason.NO_COLUMN, { name = "Verify" }),
         prefix .. "The board has no Verify column."
@@ -14417,23 +14413,23 @@ testing.test("transport_refusal writes the layout lookup sentences", function()
     testing.eq(board.transport_refusal(Reason.NO_TOKEN), prefix .. "Pomb sent no usable token.")
     testing.eq(
         board.transport_refusal(Reason.ROLES_NOT_HELD, { role = "lead", name = "demo", id = "b1" }),
-        prefix
+        refused
             .. "The token (role lead) does not hold board demo (b1), so it cannot be granted "
             .. "the standard roles. Add the board to the token."
     )
     testing.eq(
         board.transport_refusal(Reason.ROLES_NOT_HELD, { name = "demo", id = "b1" }),
-        prefix
+        refused
             .. "The token does not hold board demo (b1), so it cannot be granted "
             .. "the standard roles. Add the board to the token."
     )
     testing.eq(
         board.transport_refusal(Reason.ROLES_NO_BOARD, { name = "demo", message = "gone" }),
-        prefix
+        refused
             .. "Board demo does not exist on Pomb. It cannot be granted the standard roles. gone."
     )
     testing.eq(
         board.transport_refusal(Reason.ROLES_QUOTA, { message = "Over." }),
-        prefix .. "The account is over its quota. The standard roles cannot be created. Over."
+        refused .. "The account is over its quota. The standard roles cannot be created. Over."
     )
 end)

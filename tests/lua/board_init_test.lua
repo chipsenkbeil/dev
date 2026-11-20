@@ -604,7 +604,7 @@ end)
 testing.test("run returns the needs-admin reason on a 403", function()
     local layout = fake_layout({ columns = template_columns() })
     function layout:set_color()
-        return nil, "Board unavailable: Pomb answered 403: insufficient_scope."
+        return nil, "Board refused: Pomb answered 403: insufficient_scope."
     end
     local lines = {}
     local changes, message, reason = init.run(layout, "demo", function(line)
@@ -613,7 +613,7 @@ testing.test("run returns the needs-admin reason on a 403", function()
         end
     end, { warn = function() end })
     testing.eq(changes, nil)
-    testing.eq(message, "Board unavailable: Pomb answered 403: insufficient_scope.")
+    testing.eq(message, "Board refused: Pomb answered 403: insufficient_scope.")
     testing.eq(reason, init.Reason.NEEDS_ADMIN)
     testing.eq(lines[2], "added column Icebox")
 end)
@@ -1506,7 +1506,7 @@ testing.test("a token that may not enable colours leaves them and carries on", f
     local set_color = layout.set_color
     function layout:set_color(id, fields)
         if fields.enabled ~= nil then
-            return nil, "Board unavailable: Pomb answered 403: insufficient_scope."
+            return nil, "Board refused: Pomb answered 403: insufficient_scope."
         end
         return set_color(self, id, fields)
     end
@@ -2028,7 +2028,7 @@ testing.test("init says to use --admin when Pomb refuses the limit group", funct
         return {}
     end
     function layout:add_limit_group()
-        return nil, "Board unavailable: Pomb answered 403: insufficient_scope."
+        return nil, "Board refused: Pomb answered 403: insufficient_scope."
     end
     local changes, _, _, _, reason = run(layout)
     testing.eq(changes, nil)

@@ -302,12 +302,38 @@ testing.test("column sends the flags to Pomb as a PATCH of the column id", funct
 end)
 
 testing.test("column prints the permission message for a Pomb 403", function()
-    local backend = column_backend("Board unavailable: Pomb answered 403: nope.")
+    local backend = column_backend("Board refused: Pomb answered 403: nope.")
     local result =
         cmd_board.run("column", { support.COLUMN_NAME.RELEASE, "--blocked", "on" }, backend)
     testing.eq(result.code, 1)
     testing.ok(result.message:find("Pomb refused the change", 1, true), result.message)
     testing.ok(result.message:find("columns.edit", 1, true), result.message)
+end)
+
+testing.test("a 4xx answer is a board refusal and a 5xx stays board unavailable", function()
+    local Reason = board.TransportReason
+    for _, status in ipairs({ 400, 404, 409, 429, 499 }) do
+        local message =
+            board.transport_refusal(Reason.REFUSED, { status = status, message = "nope." })
+        testing.eq(message, "Board refused: Pomb answered " .. status .. ": nope.")
+        testing.eq(pomb.unreachable(message, true), false, message)
+    end
+    for _, status in ipairs({ 500, 502, 503 }) do
+        local message =
+            board.transport_refusal(Reason.REFUSED, { status = status, message = "down." })
+        testing.eq(message, "Board unavailable: Pomb answered " .. status .. ": down.")
+    end
+    testing.eq(
+        board.transport_refusal(Reason.UNREACHABLE, { url = "https://p.test", code = 7 }),
+        "Board unavailable: Cannot reach https://p.test (curl exit 7)."
+    )
+    testing.eq(
+        pomb.unreachable(
+            board.transport_refusal(Reason.REFUSED, { status = 502, message = "down." }),
+            true
+        ),
+        true
+    )
 end)
 
 testing.test("column refuses an unknown name, a bad value and a missing flag", function()
