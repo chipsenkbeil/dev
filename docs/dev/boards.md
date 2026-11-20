@@ -1994,8 +1994,11 @@ line.
   expired role token.
 - A local board holds no credential, so it is exit 1.
 - An extra word is exit 2.
-- The drift of a role token from its template is not listed, as Pomb's whoami
-  does not return it.
+- The last line is `drift`, how far the token's permissions moved from its
+  role's template, from the `drift` object of whoami. It reads
+  `drift: beyond A, B; lacks C`, and leaves out an empty part. It reads
+  `drift: none` for a token with no role, no drift object or two empty lists.
+  Dev takes no action on drift.
 
 ### permissions
 

@@ -13,9 +13,10 @@ local ROLE_WHO = '{"kind":"token","name":"dotfiles/implementer/72f0e012/1","scop
     .. ',"handle":"me","role_name":"implementer","label":"agent-3",'
     .. '"parent_token":{"id":"tok-lead","name":"dotfiles/lead/82f0e002/1"},'
     .. '"permissions":["cards.read","cards.write"],'
+    .. '"drift":{"beyond":["cards.write","cards.bin"],"lacks":["cards.move"]},'
     .. '"boards":[{"id":"board-1","name":"dotfiles"},{"id":"board-2","name":"pomb"}]}'
 local PLAIN_WHO = '{"kind":"token","name":"plain","scope":"read","expires_at":null,"handle":"me",'
-    .. '"role_name":null,"label":null,"parent_token":null,'
+    .. '"role_name":null,"label":null,"parent_token":null,"drift":null,'
     .. '"permissions":["cards.read"],"boards":"all"}'
 
 local CURL = [[#!/bin/sh
@@ -117,4 +118,26 @@ testing.test("whoami-silent prints the boards and permissions and never the toke
     testing.ok(code == 1, out)
     testing.ok(out:find("expired", 1, true), out)
     testing.eq(out:find(WORKER, 1, true), nil, out)
+end)
+
+testing.test("whoami-drift prints the permissions beyond and lacking as the last line", function()
+    local root, home = sandbox(ROLE_WHO)
+    local out, code = whoami(root, home)
+    testing.ok(code == 0, out)
+    testing.ok(out:find("\ndrift: beyond cards.write, cards.bin; lacks cards.move\n?$"), out)
+end)
+
+testing.test("whoami-drift-none prints drift none with no role, no drift or empty lists", function()
+    local empty = ROLE_WHO:gsub('"drift":{[^}]*},', '"drift":{"beyond":[],"lacks":[]},')
+    local only = ROLE_WHO:gsub('"lacks":%["cards.move"%]', '"lacks":[]')
+    for _, case in ipairs({
+        { who = PLAIN_WHO, line = "\ndrift: none\n?$" },
+        { who = empty, line = "\ndrift: none\n?$" },
+        { who = only, line = "\ndrift: beyond cards.write, cards.bin\n?$" },
+    }) do
+        local root, home = sandbox(case.who)
+        local out, code = whoami(root, home)
+        testing.ok(code == 0, out)
+        testing.ok(out:find(case.line), out)
+    end
 end)

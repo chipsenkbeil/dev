@@ -4638,6 +4638,14 @@ function commands.whoami(backend, args)
         "boards: " .. list(who.boards),
         "permissions: " .. list(who.permissions),
     }
+    local drift = {}
+    for _, side in ipairs({ "beyond", "lacks" }) do
+        local names = who.drift and who.drift[side] or {}
+        if #names > 0 then
+            drift[#drift + 1] = side .. " " .. table.concat(names, ", ")
+        end
+    end
+    lines[#lines + 1] = "drift: " .. (#drift > 0 and table.concat(drift, "; ") or "none")
     if who.preset then
         table.insert(lines, 5, "preset: " .. who.preset)
     end

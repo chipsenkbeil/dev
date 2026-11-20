@@ -552,6 +552,11 @@ end
 ---@field expires integer? when the credential expires
 ---@field boards string[]|string the boards the credential reaches
 ---@field permissions string[] the permissions the credential holds
+---@field drift dev.board.pomb.Drift? how far the permissions moved from the role's template
+
+---@class dev.board.pomb.Drift
+---@field beyond string[] the permissions held beyond the role's template
+---@field lacks string[] the permissions of the role's template that are missing
 
 ---Read the credential behind the token in use from whoami.
 ---@return dev.board.pomb.Who? who the credential, never its token
@@ -574,12 +579,22 @@ function Backend:whoami()
     for _, name in ipairs(type(doc.permissions) == "table" and doc.permissions or {}) do
         permissions[#permissions + 1] = tostring(name)
     end
+    local drift
+    if type(doc.drift) == "table" then
+        drift = { beyond = {}, lacks = {} }
+        for _, side in ipairs({ "beyond", "lacks" }) do
+            for _, name in ipairs(type(doc.drift[side]) == "table" and doc.drift[side] or {}) do
+                drift[side][#drift[side] + 1] = tostring(name)
+            end
+        end
+    end
     return {
         name = present(doc.name) or "?",
         kind = present(doc.kind) or "?",
         scope = present(doc.scope) or "?",
         role = present(doc.role_name),
         preset = present(doc.preset),
+        drift = drift,
         label = present(doc.label),
         issuer = type(doc.parent_token) == "table" and present(doc.parent_token.name) or nil,
         expires = tonumber(doc.expires_at),
