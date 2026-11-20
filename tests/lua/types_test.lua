@@ -62,6 +62,17 @@ testing.test("lua fmt names .lua files under dot-directories and skips .git and 
     fs.remove(root, { recursive = true })
 end)
 
+testing.test("lua-only-under-dot-dir: .dev counts as lua and .git and .jj do not", function()
+    local expected = { [".dev"] = project.Kind.LUA }
+    for _, dir in ipairs({ ".dev", ".git", ".jj" }) do
+        local root = support.tempdir()
+        assert(fs.mkdir(root .. "/" .. dir, { parents = true }))
+        assert(fs.write(root .. "/" .. dir .. "/y.lua", "return 1\n"))
+        testing.eq(project.detect_type(root), expected[dir])
+        fs.remove(root, { recursive = true })
+    end
+end)
+
 testing.test("lua fmt skips a gitignored .lua file in a git checkout", function()
     local root = support.tempdir()
     git(root, "init", "-q")
