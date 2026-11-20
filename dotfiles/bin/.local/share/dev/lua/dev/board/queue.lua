@@ -1,3 +1,4 @@
+local board = require("dev.board")
 local fs = require("dev.fs")
 local json = require("dev.json")
 local store = require("dev.board.store")
@@ -67,7 +68,19 @@ local function save(path, entries)
     if not text then
         return nil, err
     end
-    return store.write(path, text .. "\n", PRIVATE)
+    local ok, message, reason, detail = store.write(path, text .. "\n", PRIVATE)
+    if not ok then
+        return nil, board.file_refusal(reason, message, detail)
+    end
+    return true
+end
+
+local function locked(path, fn)
+    local first, message, reason, detail = store.locked(path, PRIVATE, fn)
+    if first == nil and reason then
+        message = board.file_refusal(reason, message, detail)
+    end
+    return first, message
 end
 
 ---List the queued changes.
@@ -94,7 +107,7 @@ end
 ---@return true? ok true on success
 ---@return string? message why it could not be kept
 function Queue:push(sub, args)
-    return store.locked(self.path, PRIVATE, function()
+    return locked(self.path, function()
         local entries, message = load(self.path)
         if not entries then
             return nil, message
@@ -114,7 +127,7 @@ end
 ---@return integer? handled how many left the queue, nil when the file could not be used
 ---@return string? message why it could not be used
 function Queue:drain(replay)
-    return store.locked(self.path, PRIVATE, function()
+    return locked(self.path, function()
         local entries, message = load(self.path)
         if not entries then
             return nil, message

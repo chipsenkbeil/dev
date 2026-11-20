@@ -2,6 +2,7 @@ local testing = require("dev.testing")
 local dev_os = require("dev.os")
 local board = require("dev.board")
 local localboard = require("dev.board.localboard")
+local store = require("dev.board.store")
 local fs = require("dev.fs")
 local json = require("dev.json")
 local support = require("support")
@@ -3373,6 +3374,28 @@ testing.test("a local board keeps a card with no checks row out of Ready", funct
     testing.ok(out:find("--checks", 1, true), out)
     out = dev(root, home, { "board", "init" })
     testing.eq(out:find("checks field", 1, true), nil)
+end)
+
+testing.test("a board file that is not JSON returns the not_json reason", function()
+    local path = support.tempdir() .. "/board.json"
+    assert(fs.write(path, "not json"))
+    testing.eq({ store.read(path) }, { nil, nil, board.FileReason.NOT_JSON, path })
+    local backend = localboard.new({ name = "mine", path = path, private = true })
+    testing.eq(
+        { backend:add("held", support.COLUMN_NAME.ICEBOX, {}) },
+        { nil, path .. " is not valid JSON." }
+    )
+end)
+
+testing.test("a lock failure names the file in a sentence", function()
+    local path = support.tempdir() .. "/board.json"
+    assert(fs.mkdir(path .. ".lock", { parents = true }))
+    local ok, _, reason, detail = store.locked(path, { private = true }, function() end)
+    testing.eq({ ok, reason, detail }, { nil, board.FileReason.LOCK, path })
+    local backend = localboard.new({ name = "mine", path = path, private = true })
+    local card, message = backend:add("held", support.COLUMN_NAME.ICEBOX, {})
+    testing.eq(card, nil)
+    testing.eq(message:sub(1, #path + 14), "Cannot lock " .. path .. ": ")
 end)
 
 testing.test("a release names the reason a missing card or an unheld claim is refused", function()

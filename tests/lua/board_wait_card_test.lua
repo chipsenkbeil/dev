@@ -1,6 +1,7 @@
 local testing = require("dev.testing")
 local board = require("dev.board")
 local cmd_board = require("dev.cmd.board")
+local fs = require("dev.fs")
 local support = require("support")
 
 local CARD_ID = "5af0e005-0000-4000-8000-000000000005"
@@ -167,6 +168,23 @@ local function wait_for(backend, mode)
         end,
     })
 end
+
+testing.test("the cursor write prints the write sentence when it fails", function()
+    local backend = summary_only({ { id = CARD_ID, column = READY } }, {
+        { kind = "task_added", task_id = ID_B, column = READY },
+    })
+    local stem = support.tempdir() .. "/wait"
+    local path = stem .. ".ready.cursor"
+    assert(fs.mkdir(path, { parents = true }))
+    local result = cmd_board.wait(backend, { "--for", "ready" }, {
+        stem = stem,
+        nap = function() end,
+        random = function()
+            return 0
+        end,
+    })
+    testing.eq(result.message:sub(1, #path + 15), "Cannot write " .. path .. ": ")
+end)
 
 testing.test("wait --for ready lists the unclaimed cards from the summary", function()
     local backend, seen = summary_only({

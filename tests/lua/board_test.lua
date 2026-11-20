@@ -13544,5 +13544,15 @@ testing.test("file_refusal writes one sentence per reason", function()
     )
     testing.eq(board.file_refusal(Reason.DELETE, nil, path), "Cannot delete " .. path .. ".")
     testing.eq(board.file_refusal(Reason.PROTECT, nil, path), "Cannot protect " .. path .. ".")
+    testing.eq(board.file_refusal(Reason.LOCK, nil, path), "Cannot lock " .. path .. ".")
+    testing.eq(
+        board.file_refusal(Reason.LOCK, "Is a directory", path),
+        "Cannot lock " .. path .. ": Is a directory."
+    )
+    testing.eq(
+        board.file_refusal(Reason.READ, "Permission denied.", path),
+        "Cannot read " .. path .. ": Permission denied."
+    )
+    testing.eq(board.file_refusal(Reason.NOT_JSON, nil, path), path .. " is not valid JSON.")
     testing.eq(board.file_refusal(nil, "no space left"), "No space left.")
 end)

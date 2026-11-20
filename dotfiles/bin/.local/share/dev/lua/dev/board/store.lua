@@ -1,3 +1,4 @@
+local board = require("dev.board")
 local dev_os = require("dev.os")
 local ffi = require("ffi")
 local fs = require("dev.fs")
@@ -65,14 +66,16 @@ end
 ---@param dir string the directory
 ---@param private boolean? whether the directory holds state no one else may read
 ---@return true? ok true on success
----@return string? message why it failed
+---@return string? message the lower layer's message, nil when the reason names the refusal
+---@return dev.board.FileReason? reason the fixed reason it failed
+---@return string? detail the directory the reason names
 local function prepare(dir, private)
     local ok, message = fs.mkdir(dir, { parents = true })
     if not ok then
         return nil, message
     end
     if private and dev_os.run({ "chmod", "700", dir }) ~= 0 then
-        return nil, "Cannot protect " .. dir .. "."
+        return nil, nil, board.FileReason.PROTECT, dir
     end
     return true
 end
@@ -88,31 +91,34 @@ end
 ---@param opts dev.board.store.Opts? whether the files are private
 ---@param fn fun(): A?, B? what to run
 ---@return A? first what `fn` returned, nil when the lock could not be taken
----@return B|string? second the second value of `fn`, or why the lock could not be taken
+---@return B|string? second the second value of `fn`, or the lower layer's message when the lock
+---   could not be taken
+---@return dev.board.FileReason? reason the fixed reason the lock could not be taken
+---@return string? detail the path or directory the reason names
 function M.locked(path, opts, fn)
     local private = opts and opts.private
     local lock = path .. ".lock"
     if not private then
         lock = M.dir() .. "/locks/" .. path:gsub("[^%w._-]", "_") .. ".lock"
     end
-    local ok, message = prepare(fs.dirname(lock), true)
+    local ok, message, reason, detail = prepare(fs.dirname(lock), true)
     if not ok then
-        return nil, message
+        return nil, message, reason, detail
     end
-    ok, message = prepare(fs.dirname(path), private)
+    ok, message, reason, detail = prepare(fs.dirname(path), private)
     if not ok then
-        return nil, message
+        return nil, message, reason, detail
     end
     local previous = ffi.C.umask(PRIVATE_UMASK)
     local file, err = io.open(lock, "a")
     ffi.C.umask(previous)
     if not file then
-        return nil, "Cannot lock " .. path .. ": " .. tostring(err) .. "."
+        return nil, tostring(err), board.FileReason.LOCK, path
     end
     local fd = ffi.C.fileno(file)
     if ffi.C.flock(fd, LOCK_EX) ~= 0 then
         file:close()
-        return nil, "Cannot lock " .. path .. "."
+        return nil, nil, board.FileReason.LOCK, path
     end
     local ran, first, second = pcall(fn)
     ffi.C.flock(fd, LOCK_UN)
@@ -126,18 +132,21 @@ end
 ---Read a JSON file.
 ---@param path string the file
 ---@return any? doc the decoded document, nil when the file is missing or unreadable
----@return string? message why, nil when the file is simply missing
+---@return string? message the lower layer's message, nil when the file is missing or the reason
+---   names the refusal
+---@return dev.board.FileReason? reason the fixed reason it could not be used
+---@return string? detail the path the reason names
 function M.read(path)
     if not fs.exists(path) then
         return nil
     end
     local text, err = fs.read(path)
     if not text then
-        return nil, "Cannot read " .. path .. ": " .. tostring(err) .. "."
+        return nil, tostring(err), board.FileReason.READ, path
     end
     local doc = json.decode(text)
     if doc == nil then
-        return nil, path .. " is not valid JSON"
+        return nil, nil, board.FileReason.NOT_JSON, path
     end
     return doc
 end
@@ -147,24 +156,26 @@ end
 ---@param text string what it holds
 ---@param opts dev.board.store.Opts? whether to make it readable by its owner alone
 ---@return true? ok true on success
----@return string? message why it failed
+---@return string? message the lower layer's message, nil when the reason names the refusal
+---@return dev.board.FileReason? reason the fixed reason it failed
+---@return string? detail the path or directory the reason names
 function M.write(path, text, opts)
     local private = opts and opts.private
-    local ok, message = prepare(fs.dirname(path), private)
+    local ok, message, reason, detail = prepare(fs.dirname(path), private)
     if not ok then
-        return nil, message
+        return nil, message, reason, detail
     end
     local pending = string.format("%s.%d.%s.new", path, os.time(), M.id():sub(1, 8))
     local previous = ffi.C.umask(private and PRIVATE_UMASK or SHARED_UMASK)
     ok, message = fs.write(pending, text)
     ffi.C.umask(previous)
     if not ok then
-        return nil, "Cannot write " .. path .. ": " .. tostring(message) .. "."
+        return nil, tostring(message), board.FileReason.WRITE, path
     end
     local renamed, err = os.rename(pending, path)
     if not renamed then
         fs.remove(pending)
-        return nil, "Cannot write " .. path .. ": " .. tostring(err) .. "."
+        return nil, tostring(err), board.FileReason.WRITE, path
     end
     return true
 end

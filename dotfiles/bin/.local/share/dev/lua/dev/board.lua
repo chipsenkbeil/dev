@@ -495,7 +495,7 @@ function M.seat_refusal(reason, why, seat)
     return text.sentence(why)
 end
 
----The fixed reasons a token file or claim state could not be used, named beside no message.
+---The fixed reasons a state file could not be used, named beside no message.
 ---@enum dev.board.FileReason
 M.FileReason = {
     NO_HASHER = "no_hasher",
@@ -505,9 +505,19 @@ M.FileReason = {
     NOT_TOKEN_FILE = "not_token_file",
     DELETE = "delete",
     PROTECT = "protect",
+    LOCK = "lock",
+    READ = "read",
+    NOT_JSON = "not_json",
 }
 
----Write why a token file or claim state could not be used, from the reason.
+local function with_cause(base, why)
+    if why then
+        return base .. ": " .. (text.trim(why):gsub("%.$", "")) .. "."
+    end
+    return base .. "."
+end
+
+---Write why a state file could not be used, from the reason.
 ---@param reason dev.board.FileReason? the fixed reason
 ---@param why string? the lower layer's message, which a reason code leaves out
 ---@param detail string? the path or directory the reason names
@@ -521,7 +531,13 @@ function M.file_refusal(reason, why, detail)
     elseif reason == Reason.MAKE_DIR then
         return "Cannot make " .. detail .. "."
     elseif reason == Reason.WRITE then
-        return "Cannot write " .. detail .. "."
+        return with_cause("Cannot write " .. detail, why)
+    elseif reason == Reason.LOCK then
+        return with_cause("Cannot lock " .. detail, why)
+    elseif reason == Reason.READ then
+        return with_cause("Cannot read " .. detail, why)
+    elseif reason == Reason.NOT_JSON then
+        return detail .. " is not valid JSON."
     elseif reason == Reason.NOT_TOKEN_FILE then
         return "The token file " .. detail .. " is not a token file."
     elseif reason == Reason.DELETE then

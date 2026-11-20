@@ -95,9 +95,12 @@ end
 ---@return dev.board.localboard.Doc? doc the board file's document
 ---@return string? message why there is none
 function Backend:__read()
-    local doc, message = store.read(self.__opts.path)
+    local doc, message, reason, detail = store.read(self.__opts.path)
     if not doc then
-        return nil, message or missing(self.__opts.path)
+        if reason then
+            return nil, board.file_refusal(reason, message, detail)
+        end
+        return nil, missing(self.__opts.path)
     end
     if type(doc) ~= "table" or type(doc.cards) ~= "table" or type(doc.columns) ~= "table" then
         return nil, self.__opts.path .. " is not a board file."
@@ -117,7 +120,7 @@ end
 ---@return string? message why it failed
 function Backend:__update(fn, opts)
     local path = self.__opts.path
-    local result, message = store.locked(path, self.__opts, function()
+    local result, message, reason, detail = store.locked(path, self.__opts, function()
         local doc, why = self:__read()
         if not doc then
             if why ~= missing(path) or not (opts and opts.create) then
@@ -129,12 +132,15 @@ function Backend:__update(fn, opts)
         if value == nil then
             return nil, problem
         end
-        local ok, err = store.write(path, encode(doc), self.__opts)
+        local ok, err, why_reason, why_detail = store.write(path, encode(doc), self.__opts)
         if not ok then
-            return nil, err
+            return nil, board.file_refusal(why_reason, err, why_detail)
         end
         return value
     end)
+    if result == nil and reason then
+        message = board.file_refusal(reason, message, detail)
+    end
     return result, message
 end
 

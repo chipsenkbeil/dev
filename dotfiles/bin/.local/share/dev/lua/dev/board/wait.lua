@@ -477,9 +477,9 @@ function M.wait(backend, args, opts)
             return result
         end
         if only == WaitFor.HUMAN then
-            local saved, why = store.write(path, cursor .. "\n", { private = true })
+            local saved, why, reason, detail = store.write(path, cursor .. "\n", { private = true })
             if not saved and not result.message then
-                result = failure(why)
+                result = failure(board.file_refusal(reason, why, detail))
             end
         end
         local lines = table.concat(held, "\n")
@@ -533,9 +533,10 @@ function M.wait(backend, args, opts)
                 end
             end
             if only ~= WaitFor.HUMAN then
-                local saved, why = store.write(path, reply.cursor .. "\n", { private = true })
+                local saved, why, reason, detail =
+                    store.write(path, reply.cursor .. "\n", { private = true })
                 if not saved then
-                    return flush(failure(why))
+                    return flush(failure(board.file_refusal(reason, why, detail)))
                 end
             end
             cursor = reply.cursor
@@ -574,9 +575,10 @@ function M.wait(backend, args, opts)
             end
         elseif oldest then
             if only ~= WaitFor.HUMAN or #held == 0 then
-                local saved, why = store.write(path, oldest .. "\n", { private = true })
+                local saved, why, reason, detail =
+                    store.write(path, oldest .. "\n", { private = true })
                 if not saved then
-                    return flush(failure(why))
+                    return flush(failure(board.file_refusal(reason, why, detail)))
                 end
             end
             if WaitFor.STAGES[only] then
