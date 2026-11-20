@@ -489,6 +489,38 @@ testing.test("land.git.run names a bad forge kind in a sentence", function()
     end)
 end)
 
+testing.test("trunk-config-forge-refusal reads as one sentence", function()
+    landing_env(function()
+        local root = with_origin({})
+        local before = os.getenv("JJ_FORGE") or ""
+        ffi.C.setenv("JJ_FORGE", "bogus", 1)
+        local ran, text, problem = pcall(land.trunk_config, root)
+        ffi.C.setenv("JJ_FORGE", before, 1)
+        assert(ran, text)
+        testing.eq(text, nil)
+        testing.ok(problem:find("^Trunk cannot be read%. %u"), problem)
+        testing.ok(problem:find("%.$"), problem)
+    end)
+end)
+
+testing.test("trunk-config-ref-refusal names the remote without a trunk branch", function()
+    landing_env(function()
+        local root = repo({})
+        local bare = assert(fs.realpath(support.tempdir()))
+        local code = dev_os.run({ "git", "init", "-q", "--bare", bare }, { stdout = "null" })
+        assert(code == 0, "git init failed")
+        git(root, "remote", "add", "origin", bare)
+        local text, problem = land.trunk_config(root)
+        testing.eq(text, nil)
+        testing.ok(
+            problem:find(
+                "^Trunk cannot be read%. The remote origin has no master or main branch%.$"
+            ),
+            problem
+        )
+    end)
+end)
+
 testing.test("land.git.settled_commit names a checked commit only once trunk holds it", function()
     landing_env(function()
         local root = work_behind_trunk()
