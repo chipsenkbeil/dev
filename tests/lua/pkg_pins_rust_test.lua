@@ -257,7 +257,7 @@ testing.test("the rustup script refuses a download that does not match its pin",
     local dir = sandbox(string.rep("0", 64))
     local out, code = run(dir)
     testing.ok(code ~= 0, out)
-    testing.ok(out:find("sha256 mismatch", 1, true), out)
+    testing.ok(out:find("does not match the pin. Expected ", 1, true), out)
     testing.eq(fs.read(dir .. "/calls.log"):find("rustup-init -y", 1, true), nil)
     testing.eq(fs.is_exec(dir .. "/home/.cargo/bin/rustup"), false)
     testing.eq(fs.list(dir .. "/tmp"), {})

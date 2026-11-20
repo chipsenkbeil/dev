@@ -185,7 +185,7 @@ for _, tool in ipairs(TOOLS) do
         pins(dir, tool, string.rep("0", 64))
         local out, code = run(dir, tool)
         testing.ok(code ~= 0, out)
-        testing.ok(out:find("sha256 mismatch", 1, true), out)
+        testing.ok(out:find("does not match the pin. Expected ", 1, true), out)
         testing.eq(fs.read(dir .. "/calls.log.tar"), nil)
         testing.eq(fs.is_exec(dir .. "/prefix/bin/" .. tool.name), false)
         testing.eq(fs.list(dir .. "/tmp"), {})

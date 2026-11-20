@@ -169,7 +169,7 @@ testing.test("a wrong sha256 fails naming both sums and leaves nothing behind", 
     pins(dir, { row })
     local out, code = drive(dir, "install")
     testing.eq(code, 1)
-    testing.ok(out:find("expected " .. wrong .. ", got " .. right, 1, true), out)
+    testing.ok(out:find("Expected " .. wrong .. ", got " .. right .. ".", 1, true), out)
     testing.eq(fs.list(dir .. "/bin"), nil)
     testing.eq(leftovers(dir), {})
     cleanup(dir)
@@ -196,9 +196,58 @@ testing.test("a failed download fails and leaves nothing behind", function()
     pins(dir, { row })
     local out, code = drive(dir, "install")
     testing.eq(code, 1)
-    testing.ok(out:find("failed to download " .. URL_BASE .. "tool-1.2.3", 1, true), out)
+    testing.ok(out:find("Failed to download " .. URL_BASE .. "tool-1.2.3.", 1, true), out)
     testing.eq(leftovers(dir), {})
     cleanup(dir)
+end)
+
+testing.test("a failed extract fails naming the url and leaves nothing behind", function()
+    local dir = sandbox()
+    pins(dir, { pin_asset(dir, "tool-VERSION.tar.gz", "bin/tool") })
+    write_executable(dir .. "/stubs/tar", "#!/bin/sh\nexit 1\n")
+    local out, code = drive(dir, "install")
+    testing.eq(code, 1)
+    testing.ok(out:find("Failed to extract " .. URL_BASE .. "tool-1.2.3.tar.gz.", 1, true), out)
+    testing.eq(leftovers(dir), {})
+    cleanup(dir)
+end)
+
+testing.test("a hasher that prints no sum fails naming the file", function()
+    local dir = sandbox()
+    pins(dir, { pin_asset(dir, "tool-VERSION", "-") })
+    write_executable(dir .. "/stubs/shasum", "#!/bin/sh\necho junk\n")
+    write_executable(dir .. "/stubs/sha256sum", "#!/bin/sh\necho junk\n")
+    local out, code = drive(dir, "install")
+    testing.eq(code, 1)
+    testing.ok(out:find("Could not read the sha256 of ", 1, true), out)
+    testing.eq(leftovers(dir), {})
+    cleanup(dir)
+end)
+
+testing.test("each reason of a fetch has a sentence that names what it holds", function()
+    local pin = { url = URL_BASE .. "tool", sha256 = "aa" }
+    local Reason = release.Reason
+    testing.eq(release.refusal(pin, Reason.NO_HASHER), "Neither shasum nor sha256sum is on PATH.")
+    testing.eq(
+        release.refusal(pin, Reason.HASH_FAILED, "/tmp/f"),
+        "Could not read the sha256 of /tmp/f."
+    )
+    testing.eq(
+        release.refusal(pin, Reason.MISMATCH, "bb"),
+        "The sha256 of " .. pin.url .. " does not match the pin. Expected aa, got bb."
+    )
+    testing.eq(
+        release.refusal(pin, Reason.NO_FILE, "bin/tool"),
+        "The archive holds no file bin/tool."
+    )
+    testing.eq(
+        release.refusal(pin, Reason.DOWNLOAD, pin.url),
+        "Failed to download " .. pin.url .. "."
+    )
+    testing.eq(
+        release.refusal(pin, Reason.EXTRACT, pin.url),
+        "Failed to extract " .. pin.url .. "."
+    )
 end)
 
 testing.test("the dry run prints every step and changes nothing", function()
@@ -287,7 +336,7 @@ testing.test("a row with no pin fails naming it", function()
     pins(dir, { pin_asset(dir, "tool-VERSION", "-") })
     local out, code = drive(dir, "install", { package = "other" })
     testing.eq(code, 1)
-    testing.ok(out:find("no pin named other", 1, true), out)
+    testing.ok(out:find("No pin named other", 1, true), out)
     cleanup(dir)
 end)
 
@@ -403,7 +452,7 @@ testing.test("an archive without the named file fails and leaves nothing behind"
     pins(dir, { row })
     local out, code = drive(dir, "install")
     testing.eq(code, 1)
-    testing.ok(out:find("holds no file bin/other", 1, true), out)
+    testing.ok(out:find("The archive holds no file bin/other.", 1, true), out)
     testing.ok(not fs.exists(dir .. "/bin/tool"), "nothing may be installed")
     testing.eq(leftovers(dir), {})
     cleanup(dir)
@@ -415,7 +464,7 @@ testing.test("a directory where the binary belongs is refused, even with force",
     assert(fs.mkdir(dir .. "/bin/tool", { parents = true }))
     local out, code = drive(dir, "install", { force = true })
     testing.eq(code, 1)
-    testing.ok(out:find("is a directory", 1, true), out)
+    testing.ok(out:find("A directory sits at " .. dir .. "/bin/tool.", 1, true), out)
     testing.eq(fs.list(dir .. "/bin/tool"), {})
     cleanup(dir)
 end)

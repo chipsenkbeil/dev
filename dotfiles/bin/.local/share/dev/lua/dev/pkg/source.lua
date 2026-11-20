@@ -62,9 +62,9 @@ local function install(spec, session)
         root = fs.dirname(source)
     else
         stdout:write("  + building ", spec.tool, " ", pin.version, " into ", dir, "\n")
-        local found, why = pins.fetch(pin, session:tmp())
+        local found, _, reason, detail = pins.fetch(pin, session:tmp())
         if not found then
-            session:die(why)
+            session:die(pins.refusal(pin, reason, detail))
         end
         root = fs.dirname(found)
     end
