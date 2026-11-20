@@ -634,6 +634,10 @@ function Backend:add_roles()
     return false
 end
 
+function Backend:add_seats()
+    return {}
+end
+
 function Backend:has_field()
     return true
 end

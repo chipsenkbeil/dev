@@ -23,6 +23,10 @@ M.PALETTE = {
     { value = "white", label = "Unsized", description = "Never sized" },
 }
 
+---The reviewer seats a board holds by default, which a new card copies.
+---@type string[]
+M.SEATS = { "code", "style", "recheck" }
+
 ---The labels a board highlights, with their colours.
 ---@type dev.board.Highlight[]
 M.HIGHLIGHTS = {
@@ -258,6 +262,23 @@ local function roles_step(layout, state, say)
         return true
     end
     say("created agent roles " .. table.concat(created, ", "))
+    state.changes = state.changes + 1
+    return true
+end
+
+local function seats_step(layout, state, say)
+    local added, message, missing = layout:add_seats(M.SEATS)
+    if added == nil then
+        if missing == "seats.manage" then
+            state.warn("The default seats are left for `dev board init --admin`.")
+            return true
+        end
+        return nil, message
+    end
+    if not added or #added == 0 then
+        return true
+    end
+    say("created default seats " .. table.concat(added, ", "))
     state.changes = state.changes + 1
     return true
 end
@@ -563,6 +584,7 @@ function M.run(layout, name, say, opts)
     for _, step in ipairs({
         columns_step,
         roles_step,
+        seats_step,
         checks_step,
         palette_step,
         strip_step,

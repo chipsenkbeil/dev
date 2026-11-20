@@ -395,6 +395,10 @@ end
 ---   agent roles granted to the board, the names this call created, or false when the board has no
 ---   roles. A refusal for a missing permission names it in the third value, as `roles.grant`, or
 ---   `roles.unreadable` when the roles list could not be read
+---@field add_seats fun(self: dev.board.Layout, names: string[]): string[]|false|nil, string?,
+---   string? the reviewer seats this call added to the board's default seats, empty when all were
+---   held, false when the board has no seats. A refusal for a missing permission names it in the
+---   third value, as `seats.manage`
 ---@field limit_groups fun(self: dev.board.Layout): table<string, any>[]|false|nil, string? the
 ---   limit groups the board holds, false when the board has no limits to set, or nil and a message
 ---@field add_limit_group fun(self: dev.board.Layout, names: string[], limit: integer): boolean?,

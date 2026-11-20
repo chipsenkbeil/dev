@@ -667,6 +667,18 @@ case "$last" in
 '"lease_expires_at":"2999-01-01T00:00:00Z","live":true,"fence":7}'
     fi
     ;;
+*/api/boards/board-1/seats)
+    body='{"seats":[]}'
+    if [ -f "$ROOT/board_seats.json" ]; then body=$(cat "$ROOT/board_seats.json"); fi
+    case " $* " in
+    *" -X PUT "*)
+        if [ -f "$ROOT/board_seats_status" ]; then
+            status=$(cat "$ROOT/board_seats_status")
+            body='{"code":"permission_denied","message":"seats.manage is needed"}'
+        fi
+        ;;
+    esac
+    ;;
 */seats/take)
     if [ -f "$ROOT/no_seat" ]; then
         body='{"message":"the task has no such seat"}'

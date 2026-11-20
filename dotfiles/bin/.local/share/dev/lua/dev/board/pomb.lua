@@ -75,6 +75,7 @@ local LINKS_DELETE = "links.delete"
 local SUBTASKS_DELETE = "subtasks.delete"
 local ROLES_GRANT = "roles.grant"
 local ROLES_UNREADABLE = "roles.unreadable"
+local SEATS_MANAGE = "seats.manage"
 local ADMIN = "admin"
 local ALL_BOARDS = "all"
 local NEEDS_LEAD_LANE = "Making a lane needs swimlanes.create, which only the lead token holds. "
@@ -3050,6 +3051,45 @@ function Backend:add_roles()
         end
     end
     return created
+end
+
+function Backend:add_seats(names)
+    local id, message = self:__board_id()
+    if not id then
+        return nil, message
+    end
+    local path = "/api/boards/" .. id .. "/seats"
+    local reply, status
+    reply, message, status = self:__request("GET", path)
+    if not reply then
+        return nil, message, status == FORBIDDEN and SEATS_MANAGE or nil
+    end
+    local seats = {}
+    local held = {}
+    if type(reply.seats) == "table" then
+        for _, seat in ipairs(reply.seats) do
+            seats[#seats + 1] = seat
+            if type(seat) == "table" and type(seat.name) == "string" then
+                held[seat.name:lower()] = true
+            end
+        end
+    end
+    local added = {}
+    for _, name in ipairs(names) do
+        if not held[name:lower()] then
+            held[name:lower()] = true
+            seats[#seats + 1] = { name = name, role = SEAT_ROLE }
+            added[#added + 1] = name
+        end
+    end
+    if #added == 0 then
+        return added
+    end
+    reply, message, status = self:__request("PUT", path, { seats = seats })
+    if not reply then
+        return nil, message, status == FORBIDDEN and SEATS_MANAGE or nil
+    end
+    return added
 end
 
 function Backend:add_column(name, is_done)

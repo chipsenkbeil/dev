@@ -18,6 +18,8 @@ local TURN_HOLD_SECONDS = 600
 local OVER_CAP_TTL_SECONDS = turn.MAX_HOLD_SECONDS * 2
 local ID_A = "11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 local ICEBOX_ID = "col-icebox"
+local BOARD_SEATS = "/api/boards/board-1/seats"
+local WANTED_SEATS = { "code", "style", "recheck" }
 
 local clock
 
@@ -1427,6 +1429,81 @@ testing.test("a review names the seat the card lacks when Pomb refuses to add it
         testing.eq(ok, nil)
         testing.eq(reason, board.SeatReason.NO_SEAT)
     end)
+end)
+
+local function seat_writes(root)
+    local writes = {}
+    for line in (fs.read(root .. "/calls") or ""):gmatch("[^\n]+") do
+        if line:find("--data-raw", 1, true) and line:sub(-#BOARD_SEATS) == BOARD_SEATS then
+            writes[#writes + 1] = line
+        end
+    end
+    return writes
+end
+
+testing.test(
+    "the default seats are PUT as the union of the stored seats and the wanted ones",
+    function()
+        local root = pomb_root()
+        assert(
+            fs.write(
+                root .. "/board_seats.json",
+                '{"seats":[{"name":"Code","role":"reviewer"},'
+                    .. '{"name":"qa","role":"verifier"}]}'
+            )
+        )
+        on_pomb(root, function(backend)
+            testing.eq(backend:add_seats(WANTED_SEATS), { "style", "recheck" })
+        end)
+        local writes = seat_writes(root)
+        testing.eq(#writes, 1)
+        testing.ok(writes[1]:find('{"name":"Code","role":"reviewer"}', 1, true), writes[1])
+        testing.ok(writes[1]:find('{"name":"qa","role":"verifier"}', 1, true), writes[1])
+        testing.ok(writes[1]:find('{"name":"style","role":"reviewer"}', 1, true), writes[1])
+        testing.ok(writes[1]:find('{"name":"recheck","role":"reviewer"}', 1, true), writes[1])
+        testing.eq(writes[1]:find('"name":"code"', 1, true), nil)
+    end
+)
+
+testing.test("no seats PUT goes out when every wanted seat is held", function()
+    local root = pomb_root()
+    assert(
+        fs.write(
+            root .. "/board_seats.json",
+            '{"seats":[{"name":"code","role":"reviewer"},'
+                .. '{"name":"style","role":"reviewer"},{"name":"recheck","role":"reviewer"}]}'
+        )
+    )
+    on_pomb(root, function(backend)
+        testing.eq(backend:add_seats(WANTED_SEATS), {})
+    end)
+    testing.eq(#seat_writes(root), 0)
+end)
+
+testing.test("a 403 on the seats PUT names seats.manage", function()
+    local root = pomb_root()
+    assert(fs.write(root .. "/board_seats_status", "403"))
+    on_pomb(root, function(backend)
+        local added, message, missing = backend:add_seats(WANTED_SEATS)
+        testing.eq(added, nil)
+        testing.ok(message ~= nil)
+        testing.eq(missing, "seats.manage")
+    end)
+end)
+
+testing.test("any other refusal of the seats PUT names no permission", function()
+    local root = pomb_root()
+    assert(fs.write(root .. "/board_seats_status", "500"))
+    on_pomb(root, function(backend)
+        local added, message, missing = backend:add_seats(WANTED_SEATS)
+        testing.eq(added, nil)
+        testing.ok(message ~= nil)
+        testing.eq(missing, nil)
+    end)
+end)
+
+testing.test("the local board has no default seats to add", function()
+    testing.eq(backend_at(board_home()):add_seats(WANTED_SEATS), {})
 end)
 
 testing.test("renewing the Pomb turn sends its fence as If-Owner-Fence", function()

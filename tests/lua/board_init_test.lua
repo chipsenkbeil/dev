@@ -95,6 +95,7 @@ local function fake_layout(opts)
         has_checks = opts.has_checks ~= false,
         roles = opts.roles == nil and {} or opts.roles,
         groups = opts.groups or {},
+        seats = opts.seats or {},
         highlights = copy(opts.highlights or init.HIGHLIGHTS),
         writes = {},
     }
@@ -145,6 +146,16 @@ local function fake_layout(opts)
             has_checks = state.has_checks,
             lanes = opts.lanes,
         })
+    end
+    function layout:add_seats(names)
+        local added = {}
+        for _, name in ipairs(names) do
+            if not state.seats[name] then
+                state.seats[name] = true
+                added[#added + 1] = name
+            end
+        end
+        return added
     end
     function layout:add_roles()
         if state.roles == false then
@@ -750,6 +761,18 @@ case "$last" in
     esac
     ;;
 */api/boards/board-1) body=$(cat "$ROOT/detail.json") ;;
+*/api/boards/board-1/seats)
+    body=$(cat "$ROOT/seats.json")
+    case " $* " in
+    *" -X PUT "*)
+        if [ -f "$ROOT/seats.fail" ]; then
+            line=$(cat "$ROOT/seats.fail")
+            status=${line%%|*}
+            body=${line#*|}
+        fi
+        ;;
+    esac
+    ;;
 */colors)
     body=$(cat "$ROOT/colors.json")
     if [ -f "$ROOT/colors.fail" ]; then
@@ -827,6 +850,9 @@ local function sandbox(opts)
         ["fields.json"] = opts.fields or FIELDS,
         ["roles.json"] = opts.roles or '200|{"created":[],"roles":[]}\n',
         ["rolelist.json"] = opts.rolelist or "{}",
+        ["seats.json"] = opts.seats
+            or '{"seats":[{"name":"code","role":"reviewer"},{"name":"style","role":"reviewer"},'
+                .. '{"name":"recheck","role":"reviewer"}]}',
         ["export.json"] = EXPORT,
         ["templates.json"] = '[{"id":"tpl-1","name":"agent project","built_in":false}]',
         ["whoami.json"] = '{"kind":"token","name":"x","scope":"admin"}',
@@ -1535,6 +1561,65 @@ testing.test("init sends enabled through the palette PATCH for each colour", fun
         .. "https://pomb.example/api/boards/board-1/colors/orange-id"
     testing.ok(calls_of(root):find(patch, 1, true), calls_of(root))
     testing.eq(out, UNCHANGED .. "disabled orange\nboard demo: 1 change\n")
+end)
+
+testing.test(
+    "default-seats: the step names the seats it created and says nothing on a rerun",
+    function()
+        local layout = fake_layout({ columns = template_columns() })
+        local lines = {}
+        init.run(layout, "demo", function(line)
+            lines[#lines + 1] = line
+        end)
+        testing.ok(
+            table.concat(lines, "\n"):find("created default seats code, style, recheck", 1, true)
+        )
+        lines = {}
+        testing.eq(
+            init.run(layout, "demo", function(line)
+                lines[#lines + 1] = line
+            end),
+            0
+        )
+        testing.eq(lines, { UNCHANGED_LINE })
+    end
+)
+
+testing.test(
+    "default-seats: a first init through Pomb PUTs the seats and counts one change",
+    function()
+        local root, home, tmp = sandbox({ seats = '{"seats":[]}' })
+        local out, code = dev(root, home, tmp, { "board", "init" })
+        testing.eq(code, 0, out)
+        testing.eq(
+            out,
+            table.concat({
+                UNCHANGED_LINE,
+                "created default seats code, style, recheck",
+                "board demo: 1 change",
+                "",
+            }, "\n")
+        )
+        testing.ok(calls_of(root):find("-X PUT", 1, true), calls_of(root))
+    end
+)
+
+testing.test("default-seats: a 403 on the PUT warns for the admin run and init goes on", function()
+    local root, home, tmp = sandbox({ seats = '{"seats":[]}' })
+    assert(
+        fs.write(root .. "/seats.fail", '403|{"code":"permission_denied","message":"no seats"}\n')
+    )
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("The default seats are left for `dev board init --admin`.", 1, true), out)
+end)
+
+testing.test("default-seats: any other refusal of the PUT stops init", function()
+    local root, home, tmp = sandbox({ seats = '{"seats":[]}' })
+    assert(fs.write(root .. "/seats.fail", '500|{"message":"boom"}\n'))
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("boom", 1, true), out)
 end)
 
 testing.test("agent-roles-create: a first init posts the board id and prints names", function()

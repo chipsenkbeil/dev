@@ -351,7 +351,8 @@ Every warning goes to standard error, like an error, and standard output keeps
 the change lines that another tool may read. The warnings are the `Kept
 column`, `Kept card` and `wears the disabled colour` lines, the two lines that
 leave the agent roles (`not checked` and `left for --admin`), the line that
-leaves the colours enabled and the line that names an unlisted first lane.
+leaves the default seats, the line that leaves the colours enabled and the
+line that names an unlisted first lane.
 
 ```
 dev board init
@@ -422,6 +423,20 @@ What it lays out:
     on to the later steps, the lane step included. Any other refusal still
     stops the run.
   - A local board has no roles, so it says nothing.
+- default seats: the `code`, `style` and `recheck` seats, each with the
+  `reviewer` role, which a card created afterwards copies. `init` sets these
+  default seats right after the roles.
+  - It reads `GET /api/boards/ID/seats` and, when a seat is missing, puts the
+    stored seats plus the missing ones back with `PUT`, so it drops no seat.
+    Names compare without case. It sends no `PUT` when all three exist.
+  - It prints `created default seats` with the names it added and counts one
+    change, or says nothing on a rerun.
+  - A 403 from the `PUT` prints ``The default seats are left for `dev board
+    init --admin`.``, counts no change and goes on. Any other refusal stops
+    the run.
+  - The claim-time seat add stays for cards made before the default seats
+    existed.
+  - A local board has no seats, so it says nothing.
 - role refusals: a refusal reads the token's `role_name` from
   `GET /api/v1/auth/whoami`, once, and only then.
   - A `permission_denied` 403 and an `exceeds_grant` 403 name the refused
