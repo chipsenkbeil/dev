@@ -4625,6 +4625,68 @@ testing.test("next --max-size skips a size 3 card on a pomb board", function()
     testing.ok(out:find(small, 1, true) and not out:find(big, 1, true), out)
 end)
 
+testing.test("next --for lead on a pomb board skips the planner and owner cards", function()
+    local root, home = pomb()
+    local both = "eeeeeeee-3333-4eee-8eee-eeeeeeeeeeee"
+    local planner = "ffffffff-3333-4fff-8fff-ffffffffffff"
+    local lead = "99999999-3333-4999-8999-999999999999"
+    local plain = "88888888-3333-4888-8888-888888888888"
+    local blocked_id = support.column_id(Column.BLOCKED)
+    local function task(id, name, position, labels)
+        return support.pomb_export_task({
+            id = id,
+            name = name,
+            column_id = blocked_id,
+            position = position,
+            color_id = false,
+            labels = labels,
+        })
+    end
+    local function only(out, id)
+        for _, other in ipairs({ both, plain, planner, lead }) do
+            if (other == id) ~= (out:find(other:sub(1, 8), 1, true) ~= nil) then
+                return false
+            end
+        end
+        return true
+    end
+
+    -- Seed a Blocked column whose first eligible card holds neither label
+    assert(
+        fs.write(
+            root .. "/detail.json",
+            (DETAIL:gsub('{"id":"col%-done"', '{"id":"' .. blocked_id .. '","name":"Blocked"},%0'))
+        )
+    )
+    assert(
+        fs.write(
+            root .. "/export.json",
+            '{"tasks":['
+                .. task(both, "Both", 1, { "needs:lead", "needs:human" })
+                .. ","
+                .. task(plain, "Plain", 2, { "docs" })
+                .. ","
+                .. task(planner, "Planner", 3, { "needs:planner" })
+                .. ","
+                .. task(lead, "Lead", 4, { "needs:lead" })
+                .. "]}"
+        )
+    )
+    local env = { ROOT = root, DEV_MAX_SIZE = "" }
+
+    -- Return only the needs:planner card for the planner
+    local out, code =
+        dev(root, home, { "board", "next", "--column", Column.BLOCKED, "--for", "planner" }, env)
+    testing.eq(code, 0, out)
+    testing.ok(only(out, planner), out)
+
+    -- Return only the needs:lead card without needs:human for the lead
+    out, code =
+        dev(root, home, { "board", "next", "--column", Column.BLOCKED, "--for", "lead" }, env)
+    testing.eq(code, 0, out)
+    testing.ok(only(out, lead), out)
+end)
+
 testing.test("epic_local_move", function()
     local root, home = local_board()
     local function add(name)
