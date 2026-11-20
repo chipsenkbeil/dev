@@ -19,7 +19,6 @@ local M = { END_FLAG = "--end", ORDERS_FLAG = "--orders" }
 ---@field add fun(backend: dev.board.Backend, args: string[]): dev.cmd.board.Result adds a card
 ---@field find_card fun(backend: dev.board.Backend, word: string): dev.board.Card?, dev.cmd.board.Result?
 ---   finds a card
----@field sentence fun(text: string): string capitalises and ends a sentence
 ---@field card_line fun(card: dev.board.Card): string names a card on one line
 ---@field name_chars integer the longest card name
 
@@ -105,8 +104,7 @@ local function start_run(backend, name, quoted, deps)
     end
     local taken, fence = claim_card(backend, card, name)
     if not fence then
-        taken.message = deps.sentence(taken.message)
-            .. " `dev board run` claims the new run card again."
+        taken.message = taken.message .. " `dev board run` claims the new run card again."
         return taken
     end
     local shown = deps.dispatch("show", { card.id }, backend)

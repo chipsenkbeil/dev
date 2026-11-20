@@ -456,7 +456,7 @@ testing.test("a failed highlight write that is not a refusal ends the run", func
     end
     local changes, message = run(layout)
     testing.eq(changes, nil)
-    testing.eq(message, "pomb answered 500")
+    testing.eq(message, "Pomb answered 500.")
 end)
 
 testing.test("an old board keeps its cards and gains what is missing", function()

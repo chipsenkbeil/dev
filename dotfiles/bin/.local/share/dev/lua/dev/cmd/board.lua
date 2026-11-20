@@ -41,16 +41,8 @@ local FAILURE = guards.FAILURE
 local usage = guards.usage
 local failure = guards.failure
 
-local function sentence(text)
-    text = text:gsub("^%l", string.upper)
-    if not text:find("%.$") then
-        text = text .. "."
-    end
-    return text
-end
-
 local function clock_note(opening, reason, detail)
-    local text = opening .. " " .. sentence(detail)
+    local text = opening .. " " .. detail
     if reason == role_clock.Reason.DROPPED then
         text = text .. " The clock was dropped."
     end
@@ -59,9 +51,9 @@ end
 
 local function queue_unreadable(path, reason, message)
     if reason == queue.Reason.READ then
-        return "Cannot read the queue at " .. path .. ". " .. sentence(message)
+        return "Cannot read the queue at " .. path .. ". " .. message
     end
-    return sentence(message)
+    return message
 end
 
 ---The sentence for each reason `pomb.new` refuses with
@@ -4917,7 +4909,6 @@ function commands.run(backend, args)
         dispatch = M.run,
         add = commands.add,
         find_card = find_card,
-        sentence = sentence,
         card_line = card_line,
         name_chars = board_setup.NAME_CHARS,
     })
@@ -5066,7 +5057,7 @@ local function init_refusal(message, reason)
         return (message:gsub("%.$", ""))
             .. ". This token may not change this board, so run `dev board init --admin`."
     end
-    return sentence(message)
+    return message
 end
 
 ---Print one warning from the layout change, with the hint when the token may not change the board.
@@ -5130,9 +5121,7 @@ local function sign_in_refusal(reason, detail)
     elseif reason == Reason.UNREADABLE then
         return "Pomb sent an answer dev cannot read."
     elseif reason == Reason.REFUSED then
-        return sentence(
-            "Pomb answered " .. detail.status .. ": " .. tostring(detail.message or "no message")
-        )
+        return "Pomb answered " .. detail.status .. ": " .. (detail.message or "no message.")
     elseif reason == Reason.NO_CODE then
         return "Pomb sent a sign-in with no code."
     elseif reason == Reason.NO_TEMP then
@@ -5223,7 +5212,7 @@ M.handlers["board init"] = function(ctx)
     if missing then
         local written, failed = board_setup.write_section(ctx.root, name)
         if not written then
-            verb.die("Cannot write " .. ctx.root .. "/.dev/config.toml. " .. sentence(failed))
+            verb.die("Cannot write " .. ctx.root .. "/.dev/config.toml. " .. failed)
         end
         print("wrote [board] to .dev/config.toml")
     end

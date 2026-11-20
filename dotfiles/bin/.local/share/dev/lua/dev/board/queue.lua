@@ -1,6 +1,7 @@
 local board = require("dev.board")
 local fs = require("dev.fs")
 local json = require("dev.json")
+local dev_text = require("dev.text")
 local store = require("dev.board.store")
 
 local PRIVATE = { private = true }
@@ -45,22 +46,22 @@ local function load(path)
     end
     local text, err = fs.read(path)
     if not text then
-        return nil, tostring(err), M.Reason.READ
+        return nil, dev_text.sentence(tostring(err)), M.Reason.READ
     end
     local doc, message = json.decode(text)
     if doc == nil then
         local offset = tonumber(tostring(message):match("offset (%d+)")) or 1
         return nil,
-            path .. ":" .. line_of(text, offset) .. ": " .. tostring(message),
+            dev_text.sentence(path .. ":" .. line_of(text, offset) .. ": " .. tostring(message)),
             M.Reason.MALFORMED
     end
     if type(doc) ~= "table" or doc == json.null or (next(doc) ~= nil and doc[1] == nil) then
-        return nil, path .. ":1: not a list of queued commands", M.Reason.MALFORMED
+        return nil, path .. ":1: not a list of queued commands.", M.Reason.MALFORMED
     end
     for index, entry in ipairs(doc) do
         if type(entry) ~= "table" or type(entry.sub) ~= "string" or type(entry.args) ~= "table" then
             return nil,
-                path .. ": entry " .. index .. " is not a queued command",
+                path .. ": entry " .. index .. " is not a queued command.",
                 M.Reason.MALFORMED
         end
     end
@@ -74,7 +75,7 @@ local function save(path, entries)
     end
     local text, err = json.encode(entries)
     if not text then
-        return nil, err
+        return nil, dev_text.sentence(tostring(err))
     end
     local ok, message, reason, detail = store.write(path, text .. "\n", PRIVATE)
     if not ok then

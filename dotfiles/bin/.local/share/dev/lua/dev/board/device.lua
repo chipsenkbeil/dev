@@ -58,7 +58,7 @@ local M = { Reason = Reason }
 ---@field url string? the server that did not answer
 ---@field curl_exit integer? curl's exit code
 ---@field status integer? the HTTP status of the reply
----@field message string? Pomb's message
+---@field message string? Pomb's message, ended with a period
 
 local function post(url, body_arg)
     local argv = {
@@ -104,7 +104,14 @@ local function code_of(doc, status)
 end
 
 local function answered(status, doc)
-    return { status = status, message = json.present(doc.message) }
+    local message = json.present(doc.message)
+    if message ~= nil then
+        message = tostring(message)
+        if not message:find("%.$") then
+            message = message .. "."
+        end
+    end
+    return { status = status, message = message }
 end
 
 ---Pair with the server and wait for the person to approve.
