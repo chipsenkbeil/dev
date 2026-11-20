@@ -600,7 +600,8 @@ The curated `dev help` has no verb-count cap. It is curated by purpose and
 fits a 50-line screen. `board` is shown under "Share it".
 
 The hidden verbs are `bootstrap` (machine-local setup run once), `help`,
-`gpgkeys` (the legacy GPG key listing) and dev's own `__` helpers.
+`gpgkeys` (the legacy GPG key listing), `waits` (the leftover shell wait-loop
+listing) and dev's own `__` helpers.
 `tests/dev/guide_test.sh` pins that exact list, and `dev help -a` still lists
 them.
 

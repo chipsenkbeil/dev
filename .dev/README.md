@@ -343,3 +343,6 @@ These are the project verbs in `.dev/`. Each lists the flags and
 ### Hidden
 
 - `dev gpgkeys`: list the legacy GPG key files. It shows in `dev help -a`.
+- `dev waits`: list the shells that run an `until` or `while` loop, with each
+  one's pid, age, cpu time and nearest `claude` ancestor, and `cwd gone` when
+  its directory no longer exists. It shows in `dev help -a`.
