@@ -196,6 +196,48 @@ testing.test("follow.jj.leaves.a.checkout.with.uncommitted.edits.alone", functio
     cleanup(root, remote)
 end)
 
+testing.test("follow.jj.leaves.an.empty.checkout.on.unlanded.changes.alone", function()
+    local root, remote = jj_main()
+    assert(fs.write(root .. "/local.txt", "local\n"))
+    jj(root, "commit", "-m", "local")
+    local before = jj(root, "log", "-r", "@-", "--no-graph", "-T", "commit_id")
+    advance(remote)
+    local out, code = follow(root)
+    testing.eq(code, 0, out)
+    testing.ok(
+        out:find(root .. " was left alone: it sits on changes that are not on trunk.", 1, true),
+        out
+    )
+    testing.eq(jj(root, "log", "-r", "@-", "--no-graph", "-T", "commit_id"), before)
+    testing.eq(fs.exists(root .. "/next.txt"), false)
+    cleanup(root, remote)
+end)
+
+testing.test("follow.jj.leaves.an.unlanded.checkout.alone.under.DEV_FOLLOW_REV", function()
+    local root, remote = jj_main()
+    local base = jj(root, "log", "-r", "@-", "--no-graph", "-T", "commit_id")
+    assert(fs.write(root .. "/local.txt", "local\n"))
+    jj(root, "commit", "-m", "local")
+    local before = jj(root, "log", "-r", "@-", "--no-graph", "-T", "commit_id")
+    local out, code = support.dev(root, { "follow" }, { env = { DEV_FOLLOW_REV = base } })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("it sits on changes that are not on trunk.", 1, true), out)
+    testing.eq(jj(root, "log", "-r", "@-", "--no-graph", "-T", "commit_id"), before)
+    cleanup(root, remote)
+end)
+
+testing.test("follow.jj.moves.an.empty.checkout.on.an.older.trunk.commit", function()
+    local root, remote = jj_main()
+    local old = jj(root, "log", "-r", "@-", "--no-graph", "-T", "commit_id")
+    local head = advance(remote)
+    local out, code = follow(root)
+    testing.eq(code, 0, out)
+    testing.ok(out:find(root .. " is on trunk " .. head:sub(1, 12), 1, true), out)
+    testing.ok(old ~= head, old)
+    testing.eq(jj(root, "log", "-r", "@-", "--no-graph", "-T", "commit_id"), head)
+    cleanup(root, remote)
+end)
+
 testing.test("follow.jj.moves.the.main.checkout.from.a.workspace", function()
     local root, remote = jj_main()
     local workspace = dir() .. "/card"

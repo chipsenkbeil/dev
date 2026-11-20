@@ -350,10 +350,15 @@ sets it to the commit it tested, and a value that is not hex exits 2.
   `@` that is not empty, and for git a changed tracked file. A git checkout on
   a detached HEAD that no branch holds stays as it is too. One line names the
   folder and says why.
+- For jj, an empty `@` whose parent is not on trunk stays as it is too, to keep
+  the verb from moving a checkout off unlanded changes. A set `DEV_FOLLOW_REV`
+  is subject to the same rule.
 - The verb prints one sentence with a final period. It reads
-  `FOLDER is on trunk COMMIT.` or
-  `FOLDER was left alone: it has uncommitted changes.`, and the exit code is 0
-  for both. A failed jj or git command exits 1 with a sentence that names it,
+  `FOLDER is on trunk COMMIT.`,
+  `FOLDER was left alone: it has uncommitted changes.` or
+  `FOLDER was left alone: it sits on changes that are not on trunk.`, and the
+  exit code is 0 for all three. A failed jj or git command exits 1 with a
+  sentence that names it,
   such as `The git fetch command failed in FOLDER: OUTPUT.`
 - A project `.dev/follow.sh` or `.dev/follow.lua` replaces the built-in.
   `dev board land` on a board with no `deploys = true` under `[board.land]`

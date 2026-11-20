@@ -125,6 +125,11 @@ local function jj_follow(main, rev)
     if code ~= 0 or trunk == ROOT_MARK or trunk == "" then
         return "There is no trunk in " .. main .. ".", 1
     end
+    local landed
+    landed, code = read("log", "-r", "@- & ::trunk()", "--no-graph", "-T", "commit_id")
+    if code == 0 and landed == "" then
+        return main .. " was left alone: it sits on changes that are not on trunk.", 0
+    end
     local target = rev or trunk
     local parent
     parent, code = read("log", "-r", "@-", "--no-graph", "-T", "commit_id")
