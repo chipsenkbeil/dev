@@ -15,6 +15,7 @@ local PASSLOCK_SCRIPT = "/board/passlock.sh"
 local KEYCHAIN_SCRIPT = "/board/keychain.sh"
 local KEYCHAIN_SOURCE = "keychain"
 local UNAUTHORIZED = 401
+local UNAVAILABLE = "Board unavailable: "
 local ISSUED_VARIABLE = "DEV_BOARD_TOKEN"
 local ISSUED_REFUSED = "The issued token in DEV_BOARD_TOKEN was refused by Pomb."
 local FILE_REFUSED = "The role token file for DEV_AGENT was refused by Pomb."
@@ -144,7 +145,7 @@ local Backend = {}
 Backend.__index = Backend
 
 local function unavailable(reason)
-    return "Board unavailable: " .. dev_text.sentence(reason)
+    return UNAVAILABLE .. dev_text.sentence(reason)
 end
 
 local function listed(list, word)
@@ -210,7 +211,7 @@ function M.unreachable(message, idempotent)
         end
     end
     for _, reason in ipairs(reasons) do
-        if message:find("^board unavailable: " .. reason) then
+        if message:find("^" .. UNAVAILABLE:lower() .. reason) then
             return true
         end
     end

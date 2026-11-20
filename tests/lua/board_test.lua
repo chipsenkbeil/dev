@@ -1341,7 +1341,7 @@ end)
 testing.test("rename of a card on an unreadable board still fails with exit 1", function()
     local backend = fake(sample())
     backend.cards = function()
-        return nil, "board unavailable"
+        return nil, "Board unavailable"
     end
     local result = cmd_board.run("rename", { "11111111-a", "x" }, backend)
     testing.eq(result.code, 1)
@@ -1827,7 +1827,7 @@ end)
 
 testing.test("move to Done is never queued when the card cannot be read", function()
     local backend = fake(sample())
-    local message = "board unavailable: cannot reach pomb.example (curl exit 7)"
+    local message = "Board unavailable: cannot reach pomb.example (curl exit 7)"
     backend.cards = function()
         return nil, message
     end
@@ -3807,7 +3807,7 @@ testing.test("outcome --tick says the outcome was ticked when its record fails",
     card.outcomes = outcomes(2)
     local backend = fake({ card })
     function backend:note()
-        return nil, "board unavailable: cannot reach pomb"
+        return nil, "Board unavailable: cannot reach pomb"
     end
     local result = cmd_board.run(
         "outcome",
@@ -3860,7 +3860,7 @@ testing.test("outcome --rename names the old text and the reason when the note f
     local old = card.outcomes[2].name
     local backend = fake({ card })
     function backend:note()
-        return nil, "board unavailable: cannot reach pomb"
+        return nil, "Board unavailable: cannot reach pomb"
     end
     local result =
         cmd_board.run("outcome", { "cccccccc", "--rename", "2", "New", "--reason", "why" }, backend)
@@ -4040,7 +4040,7 @@ testing.test(
         local deleted = card.outcomes[2].name
         local backend = fake({ card })
         function backend:note()
-            return nil, "board unavailable: cannot reach pomb"
+            return nil, "Board unavailable: cannot reach pomb"
         end
         as_agent(LEAD, function()
             local result = cmd_board.run(
@@ -11082,7 +11082,7 @@ end)
 testing.test("wait --for ready keeps waiting on a trim and wakes for an unclaimed card", function()
     local cards = { { id = ID_A, column = support.COLUMN_NAME.READY } }
     local result, seen, path = waited({
-        { message = "board unavailable: pomb answered 410: too old", oldest = "17" },
+        { message = "Board unavailable: pomb answered 410: too old", oldest = "17" },
         got("18", { kind = "task_added", task_id = ID_A, column = support.COLUMN_NAME.READY }),
     }, { "--for", "ready" }, { cards = cards })
     testing.eq(result.output, "added 11111111 to Ready")
@@ -11539,7 +11539,7 @@ testing.test("wait --for lead leaves the cursor alone when the board cannot be r
     testing.eq(fs.read(path .. ".lead.cursor"), "1\n")
 end)
 
-local DOWN = "board unavailable: cannot reach https://p (curl exit 7)"
+local DOWN = "Board unavailable: cannot reach https://p (curl exit 7)"
 
 local function lead_added()
     return got("2", { kind = "task_added", task_id = ID_A, column = support.COLUMN_NAME.BLOCKED })
@@ -11811,7 +11811,7 @@ testing.test(
     "wait stores the oldest cursor of an expired one and says events were trimmed",
     function()
         local result, _, path = waited({
-            { message = "board unavailable: pomb answered 410: too old", oldest = "17" },
+            { message = "Board unavailable: pomb answered 410: too old", oldest = "17" },
         }, { "--for", "lead" })
         testing.eq(result.output, "events were trimmed, check the board")
         testing.eq(result.message, nil)
@@ -11821,14 +11821,14 @@ testing.test(
 
 testing.test("wait retries Pomb being unreachable, then gives up after ten in a row", function()
     local result, seen = waited({
-        { message = "board unavailable: cannot reach https://p (curl exit 7)" },
+        { message = "Board unavailable: cannot reach https://p (curl exit 7)" },
         got("5", { kind = "task_added", task_id = ID_A, column = support.COLUMN_NAME.READY }),
     }, { "--for", "ready" }, { cards = { { id = ID_A, column = support.COLUMN_NAME.READY } } })
     testing.eq(result.output, "added 11111111 to Ready")
     testing.eq(seen.naps, { 30 })
     local down = {}
     for i = 1, 10 do
-        down[i] = { message = "board unavailable: cannot reach https://p (curl exit 6)" }
+        down[i] = { message = "Board unavailable: cannot reach https://p (curl exit 6)" }
     end
     result, seen = waited(down, {})
     testing.ok(result.message:find("curl exit 6", 1, true), result.message)
@@ -11838,7 +11838,7 @@ end)
 testing.test(
     "wait.retry.backs.off by doubling to the bound and resets after a good read",
     function()
-        local down = { message = "board unavailable: cannot reach https://p (curl exit 7)" }
+        local down = { message = "Board unavailable: cannot reach https://p (curl exit 7)" }
         local replies = {}
         for i = 1, 6 do
             replies[i] = down
@@ -11855,7 +11855,7 @@ testing.test(
 )
 
 local function limited()
-    return { message = "board unavailable: pomb answered 429: end one", refused = true }
+    return { message = "Board unavailable: pomb answered 429: end one", refused = true }
 end
 
 testing.test(
@@ -11912,12 +11912,12 @@ testing.test("wait does not count too many open waits toward the ten failures", 
     local replies = {}
     for _ = 1, 9 do
         replies[#replies + 1] =
-            { message = "board unavailable: cannot reach https://p (curl exit 6)" }
+            { message = "Board unavailable: cannot reach https://p (curl exit 6)" }
     end
     replies[#replies + 1] = limited()
     for _ = 1, 9 do
         replies[#replies + 1] =
-            { message = "board unavailable: cannot reach https://p (curl exit 6)" }
+            { message = "Board unavailable: cannot reach https://p (curl exit 6)" }
     end
     replies[#replies + 1] = got("5", { kind = "task_updated", task_id = ID_A })
     local result = waited(replies, {})
@@ -11926,7 +11926,7 @@ end)
 
 testing.test("wait treats a 429 without the too_many_waits flag as a plain refusal", function()
     local result, seen = waited({
-        { message = "board unavailable: pomb answered 429: slow down" },
+        { message = "Board unavailable: pomb answered 429: slow down" },
     }, {})
     testing.eq(result.code, 1)
     testing.eq(#seen.naps, 0)
@@ -11934,7 +11934,7 @@ end)
 
 testing.test("wait fails at once on a refusal", function()
     local result, seen = waited({
-        { message = "board unavailable: pomb answered 401: bad token" },
+        { message = "Board unavailable: pomb answered 401: bad token" },
     }, {})
     testing.eq(result.code, 1)
     testing.eq(#seen.naps, 0)

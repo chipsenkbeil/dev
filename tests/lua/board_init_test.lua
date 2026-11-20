@@ -1288,7 +1288,7 @@ testing.test("a run that stops while stripping can be repeated without losing a 
     })
     local set_card = layout.set_card
     function layout:set_card()
-        return nil, "board unavailable: pomb answered 503: down"
+        return nil, "Board unavailable: pomb answered 503: down"
     end
     local changes = run(layout)
     testing.eq(changes, nil)
@@ -1568,7 +1568,7 @@ testing.test(
         testing.eq(message:find("..", 1, true), nil, message)
         function layout:set_color()
             return nil,
-                "board unavailable: this token has the boards.write permission but is not assigned "
+                "Board unavailable: this token has the boards.write permission but is not assigned "
                     .. "to board b; add the board to the token"
         end
         _, message = run(layout)
@@ -2057,7 +2057,7 @@ testing.test("init-lead-without-roles-grant-names-the-roles-step", function()
     local layout = fake_layout({ columns = template_columns() })
     function layout:add_roles()
         return nil,
-            "board unavailable: pomb answered 403: this token lacks the roles.grant permission "
+            "Board unavailable: pomb answered 403: this token lacks the roles.grant permission "
                 .. "on every board; use a token that has it",
             "roles.grant"
     end

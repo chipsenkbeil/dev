@@ -99,7 +99,7 @@ end)
 
 testing.test("wait --card retries an unreachable Pomb and then reads on", function()
     local result, seen =
-        wait_card({ {}, { broken = "board unavailable: pass timed out" }, { column = "Done" } })
+        wait_card({ {}, { broken = "Board unavailable: pass timed out" }, { column = "Done" } })
     testing.eq(result.output, "5af0e005 moved to Done")
     testing.eq(#seen.naps, 2)
 end)
@@ -108,7 +108,7 @@ testing.test("wait --card retries an unreachable Pomb on the first card listing"
     local result, seen = wait_card(
         { {}, { column = "Done" } },
         nil,
-        { "board unavailable: pass timed out" }
+        { "Board unavailable: pass timed out" }
     )
     testing.eq(result.output, "5af0e005 moved to Done")
     testing.eq(#seen.naps, 2)

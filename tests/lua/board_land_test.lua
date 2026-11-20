@@ -2929,7 +2929,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         local project = jj_project()
         local backend = fake_backend(project.root)
         function backend:comments()
-            return nil, "board unavailable: comments timed out"
+            return nil, "Board unavailable: comments timed out"
         end
         local result = land_as_lander(backend)
         testing.eq(result.code, 1)
@@ -2941,7 +2941,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         local project = jj_project()
         local backend = fake_backend(project.root)
         function backend:cards()
-            return nil, "board unavailable: cards timed out"
+            return nil, "Board unavailable: cards timed out"
         end
         local result = land_as_lander(backend)
         testing.eq(result.code, 1)
@@ -3191,7 +3191,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
                 local family = backend.family
                 function backend:family(...)
                     if has_landed(project) then
-                        return nil, "board unavailable: family timed out"
+                        return nil, "Board unavailable: family timed out"
                     end
                     return family(self, ...)
                 end
