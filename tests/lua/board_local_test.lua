@@ -13,6 +13,7 @@ local READY_COLUMN = support.column_id(Column.READY)
 local TOKEN = "pomb_SECRETtoken0123456789"
 local ID_A = "aaaaaaaa-1111-4aaa-8aaa-aaaaaaaaaaaa"
 local ID_B = "bbbbbbbb-1111-4bbb-8bbb-bbbbbbbbbbbb"
+local ID_C = "cccccccc-1111-4ccc-8ccc-cccccccccccc"
 local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local MAIN = REPO .. "/dotfiles/bin/.local/share/dev/main.lua"
 
@@ -1089,6 +1090,46 @@ testing.test(
         testing.ok(out:find("^" .. first), out)
     end
 )
+
+testing.test("next returns a card whose blocker the board no longer holds", function()
+    local root, home = local_board()
+    local function add(name)
+        return prefix_of((dev(root, home, {
+            "board",
+            "add",
+            name,
+            "--column",
+            Column.READY,
+            "--size",
+            "1",
+            "--description",
+            PLANNED,
+            "--done-when",
+            JUDGED,
+            "--done-when",
+            JUDGED,
+            "--done-when",
+            JUDGED,
+            "--checks",
+            "dev test",
+        })))
+    end
+    local blocked, blocker = add("Blocked"), add("Blocker")
+    dev(root, home, { "board", "link", blocked, "blocked_by", blocker })
+    local out = dev(root, home, { "board", "next" })
+    testing.ok(out:find("^" .. blocker), out)
+    local doc = document(file_of(home))
+    local kept = {}
+    for _, card in ipairs(doc.cards) do
+        if card.id:sub(1, 8) ~= blocker then
+            kept[#kept + 1] = card
+        end
+    end
+    doc.cards = kept
+    assert(fs.write(file_of(home), assert(json.encode(doc))))
+    out = dev(root, home, { "board", "next" })
+    testing.ok(out:find("^" .. blocked), out)
+end)
 
 testing.test(
     "links lists a card's own links and the reverse side of links other cards hold",
@@ -2740,6 +2781,9 @@ case "$last" in
 */colors) body=$(cat "$ROOT/colors.json") ;;
 */fields) body=$(cat "$ROOT/fields.json") ;;
 */export-data) body=$(cat "$ROOT/export.json") ;;
+*/api/tasks/bbbbbbbb-1111-4bbb-8bbb-bbbbbbbbbbbb/links)
+    if [ -f "$ROOT/links_b.json" ]; then body=$(cat "$ROOT/links_b.json"); else body='{"ok":true}'; fi
+    ;;
 */api/tasks/aaaaaaaa-1111-4aaa-8aaa-aaaaaaaaaaaa)
     body=$(task_of aaaaaaaa-1111-4aaa-8aaa-aaaaaaaaaaaa | sed 's|}$|,"parent":{"id":"bbbbbbbb-1111-4bbb-8bbb-bbbbbbbbbbbb","name":"Epic"},"children_done":1,"children_total":3}|')
     if [ -z "$body" ]; then body='{"id":"aaaaaaaa-1111-4aaa-8aaa-aaaaaaaaaaaa","parent":{"id":"bbbbbbbb-1111-4bbb-8bbb-bbbbbbbbbbbb","name":"Epic"},"children_done":1,"children_total":3}'; fi
@@ -4226,6 +4270,69 @@ testing.test("next on a Pomb board skips a run card", function()
     testing.eq(code, 0, out)
     testing.ok(out:find("bbbbbbbb", 1, true), out)
     testing.ok(not out:find("cccccccc", 1, true) and not out:find("run dotfiles", 1, true), out)
+end)
+
+local function blocked_by(target)
+    return '[{"id":"link-1","kind":"blocked_by","target_id":"' .. target .. '"}]'
+end
+
+local function blocked_export(blocker_column)
+    return '{"tasks":['
+        .. support.pomb_export_task({
+            id = ID_B,
+            name = "Second",
+            column_id = READY_COLUMN,
+            color_id = false,
+        })
+        .. ","
+        .. support.pomb_export_task({
+            id = ID_C,
+            name = "Third",
+            column_id = blocker_column,
+            position = 2,
+            color_id = false,
+        })
+        .. "]}"
+end
+
+testing.test(
+    "next on a Pomb board skips an open blocker and returns a card whose blocker is done",
+    function()
+        local root, home = pomb()
+        local env = { ROOT = root, DEV_MAX_SIZE = "" }
+        assert(fs.write(root .. "/links_b.json", blocked_by(ID_C)))
+        assert(fs.write(root .. "/export.json", blocked_export(READY_COLUMN)))
+        local out, code = dev(root, home, { "board", "next" }, env)
+        testing.eq(code, 0, out)
+        testing.ok(out:find("cccccccc", 1, true), out)
+        testing.ok(not out:find("bbbbbbbb", 1, true), out)
+        assert(
+            fs.write(
+                root .. "/detail.json",
+                (
+                    DETAIL:gsub(
+                        '{"id":"col%-done","name":"Done"}',
+                        '{"id":"col-done","name":"Done","is_done":true}'
+                    )
+                )
+            )
+        )
+        assert(fs.write(root .. "/export.json", blocked_export(support.column_id(Column.DONE))))
+        out, code = dev(root, home, { "board", "next" }, env)
+        testing.eq(code, 0, out)
+        testing.ok(out:find("bbbbbbbb", 1, true), out)
+    end
+)
+
+testing.test("next on a Pomb board skips a card whose blocker cannot be read", function()
+    local root, home = pomb()
+    local env = { ROOT = root, DEV_MAX_SIZE = "" }
+    assert(fs.write(root .. "/links_b.json", blocked_by("dddddddd-1111-4ddd-8ddd-dddddddddddd")))
+    assert(fs.write(root .. "/export.json", blocked_export(READY_COLUMN)))
+    local out, code = dev(root, home, { "board", "next" }, env)
+    testing.eq(code, 0, out)
+    testing.ok(out:find("cccccccc", 1, true), out)
+    testing.ok(not out:find("bbbbbbbb", 1, true), out)
 end)
 
 testing.test(
