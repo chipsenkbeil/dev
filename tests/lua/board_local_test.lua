@@ -3608,6 +3608,17 @@ testing.test("a release names the reason a missing card or an unheld claim is re
     testing.eq({ ok, reason, detail }, { nil, board.ReleaseReason.NOT_HELD, card.id })
 end)
 
+testing.test("a release with an expected holder refuses another holder's claim", function()
+    local _, home = local_board()
+    local backend = localboard.new({ name = "mine", path = file_of(home), private = true })
+    local card = assert(backend:add("held", support.COLUMN_NAME.ICEBOX, {}))
+    local fence = assert(backend:claim(card.id, "r/third", {}))
+    local ok, message = backend:release(card.id, fence, "r/old")
+    testing.eq(ok, nil)
+    testing.ok(message:find("is held by r/third now, not by r/old", 1, true), message)
+    testing.eq(backend:release(card.id, fence, "r/third"), true)
+end)
+
 testing.test("release returns a reason and no message", function()
     local _, home = local_board()
     local backend = localboard.new({ name = "mine", path = file_of(home), private = true })

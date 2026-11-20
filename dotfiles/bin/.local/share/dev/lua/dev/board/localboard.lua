@@ -1178,8 +1178,8 @@ function Backend:claim(id, claimant, opts)
     end)
 end
 
-function Backend:release(id, fence)
-    local reason
+function Backend:release(id, fence, expected)
+    local reason, changed
     local done, why = self:__update(function(doc)
         local card = find_by_id(doc.cards, id)
         if not card then
@@ -1190,10 +1190,20 @@ function Backend:release(id, fence)
             reason = board.ReleaseReason.NOT_HELD
             return nil
         end
+        if expected and card.claim.claimant ~= expected then
+            changed = "Card "
+                .. id
+                .. " is held by "
+                .. card.claim.claimant
+                .. " now, not by "
+                .. expected
+                .. ". Nothing was released."
+            return nil
+        end
         card.claim = nil
         return true
     end)
-    return done, why, reason, reason and id
+    return done, why or changed, reason, reason and id
 end
 
 function Backend:keepalive()

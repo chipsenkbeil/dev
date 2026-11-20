@@ -2420,7 +2420,7 @@ function Backend:claim(id, claimant, opts)
     return taken
 end
 
-function Backend:release(id, fence)
+function Backend:release(id, fence, expected)
     local task, message = self:__request("GET", "/api/tasks/" .. id)
     if not task then
         return nil, message
@@ -2428,6 +2428,16 @@ function Backend:release(id, fence)
     local name = holder(task)
     if not name then
         return true
+    end
+    if expected and name ~= expected then
+        return nil,
+            "Card "
+                .. id
+                .. " is held by "
+                .. name
+                .. " now, not by "
+                .. expected
+                .. ". Nothing was released."
     end
     if task.owner.holder.kind == board.ACTOR.HUMAN then
         return nil, nil, board.ReleaseReason.HELD_BY_MEMBER, name

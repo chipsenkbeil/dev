@@ -4864,7 +4864,7 @@ local function take_once(backend, args)
     if from then
         local held = claims.read(card.id)
         local fence = held and held.fence
-        local released, stuck, reason, detail = backend:release(card.id, fence)
+        local released, stuck, reason, detail = backend:release(card.id, fence, from)
         if not released then
             return failure(board.release_refusal(reason, stuck, detail, fence))
         end

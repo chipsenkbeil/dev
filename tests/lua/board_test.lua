@@ -10287,6 +10287,61 @@ testing.test("a release of an owner with no claim sends the owner fence", functi
     dev(root, home, { "board", "release", "11111111-a" }, { agent = "r/one" })
 end)
 
+testing.test("take --from refuses when the holder changed before the release", function()
+    local cards = sample()
+    cards[1].claimant = "r/old"
+    local backend = fake(cards)
+    local released = {}
+    function backend:release(id, _, expected)
+        released[#released + 1] = { id, expected }
+        local held = "r/third"
+        if expected and expected ~= held then
+            return nil,
+                "Card " .. id .. " is held by " .. held .. " now, not by " .. expected .. "."
+        end
+        cards[1].claimant = nil
+        return true
+    end
+    local result =
+        cmd_board.run("take", { "11111111-a", "--from", "r/old", "--as", "r/one" }, backend)
+    testing.eq(result.code, 1, result.message)
+    testing.ok(result.message:find("is held by r/third now, not by r/old", 1, true), result.message)
+    testing.eq(released, { { ID_A, "r/old" } })
+    testing.eq(cards[1].claimant, "r/old")
+    for _, call in ipairs(backend.calls) do
+        testing.ok(
+            call[1] ~= "claim" and call[1] ~= "note",
+            "the refused take went on: " .. call[1]
+        )
+    end
+end)
+
+testing.test("pomb release sends no owner release when the holder changed", function()
+    local backend = assert(pomb.new({
+        url = "https://pomb.example",
+        token = "pass:secrets/worker/token/pomb",
+        name = "dotfiles",
+    }))
+    local sent = {}
+    function backend:__request(method, path)
+        sent[#sent + 1] = method .. " " .. path
+        return {
+            owner = {
+                holder = { kind = "agent", name = "r/third" },
+                lease_expires_at = "2999-01-01T00:00:00Z",
+                live = true,
+                fence = 9,
+            },
+        }
+    end
+    local ok, message = backend:release(ID_A, 9, "r/old")
+    testing.eq(ok, nil)
+    testing.ok(message:find("is held by r/third now, not by r/old", 1, true), message)
+    testing.eq(sent, { "GET /api/tasks/" .. ID_A })
+    testing.eq({ backend:release(ID_A, 9, "r/third") }, { true })
+    testing.eq(sent[#sent], "POST /api/tasks/" .. ID_A .. "/owner/release")
+end)
+
 testing.test("take --from prints the sentence for a card a person holds", function()
     local export = export_with_first_card({
         description = PLANNED_TEXT,
