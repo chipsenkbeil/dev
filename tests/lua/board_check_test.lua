@@ -696,6 +696,75 @@ testing.test("check setting refuses a bad value", function()
     testing.eq(code, 0, out)
 end)
 
+local MAC_FILE = "tests/lua/mac_test.lua"
+local MAC_ROW = "dev --remote test -- " .. MAC_FILE
+
+local function mac_root(setting)
+    local config = '[board]\nbackend = "local"\nname = "mine"\n\n[board.check]\n' .. setting
+    return git_root({ [".dev/config.toml"] = config, [MAC_FILE] = "x\n" })
+end
+
+testing.test("NOT_RUN row for a listed mac-only file is recorded and never started", function()
+    local root, home, head = mac_root('mac_only = ["' .. MAC_FILE .. '"]\n')
+    local id = card_with(root, home, { "true", MAC_ROW })
+    local out, code = dev(root, home, { "board", "check", id })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("2 not-run - " .. MAC_ROW, 1, true), out)
+    testing.ok(not out:find("row 2 run", 1, true), out)
+    local body = comments(home)[1].body
+    testing.eq(
+        body,
+        expected_head(head, "-", "run", { "true", MAC_ROW }) .. "\n1 pass -\n2 not-run -"
+    )
+end)
+
+testing.test("a mac_only setting that is no list of paths is refused", function()
+    local root, home = mac_root('mac_only = "' .. MAC_FILE .. '"\n')
+    local id = card_with(root, home, { MAC_ROW })
+    local out, code = dev(root, home, { "board", "check", id })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("board.check.mac_only", 1, true), out)
+end)
+
+testing.test("not.run.parse reads a not-run row back", function()
+    local commands = { "true", MAC_ROW }
+    local state = { commit = "abc123", change = "-" }
+    local rows = { { run = "true", result = "pass", run_id = "-" }, check.not_run(MAC_ROW) }
+    local record = check.parse(check.record(state, rows, false))
+    testing.eq(record.rows, {
+        { result = "pass", run_id = "-" },
+        { result = "not-run", run_id = "-" },
+    })
+    testing.eq(record.sum, check.fingerprint(commands))
+    testing.eq(check.line(2, rows[2]), "2 not-run - " .. MAC_ROW)
+end)
+
+testing.test("summarize counts a not-run row as neither passed nor an error", function()
+    local not_run = check.not_run(MAC_ROW)
+    local pass = { run = "true", run_id = "-", result = "pass", code = 0, tail = "" }
+    local fail = { run = "false", run_id = "-", result = "fail", code = 1, tail = "" }
+    local summary = check.summarize({ pass, not_run }, false)
+    testing.eq({ summary.passed, summary.not_run, summary.errors, summary.good }, { 1, 1, 0, true })
+    testing.eq(check.summarize({ not_run }, false).good, true)
+    testing.eq(check.summarize({ pass, not_run, fail }, false).good, false)
+    local lint = { run = "dev --remote lint", run_id = "-", result = "pass", code = 0, tail = "" }
+    testing.eq(check.summarize({ lint, not_run }, true).good, false)
+end)
+
+testing.test("mac_only names a dev test row with a listed file after the double dash", function()
+    local listed = { [MAC_FILE] = true }
+    testing.eq(check.mac_only({ "dev", "--remote", "test", "--", MAC_FILE }, listed), true)
+    testing.eq(
+        check.mac_only({ "dev", "--remote", "test", "--", MAC_FILE, MAC_FILE }, listed),
+        true
+    )
+    testing.eq(check.mac_only({ "dev", "--remote", "test", "--", "a", MAC_FILE }, listed), false)
+    testing.eq(check.mac_only({ "dev", "--remote", "test" }, listed), false)
+    testing.eq(check.mac_only({ "dev", "--remote", "test", "--", "tests/a.lua" }, listed), false)
+    testing.eq(check.mac_only({ "dev", "--remote", "lint", "--", MAC_FILE }, listed), false)
+    testing.eq(check.mac_only({ "rg", "-n", "x", MAC_FILE }, listed), false)
+end)
+
 local function fake_ci(body)
     local bin = support.tempdir() .. "/bin"
     assert(fs.mkdir(bin, { parents = true }), "mkdir failed")
@@ -1054,11 +1123,17 @@ testing.test(
             { result = check.Result.FAIL, run = "dev --remote test -- tests/lua/new_test.lua" },
         }
         local summary = check.summarize(rows, true)
-        testing.eq(summary, { passed = 2, good = true, errors = 0, proves_nothing = 0 })
+        testing.eq(
+            summary,
+            { passed = 2, not_run = 0, good = true, errors = 0, proves_nothing = 0 }
+        )
         rows[3] =
             { result = check.Result.PASS, run = "dev --remote test -- tests/lua/new_test.lua" }
         summary = check.summarize(rows, true)
-        testing.eq(summary, { passed = 3, good = false, errors = 0, proves_nothing = 1 })
+        testing.eq(
+            summary,
+            { passed = 3, not_run = 0, good = false, errors = 0, proves_nothing = 1 }
+        )
     end
 )
 
@@ -1068,7 +1143,7 @@ testing.test("an expect-fail run where no row fails is bad", function()
         { result = check.Result.PASS, run = "dev --remote test" },
     }
     local summary = check.summarize(rows, true)
-    testing.eq(summary, { passed = 2, good = false, errors = 0, proves_nothing = 0 })
+    testing.eq(summary, { passed = 2, not_run = 0, good = false, errors = 0, proves_nothing = 0 })
 end)
 
 testing.test("an expect-fail remote row that printed no run id never ran", function()

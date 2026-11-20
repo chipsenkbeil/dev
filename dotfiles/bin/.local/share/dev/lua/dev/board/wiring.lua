@@ -188,6 +188,29 @@ local function trunk_proof(backend)
     end
 end
 
+---Read the test files the project lists as mac-only.
+---
+---A `mac_only` that is not a list of file paths ends the process with exit 1.
+---@param root string the project root
+---@return table<string, boolean> listed the listed files as a set, empty when none is set
+local function mac_only_files(root)
+    local key = "board.check.mac_only"
+    local value = config.get(root, key)
+    local listed = {}
+    if value == nil then
+        return listed
+    end
+    local bad = type(value) ~= "table" or (#value == 0 and next(value) ~= nil)
+    for _, path in ipairs(not bad and value or {}) do
+        bad = bad or type(path) ~= "string" or not path:find("%S")
+        listed[path] = true
+    end
+    if bad then
+        verb.die("The `" .. key .. "` setting must be a list of file paths.")
+    end
+    return listed
+end
+
 ---Run the card's rows and record the result.
 ---
 ---An `--expect-fail` run on a commit with a trunk proof runs the rows the card adds only. Without
@@ -246,12 +269,30 @@ local function check_rows(opts)
             )
         end
     end
+    local listed = mac_only_files(backend.root)
+    local mac = {}
+    for i, argv in ipairs(argvs) do
+        if not flags.run and check.mac_only(argv, listed) then
+            mac[i] = true
+            plan = nil
+        end
+    end
     local shared = {}
     for _, entry in ipairs(plan and plan.rows or {}) do
         shared[entry.index] = true
     end
     for i, argv in ipairs(argvs) do
-        if plan and shared[i] then
+        if mac[i] then
+            verb.note(
+                string.format(
+                    "Not running row %d of %d. It is a mac-only test: %s",
+                    i,
+                    #argvs,
+                    commands[i]
+                )
+            )
+            rows[i] = check.not_run(commands[i])
+        elseif plan and shared[i] then
             if not rows[i] then
                 renew_claim(backend, card, opts.name, flags.seconds)
                 local done = run_shared(opts, plan, env)

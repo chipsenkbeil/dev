@@ -1510,6 +1510,19 @@ is not a whole number from 1 to 86400 makes them exit 1 and name
 seconds = 14400
 ```
 
+The same table takes a `mac_only` list of test files that only run on macOS. A
+`dev --remote test -- FILE` row whose words after the double dash all name
+listed files is never started, as the Linux ci container would run no tests and
+fail it. A row that names any other suite too runs as usual. `dev board check`
+records the row as `not-run` with no ci run id, and the summary counts it as
+neither passed nor failed. A `mac_only` that is not a list of file paths makes
+`dev board check` exit 1 and name `board.check.mac_only`:
+
+```toml
+[board.check]
+mac_only = ["tests/lua/mac_only_test.lua"]
+```
+
 ### landing before starting
 
 A runner lands what passed before it takes a new card. `take` and `move CARD
@@ -2879,6 +2892,9 @@ command.
   runs finds the ids in its log. It prints one line per row, for the first
   `run` line the row prints. A shared run prints one `rows N, M run <id>` line
   for all its rows. `land`'s recheck and `ship` print none.
+- A row for a file the `mac_only` setting lists is recorded as `not-run` with
+  `-` for its run id and starts no run. It does not make the check fail, but
+  `land` reads only a `pass` as a pass.
 - A row that failed with no run id adds a second line under it, indented by
   two spaces, with the last line the row printed. A row that printed a run id,
   a negated row and a row that timed out add none.

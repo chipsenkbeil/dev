@@ -124,7 +124,13 @@ local LOGS_SECONDS = 60
 
 ---How a checks row ended.
 ---@enum dev.board.check.Result
-M.Result = { PASS = "pass", FAIL = "fail", TIMEOUT = "timeout", ERROR = "error" }
+M.Result = {
+    PASS = "pass",
+    FAIL = "fail",
+    TIMEOUT = "timeout",
+    ERROR = "error",
+    NOT_RUN = "not-run",
+}
 
 ---What a run was meant to show, as the record names it.
 ---@enum dev.board.check.Mode
@@ -138,7 +144,7 @@ M.Mode = { RUN = "run", EXPECT_FAIL = "expect-fail" }
 ---@class dev.board.check.Row
 ---@field run string the row's command as the card holds it
 ---@field run_id string the ci run id the row printed, `-` when it printed none
----@field result string one of `Result`, where a timeout also covers a row killed from outside and an error is a row that never started under `--expect-fail`
+---@field result string one of `Result`, where a timeout also covers a row killed from outside, an error is a row that never started under `--expect-fail` and not-run is a row for a macOS-only test that was never started
 ---@field code integer the exit status
 ---@field tail string the last lines the run printed
 ---@field failed string[]? the paths on the `FAIL PATH` lines the run printed, which the test runner prints
@@ -956,7 +962,8 @@ end
 
 ---@class dev.board.check.Summary
 ---@field passed integer how many rows passed
----@field good boolean true when every row passed, or with `expect_fail` when no row but a plain lint or test row passed, none never started and one failed
+---@field not_run integer how many rows were recorded as not run
+---@field good boolean true when every row passed or was not run, or with `expect_fail` when no row but a plain lint or test row passed, none never started and one failed
 ---@field errors integer how many rows never started under `expect_fail`
 ---@field proves_nothing integer how many passing rows other than the plain lint and test rows
 
@@ -965,7 +972,7 @@ end
 ---@param expect_fail boolean whether every row was meant to fail
 ---@return dev.board.check.Summary summary the counts and the verdict
 function M.summarize(rows, expect_fail)
-    local passed, errors, proves_nothing = 0, 0, 0
+    local passed, errors, proves_nothing, not_run = 0, 0, 0, 0
     for _, row in ipairs(rows) do
         if row.result == M.Result.PASS then
             passed = passed + 1
@@ -974,13 +981,46 @@ function M.summarize(rows, expect_fail)
             end
         elseif row.result == M.Result.ERROR then
             errors = errors + 1
+        elseif row.result == M.Result.NOT_RUN then
+            not_run = not_run + 1
         end
     end
-    local good = passed == #rows
+    local good = passed + not_run == #rows
     if expect_fail then
-        good = proves_nothing == 0 and errors == 0 and passed < #rows
+        good = proves_nothing == 0 and errors == 0 and passed + not_run < #rows
     end
-    return { passed = passed, good = good, errors = errors, proves_nothing = proves_nothing }
+    return {
+        passed = passed,
+        not_run = not_run,
+        good = good,
+        errors = errors,
+        proves_nothing = proves_nothing,
+    }
+end
+
+---Say whether a row is a `dev --remote test` row that names only files the project lists as
+---mac-only.
+---@param argv string[] the row's words
+---@param listed table<string, boolean> the listed files as a set
+---@return boolean named true when the row has words after the double dash and all are listed
+function M.mac_only(argv, listed)
+    local job, words = M.job_row(argv)
+    if job ~= STANDARD_TEST or #words == 0 then
+        return false
+    end
+    for _, word in ipairs(words) do
+        if not listed[word] then
+            return false
+        end
+    end
+    return true
+end
+
+---Make the row for a command that was never started.
+---@param command string the row as the card holds it
+---@return dev.board.check.Row row the row, with no run id
+function M.not_run(command)
+    return { run = command, run_id = NO_RUN, result = M.Result.NOT_RUN, code = 0, tail = "" }
 end
 
 ---Sum a list of checks rows into a value that differs when a row changes.
@@ -1081,7 +1121,7 @@ function M.parse(body)
             end
             rows[#rows].reason = reason
         else
-            local index, result, run_id = line:match("^(%d+) (%a+) (%S+)$")
+            local index, result, run_id = line:match("^(%d+) ([%a-]+) (%S+)$")
             if not index or tonumber(index) ~= #rows + 1 then
                 return nil
             end
