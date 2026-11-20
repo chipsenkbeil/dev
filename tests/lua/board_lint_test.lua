@@ -417,11 +417,15 @@ end)
 testing.test("lint fails when the children of a card cannot be read", function()
     local fake = backend({ card(1, NAME.DONE) })
     function fake:family()
-        return nil, "pomb is down"
+        return nil, "Pomb is down."
     end
     local result = cmd_board.run("lint", {}, fake)
     testing.eq(result.code, 1)
-    testing.ok(result.message:find("Pomb is down", 1, true), result.message)
+    testing.ok(
+        result.message:find("Could not read the family of 00000001-", 1, true)
+            and result.message:find("aaaaaaaaaaaa. Pomb is down.", 1, true),
+        result.message
+    )
 end)
 
 testing.test("lint reports a card with a v1 checklist and no outcomes as lacking them", function()
@@ -494,21 +498,29 @@ end)
 testing.test("lint fails when a card's comments cannot be read", function()
     local fake = backend({ card(1, NAME.BLOCKED) })
     function fake:comments()
-        return nil, "pomb is down"
+        return nil, "Pomb is down."
     end
     local result = cmd_board.run("lint", {}, fake)
     testing.eq(result.code, 1)
-    testing.ok(result.message:find("Pomb is down", 1, true), result.message)
+    testing.ok(
+        result.message:find("Could not read the comments of 00000001-", 1, true)
+            and result.message:find("aaaaaaaaaaaa. Pomb is down.", 1, true),
+        result.message
+    )
 end)
 
 testing.test("lint fails when the comments of a Done card cannot be read", function()
     local fake = backend({ card(1, NAME.DONE) })
     function fake:comments()
-        return nil, "pomb is down"
+        return nil, "Pomb is down."
     end
     local result = cmd_board.run("lint", {}, fake)
     testing.eq(result.code, 1)
-    testing.ok(result.message:find("Pomb is down", 1, true), result.message)
+    testing.ok(
+        result.message:find("Could not read the comments of 00000001-", 1, true)
+            and result.message:find("aaaaaaaaaaaa. Pomb is down.", 1, true),
+        result.message
+    )
 end)
 
 local function local_board(config)

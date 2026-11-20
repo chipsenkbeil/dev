@@ -1269,7 +1269,7 @@ local function claimed_view(backend, card, result)
             "Took card "
                 .. card.id:sub(1, board.MIN_PREFIX)
                 .. ", but its view failed. "
-                .. sentence(err.message)
+                .. err.message
         )
         return result
     end
@@ -2920,7 +2920,7 @@ function commands.outcome(backend, args)
                         .. " "
                         .. number
                         .. " was deleted, but the note failed. "
-                        .. sentence(message)
+                        .. message
                         .. ' Its text was "'
                         .. deleted_text
                         .. '". Its reason was "'
@@ -2955,7 +2955,7 @@ function commands.outcome(backend, args)
                         .. " "
                         .. number
                         .. " was ticked, but its tick record failed. "
-                        .. sentence(message)
+                        .. message
                 )
             )
         end
@@ -2978,7 +2978,7 @@ function commands.outcome(backend, args)
                         .. " "
                         .. number
                         .. " was renamed, but the note failed. "
-                        .. sentence(message)
+                        .. message
                         .. ' Its old text was "'
                         .. old_text
                         .. '". Its reason was "'
@@ -3377,7 +3377,7 @@ function commands.review(backend, args)
             string.format(
                 "The review was NOT recorded on card %s. %s The board may or may not hold it. Read `dev board notes` before repeating it.",
                 short,
-                sentence(message)
+                message
             )
         )
     end
@@ -4639,22 +4639,21 @@ function commands.lint(backend, args)
             comments = function()
                 local list, why = backend:comments(card.id)
                 if not list then
-                    return nil,
-                        "Could not read the comments of " .. card.id .. ": " .. sentence(why)
+                    return nil, "Could not read the comments of " .. card.id .. ". " .. why
                 end
                 return list
             end,
             links = function()
                 local list, why = backend:links(card.id)
                 if not list then
-                    return nil, "Could not read the links of " .. card.id .. ": " .. sentence(why)
+                    return nil, "Could not read the links of " .. card.id .. ". " .. why
                 end
                 return list
             end,
             children = function()
                 local family, why = backend:family(card.id)
                 if not family then
-                    return nil, "Could not read the family of " .. card.id .. ": " .. sentence(why)
+                    return nil, "Could not read the family of " .. card.id .. ". " .. why
                 end
                 local counts = family.children or { done = 0, total = 0 }
                 return { done = counts.done, total = counts.total, epic = family.epic }
@@ -4795,12 +4794,7 @@ function commands.take(backend, args)
             { kind = board.NoteKind.STATUS }
         )
         if not ok then
-            verb.note(
-                "Took card "
-                    .. short
-                    .. ", but the handoff note was not posted. "
-                    .. sentence(message)
-            )
+            verb.note("Took card " .. short .. ", but the handoff note was not posted. " .. message)
         end
     end
     return claimed_view(backend, card, result)

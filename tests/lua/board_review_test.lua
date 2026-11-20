@@ -529,7 +529,7 @@ testing.test("a review that cannot be written is never reported as recorded", fu
         return {}
     end
     function backend:note()
-        return nil, "curl exit 28"
+        return nil, "Curl exit 28."
     end
     local result = require("dev.cmd.board").run(
         "review",

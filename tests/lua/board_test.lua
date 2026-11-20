@@ -3944,7 +3944,7 @@ testing.test("outcome --tick says the outcome was ticked when its record fails",
     card.outcomes = outcomes(2)
     local backend = fake({ card })
     function backend:note()
-        return nil, "Board unavailable: cannot reach pomb"
+        return nil, "Board unavailable: cannot reach pomb."
     end
     local result = cmd_board.run(
         "outcome",
@@ -3958,7 +3958,7 @@ testing.test("outcome --tick says the outcome was ticked when its record fails",
         result.message
     )
     function backend:note()
-        return nil, "pomb answered 500"
+        return nil, "Pomb answered 500."
     end
     result = cmd_board.run(
         "outcome",
@@ -3967,6 +3967,26 @@ testing.test("outcome --tick says the outcome was ticked when its record fails",
     )
     testing.eq(result.code, 1)
     testing.eq(result.unqueued, true)
+end)
+
+testing.test("a failed tick record prints the board message once", function()
+    local card = colored("green")
+    card.outcomes = outcomes(2)
+    local backend = fake({ card })
+    function backend:note()
+        return nil, "Board unavailable: cannot reach pomb."
+    end
+    local result = cmd_board.run(
+        "outcome",
+        { "cccccccc", "--tick", "2", "--as", "dotfiles/verifier" },
+        backend
+    )
+    testing.eq(
+        result.message,
+        "Outcome "
+            .. card.id:sub(1, board.MIN_PREFIX)
+            .. " 2 was ticked, but its tick record failed. Board unavailable: cannot reach pomb."
+    )
 end)
 
 testing.test("outcome --convert writes a dev-tick record for each outcome it ticks", function()
@@ -3997,7 +4017,7 @@ testing.test("outcome --rename names the old text and the reason when the note f
     local old = card.outcomes[2].name
     local backend = fake({ card })
     function backend:note()
-        return nil, "Board unavailable: cannot reach pomb"
+        return nil, "Board unavailable: cannot reach pomb."
     end
     local result =
         cmd_board.run("outcome", { "cccccccc", "--rename", "2", "New", "--reason", "why" }, backend)
@@ -4177,7 +4197,7 @@ testing.test(
         local deleted = card.outcomes[2].name
         local backend = fake({ card })
         function backend:note()
-            return nil, "Board unavailable: cannot reach pomb"
+            return nil, "Board unavailable: cannot reach pomb."
         end
         as_agent(LEAD, function()
             local result = cmd_board.run(
@@ -11369,7 +11389,7 @@ local function waited(replies, args, opts)
     if opts.comments then
         function backend:comments(id)
             if opts.comments_errors and table.remove(opts.comments_errors, 1) then
-                return nil, "pomb refused the read"
+                return nil, "Pomb refused the read."
             end
             if opts.reads then
                 opts.reads[#opts.reads + 1] = id
