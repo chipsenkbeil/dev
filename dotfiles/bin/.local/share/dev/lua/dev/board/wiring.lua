@@ -251,6 +251,63 @@ local function post_partial(opts, rows, posted)
     return count
 end
 
+---@class dev.board.wiring.start_rows.Opts
+---@field check dev.board.wiring.check_rows.Opts the card, its commit and the flags
+---@field commands string[] the rows as the card holds them
+---@field argvs string[][] the rows' words after narrowing
+---@field rows dev.board.check.Row[] the finished rows by their place, which a row ended at its start joins
+---@field skip table<integer, boolean>[] the places that run another way, one set for each way
+---@field env table<string, string> variables set for each start
+
+---Start every ci row that runs on its own, to queue their runs in ci together.
+---
+---A row that ends at its start, failed or passed, is left in `rows`, and a refused start ends the
+---starting. A serial run starts none.
+---@param opts dev.board.wiring.start_rows.Opts the rows and where they start
+---@return table<integer, string> pending the ci run id of each started row by its place
+local function start_rows(opts)
+    local commands, argvs, rows = opts.commands, opts.argvs, opts.rows
+    local backend, flags = opts.check.backend, opts.check.options
+    local pending = {}
+    if flags.expect_fail or flags.run then
+        return pending
+    end
+    for i, argv in ipairs(argvs) do
+        local apart = false
+        for _, set in ipairs(opts.skip) do
+            apart = apart or set[i]
+        end
+        if not rows[i] and not apart and check.detachable(commands[i], argv) then
+            renew_claim(backend, opts.check.card, opts.check.name, flags.seconds)
+            local run_id, ended = check.start({
+                root = backend.root,
+                run = commands[i],
+                argv = argv,
+                seconds = flags.seconds,
+                env = opts.env,
+            })
+            if run_id then
+                pending[i] = run_id
+                verb.note(
+                    string.format(
+                        "started row %d of %d as ci run %s: %s",
+                        i,
+                        #argvs,
+                        run_id,
+                        commands[i]
+                    )
+                )
+            else
+                rows[i] = ended
+                if ended.refused then
+                    break
+                end
+            end
+        end
+    end
+    return pending
+end
+
 ---Run the card's rows and record the result.
 ---
 ---Each row that passes in a row from the first is saved in a partial record, and a rerun at the
@@ -344,6 +401,14 @@ local function check_rows(opts)
         end
     end
     local posted = #rows
+    local pending = start_rows({
+        check = opts,
+        commands = commands,
+        argvs = argvs,
+        rows = rows,
+        skip = { mac, shared },
+        env = env,
+    })
     for i, argv in ipairs(argvs) do
         if mac[i] then
             verb.note(
@@ -363,7 +428,7 @@ local function check_rows(opts)
                     rows[entry.index] = done[entry.index]
                 end
             end
-        elseif not rows[i] then
+        elseif not rows[i] and not pending[i] then
             renew_claim(backend, card, opts.name, flags.seconds)
             verb.note(string.format("running %d of %d: %s", i, #argvs, commands[i]))
             rows[i] = check.run({
@@ -378,7 +443,7 @@ local function check_rows(opts)
                 end,
             })
         end
-        if rows[i].refused then
+        if rows[i] and rows[i].refused then
             return failure(
                 string.format(
                     "The ci hub refused row %d (%s). Nothing was recorded on card %s. The hub said: %s",
@@ -390,6 +455,29 @@ local function check_rows(opts)
             )
         end
         if not flags.expect_fail and i < #argvs then
+            posted = post_partial(opts, rows, posted)
+        end
+    end
+
+    -- Wait for the started rows in card order
+    local waiting = {}
+    for i in ipairs(argvs) do
+        if pending[i] then
+            waiting[#waiting + 1] = i
+        end
+    end
+    for k, i in ipairs(waiting) do
+        renew_claim(backend, card, opts.name, flags.seconds)
+        verb.note(string.format("waiting on row %d of %d, ci run %s", i, #argvs, pending[i]))
+        local job = check.job_row(argvs[i])
+        rows[i] = check.run_group({
+            root = backend.root,
+            plan = { rows = { { index = i, job = job, run = commands[i] } }, args = {} },
+            seconds = flags.seconds,
+            attach = pending[i],
+        })[1]
+        verb.note(string.format("row %d of %d ended: %s", i, #argvs, rows[i].result))
+        if k < #waiting then
             posted = post_partial(opts, rows, posted)
         end
     end

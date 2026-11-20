@@ -1483,6 +1483,140 @@ if has_jj then
     end)
 end
 
+local DETACH_ROWS = { "dev --remote lint", "true", "dev --remote test" }
+
+---@class board_check_test.detach_check.Opts
+---@field rows string[]? the card's checks, DETACH_ROWS when nil
+---@field test_state string? how the test job ended, passed when nil
+---@field watch string? the shell the fake `ci ps RUN --watch` runs, given the run id as $4
+---@field timeout string? the `--timeout` seconds
+---@field expect_fail boolean? whether the check passes `--expect-fail`
+---@field lint_start string? the shell the fake `dev --remote --detach lint` runs, printing the id when nil
+
+local function detach_check(opts)
+    local root, home = git_root({ ["tests/a_test.lua"] = "x\n" })
+    local id = card_with(root, home, opts.rows or DETACH_ROWS)
+    local bin = support.tempdir() .. "/bin"
+    assert(fs.mkdir(bin, { parents = true }), "mkdir failed")
+    local state = opts.test_state or "passed"
+    local code = state == "passed" and "0" or "3"
+    assert(
+        fs.write(bin .. "/ci", "#!/bin/sh\n" .. [[case "$1" in
+-C)
+    case "$3" in
+    ps) echo "watch $4" >> "$CI_LOG"; ]] .. (opts.watch or "exit 0") .. [[ ;;
+    run) echo '{"jobs":[{"name":"lint"},{"name":"test"},{"name":"docs"}]}' ;;
+    esac ;;
+ps)
+    case "$2" in
+    8cb600) echo '{"jobs":[{"name":"lint","state":"passed","exit_code":0}]}' ;;
+    1f2e3d) echo '{"jobs":[{"name":"test","state":"]] .. state .. [[","exit_code":]] .. code .. [[}]}' ;;
+    esac ;;
+logs) echo "output of $4" ;;
+esac
+]]),
+        "write failed"
+    )
+    assert(
+        fs.write(bin .. "/dev", "#!/bin/sh\n" .. [[echo "dev $*" >> "$CI_LOG"
+case "$2" in
+*detach*)
+    case "$3" in
+    lint) ]] .. (opts.lint_start or "echo 8cb600") .. [[ ;;
+    test) echo 1f2e3d ;;
+    esac ;;
+esac
+]]),
+        "write failed"
+    )
+    must(dev_os.run({ "chmod", "755", bin .. "/ci", bin .. "/dev" }))
+    local log = support.tempdir() .. "/ci.log"
+    local env = { PATH = bin .. ":" .. os.getenv("PATH"), CI_LOG = log, DEV_AGENT = "" }
+    local args = { "board", "check", id }
+    if opts.expect_fail then
+        args[#args + 1] = "--expect-fail"
+    end
+    if opts.timeout then
+        args[#args + 1] = "--timeout"
+        args[#args + 1] = opts.timeout
+    end
+    local out, status = dev(root, home, args, nil, env)
+    local held = comments(home)
+    return out, status, held[#held] and held[#held].body, fs.read(log) or "", #held
+end
+
+testing.test("check starts every ci row first and waits for them afterwards", function()
+    local out, code, body, log = detach_check({})
+    testing.eq(code, 0, out)
+    local lint = log:find("dev --remote --detach lint", 1, true)
+    local test = log:find("dev --remote --detach test", 1, true)
+    local watch = log:find("watch ", 1, true)
+    testing.ok(lint and test and watch and lint < watch and test < watch, log)
+    local started = out:find("started row 3 of 3 as ci run 1f2e3d", 1, true)
+    testing.ok(started and started < out:find("running 2 of 3: true", 1, true), out)
+    testing.ok(out:find("running 2 of 3: true", 1, true) < out:find("waiting on row 1", 1, true))
+    testing.eq(check.parse(body).rows, {
+        { result = "pass", run_id = "8cb600" },
+        { result = "pass", run_id = "-" },
+        { result = "pass", run_id = "1f2e3d" },
+    })
+end)
+
+testing.test("a check with a failed row others report and record, and it fails", function()
+    local out, code, body = detach_check({ test_state = "failed" })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("1 pass 8cb600 dev --remote lint", 1, true), out)
+    testing.ok(out:find("3 fail 1f2e3d dev --remote test", 1, true), out)
+    testing.eq(check.parse(body).rows, {
+        { result = "pass", run_id = "8cb600" },
+        { result = "pass", run_id = "-" },
+        { result = "fail", run_id = "1f2e3d" },
+    })
+end)
+
+testing.test("an expect-fail stays serial and starts no row detached", function()
+    local out, _, _, log =
+        detach_check({ rows = { "dev --remote lint", "true" }, expect_fail = true })
+    testing.ok(not log:find("--detach", 1, true), log)
+    testing.ok(out:find("running 1 of 2: dev --remote lint", 1, true), out)
+    testing.ok(not out:find("started row", 1, true), out)
+end)
+
+testing.test("a row wait keeps time limit and a started row that outlives it times out", function()
+    local out, code, body = detach_check({
+        timeout = "2",
+        watch = [[case "$4" in 1f2e3d) sleep 30 ;; esac]],
+    })
+    testing.eq(code, 1, out)
+    testing.eq(check.parse(body).rows[1], { result = "pass", run_id = "8cb600" })
+    local last = check.parse(body).rows[3]
+    testing.eq({ last.result, last.run_id }, { "timeout", "1f2e3d" })
+end)
+
+testing.test("a refused start records nothing, names the row and starts no more", function()
+    local out, code, _, log, held = detach_check({
+        lint_start = 'echo "error: fleet is draining"; exit 12',
+    })
+    testing.eq(code, 1, out)
+    testing.eq(held, 0)
+    testing.ok(out:find("The ci hub refused row 1 (dev --remote lint)", 1, true), out)
+    testing.ok(not log:find("--detach test", 1, true), log)
+end)
+
+testing.test("a start that fails with no run id records the row as fail", function()
+    local out, code, body = detach_check({ lint_start = "echo boom; exit 1" })
+    testing.eq(code, 1, out)
+    local rows = check.parse(body).rows
+    testing.eq({ rows[1].result, rows[1].run_id }, { "fail", "-" })
+    testing.eq({ rows[3].result, rows[3].run_id }, { "pass", "1f2e3d" })
+end)
+
+testing.test("a start that exits 0 with no run id records the row as pass", function()
+    local out, code, body = detach_check({ lint_start = "true" })
+    testing.eq(code, 0, out)
+    testing.eq(check.parse(body).rows[1], { result = "pass", run_id = "-" })
+end)
+
 local function baseline_of(rows)
     local argvs = {}
     for i, row in ipairs(rows) do

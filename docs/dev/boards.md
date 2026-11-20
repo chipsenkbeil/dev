@@ -2958,6 +2958,15 @@ run are skipped only when all of them passed. A rerun at another commit, with
 `--expect-fail` or with `--run` runs every row. Land and carry ignore a
 `mode=partial` record.
 
+Rows that are plain `dev --remote JOB` rows, not negated and not in the one
+shared ci run, all start first as `dev --remote --detach JOB` to queue their
+runs in ci together. The other rows then run one at a time in card order, and
+the started rows are waited on in card order with `ci ps RUN --watch`, each
+within the `--timeout` limit. A failed row fails the check and the rest still
+report and record. A start that the hub refuses stops the starting, and the
+check records nothing, as a refused serial row does. An `--expect-fail` run
+starts nothing at once.
+
 The result and the exit code:
 
 - A row ends as `pass`, `fail` (any non-zero exit) or `timeout`. Under

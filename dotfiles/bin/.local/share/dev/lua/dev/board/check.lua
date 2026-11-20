@@ -115,6 +115,7 @@ local NOT_FOUND_EXIT = 127
 local REMOTE_FLAG = "--remote"
 local CI_COMMAND = "ci"
 local DEV_COMMAND = "dev"
+local DETACH_FLAG = "--detach"
 local DOUBLE_DASH = "--"
 local STATE_SECONDS = 20
 local STANDARD_TEST = "test"
@@ -714,6 +715,63 @@ function M.run_id(output)
         end
     end
     return nil
+end
+
+---Say whether a row is a plain `dev --remote JOB` row that can start on its own.
+---@param command string the row as the card holds it
+---@param argv string[] the row's words, without a leading `! `
+---@return boolean detachable true for a row that is not negated and runs one job
+function M.detachable(command, argv)
+    return not command:match(NEGATED) and M.job_row(argv) ~= nil
+end
+
+---@class dev.board.check.start.Opts
+---@field root string the project root the row starts in
+---@field run string the row as the card holds it
+---@field argv string[] the row's words, a plain `dev --remote JOB` row
+---@field seconds integer how long the start may take
+---@field env table<string, string>? variables set for the start
+
+---Start a ci row with `--detach` and read the id of its ci run, without waiting for the run.
+---
+---`dev --remote --detach` prints the bare run id, where a followed run prints a `run <id>` line. On
+---a ci box dev runs the row itself and prints none, so an exit 0 with no id is a passed row.
+---@param opts dev.board.check.start.Opts the row and where it starts
+---@return string? run_id the ci run id, nil when the run did not start
+---@return dev.board.check.Row? row how the row ended, set when the run did not start
+function M.start(opts)
+    local argv = {}
+    for i, word in ipairs(opts.argv) do
+        argv[#argv + 1] = word
+        if i == 2 and word == REMOTE_FLAG then
+            argv[#argv + 1] = DETACH_FLAG
+        end
+    end
+    local output, code = dev_os.capture_timed(argv, opts.seconds, {
+        cwd = opts.root,
+        merge = true,
+        env = opts.env,
+    })
+    local run_id
+    for line in output:gmatch("[^\n]+") do
+        run_id = line:match(RUN_LINE) or line:match("^(%x+)$") or run_id
+    end
+    if run_id and code == 0 then
+        return run_id
+    end
+    if code == 0 then
+        return nil, { run = opts.run, run_id = NO_RUN, result = M.Result.PASS, code = 0, tail = "" }
+    end
+    return nil,
+        {
+            run = opts.run,
+            run_id = run_id or NO_RUN,
+            refused = not run_id and code ~= 0 and hub_refusal(output, code) or nil,
+            reason = last_line(output),
+            result = code == TIMEOUT_EXIT and M.Result.TIMEOUT or M.Result.FAIL,
+            code = code,
+            tail = tail_of(output),
+        }
 end
 
 ---@class dev.board.check.GroupRow
