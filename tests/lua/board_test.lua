@@ -19,6 +19,8 @@ local runner = require("dev.board.runner")
 local ui = require("dev.ui")
 local support = require("support")
 
+---The ask flag and key that name the taste list
+local ASK_TASTE = { "--list", "taste" }
 local TOKEN = "pomb_SECRETtoken0123456789"
 local OLD_TOKEN = "pomb_OLDtoken9876543210"
 local FROZEN_NAP_SECS = 1
@@ -4967,25 +4969,34 @@ testing.test("answer prints the backend's refusal and exits 1", function()
     testing.eq(result.message, "Pomb answered 409: the question is answered already.")
 end)
 
+local function with_taste(args)
+    for _, word in ipairs(ASK_TASTE) do
+        args[#args + 1] = word
+    end
+    return args
+end
+
 testing.test(
     "ask sends the parts it was given and lets the backend refuse a missing one",
     function()
         local cards = sample()
         cards[1].outcomes = { { id = "o1", name = "a " .. board.JUDGEMENT, done = false } }
         local backend = fake(cards)
-        local result = cmd_board.run("ask", {
-            "11111111-a",
-            "--question",
-            "Which?",
-            "--choice",
-            "Ready=Ship it",
-            "--choice",
-            "Icebox = Park it",
-            "--list",
-            "taste",
-            "--recommend",
-            "1",
-        }, backend)
+        local result = cmd_board.run(
+            "ask",
+            with_taste({
+                "11111111-a",
+                "--question",
+                "Which?",
+                "--choice",
+                "Ready=Ship it",
+                "--choice",
+                "Icebox = Park it",
+                "--recommend",
+                "1",
+            }),
+            backend
+        )
         testing.eq(result.output, "asked 11111111")
         testing.eq(backend.calls[1], {
             "ask",
@@ -5033,7 +5044,7 @@ testing.test(
             { "--list", "destroy" },
             { "--list", "spend" },
             { "--list", "restart" },
-            { "--list", "taste" },
+            ASK_TASTE,
             { "--searched", "the decision notes and the transcripts" },
         }) do
             local cards = sample()
@@ -5141,19 +5152,21 @@ testing.test("ask posts the question on a planned Backlog card", function()
     cards[2].description = V2
     cards[2].outcomes = { { id = "o1", name = "a " .. board.JUDGEMENT, done = false } }
     local backend = fake(cards)
-    local result = cmd_board.run("ask", {
-        "11111111-b",
-        "--list",
-        "taste",
-        "--question",
-        "Which?",
-        "--choice",
-        "Ready=Ship it",
-        "--recommend",
-        "1",
-        "--why",
-        "w",
-    }, backend)
+    local result = cmd_board.run(
+        "ask",
+        with_taste({
+            "11111111-b",
+            "--question",
+            "Which?",
+            "--choice",
+            "Ready=Ship it",
+            "--recommend",
+            "1",
+            "--why",
+            "w",
+        }),
+        backend
+    )
     testing.eq(result.output, "asked 11111111")
     testing.eq(backend.calls[1][1], "ask")
     testing.eq(backend.calls[1][2], ID_B)
@@ -5165,19 +5178,21 @@ testing.test("ask refuses an unplanned card, naming what it lacks, and posts not
         { id = "11111111-a", lacks = { "Done when outcomes" } },
     }) do
         local backend = fake(sample())
-        local result = cmd_board.run("ask", {
-            case.id,
-            "--list",
-            "taste",
-            "--question",
-            "Which?",
-            "--choice",
-            "Ready=Ship it",
-            "--recommend",
-            "1",
-            "--why",
-            "w",
-        }, backend)
+        local result = cmd_board.run(
+            "ask",
+            with_taste({
+                case.id,
+                "--question",
+                "Which?",
+                "--choice",
+                "Ready=Ship it",
+                "--recommend",
+                "1",
+                "--why",
+                "w",
+            }),
+            backend
+        )
         testing.eq(result.code, 1, case.id)
         testing.ok(result.message:find("is not planned", 1, true), result.message)
         for _, item in ipairs(case.lacks) do
@@ -5345,19 +5360,21 @@ testing.test("ask sends one ask call and no label call", function()
     local cards = sample()
     cards[1].outcomes = { { id = "o1", name = "a " .. board.JUDGEMENT, done = false } }
     local backend = fake(cards)
-    local result = cmd_board.run("ask", {
-        "11111111-a",
-        "--question",
-        "Which?",
-        "--choice",
-        "Ready=Ship it",
-        "--choice",
-        "Icebox=Park it",
-        "--list",
-        "taste",
-        "--recommend",
-        "1",
-    }, backend)
+    local result = cmd_board.run(
+        "ask",
+        with_taste({
+            "11111111-a",
+            "--question",
+            "Which?",
+            "--choice",
+            "Ready=Ship it",
+            "--choice",
+            "Icebox=Park it",
+            "--recommend",
+            "1",
+        }),
+        backend
+    )
     testing.eq(result.output, "asked 11111111")
     testing.eq(#backend.calls, 1)
     testing.eq(backend.calls[1][1], "ask")
@@ -8783,23 +8800,25 @@ end
 
 testing.test("ask posts a structured question", function()
     local root, home = sandbox({ export = PLANNED_EXPORT })
-    local out, code = dev(root, home, {
-        "board",
-        "ask",
-        "11111111-a",
-        "--question",
-        "Which way?",
-        "--choice",
-        "Ready=Ship it",
-        "--choice",
-        "Icebox=Park it",
-        "--recommend",
-        "2",
-        "--list",
-        "taste",
-        "--why",
-        "Only he can choose",
-    })
+    local out, code = dev(
+        root,
+        home,
+        with_taste({
+            "board",
+            "ask",
+            "11111111-a",
+            "--question",
+            "Which way?",
+            "--choice",
+            "Ready=Ship it",
+            "--choice",
+            "Icebox=Park it",
+            "--recommend",
+            "2",
+            "--why",
+            "Only he can choose",
+        })
+    )
     testing.eq(out, "asked 11111111\n")
     testing.eq(code, 0)
     local calls = read(root, "calls")
@@ -8817,36 +8836,40 @@ end)
 testing.test("ask prints the refusal as worded", function()
     local root, home = sandbox({ export = PLANNED_EXPORT })
     assert(fs.write(root .. "/ask_refusal", '{"message":"question.why is required"}'))
-    local out, code = dev(root, home, {
-        "board",
-        "ask",
-        "11111111-a",
-        "--question",
-        "Which way?",
-        "--choice",
-        "Ready=Ship it",
-        "--choice",
-        "Icebox=Park it",
-        "--recommend",
-        "1",
-        "--list",
-        "taste",
-    })
+    local out, code = dev(
+        root,
+        home,
+        with_taste({
+            "board",
+            "ask",
+            "11111111-a",
+            "--question",
+            "Which way?",
+            "--choice",
+            "Ready=Ship it",
+            "--choice",
+            "Icebox=Park it",
+            "--recommend",
+            "1",
+        })
+    )
     testing.eq(code, 1)
     testing.ok(out:find("question.why is required", 1, true), out)
 end)
 
 testing.test("ask names a choice whose column the board lacks and posts nothing", function()
     local root, home = sandbox({ export = PLANNED_EXPORT })
-    local out, code = dev(root, home, {
-        "board",
-        "ask",
-        "11111111-a",
-        "--choice",
-        "Nowhere=Lost",
-        "--list",
-        "taste",
-    })
+    local out, code = dev(
+        root,
+        home,
+        with_taste({
+            "board",
+            "ask",
+            "11111111-a",
+            "--choice",
+            "Nowhere=Lost",
+        })
+    )
     testing.eq(code, 1)
     testing.ok(out:find("Choice 1 names Nowhere, which is no column.", 1, true), out)
     testing.ok(not read(root, "calls"):find("-X POST", 1, true), read(root, "calls"))
@@ -10405,23 +10428,25 @@ testing.test("ask ends the owner lease and a plain move to blocked keeps it", fu
         return heartbeats(root) >= 1
     end))
     local pid = loop_pid(home)
-    local out, code = dev(root, home, {
-        "board",
-        "ask",
-        "11111111-a",
-        "--question",
-        "Which way?",
-        "--choice",
-        "Ready=Ship it",
-        "--choice",
-        "Icebox=Park it",
-        "--recommend",
-        "1",
-        "--list",
-        "taste",
-        "--why",
-        "Only he can choose",
-    })
+    local out, code = dev(
+        root,
+        home,
+        with_taste({
+            "board",
+            "ask",
+            "11111111-a",
+            "--question",
+            "Which way?",
+            "--choice",
+            "Ready=Ship it",
+            "--choice",
+            "Icebox=Park it",
+            "--recommend",
+            "1",
+            "--why",
+            "Only he can choose",
+        })
+    )
     testing.eq(code, 0, out)
     testing.eq(out, "asked 11111111\n")
     local calls = read(root, "calls")
@@ -10457,21 +10482,23 @@ testing.test("ask keeps the owner lease when Pomb refuses the question", functio
         return heartbeats(root) >= 1
     end))
     assert(fs.write(root .. "/ask_refusal", '{"message":"question.why is required"}'))
-    local out, code = dev(root, home, {
-        "board",
-        "ask",
-        "11111111-a",
-        "--question",
-        "Which way?",
-        "--choice",
-        "Ready=Ship it",
-        "--choice",
-        "Icebox=Park it",
-        "--recommend",
-        "1",
-        "--list",
-        "taste",
-    })
+    local out, code = dev(
+        root,
+        home,
+        with_taste({
+            "board",
+            "ask",
+            "11111111-a",
+            "--question",
+            "Which way?",
+            "--choice",
+            "Ready=Ship it",
+            "--choice",
+            "Icebox=Park it",
+            "--recommend",
+            "1",
+        })
+    )
     testing.eq(code, 1, out)
     testing.ok(out:find("question.why is required", 1, true), out)
     local calls = read(root, "calls")

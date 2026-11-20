@@ -672,11 +672,15 @@ folds it into the description and notes the decision.
 
 When a steering comment lists options, the agent picks the one you favour and
 says why in the decision note. Options you do not rank park the card only when
-their choice is on this closed list of what only you decide: secrets, keys and
-permissions; destroying another live session's data or work; spend, a public
-launch or a force push; restarting shared services or rebooting a host; taste
-or scope with no ruling yet. The agent makes any other technical choice itself
-and notes why.
+their choice is on this closed list of what only you decide:
+
+- secrets, keys and permissions
+- destroying another live session's data or work
+- spend, a public launch or a force push
+- restarting shared services or rebooting a host
+- taste or scope with no ruling yet
+
+The agent makes any other technical choice itself and notes why.
 
 A card is parked only in two cases:
 
