@@ -1,15 +1,27 @@
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
 
+---The reasons `manifest_copy` refuses a manifest
+---@enum dev.root.Reason
+local Reason = {
+    OPEN = "open",
+    NOT_REGULAR = "not_regular",
+    OWNERSHIP = "ownership",
+    TOO_LARGE = "too_large",
+    LONG_LINE = "long_line",
+    TEMP = "temp",
+    WRITE = "write",
+}
+
 local MAX_BYTES = 262144
 local MAX_LINE_BYTES = 4096
 local WRITABLE_BY_OTHERS = 18
 local STICKY = 512
-local OWNERSHIP = " must be owned by root and not writable by others"
 local TEMP_TEMPLATE = "/tmp/dev-tools.XXXXXX"
 
 ---@class dev.root
-local M = {}
+---@field Reason table<string, dev.root.Reason> the reasons `manifest_copy` names
+local M = { Reason = Reason }
 
 ---Say whether dev may run these command words as root.
 ---@param words string[] the command words, a verb and its subcommand
@@ -18,46 +30,42 @@ function M.allowed(words)
     return words[1] == "tools" and (words[2] == "install" or words[2] == "check")
 end
 
-local function refuse(manifest, reason)
-    return "refusing " .. manifest .. " as root" .. reason
-end
-
 local function root_owned(stat)
     return stat ~= nil and stat.kind ~= fs.Kind.LINK and stat.uid == 0
 end
 
-local function check_strict(manifest, path)
+local function check_strict(path)
     local stat = fs.stat(path)
     if not root_owned(stat) or bit.band(stat.mode, WRITABLE_BY_OTHERS) ~= 0 then
-        return refuse(manifest, ": " .. path .. OWNERSHIP)
+        return Reason.OWNERSHIP, path
     end
 end
 
-local function check_ancestor(manifest, path)
+local function check_ancestor(path)
     local stat = fs.stat(path)
     local sticky = stat ~= nil and bit.band(stat.mode, STICKY) ~= 0
     if not root_owned(stat) or (bit.band(stat.mode, WRITABLE_BY_OTHERS) ~= 0 and not sticky) then
-        return refuse(manifest, ": " .. path .. OWNERSHIP)
+        return Reason.OWNERSHIP, path
     end
 end
 
 local function check_chain(root, manifest)
     local owned_paths = { manifest, root .. "/.dev", root }
     for _, path in ipairs(owned_paths) do
-        local refusal = check_strict(manifest, path)
-        if refusal then
-            return refusal
+        local reason, detail = check_strict(path)
+        if reason then
+            return reason, detail
         end
     end
     local dir = fs.dirname(root)
     while dir ~= "/" and dir ~= "." do
-        local refusal = check_ancestor(manifest, dir)
-        if refusal then
-            return refusal
+        local reason, detail = check_ancestor(dir)
+        if reason then
+            return reason, detail
         end
         dir = fs.dirname(dir)
     end
-    return check_ancestor(manifest, "/")
+    return check_ancestor("/")
 end
 
 local function line_too_long(text)
@@ -78,26 +86,26 @@ end
 local function read_manifest(fd, manifest)
     local stat = dev_os.fstat(fd)
     if not stat then
-        return nil, "cannot open " .. manifest
+        return nil, nil, Reason.OPEN, manifest
     end
     if stat.kind ~= fs.Kind.FILE then
-        return nil, refuse(manifest, ", it is not a regular file")
+        return nil, nil, Reason.NOT_REGULAR, manifest
     end
     if stat.uid ~= 0 or bit.band(stat.mode, WRITABLE_BY_OTHERS) ~= 0 then
-        return nil, refuse(manifest, ": " .. manifest .. OWNERSHIP)
+        return nil, nil, Reason.OWNERSHIP, manifest
     end
     if stat.size > MAX_BYTES then
-        return nil, refuse(manifest, ": larger than 256 KiB")
+        return nil, nil, Reason.TOO_LARGE, manifest
     end
     local text = dev_os.read_fd(fd, MAX_BYTES + 1)
     if not text then
-        return nil, "cannot open " .. manifest
+        return nil, nil, Reason.OPEN, manifest
     end
     if #text > MAX_BYTES then
-        return nil, refuse(manifest, ": larger than 256 KiB")
+        return nil, nil, Reason.TOO_LARGE, manifest
     end
     if line_too_long(text) then
-        return nil, refuse(manifest, ": a line is longer than 4096 bytes")
+        return nil, nil, Reason.LONG_LINE, manifest
     end
     return text
 end
@@ -111,29 +119,31 @@ end
 ---@param root string absolute path of the project
 ---@param manifest string absolute path of `.dev/tools.tsv`
 ---@return string? copy path of the copy, which the caller removes
----@return string? message why the manifest was refused
+---@return nil message always nil, which keeps the slot a lower layer's message would take
+---@return dev.root.Reason? reason why the manifest was refused
+---@return string? detail the manifest, the path that fails the ownership check, or the copy
 function M.manifest_copy(root, manifest)
-    local refusal = check_chain(root, manifest)
-    if refusal then
-        return nil, refusal
+    local chain_reason, chain_detail = check_chain(root, manifest)
+    if chain_reason then
+        return nil, nil, chain_reason, chain_detail
     end
     local fd = dev_os.open_nofollow(manifest)
     if not fd then
-        return nil, "cannot open " .. manifest
+        return nil, nil, Reason.OPEN, manifest
     end
-    local text, message = read_manifest(fd, manifest)
+    local text, _, reason, detail = read_manifest(fd, manifest)
     dev_os.close(fd)
     if not text then
-        return nil, message
+        return nil, nil, reason, detail
     end
     local out, code = dev_os.capture({ "mktemp", TEMP_TEMPLATE })
     local copy = out:gsub("\n$", "")
     if code ~= 0 or copy == "" then
-        return nil, "cannot make a temp file"
+        return nil, nil, Reason.TEMP
     end
     if not fs.write(copy, text) then
         fs.remove(copy)
-        return nil, "cannot write " .. copy
+        return nil, nil, Reason.WRITE, copy
     end
     return copy
 end

@@ -47,11 +47,11 @@ local function project(base, name, manifest)
 end
 
 local function copy_of(dir, manifest)
-    local copy, message
+    local copy, message, reason, detail
     trusting(function()
-        copy, message = root.manifest_copy(dir, manifest)
+        copy, message, reason, detail = root.manifest_copy(dir, manifest)
     end)
-    return copy, message
+    return copy, message, reason, detail
 end
 
 local function temp_count()
@@ -82,20 +82,25 @@ testing.test("a hostile project name and manifest cell are read as text and run 
     fs.remove(base, { recursive = true })
 end)
 
-testing.test("a manifest of 262145 bytes is refused and 262144 is read", function()
-    local base = assert(fs.realpath(support.tempdir()))
-    local lines = string.rep(line_of(1023), 256)
-    testing.eq(#lines, MAX)
-    local dir, manifest = project(base, "p", lines)
-    local copy = assert(copy_of(dir, manifest))
-    testing.eq(#fs.read(copy), MAX)
-    fs.remove(copy)
-    assert(fs.write(manifest, lines .. "x"))
-    local none, message = copy_of(dir, manifest)
-    testing.eq(none, nil)
-    testing.eq(message, "refusing " .. manifest .. " as root: larger than 256 KiB")
-    fs.remove(base, { recursive = true })
-end)
+testing.test(
+    "a manifest of 262145 bytes returns the too_large reason and 262144 is read",
+    function()
+        local base = assert(fs.realpath(support.tempdir()))
+        local lines = string.rep(line_of(1023), 256)
+        testing.eq(#lines, MAX)
+        local dir, manifest = project(base, "p", lines)
+        local copy = assert(copy_of(dir, manifest))
+        testing.eq(#fs.read(copy), MAX)
+        fs.remove(copy)
+        assert(fs.write(manifest, lines .. "x"))
+        local none, message, reason, detail = copy_of(dir, manifest)
+        testing.eq(none, nil)
+        testing.eq(message, nil)
+        testing.eq(reason, root.Reason.TOO_LARGE)
+        testing.eq(detail, manifest)
+        fs.remove(base, { recursive = true })
+    end
+)
 
 testing.test("a line of 4097 bytes is refused and 4096 is read", function()
     local base = assert(fs.realpath(support.tempdir()))
@@ -103,13 +108,15 @@ testing.test("a line of 4097 bytes is refused and 4096 is read", function()
     local copy = assert(copy_of(dir, manifest))
     fs.remove(copy)
     assert(fs.write(manifest, "ok\n" .. line_of(4097)))
-    local none, message = copy_of(dir, manifest)
+    local none, _, reason, detail = copy_of(dir, manifest)
     testing.eq(none, nil)
-    testing.eq(message, "refusing " .. manifest .. " as root: a line is longer than 4096 bytes")
+    testing.eq(reason, root.Reason.LONG_LINE)
+    testing.eq(detail, manifest)
     assert(fs.write(manifest, "ok\n" .. string.rep("y", 4097)))
-    none, message = copy_of(dir, manifest)
+    none, _, reason, detail = copy_of(dir, manifest)
     testing.eq(none, nil)
-    testing.eq(message, "refusing " .. manifest .. " as root: a line is longer than 4096 bytes")
+    testing.eq(reason, root.Reason.LONG_LINE)
+    testing.eq(detail, manifest)
     fs.remove(base, { recursive = true })
 end)
 
@@ -118,16 +125,10 @@ testing.test("a symlinked manifest is refused with the ownership text", function
     local dir, manifest = project(base, "p")
     assert(fs.write(base .. "/outside", "SECRET\n"))
     assert(fs.symlink(base .. "/outside", manifest))
-    local none, message = copy_of(dir, manifest)
+    local none, _, reason, detail = copy_of(dir, manifest)
     testing.eq(none, nil)
-    testing.eq(
-        message,
-        "refusing "
-            .. manifest
-            .. " as root: "
-            .. manifest
-            .. " must be owned by root and not writable by others"
-    )
+    testing.eq(reason, root.Reason.OWNERSHIP)
+    testing.eq(detail, manifest)
     fs.remove(base, { recursive = true })
 end)
 
@@ -135,16 +136,10 @@ testing.test("a group-writable .dev is refused and names the directory", functio
     local base = assert(fs.realpath(support.tempdir()))
     local dir, manifest = project(base, "p", "x\n")
     assert(dev_os.run({ "chmod", "g+w", dir .. "/.dev" }) == 0, "chmod failed")
-    local none, message = copy_of(dir, manifest)
+    local none, _, reason, detail = copy_of(dir, manifest)
     testing.eq(none, nil)
-    testing.eq(
-        message,
-        "refusing "
-            .. manifest
-            .. " as root: "
-            .. dir
-            .. "/.dev must be owned by root and not writable by others"
-    )
+    testing.eq(reason, root.Reason.OWNERSHIP)
+    testing.eq(detail, dir .. "/.dev")
     fs.remove(base, { recursive = true })
 end)
 
@@ -154,10 +149,10 @@ testing.test("a user-owned chain is refused", function()
     end
     local base = assert(fs.realpath(support.tempdir()))
     local dir, manifest = project(base, "p", "x\n")
-    local none, message = root.manifest_copy(dir, manifest)
+    local none, _, reason, detail = root.manifest_copy(dir, manifest)
     testing.eq(none, nil)
-    testing.ok(message:find("refusing " .. manifest .. " as root: ", 1, true), message)
-    testing.ok(message:find("must be owned by root and not writable by others", 1, true), message)
+    testing.eq(reason, root.Reason.OWNERSHIP)
+    testing.eq(type(detail), "string")
     fs.remove(base, { recursive = true })
 end)
 
@@ -167,7 +162,7 @@ testing.test("a manifest swapped for a symlink after the directory checks is ref
     assert(fs.write(base .. "/outside", "SECRET\n"))
     local before = temp_count()
     local stat = fs.stat
-    local none, message
+    local none, message, reason, detail
     trusting(function()
         local trusted_stat = fs.stat
         fs.stat = function(path)
@@ -178,35 +173,39 @@ testing.test("a manifest swapped for a symlink after the directory checks is ref
             end
             return result
         end
-        none, message = root.manifest_copy(dir, manifest)
+        none, message, reason, detail = root.manifest_copy(dir, manifest)
         fs.stat = trusted_stat
     end)
     fs.stat = stat
     testing.eq(none, nil)
-    testing.eq(message, "cannot open " .. manifest)
+    testing.eq(message, nil)
+    testing.eq(reason, root.Reason.OPEN)
+    testing.eq(detail, manifest)
     testing.eq(temp_count(), before)
     fs.remove(base, { recursive = true })
 end)
 
-testing.test("a FIFO manifest is refused without blocking", function()
+testing.test("a FIFO manifest returns the not_regular reason without blocking", function()
     local base = assert(fs.realpath(support.tempdir()))
     local dir, manifest = project(base, "p")
     assert(dev_os.run({ "mkfifo", manifest }) == 0, "mkfifo failed")
     assert(dev_os.run({ "chmod", "600", manifest }) == 0, "chmod failed")
-    local none, message = copy_of(dir, manifest)
+    local none, _, reason, detail = copy_of(dir, manifest)
     testing.eq(none, nil)
-    testing.eq(message, "refusing " .. manifest .. " as root, it is not a regular file")
+    testing.eq(reason, root.Reason.NOT_REGULAR)
+    testing.eq(detail, manifest)
     fs.remove(base, { recursive = true })
 end)
 
-testing.test("a directory manifest is refused as not a regular file", function()
+testing.test("a directory manifest returns the not_regular reason", function()
     local base = assert(fs.realpath(support.tempdir()))
     local dir, manifest = project(base, "p")
     assert(fs.mkdir(manifest))
     assert(dev_os.run({ "chmod", "755", manifest }) == 0, "chmod failed")
-    local none, message = copy_of(dir, manifest)
+    local none, _, reason, detail = copy_of(dir, manifest)
     testing.eq(none, nil)
-    testing.eq(message, "refusing " .. manifest .. " as root, it is not a regular file")
+    testing.eq(reason, root.Reason.NOT_REGULAR)
+    testing.eq(detail, manifest)
     fs.remove(base, { recursive = true })
 end)
 
@@ -388,14 +387,16 @@ testing.test("a failing fstat is a refusal, not a traceback", function()
     dev_os.fstat = function()
         return nil, "no fstat"
     end
-    local none, message
+    local none, message, reason, detail
     local ok, err = pcall(function()
-        none, message = copy_of(dir, manifest)
+        none, message, reason, detail = copy_of(dir, manifest)
     end)
     dev_os.fstat = fstat
     assert(ok, err)
     testing.eq(none, nil)
-    testing.eq(message, "cannot open " .. manifest)
+    testing.eq(message, nil)
+    testing.eq(reason, root.Reason.OPEN)
+    testing.eq(detail, manifest)
     fs.remove(base, { recursive = true })
 end)
 

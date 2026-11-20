@@ -206,7 +206,7 @@ printf '%s\n' "$MANIFEST" >"$owned/.dev/tools.tsv"
 if [ "$REAL_ROOT" = 1 ]; then chown -R 65534:65534 "$owned"; fi
 out="$(dev "$owned" tools check 2>&1)"
 assert_eq "root refuses a user-owned chain" "$?" "1"
-assert_contains "the ownership refusal names the manifest" "$out" "refusing $(cd "$owned" && pwd -P)/.dev/tools.tsv as root: "
+assert_contains "the ownership refusal names the manifest" "$out" "Refusing $(cd "$owned" && pwd -P)/.dev/tools.tsv as root. "
 assert_contains "the ownership refusal says what is required" "$out" "$OWN"
 assert_eq "no temp copy is left after an ownership refusal" "$(count_tmp)" "$before"
 
@@ -232,7 +232,7 @@ if [ "$REAL_ROOT" = 1 ]; then
 
     out="$(dev "$gw" tools check 2>&1)"
     assert_eq "root refuses a group-writable .dev" "$?" "1"
-    assert_contains "the .dev refusal names the offending path" "$out" "refusing $gw/.dev/tools.tsv as root: $gw/.dev $OWN"
+    assert_contains "the .dev refusal names the offending path" "$out" "Refusing $gw/.dev/tools.tsv as root. The path $gw/.dev $OWN."
 
     ow="$TMP/ow"
     mkdir -p "$ow/.dev"
@@ -284,7 +284,7 @@ if [ "$REAL_ROOT" = 1 ]; then
     truncate -s 2M "$big/.dev/tools.tsv"
     out="$(dev "$big" tools check 2>&1)"
     assert_eq "root refuses an oversize manifest" "$?" "1"
-    assert_contains "the oversize refusal names the path" "$out" "refusing $big/.dev/tools.tsv as root: larger than 256 KiB"
+    assert_contains "the oversize refusal names the path" "$out" "Refusing $big/.dev/tools.tsv as root. It is larger than 256 KiB."
     mid="$TMP/mid"
     mkdir -p "$mid/.dev"
     mkline() { awk -v n="$1" 'BEGIN { s = "#"; for (i = 1; i < n; i++) s = s "x"; print s }'; }
@@ -297,7 +297,7 @@ if [ "$REAL_ROOT" = 1 ]; then
     mkline 5000 >"$long/.dev/tools.tsv"
     out="$(dev "$long" tools check 2>&1)"
     assert_eq "root refuses a 5000-byte line" "$?" "1"
-    assert_contains "the long-line refusal names the path" "$out" "refusing $long/.dev/tools.tsv as root: a line is longer than 4096 bytes"
+    assert_contains "the long-line refusal names the path" "$out" "Refusing $long/.dev/tools.tsv as root. A line is longer than 4096 bytes."
     assert_eq "no temp copy is left after the long-line refusal" "$(count_tmp)" "$before"
     assert_eq "no temp copy is left after the oversize refusal" "$(count_tmp)" "$before"
 
@@ -321,22 +321,22 @@ if [ "$REAL_ROOT" = 1 ]; then
     chown 65534:65534 "$c_proj"
     out="$(dev "$c_proj" tools check 2>&1)"
     assert_eq "chain (a): only ROOT user-owned is refused" "$?" "1"
-    assert_contains "chain (a): names ROOT" "$out" "refusing $c_man as root: $c_proj $OWN"
+    assert_contains "chain (a): names ROOT" "$out" "Refusing $c_man as root. The path $c_proj $OWN."
     mkchain b
     chown 65534:65534 "$c_proj/.dev"
     out="$(dev "$c_proj" tools check 2>&1)"
     assert_eq "chain (b): only .dev user-owned is refused" "$?" "1"
-    assert_contains "chain (b): names .dev" "$out" "refusing $c_man as root: $c_proj/.dev $OWN"
+    assert_contains "chain (b): names .dev" "$out" "Refusing $c_man as root. The path $c_proj/.dev $OWN."
     mkchain c
     chmod 0775 "$c_anc"
     out="$(dev "$c_proj" tools check 2>&1)"
     assert_eq "chain (c): a group-writable ancestor is refused" "$?" "1"
-    assert_contains "chain (c): names the ancestor" "$out" "refusing $c_man as root: $c_anc $OWN"
+    assert_contains "chain (c): names the ancestor" "$out" "Refusing $c_man as root. The path $c_anc $OWN."
     mkchain d
     chown 65534:65534 "$c_anc"
     out="$(dev "$c_proj" tools check 2>&1)"
     assert_eq "chain (d): a user-owned ancestor is refused" "$?" "1"
-    assert_contains "chain (d): names the ancestor" "$out" "refusing $c_man as root: $c_anc $OWN"
+    assert_contains "chain (d): names the ancestor" "$out" "Refusing $c_man as root. The path $c_anc $OWN."
     mkchain e
     chmod 1777 "$c_anc"
     out="$(dev "$c_proj" tools check 2>&1)"
@@ -346,7 +346,7 @@ if [ "$REAL_ROOT" = 1 ]; then
     chmod 1777 "$c_anc"
     out="$(dev "$c_proj" tools check 2>&1)"
     assert_eq "chain (f): a user-owned sticky ancestor is refused" "$?" "1"
-    assert_contains "chain (f): names the ancestor" "$out" "refusing $c_man as root: $c_anc $OWN"
+    assert_contains "chain (f): names the ancestor" "$out" "Refusing $c_man as root. The path $c_anc $OWN."
 
     if [ -x /usr/bin/pacman ]; then
         out="$(dev "$nojj" tools install --system --dry-run 2>&1)"

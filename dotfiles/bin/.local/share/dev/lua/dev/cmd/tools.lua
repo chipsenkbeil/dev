@@ -82,6 +82,35 @@ local function interpreter(ctx, is_root)
     end
 end
 
+---Write why a manifest was refused as root.
+---@param reason dev.root.Reason the reason `root.manifest_copy` named
+---@param manifest string absolute path of the manifest
+---@param detail string? the path that fails the ownership check, or the copy
+---@return string message the sentence
+local function manifest_refusal(reason, manifest, detail)
+    local Reason = root.Reason
+    local refusing = "Refusing " .. manifest .. " as root. "
+    if reason == Reason.OPEN then
+        return "Cannot open " .. manifest .. "."
+    elseif reason == Reason.NOT_REGULAR then
+        return refusing .. "It is not a regular file."
+    elseif reason == Reason.OWNERSHIP then
+        return refusing
+            .. "The path "
+            .. tostring(detail)
+            .. " must be owned by root and not writable by others."
+    elseif reason == Reason.TOO_LARGE then
+        return refusing .. "It is larger than 256 KiB."
+    elseif reason == Reason.LONG_LINE then
+        return refusing .. "A line is longer than 4096 bytes."
+    elseif reason == Reason.TEMP then
+        return "Cannot make a temp file."
+    elseif reason == Reason.WRITE then
+        return "Cannot write " .. tostring(detail) .. "."
+    end
+    return refusing .. "It failed for a reason dev does not know."
+end
+
 local function run_driver(ctx, sub, manifest, args)
     local pkg = project.dotfiles_root() .. "/dotfiles/bin/.local/share/dev/pkg.lua"
     if not fs.is_file(pkg) then
@@ -94,9 +123,9 @@ local function run_driver(ctx, sub, manifest, args)
         verb.show(ctx, argv)
         return exec(argv, { cwd = ctx.root })
     end
-    local copy, message = root.manifest_copy(ctx.root, manifest)
+    local copy, _, reason, detail = root.manifest_copy(ctx.root, manifest)
     if not copy then
-        return fail(message)
+        return fail(manifest_refusal(reason, manifest, detail))
     end
     if not luajit then
         fs.remove(copy)
