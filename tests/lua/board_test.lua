@@ -105,7 +105,7 @@ local function fake(cards, times, finished)
             return cards[1]
         end
         for _, card in ipairs(cards) do
-            local labels = table.concat(card.labels or {}, ",")
+            local labels = table.concat(card.labels, ",")
             if
                 card.column == column
                 and not card.claimant
@@ -11177,14 +11177,15 @@ end
 local function waited(replies, args, opts)
     opts = opts or {}
     local backend, seen = waiter(replies)
-    if opts.cards or opts.cards_error or opts.cards_errors then
-        function backend:cards()
-            local down = opts.cards_errors and table.remove(opts.cards_errors, 1)
-            if down then
-                return nil, down
-            end
-            return opts.cards, opts.cards_error
+    function backend:cards()
+        local down = opts.cards_errors and table.remove(opts.cards_errors, 1)
+        if down then
+            return nil, down
         end
+        if opts.cards_error then
+            return nil, opts.cards_error
+        end
+        return opts.cards or {}
     end
     if opts.comments then
         function backend:comments(id)

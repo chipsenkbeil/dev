@@ -16,6 +16,7 @@ local index_of = require("dev.text").index_of
 ---@class dev.board.stale
 local M = {}
 
+local DAYS_UNIT = "days"
 local STALE_DAYS = 7
 local ICEBOX_DAYS = 30
 local LEAD_HOURS = 1
@@ -245,7 +246,7 @@ function M.stale(backend, args, now)
         return usage("Unknown argument " .. extra[1] .. ".")
     end
     local limit, refusal =
-        whole_limit("--days", flags["--days"], { default = STALE_DAYS, unit = "days" })
+        whole_limit("--days", flags["--days"], { default = STALE_DAYS, unit = DAYS_UNIT })
     if not limit then
         return refusal
     end
@@ -253,7 +254,7 @@ function M.stale(backend, args, now)
     icebox_limit, refusal = whole_limit(
         "--icebox-days",
         flags["--icebox-days"],
-        { default = ICEBOX_DAYS, unit = "days" }
+        { default = ICEBOX_DAYS, unit = DAYS_UNIT }
     )
     if not icebox_limit then
         return refusal

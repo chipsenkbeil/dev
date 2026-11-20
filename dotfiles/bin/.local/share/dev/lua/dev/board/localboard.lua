@@ -666,6 +666,8 @@ function Backend:lanes()
     return names
 end
 
+---@param column string the column's name
+---@param opts dev.board.next.Opts? the options `next` was given
 function Backend:next(column, opts)
     local label = opts and opts.label
     local doc, message = self:__read()

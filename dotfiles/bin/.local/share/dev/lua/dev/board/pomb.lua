@@ -1049,6 +1049,8 @@ function Backend:entered()
     return times
 end
 
+---@param column string the column's name
+---@param opts dev.board.next.Opts? the options `next` was given
 function Backend:next(column, opts)
     local ok, message = self:__load()
     if not ok then

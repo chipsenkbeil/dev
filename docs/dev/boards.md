@@ -1598,7 +1598,8 @@ Each mode wakes on its own events:
   `needs:lead` label, no claim and without `needs:human`. It skips what
   `next --column blocked` skips: a run card, an epic with an open child or a
   card an open card blocks. It prints
-  `<id prefix> is labelled needs:lead in Blocked`.
+  `<id prefix> is labelled needs:lead in Blocked`. A card labelled before the
+  first wait raises no event, so call next again after the first wait.
 - `--for planner`: the same for `needs:planner`. It prints
   `<id prefix> is labelled needs:planner in Blocked`.
 - no `--for`: every added card, move, update and comment.

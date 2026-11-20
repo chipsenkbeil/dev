@@ -131,7 +131,7 @@ end
 ---   defines the custom field with that key, or nil and a message
 ---@field next fun(self: dev.board.Backend, column: string, opts: dev.board.next.Opts?):
 ---   dev.board.Card?, string? the top unclaimed, unblocked card of that column without needs:human,
----   or nil and a message when it failed
+---   or nil and a message when it failed, narrowed by opts.label, opts.max_size and opts.lane
 ---@field add fun(self: dev.board.Backend, name: string, column: string, opts: dev.board.add.Opts?):
 ---   dev.board.Card?, string?, boolean? the new card, or with `once` the open card of that name and
 ---   true when one existed
