@@ -145,31 +145,47 @@ M.Mode = { RUN = "run", EXPECT_FAIL = "expect-fail" }
 ---@field reason string? the last line a failed row printed when it printed no run id
 ---@field refused string? ci's refusal line when the hub refused the run, which no row records
 
----Say why a `dev --remote test` or `dev --remote lint` row passes a word before the double dash.
+---Split a row into its words.
 ---@param row string the row without its leading `! `
----@return string? message why the row is refused, nil when it is allowed
-local function bare_name(row)
+---@return string[] words the row's words
+local function split_words(row)
     local words = {}
     for word in row:gmatch("%S+") do
         words[#words + 1] = word
     end
-    if words[1] ~= "dev" then
-        return nil
-    end
-    local remote, verb_at = false, nil
+    return words
+end
+
+---Find the verb of a dev row after dev's flags.
+---@param words string[] the row's words, dev first
+---@return integer? verb_at the index of the verb, nil when a double dash or the row's end comes first
+---@return boolean remote true when `--remote` came before the verb
+local function dev_verb(words)
+    local remote = false
     local i = 2
-    while i <= #words and words[i] ~= "--" do
+    while words[i] and words[i] ~= DOUBLE_DASH do
         local word = words[i]
-        if word == "--remote" then
+        if word == REMOTE_FLAG then
             remote = true
         elseif registry.VALUE_FLAGS[word] then
             i = i + 1
         elseif word:sub(1, 1) ~= "-" then
-            verb_at = i
-            break
+            return i, remote
         end
         i = i + 1
     end
+    return nil, remote
+end
+
+---Say why a `dev --remote test` or `dev --remote lint` row passes a word before the double dash.
+---@param row string the row without its leading `! `
+---@return string? message why the row is refused, nil when it is allowed
+local function bare_name(row)
+    local words = split_words(row)
+    if words[1] ~= DEV_COMMAND then
+        return nil
+    end
+    local verb_at, remote = dev_verb(words)
     local name = verb_at and words[verb_at]
     if not (name == "test" or name == "lint") then
         return nil
@@ -262,21 +278,12 @@ local function test_paths(words)
     if words[1] ~= DEV_COMMAND then
         return paths
     end
-    local i = 2
-    while i <= #words and words[i] ~= DOUBLE_DASH do
-        local word = words[i]
-        if registry.VALUE_FLAGS[word] then
-            i = i + 1
-        elseif word:sub(1, 1) ~= "-" then
-            break
-        end
-        i = i + 1
-    end
-    if words[i] ~= STANDARD_TEST then
+    local verb_at = dev_verb(words)
+    if not verb_at or words[verb_at] ~= STANDARD_TEST then
         return paths
     end
     local dashed = false
-    for k = i + 1, #words do
+    for k = verb_at + 1, #words do
         if dashed then
             paths[#paths + 1] = words[k]
         elseif words[k] == DOUBLE_DASH then
@@ -304,10 +311,7 @@ end
 ---@return string? message why the row cannot run, nil when it can
 function M.unrunnable(row, root)
     row = row:match(NEGATED) or row
-    local words = {}
-    for word in row:gmatch("%S+") do
-        words[#words + 1] = word
-    end
+    local words = split_words(row)
     local first = words[1]
     if not first then
         return nil
