@@ -907,13 +907,16 @@ function M.line(index, row)
     return string.format("%d %s %s %s", index, row.result, row.run_id, row.run)
 end
 
+---@class dev.board.check.Summary
+---@field passed integer how many rows passed
+---@field good boolean true when every row passed, or with `expect_fail` when no row but a plain lint or test row passed, none never started and one failed
+---@field errors integer how many rows never started under `expect_fail`
+---@field proves_nothing integer how many passing rows other than the plain lint and test rows
+
 ---Count the rows that passed and say whether the run showed what it was meant to.
 ---@param rows dev.board.check.Row[] the finished rows
 ---@param expect_fail boolean whether every row was meant to fail
----@return integer passed how many rows passed
----@return boolean good true when every row passed, or with `expect_fail` when no row but a plain lint or test row passed, none never started and one failed
----@return integer errors how many rows never started under `expect_fail`
----@return integer proves_nothing how many passing rows other than the plain lint and test rows
+---@return dev.board.check.Summary summary the counts and the verdict
 function M.summarize(rows, expect_fail)
     local passed, errors, proves_nothing = 0, 0, 0
     for _, row in ipairs(rows) do
@@ -926,13 +929,11 @@ function M.summarize(rows, expect_fail)
             errors = errors + 1
         end
     end
+    local good = passed == #rows
     if expect_fail then
-        return passed,
-            proves_nothing == 0 and errors == 0 and passed < #rows,
-            errors,
-            proves_nothing
+        good = proves_nothing == 0 and errors == 0 and passed < #rows
     end
-    return passed, passed == #rows, errors, proves_nothing
+    return { passed = passed, good = good, errors = errors, proves_nothing = proves_nothing }
 end
 
 ---Sum a list of checks rows into a value that differs when a row changes.

@@ -975,8 +975,8 @@ testing.test("an expect-fail row that exits 1 still counts as the expected failu
         expect_fail = true,
     })
     testing.eq(row.result, "fail")
-    local passed, good, errors = check.summarize({ row }, true)
-    testing.eq({ passed, good, errors }, { 0, true, 0 })
+    local summary = check.summarize({ row }, true)
+    testing.eq({ summary.passed, summary.good, summary.errors }, { 0, true, 0 })
 end)
 
 testing.test(
@@ -987,12 +987,12 @@ testing.test(
             { result = check.Result.PASS, run = "dev --remote test" },
             { result = check.Result.FAIL, run = "dev --remote test -- tests/lua/new_test.lua" },
         }
-        local passed, good, errors, proves_nothing = check.summarize(rows, true)
-        testing.eq({ passed, good, errors, proves_nothing }, { 2, true, 0, 0 })
+        local summary = check.summarize(rows, true)
+        testing.eq(summary, { passed = 2, good = true, errors = 0, proves_nothing = 0 })
         rows[3] =
             { result = check.Result.PASS, run = "dev --remote test -- tests/lua/new_test.lua" }
-        passed, good, errors, proves_nothing = check.summarize(rows, true)
-        testing.eq({ passed, good, errors, proves_nothing }, { 3, false, 0, 1 })
+        summary = check.summarize(rows, true)
+        testing.eq(summary, { passed = 3, good = false, errors = 0, proves_nothing = 1 })
     end
 )
 
@@ -1001,8 +1001,8 @@ testing.test("an expect-fail run where no row fails is bad", function()
         { result = check.Result.PASS, run = "dev --remote lint" },
         { result = check.Result.PASS, run = "dev --remote test" },
     }
-    local passed, good, errors, proves_nothing = check.summarize(rows, true)
-    testing.eq({ passed, good, errors, proves_nothing }, { 2, false, 0, 0 })
+    local summary = check.summarize(rows, true)
+    testing.eq(summary, { passed = 2, good = false, errors = 0, proves_nothing = 0 })
 end)
 
 testing.test("an expect-fail remote row that printed no run id never ran", function()
@@ -1013,8 +1013,8 @@ testing.test("an expect-fail remote row that printed no run id never ran", funct
     testing.ok(not check.never_started({ "dev", "test", "--", "--remote" }, 1, nil))
     testing.ok(not check.never_started({ "rg", "-n", "x" }, 1, nil))
     testing.ok(check.never_started({ "rg", "-n", "x" }, 126, nil))
-    local passed, good, errors = check.summarize({ { result = "error" } }, true)
-    testing.eq({ passed, good, errors }, { 0, false, 1 })
+    local summary = check.summarize({ { result = "error" } }, true)
+    testing.eq({ summary.passed, summary.good, summary.errors }, { 0, false, 1 })
 end)
 
 testing.test(

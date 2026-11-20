@@ -331,21 +331,21 @@ local function check_rows(opts)
             )
         )
     end
-    local passed, good, errors, proves_nothing = check.summarize(rows, flags.expect_fail)
+    local summary = check.summarize(rows, flags.expect_fail)
     local verdict = string.format(
         "recorded on %s at commit %s: %d of %s passed",
         short,
         land.short(before.commit),
-        passed,
+        summary.passed,
         render.count_text(#rows, "row")
     )
-    if flags.expect_fail and proves_nothing > 0 then
+    if flags.expect_fail and summary.proves_nothing > 0 then
         verdict = verdict
             .. ". With --expect-fail every row but the plain lint and test rows should fail, so the passing ones prove nothing."
-    elseif flags.expect_fail and errors == 0 and not good then
+    elseif flags.expect_fail and summary.errors == 0 and not summary.good then
         verdict = verdict .. ". With --expect-fail a new row should fail, and none did."
     end
-    if flags.expect_fail and errors > 0 then
+    if flags.expect_fail and summary.errors > 0 then
         verdict = verdict
             .. (verdict:sub(-1) == "." and " " or ". ")
             .. "With --expect-fail a row that never started proves nothing. Fix the row."
@@ -360,7 +360,7 @@ local function check_rows(opts)
             )
     end
     lines[#lines + 1] = verdict
-    if not good then
+    if not summary.good then
         return failure(table.concat(lines, "\n"))
     end
     return { output = table.concat(lines, "\n") }
