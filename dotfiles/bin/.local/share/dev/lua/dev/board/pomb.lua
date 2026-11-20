@@ -17,6 +17,8 @@ local UNAUTHORIZED = 401
 local UNAVAILABLE = "Board unavailable: "
 local ISSUED_VARIABLE = "DEV_BOARD_TOKEN"
 local ISSUED_REFUSED = "The issued token in DEV_BOARD_TOKEN was refused by Pomb."
+local ISSUED_BAD = "DEV_BOARD_TOKEN holds a token that is not plain text."
+local FILE_BAD = "The token file for DEV_AGENT holds a token that is not plain text."
 local FILE_REFUSED = "The role token file for DEV_AGENT was refused by Pomb."
 local FILE_EXPIRED =
     "The role token file for DEV_AGENT expired. Mint it again with `dev board token mint`."
@@ -27,7 +29,6 @@ local CONFLICT = 409
 local LIMIT_REACHED = "wip_limit_reached"
 local NOT_FOUND = 404
 local UNKNOWN_ROLE = "unknown_role"
-local ISSUED_BAD = "DEV_BOARD_TOKEN holds a token that is not plain text."
 local CONNECT_SECONDS = "10"
 local REQUEST_SECONDS = 30
 local WAIT_SECONDS = 50
@@ -223,7 +224,7 @@ local function filed()
         return nil, FILE_EXPIRED
     end
     if not found.token:find(TOKEN_PATTERN) then
-        return nil, "The token file for DEV_AGENT holds a token that is not plain text."
+        return nil, FILE_BAD
     end
     return found.token
 end
@@ -2475,7 +2476,10 @@ function Backend:keepalive(id, fence, ticks, state, name)
     return pid
 end
 
-local function plural(list)
+---Join names with commas for a message.
+---@param list string[] the names
+---@return string joined the names, or `none` for an empty list
+local function join_names(list)
     return #list > 0 and table.concat(list, ", ") or "none"
 end
 
@@ -2512,7 +2516,11 @@ function Backend:mint(role, name, opts)
     if not id then
         table.sort(names)
         return nil,
-            "Pomb has no agent role named " .. role .. ". The roles are " .. plural(names) .. "."
+            "Pomb has no agent role named "
+                .. role
+                .. ". The roles are "
+                .. join_names(names)
+                .. "."
     end
     local deleted = false
     if opts.renew then
@@ -2567,24 +2575,33 @@ function Backend:mint(role, name, opts)
     local reason, detail
     ok, message, reason, detail = tokenfile.write(name, raw, expires)
     if not ok then
-        local undone, why, gone = self:revoke(name)
-        local kept = board.file_refusal(reason, message, detail)
-        if gone then
-            return nil, kept .. " " .. why
-        end
-        if not undone then
-            return nil, kept .. " The token stays issued. " .. why
-        end
-        if not undone.revoked then
-            return nil, kept .. " Pomb listed no token to revoke."
-        end
-        return nil, kept .. " The token was revoked."
+        return self:__undo_mint(name, board.file_refusal(reason, message, detail))
     end
     return {
         role = present(reply.role_name) or role,
         label = present(reply.label) or "none",
         expires = expires,
     }
+end
+
+---Revoke the token that `mint` issued as `name` after its file could not be written.
+---@param name string the agent name the token was issued as
+---@param kept string the refusal that says why the file was not written
+---@return nil
+---@return string message the refusal and what became of the issued token
+---@private
+function Backend:__undo_mint(name, kept)
+    local undone, why, gone = self:revoke(name)
+    if gone then
+        return nil, kept .. " " .. why
+    end
+    if not undone then
+        return nil, kept .. " The token stays issued. " .. why
+    end
+    if not undone.revoked then
+        return nil, kept .. " Pomb listed no token to revoke."
+    end
+    return nil, kept .. " The token was revoked."
 end
 
 ---Delete the child token of the token in use that was issued as `name` on
