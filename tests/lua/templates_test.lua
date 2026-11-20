@@ -144,14 +144,17 @@ testing.test("dev_calls lists nothing for a file that requires no dev module", f
     testing.eq(templates.dev_calls('local fs = require("lfs")\nreturn fs.exists(a)\n'), {})
 end)
 
-testing.test("render leaves deny.toml alone when the project has no ignore array", function()
-    local template = table.concat({ "[advisories]", 'yanked = "deny"', "" }, "\n")
-    local existing = table.concat({ "[advisories]", 'yanked = "warn"', "" }, "\n")
-    testing.eq(
-        render_deny(existing, template),
-        table.concat({ template, DENY_MARK, "kept = 1", "" }, "\n")
-    )
-end)
+testing.test(
+    "render takes the template's advisories head when the project has no ignore array",
+    function()
+        local template = table.concat({ "[advisories]", 'yanked = "deny"', "" }, "\n")
+        local existing = table.concat({ "[advisories]", 'yanked = "warn"', "" }, "\n")
+        testing.eq(
+            render_deny(existing, template),
+            table.concat({ template, DENY_MARK, "kept = 1", "" }, "\n")
+        )
+    end
+)
 
 testing.test("render keeps the project's text below the deny.toml and lint.lua markers", function()
     local root = support.sandbox({
