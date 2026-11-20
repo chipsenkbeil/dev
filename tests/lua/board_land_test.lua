@@ -472,9 +472,16 @@ local function rename_workspace(root, name)
     must(dev_os.run(argv, { stdout = "null", stderr = "null", env = IDENT }))
 end
 
+local function add_outcomes(args)
+    for _, outcome in ipairs(support.READY_OUTCOMES) do
+        args[#args + 1] = "--done-when"
+        args[#args + 1] = (outcome.name:gsub("%(check: .*%)$", board.JUDGEMENT))
+    end
+end
+
 local function new_card(project)
     must(dev(project, { "board", "init" }))
-    local out = dev(project, {
+    local args = {
         "board",
         "add",
         "Card",
@@ -486,9 +493,9 @@ local function new_card(project)
         "y",
         "--size",
         "1",
-        "--done-when",
-        "It works",
-    })
+    }
+    add_outcomes(args)
+    local out = dev(project, args)
     local id = assert(out:match("added (%x+)"), out)
     must(dev(project, { "board", "checks", id, "true" }))
     if fs.is_dir(project.root .. "/.jj") then
@@ -539,16 +546,30 @@ local function to_review(project, id, extra)
     end, id))
 end
 
+local function tick_all(project, id, opts)
+    opts = opts or {}
+    for number = 1, 3 do
+        local args = { "board", "outcome", id, "--tick", tostring(number), "--as", "verifier" }
+        must((opts.run or dev)(project, args, opts.extra))
+    end
+end
+
+local function untick_all(project, id, extra)
+    for number = 1, 3 do
+        must(dev(project, { "board", "outcome", id, "--untick", tostring(number) }, extra))
+    end
+end
+
 local function to_verify(project, id, extra)
     to_review(project, id, extra)
-    must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }, extra))
-    must(dev(project, { "board", "outcome", id, "--untick", "1" }, extra))
+    tick_all(project, id, { extra = extra })
+    untick_all(project, id, extra)
 end
 
 local function approve(project, id)
     approve_reviews(project, id)
     must(dev(project, { "board", "check", id }))
-    must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+    tick_all(project, id)
 end
 
 local function verified_card(project)
@@ -970,7 +991,7 @@ esac
     end)
 
     local function second_card(project)
-        local out = dev(project, {
+        local args = {
             "board",
             "add",
             "Second",
@@ -982,9 +1003,9 @@ esac
             "y",
             "--size",
             "1",
-            "--done-when",
-            "It works",
-        })
+        }
+        add_outcomes(args)
+        local out = dev(project, args)
         local id = assert(out:match("added (%x+)"), out)
         must(dev(project, { "board", "checks", id, "true" }))
         return id
@@ -1086,7 +1107,7 @@ esac
     testing.test("land refuses a card in Review and names Verify", function()
         local project = jj_project()
         local id = new_card(project)
-        must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+        tick_all(project, id)
         to_review(project, id)
         approve_reviews(project, id)
         must(dev(project, { "board", "check", id }))
@@ -1173,9 +1194,9 @@ esac
         must(dev(project, { "board", "outcome", id, "--untick", "1" }))
         local out, code = dev(project, { "board", "move", id, support.Column.DONE })
         testing.eq(code, 1, out)
-        testing.ok(out:find("1 of 1 outcomes are unticked", 1, true), out)
+        testing.ok(out:find("1 of 3 outcomes are unticked", 1, true), out)
         testing.eq(column_of(project.home, id), support.COLUMN_NAME.RELEASE)
-        must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+        tick_all(project, id)
         must(dev(project, { "board", "move", id, support.Column.DONE }))
         testing.eq(column_of(project.home, id), support.COLUMN_NAME.DONE)
     end)
@@ -1288,7 +1309,7 @@ esac
         local id = new_card(project)
         refused(project, id, {
             "It is in Backlog, and only a card in Verify lands.",
-            "1 of 1 outcomes are unticked",
+            "3 of 3 outcomes are unticked",
             "No code review of change",
             "No style review of change",
             "No run of `dev board check`",
@@ -1372,7 +1393,7 @@ esac
         to_verify(project, id)
         approve_reviews(project, id)
         must(dev(project, { "board", "check", id, "--expect-fail" }))
-        must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+        tick_all(project, id)
         refused(project, id, { "No run of `dev board check` is recorded", "expect-fail" })
     end)
 
@@ -1589,7 +1610,7 @@ esac
         local project = jj_project()
         local id = new_card(project)
         to_verify(project, id)
-        must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+        tick_all(project, id)
         local out, code = dev(project, { "board", "land", id })
         testing.eq(code, 1, out)
         testing.ok(out:find("No code review", 1, true), out)
@@ -2463,7 +2484,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
             must(dev(project, { "board", "check", id }))
             trunk_moves(project, { ["docs.txt"] = "docs\n" })
             rebase_onto_trunk(project.root)
-            local out = refused(project, id, { "1 of 1 outcomes are unticked" })
+            local out = refused(project, id, { "3 of 3 outcomes are unticked" })
             testing.eq(out:find("review of", 1, true), nil, out)
             testing.eq(out:find("No run of `dev board check`", 1, true), nil, out)
         end
@@ -2565,7 +2586,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         local project = jj_project()
         local id = new_card(project)
         to_verify(project, id)
-        must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+        tick_all(project, id)
         local trunk = jj(project.root, "log", "-r", "@-", "--no-graph", "-T", "commit_id")
         local change = jj(project.root, "log", "-r", "@", "--no-graph", "-T", "change_id")
         local at = { commit = trunk, change = change }
@@ -2605,7 +2626,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         assert(fs.write(project.root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nG\n"), "write failed")
         local id = new_card(project)
         to_verify(project, id)
-        must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+        tick_all(project, id)
         local older = reviewed_and_checked({ project = project, id = id })
         assert(fs.write(project.root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nH\n"), "write failed")
         local newer = reviewed_and_checked({ project = project, id = id })
@@ -2634,7 +2655,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         assert(fs.write(project.root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nG\n"), "write failed")
         local id = new_card(project)
         to_verify(project, id)
-        must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+        tick_all(project, id)
         local older = reviewed_and_checked({ project = project, id = id })
         must(dev(project, { "board", "check", id }))
         assert(fs.write(project.root .. "/shared.txt", "a\nb\nc\nd\ne\nf\nH\n"), "write failed")
@@ -2654,7 +2675,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
             local project = jj_project()
             local id = new_card(project)
             to_verify(project, id)
-            must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+            tick_all(project, id)
             approve_reviews(project, id)
             jj(project.root, "describe", "-m", "feat: work again")
             must(dev(project, { "board", "check", id }))
@@ -2677,7 +2698,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
     local function checked_past_reviews(project)
         local id = new_card(project)
         to_verify(project, id)
-        must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+        tick_all(project, id)
         approve_reviews(project, id)
         assert(fs.write(project.root .. "/other.txt", "other\n"), "write failed")
         must(dev(project, { "board", "check", id }))
@@ -2841,7 +2862,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
             must(record_review(project, id))
             must(dev(project, { "board", "check", id }))
             local at_check = head(project.root)
-            must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+            tick_all(project, id)
             trunk_moves(project, { ["docs.txt"] = "docs\n" })
             rebase_onto_trunk(project.root)
             local out = refused(project, id, { "No style review of change" })
@@ -3336,7 +3357,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         approve_reviews(project, id)
         local _, failed = dev(project, { "board", "check", id })
         testing.ok(failed ~= 0, "the check must fail")
-        must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+        tick_all(project, id)
         reached_trunk(project)
         local out, code = dev(project, { "board", "land", id })
         testing.eq(code, 1, out)
@@ -3350,7 +3371,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         local id = new_card(project)
         to_verify(project, id)
         must(dev(project, { "board", "check", id }))
-        must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+        tick_all(project, id)
         reached_trunk(project)
         local out, code = dev(project, { "board", "land", id })
         testing.eq(code, 1, out)
@@ -3365,7 +3386,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         local id = new_card(project)
         to_verify(project, id)
         approve_reviews(project, id)
-        must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+        tick_all(project, id)
         reached_trunk(project)
         local out, code = dev(project, { "board", "land", id })
         testing.eq(code, 1, out)
@@ -3763,7 +3784,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
     testing.test("a refused landing keeps the hold until it is released", function()
         local project = jj_project()
         local id = in_verify(project)
-        must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+        tick_all(project, id)
         must(dev(project, { "board", "turn", id }))
         local out, code = dev(project, { "board", "land", id })
         testing.eq(code, 1, out)
@@ -3802,7 +3823,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
     testing.test("land refused before the move keeps its hold", function()
         local project = jj_project()
         local id = in_verify(project)
-        must(dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+        tick_all(project, id)
         must(dev(project, { "board", "turn", id }))
         local out, code = dev(project, { "board", "land", id })
         testing.eq(code, 1, out)
@@ -4350,12 +4371,12 @@ local function git_approve(project)
     must(support.to_review(function(args)
         return git_dev(project, args, builder)
     end, id))
-    must(git_dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+    tick_all(project, id, { run = git_dev })
     for _, kind in ipairs({ "code", "style" }) do
         must(record_review(project, id, { kind = kind, rev = "HEAD", run = git_dev }))
     end
     must(git_dev(project, { "board", "check", id }))
-    must(git_dev(project, { "board", "outcome", id, "--tick", "1", "--as", "verifier" }))
+    tick_all(project, id, { run = git_dev })
 end
 
 local function git_trunk_moves(project, name, text)

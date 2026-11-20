@@ -16,7 +16,7 @@ local ID_B = "bbbbbbbb-1111-4bbb-8bbb-bbbbbbbbbbbb"
 local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local MAIN = REPO .. "/dotfiles/bin/.local/share/dev/main.lua"
 
-local PLANNED = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone"
+local PLANNED = support.READY_DESCRIPTION
 local JUDGED = "done (reviewer judgement)"
 local YELLOW_ID = "yellow-id"
 local BLUE_ID = "blue-id"
@@ -629,7 +629,13 @@ testing.test("next --column backlog and icebox skip a claimed card", function()
                 "--out-of-scope",
                 "y",
                 "--done-when",
-                "a",
+                JUDGED,
+                "--done-when",
+                JUDGED,
+                "--done-when",
+                JUDGED,
+                "--checks",
+                "dev test",
             })
             testing.eq(code, 0, out)
             return prefix_of(out)
@@ -853,16 +859,25 @@ end)
 
 testing.test("edit is refused under another process's claim fence", function()
     local root, home = local_board()
-    local a = prefix_of(
-        (
-            dev(
-                root,
-                home,
-                { "board", "add", "Card", "--column", Column.ICEBOX, "--description", "keep" }
-            )
-        )
-    )
-    dev(root, home, { "board", "checks", a, "dev test" })
+    local a = prefix_of((dev(root, home, {
+        "board",
+        "add",
+        "Card",
+        "--column",
+        Column.ICEBOX,
+        "--size",
+        "1",
+        "--description",
+        PLANNED,
+        "--done-when",
+        JUDGED,
+        "--done-when",
+        JUDGED,
+        "--done-when",
+        JUDGED,
+        "--checks",
+        "dev test",
+    })))
     dev(root, home, { "board", "take", a })
     local doc = document(file_of(home))
     doc.cards[1].claim.fence = 9
@@ -873,7 +888,7 @@ testing.test("edit is refused under another process's claim fence", function()
         { env = env_of(home), input = "new\n" }
     )
     testing.eq(code, 1, out)
-    testing.eq(document(file_of(home)).cards[1].description, "keep")
+    testing.eq(document(file_of(home)).cards[1].description, PLANNED)
 end)
 
 testing.test("show prints a local card's description and notes", function()
@@ -1875,7 +1890,11 @@ testing.test("a local board ticks an outcome while this machine holds the claim"
         "--size",
         "1",
         "--done-when",
-        "A works",
+        "A works " .. board.JUDGEMENT,
+        "--done-when",
+        JUDGED,
+        "--done-when",
+        JUDGED,
         "--checks",
         "dev test",
     })))
@@ -2134,7 +2153,7 @@ testing.test("a second claim needs a fresh note of what was built, tried and lea
 end)
 
 local function card_in(root, home, column)
-    return prefix_of((dev(root, home, {
+    local args = {
         "board",
         "add",
         "Card",
@@ -2143,16 +2162,15 @@ local function card_in(root, home, column)
         "--size",
         "1",
         "--description",
-        PLANNED,
-        "--done-when",
-        JUDGED,
-        "--done-when",
-        JUDGED,
-        "--done-when",
-        JUDGED,
+        support.READY_DESCRIPTION,
         "--checks",
-        "dev test",
-    })))
+        support.READY_CHECKS[1],
+    }
+    for _, outcome in ipairs(support.READY_OUTCOMES) do
+        args[#args + 1] = "--done-when"
+        args[#args + 1] = outcome.name
+    end
+    return prefix_of((dev(root, home, args)))
 end
 
 testing.test("move to Review refuses a card that is not in progress under a claim", function()
@@ -2173,7 +2191,7 @@ end)
 
 local function lapsed_in_progress(root, home)
     local a = card_in(root, home, Column.READY)
-    dev(root, home, { "board", "outcome", a, "First", "works" })
+    dev(root, home, { "board", "outcome", a, "First works " .. board.JUDGEMENT })
     local steps = {
         { "board", "take", a },
         { "board", "move", a, Column.PROGRESS },
@@ -2284,7 +2302,7 @@ end)
 testing.test("a claimed card with a note moves to Review and a Verify card moves back", function()
     local root, home = local_board()
     local a = card_in(root, home, Column.READY)
-    dev(root, home, { "board", "outcome", a, "First", "works" })
+    dev(root, home, { "board", "outcome", a, "First works " .. board.JUDGEMENT })
     dev(root, home, { "board", "take", a })
     local out, code = support.to_review(function(args)
         return dev(root, home, args)
@@ -2422,7 +2440,11 @@ local function unnamed_card(tty)
         "--size",
         "1",
         "--done-when",
-        "a",
+        JUDGED,
+        "--done-when",
+        JUDGED,
+        "--done-when",
+        JUDGED,
         "--checks",
         "dev test",
     })
@@ -2463,9 +2485,14 @@ testing.test("a stale fence is refused once another process holds the claim", fu
         "--size",
         "1",
         "--done-when",
-        "a",
+        JUDGED,
+        "--done-when",
+        JUDGED,
+        "--done-when",
+        JUDGED,
+        "--checks",
+        "dev test",
     })))
-    dev(root, home, { "board", "checks", a, "dev test" })
     dev(root, home, { "board", "take", a })
     local doc = document(file_of(home))
     doc.cards[1].claim.fence = 9

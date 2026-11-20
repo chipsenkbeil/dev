@@ -38,7 +38,7 @@ end
 local function card_in(root, home)
     must(dev(root, home, { "board", "init" }))
     support.drop_turn_card(support.board_file(home, "mine"))
-    local out = dev(root, home, {
+    local args = {
         "board",
         "add",
         "Card",
@@ -50,11 +50,14 @@ local function card_in(root, home)
         "y",
         "--size",
         "1",
-        "--done-when",
-        "a",
         "--checks",
-        "dev test",
-    })
+        support.READY_CHECKS[1],
+    }
+    for _, outcome in ipairs(support.READY_OUTCOMES) do
+        args[#args + 1] = "--done-when"
+        args[#args + 1] = outcome.name
+    end
+    local out = dev(root, home, args)
     return assert(out:match("added (%x+)"), out)
 end
 
