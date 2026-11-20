@@ -1161,7 +1161,7 @@ end
 ---Report whether a card outside Done blocks a card.
 ---A blocker that cannot be read counts as blocking.
 ---@param id string the card id
----@return boolean? blocked, string? message nil with the message when the board cannot be read
+---@return boolean? blocked, string? blocker the open blocker's id, or with nil the message that says the board cannot be read
 function Backend:blocked(id)
     local links, message = self:links(id)
     if not links then
@@ -1173,7 +1173,7 @@ end
 ---Report whether `blocked_by` links hold a card: a linked card holds it unless it is in Done, and
 ---a card that cannot be read holds it too.
 ---@param links dev.board.Link[] the links the card holds
----@return boolean? blocked, string? message
+---@return boolean? blocked, string? blocker the open blocker's id, or with nil the message
 function Backend:__blocked(links)
     for _, link in ipairs(links) do
         if link.kind == "blocked_by" then
@@ -1192,7 +1192,7 @@ function Backend:__blocked(links)
                 end
             end
             if not target or not target.done then
-                return true
+                return true, link.board and (link.board .. ":" .. link.id) or link.id
             end
         end
     end

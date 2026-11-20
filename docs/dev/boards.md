@@ -2305,6 +2305,10 @@ session responsible for a card.
   cards (`BOARD:` is exit 1).
 - A local board's `next` skips a card with a `blocked_by` target outside a Done
   column.
+- `take` and `move CARD progress` refuse a card in Icebox, Backlog or Ready
+  while a `blocked_by` card is outside Done, and name that open blocker. A board
+  that cannot be read refuses with the reason. A planner or scoper taking a card
+  to plan it, and a card in any later column, are not refused.
 
 ### links
 

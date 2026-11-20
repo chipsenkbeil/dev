@@ -1512,6 +1512,30 @@ local function before_work(stages, card)
         or card.column == stages.ready
 end
 
+---Refuse a card that has not started while an open card blocks it.
+---@param backend dev.board.Backend the board
+---@param card dev.board.Card the card
+---@return dev.cmd.board.Result? refused the failure, nil when the card has started or nothing open blocks it
+local function blocker_refusal(backend, card)
+    if not before_work(backend.stages, card) then
+        return nil
+    end
+    local blocked, blocker = backend:blocked(card.id)
+    if blocked == nil then
+        return failure(blocker)
+    end
+    if not blocked then
+        return nil
+    end
+    return failure(
+        "Card "
+            .. card.id:sub(1, board.MIN_PREFIX)
+            .. " is blocked by open card "
+            .. blocker
+            .. ". Finish that card first."
+    )
+end
+
 ---Roles that take an Icebox or Backlog card unplanned
 local PLANNING_ROLES = { planner = true, scoper = true }
 
@@ -1726,6 +1750,12 @@ local function move_once(backend, args, opts)
         local held_back = owner_holds(card)
         if held_back then
             return held_back
+        end
+    end
+    if column == stages.progress then
+        local refused = blocker_refusal(backend, card)
+        if refused then
+            return refused
         end
     end
     if to_done then
@@ -4744,6 +4774,12 @@ function commands.take(backend, args)
         return refused
     end
     local stages = backend.stages
+    if not plans_card(stages, card, name) then
+        refused = blocker_refusal(backend, card)
+        if refused then
+            return refused
+        end
+    end
     local rival = not from and card.claimant ~= nil and card.claimant ~= (name or claimant())
     if card.claimant == nil or from then
         local shaped = runner.shape_refusal(name)

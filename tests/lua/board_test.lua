@@ -124,7 +124,11 @@ local function fake(cards, times, finished)
         if backend.blocked_error then
             return nil, backend.blocked_error
         end
-        return (backend.blockers or {})[id] == true
+        local held = (backend.blockers or {})[id]
+        if held then
+            return true, held
+        end
+        return false
     end
     function backend:add(name, column, opts)
         backend.opts = opts
@@ -1557,6 +1561,15 @@ testing.test("move to Done takes a planned card whose outcomes are all ticked", 
         "moved 11111111 to Done"
     )
     testing.eq(backend.calls[#backend.calls], { "move", ID_A, support.COLUMN_NAME.DONE })
+end)
+
+testing.test("move refuses a card with an open blocker and names it", function()
+    local backend = fake(sample())
+    backend.blockers = { [ID_A] = "bbbbbbbb" }
+    local result = cmd_board.run("move", { "11111111-a", support.Column.PROGRESS }, backend)
+    testing.eq(result.code, 1, result.message)
+    testing.ok(result.message:find("blocked by open card bbbbbbbb", 1, true), result.message)
+    testing.eq(#backend.calls, 0)
 end)
 
 testing.test("move refuses an unsized card into every column but Icebox", function()
@@ -9702,6 +9715,19 @@ testing.test("take refuses a Backlog card with an outcome that names no check", 
     testing.eq(code, 1, out)
     testing.ok(out:find("names no deciding check", 1, true), out)
     testing.eq(read(root, "calls"):find("/owner", 1, true), nil)
+end)
+
+testing.test("take refuses a card with an open blocker and names it", function()
+    local backend = fake(sample())
+    backend.blockers = { [ID_A] = "bbbbbbbb" }
+    local result = cmd_board.run("take", { "11111111-a", "--as", "dotfiles/implementer" }, backend)
+    testing.eq(result.code, 1, result.message)
+    testing.ok(result.message:find("blocked by open card bbbbbbbb", 1, true), result.message)
+    testing.eq(#backend.calls, 0)
+    backend.blocked_error = "pomb is down"
+    result = cmd_board.run("take", { "11111111-a", "--as", "dotfiles/implementer" }, backend)
+    testing.eq(result.code, 1, result.message)
+    testing.ok(result.message:find("Pomb is down", 1, true), result.message)
 end)
 
 testing.test("take refuses a red Backlog card", function()
