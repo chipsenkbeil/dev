@@ -1536,7 +1536,7 @@ group limit, whoever claimed them.
 - The refusal names the cards in the group, so land the first one in Verify
   whose outcomes are all ticked, or help its runner land it, then take again.
 - The landing turn covers only the rebase and the push, so run `dev board
-  check` and `dev land` without `dev board turn`.
+  check` and `dev land` without `dev board turn`. A check gives a hold back.
 
 ## Local boards
 
@@ -2792,6 +2792,18 @@ runs every checks row of the card and records the result as one comment
 on the card. A rerun at the same commit skips the leading rows an earlier run
 recorded as passed (see the partial record below).
 
+The landing turn:
+
+- A check never holds the landing turn. When `DEV_AGENT` is set and the caller
+  holds a turn for the card, `check` gives it back before any row runs and
+  prints `A check never holds the landing turn. It was given back, and dev board
+  land takes it again.`
+- When the hold is lost or the board cannot be read, `check` prints the reason
+  and runs on.
+- A check with no hold, or with no `DEV_AGENT`, runs as before.
+- A queued row can outlast a hold's 3600 second ceiling, so the hold does not
+  survive it.
+
 The workspace rule:
 
 - In a jj project `check`, `turn` (not `--release`) and `land` first refuse,
@@ -3526,7 +3538,8 @@ The hold:
 - A hold is longer than a landing's 900 second lease. `--hold` sets its lease,
   1800 seconds by default and 3600 at most (a whole number, exit 2 otherwise),
   so a long wait fits.
-- `check` does not renew the lease while it runs.
+- `check` gives a hold for its card back before it runs, so a hold never spans
+  a check.
 - The hold is recorded in the `dev-turn:` note with the fence and the lease, so
   a later command finds it from the board alone, on any machine under the same
   `DEV_AGENT`.

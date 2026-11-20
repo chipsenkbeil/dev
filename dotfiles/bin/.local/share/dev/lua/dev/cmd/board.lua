@@ -3357,8 +3357,24 @@ function commands.check(backend, args)
     if empty then
         return failure(empty)
     end
+    local name = agent_name()
+    if name then
+        local hold, held_why = turn.held(backend, name, short)
+        if not hold and held_why then
+            verb.note(held_why)
+        end
+        if hold then
+            local released, reason = turn.release(backend, hold)
+            if not released then
+                return failure(reason)
+            end
+            verb.note(
+                "A check never holds the landing turn. It was given back, and dev board land takes it again."
+            )
+        end
+    end
     return wiring.check_rows({
-        name = agent_name(),
+        name = name,
         backend = backend,
         card = card,
         before = before,

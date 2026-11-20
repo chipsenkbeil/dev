@@ -3644,18 +3644,39 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         return id
     end
 
-    testing.test("a held turn survives a check and lands the card under it", function()
+    testing.test("a check gives back the landing turn the card holds", function()
         local project = jj_project()
         local id = in_verify(project)
         local out, code = dev(project, { "board", "turn", id })
         testing.eq(code, 0, out)
         testing.ok(out:find("Holding the landing turn for " .. id, 1, true), out)
-        approve(project, id)
         testing.eq(assert(turn_holder(project.home)).name, "dotfiles/lander")
+        approve_reviews(project, id)
+        out, code = dev(project, { "board", "check", id })
+        testing.eq(code, 0, out)
+        testing.ok(
+            out:find(
+                "A check never holds the landing turn. It was given back, and dev board land takes it again.",
+                1,
+                true
+            ),
+            out
+        )
+        testing.eq(turn_holder(project.home), nil)
+        tick_all(project, id)
         out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
         testing.eq(column_of(project.home, id), support.COLUMN_NAME.DONE)
         testing.eq(turn_holder(project.home), nil)
+    end)
+
+    testing.test("a check with no hold on the card prints nothing about the turn", function()
+        local project = jj_project()
+        local id = in_verify(project)
+        approve_reviews(project, id)
+        local out, code = dev(project, { "board", "check", id })
+        testing.eq(code, 0, out)
+        testing.eq(out:find("landing turn", 1, true), nil)
     end)
 
     testing.test("a second runner is told who holds the turn and since when", function()
