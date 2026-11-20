@@ -1521,35 +1521,49 @@ function Backend:answer(id, choice, quote, fence)
     return true
 end
 
+---Return a history row's old or new value, or nil when it is unset.
+---@param value any a decoded old or new value of a history row
+---@return string? value `value`, or nil when it is null or `(none)`
+local function unset(value)
+    value = present(value)
+    return value ~= "(none)" and value or nil
+end
+
 function Backend:history(id)
-    local ok, message = self:__load()
-    if not ok then
-        return nil, message
-    end
-    local doc
-    doc, message = self:__export(self.__detail.id)
-    if not doc then
-        return nil, message
-    end
-    for _, task in ipairs(doc.tasks) do
-        if task.id == id then
-            local raw = task.history or {}
-            local found = {}
-            for index = #raw, 1, -1 do
-                local event = raw[index]
-                found[#found + 1] = {
-                    at = present(event.created_at) or "",
-                    kind = present(event.kind) or "",
-                    from = present(event.from),
-                    to = present(event.to),
-                    actor = present(event.actor) or "unknown",
-                    token = present(event.token_name),
-                }
-            end
-            return found
+    local rows = {}
+    local cursor
+    repeat
+        local page, message = self:__request(
+            "GET",
+            "/api/tasks/" .. id .. "/history" .. (cursor and "?cursor=" .. cursor or "")
+        )
+        if not page then
+            return nil, message
+        end
+        local items = page.items or {}
+        for _, row in ipairs(items) do
+            rows[#rows + 1] = row
+        end
+        cursor = #items > 0 and present(page.next_cursor) or nil
+    until cursor == nil
+    local found = {}
+    for index = #rows, 1, -1 do
+        local row = rows[index]
+        local kind = present(row.kind) or ""
+        if kind ~= "comment_added" then
+            local user = present(row.user) or "unknown"
+            local actor, token = user:match("^(.-) %((.*)%)$")
+            found[#found + 1] = {
+                at = present(row.time) or "",
+                kind = kind,
+                from = unset(row.old_value),
+                to = unset(row.new_value),
+                actor = actor or user,
+                token = token,
+            }
         end
     end
-    return nil, "The board has no card " .. id .. "."
+    return found
 end
 
 function Backend:dwell()

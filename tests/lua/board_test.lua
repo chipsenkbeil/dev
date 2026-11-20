@@ -9287,22 +9287,30 @@ testing.test("notes, note --edit and note --delete reach pomb's comment routes",
 end)
 
 do
-    local HISTORY = '[{"id":"e1","kind":"created","detail":"Created","actor":"admin",'
-        .. '"created_at":"2026-11-17T08:00:00Z"},'
-        .. '{"id":"e2","kind":"moved","detail":"Moved","actor":"api-token",'
-        .. ('"created_at":"2026-11-18T09:30:12Z","from":"%s","to":"%s",'):format(
-            support.COLUMN_NAME.READY,
-            PROGRESS_NAME
+    local HISTORY = '{"id":"e1","kind":"created","time":"2026-11-17T08:00:00Z",'
+        .. '"user":"admin","old_value":"(none)","new_value":"(none)"},'
+        .. '{"id":"e2","kind":"moved","time":"2026-11-18T09:30:12Z",'
+        .. '"user":"api-token (dotfiles/implementer/x)",'
+        .. ('"old_value":"%s","new_value":"%s"},'):format(support.COLUMN_NAME.READY, PROGRESS_NAME)
+        .. '{"id":"e3","kind":"moved","time":"2026-11-18T10:00:00Z","user":"admin",'
+        .. ('"old_value":"%s","new_value":"%s"}'):format(PROGRESS_NAME, support.COLUMN_NAME.REVIEW)
+
+    local function history_sandbox(rows, more)
+        local root, home = sandbox()
+        local cursor = more and '"c2"' or "null"
+        local page = '{"items":[' .. rows .. '],"next_cursor":' .. cursor .. "}"
+        assert(fs.write(root .. "/history.json", page))
+        assert(
+            fs.write(
+                root .. "/history_next.json",
+                '{"items":[' .. (more or "") .. '],"next_cursor":null}'
+            )
         )
-        .. '"token_name":"dotfiles/implementer/x"},'
-        .. '{"id":"e3","kind":"moved","detail":"Moved","actor":"admin",'
-        .. ('"created_at":"2026-11-18T10:00:00Z","from":"%s","to":"%s"}]'):format(
-            PROGRESS_NAME,
-            support.COLUMN_NAME.REVIEW
-        )
+        return root, home
+    end
 
     testing.test("history prints each entry newest first with its actor and token name", function()
-        local root, home = sandbox({ export = export_with_first_card({ history = HISTORY }) })
+        local root, home = history_sandbox(HISTORY)
         local out, code = dev(root, home, { "board", "history", "11111111-a" })
         testing.eq(code, 0, out)
         testing.eq(
@@ -9329,15 +9337,37 @@ do
     testing.test(
         "history shows a dash for a browser move and none for a card without events",
         function()
-            local root, home = sandbox({ export = export_with_first_card({ history = HISTORY }) })
+            local root, home = history_sandbox(HISTORY)
             local out = dev(root, home, { "board", "history", "11111111-a" })
             local browser = out:match(("[^\n]+%s[^\n]*"):format(support.COLUMN_NAME.REVIEW))
             testing.ok(browser:find("admin      %-$"), browser)
-            root, home = sandbox({ export = export_with_first_card({ history = "[]" }) })
+            root, home = history_sandbox("")
             out = dev(root, home, { "board", "history", "11111111-a" })
             testing.eq(out, "no history\n")
         end
     )
+
+    testing.test("history follows the card route across next_cursor pages", function()
+        local second = '{"id":"e4","kind":"comment_added","time":"2026-11-18T10:05:00Z",'
+            .. '"user":"admin","old_value":"(none)","new_value":"(none)"},'
+            .. '{"id":"e5","kind":"moved","time":"2026-11-18T11:00:00Z","user":"admin",'
+            .. ('"old_value":"%s","new_value":"%s"}'):format(
+                support.COLUMN_NAME.REVIEW,
+                support.COLUMN_NAME.DONE
+            )
+        local root, home = history_sandbox(HISTORY, second)
+        local out, code = dev(root, home, { "board", "history", "11111111-a" })
+        testing.eq(code, 0, out)
+        testing.eq(select(2, out:gsub("\n", "")), 4, out)
+        testing.ok(
+            out:find("2026-11-18 11:00  moved    " .. support.COLUMN_NAME.REVIEW, 1, true) == 1,
+            out
+        )
+        testing.ok(not out:find("comment_added", 1, true), out)
+        local calls = read(root, "calls")
+        testing.ok(calls:find("/api/tasks/" .. ID_A .. "/history", 1, true), calls)
+        testing.ok(calls:find("/api/tasks/" .. ID_A .. "/history?cursor=c2", 1, true), calls)
+    end)
 
     local function moved_event(at, to)
         return ('{"id":"m","kind":"moved","detail":"Moved","actor":"admin","created_at":"%s","to":"%s"}'):format(
@@ -11116,13 +11146,10 @@ local function export_fetches(root, home, steps)
     return fetches
 end
 
-testing.test("one pomb backend reads the export once across cards and history", function()
+testing.test("one pomb backend reads the export once across cards and dwell", function()
     local root, home = sandbox()
-    local fetches = export_fetches(
-        root,
-        home,
-        string.format("assert(b:cards()); assert(b:history(%q)); assert(b:cards())", ID_A)
-    )
+    local fetches =
+        export_fetches(root, home, "assert(b:cards()); assert(b:dwell()); assert(b:cards())")
     testing.eq(fetches, 1)
 end)
 

@@ -2647,8 +2647,10 @@ on another board of the same Pomb server.
 ### history
 
 `dev board history CARD` lists the card's history events, newest first, from
-the `history` of the card in `GET /api/boards/{id}/export-data`.
+`GET /api/tasks/{id}/history`, which it pages by `next_cursor` until the cursor
+is null or a page is empty.
 
+- A `comment_added` row is left out.
 - Each line holds, aligned, the time to the minute in UTC, the event's kind,
   the change as `FROM -> TO` (`-` for none), the actor (`admin` for a person,
   `api-token` for a token) and the token's name (`-` for a browser session or

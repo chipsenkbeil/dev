@@ -496,6 +496,8 @@ case "$last" in
 */api/boards/board-1/bin) body=$(cat "$ROOT/bin.json") ;;
 */restore) body=$(cat "$ROOT/restore.json") ;;
 */export-data) body=$(cat "$ROOT/export.json") ;;
+*/history\?cursor=*) body=$(cat "$ROOT/history_next.json") ;;
+*/history) body=$(cat "$ROOT/history.json") ;;
 */tasks\?limit=500\&cursor=c2) body='{"items":[{"id":"]] .. second_id .. [[",'\
 '"column_entered_at":"2020-02-01T00:00:00Z"}],"next_cursor":null}' ;;
 */tasks\?limit=500) body='{"items":[{"id":"]] .. first_id .. [[",'\
