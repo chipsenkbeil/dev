@@ -12,6 +12,10 @@ local FILE_NAME_UNSAFE = "[^%w._-]"
 ---@class dev.board.queue
 local M = { Replay = { DONE = "done", STOP = "stop" } }
 
+---Why the queue file could not be used.
+---@enum dev.board.queue.Reason
+M.Reason = { READ = "read", MALFORMED = "malformed" }
+
 ---@class dev.board.queue.Entry
 ---@field sub string the subcommand, such as `move`
 ---@field args string[] its arguments as typed
@@ -41,19 +45,23 @@ local function load(path)
     end
     local text, err = fs.read(path)
     if not text then
-        return nil, "Cannot read " .. path .. ": " .. tostring(err) .. "."
+        return nil, tostring(err), M.Reason.READ
     end
     local doc, message = json.decode(text)
     if doc == nil then
         local offset = tonumber(tostring(message):match("offset (%d+)")) or 1
-        return nil, path .. ":" .. line_of(text, offset) .. ": " .. tostring(message)
+        return nil,
+            path .. ":" .. line_of(text, offset) .. ": " .. tostring(message),
+            M.Reason.MALFORMED
     end
     if type(doc) ~= "table" or doc == json.null or (next(doc) ~= nil and doc[1] == nil) then
-        return nil, path .. ":1: not a list of queued commands"
+        return nil, path .. ":1: not a list of queued commands", M.Reason.MALFORMED
     end
     for index, entry in ipairs(doc) do
         if type(entry) ~= "table" or type(entry.sub) ~= "string" or type(entry.args) ~= "table" then
-            return nil, path .. ": entry " .. index .. " is not a queued command"
+            return nil,
+                path .. ": entry " .. index .. " is not a queued command",
+                M.Reason.MALFORMED
         end
     end
     return doc
@@ -93,10 +101,11 @@ end
 ---Count the queued changes.
 ---@return integer? count how many are waiting, 0 when there is no file, nil when it is malformed
 ---@return string? message why the file could not be used
+---@return dev.board.queue.Reason? reason the kind of failure
 function Queue:count()
-    local entries, message = load(self.path)
+    local entries, message, reason = load(self.path)
     if not entries then
-        return nil, message
+        return nil, message, reason
     end
     return #entries
 end

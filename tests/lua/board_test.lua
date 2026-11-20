@@ -13,6 +13,7 @@ local fs = require("dev.fs")
 local guards = require("dev.board.guards")
 local json = require("dev.json")
 local pomb = require("dev.board.pomb")
+local queue_store = require("dev.board.queue")
 local runner = require("dev.board.runner")
 local ui = require("dev.ui")
 local support = require("support")
@@ -13836,6 +13837,37 @@ testing.test("stale lists a running clock", function()
         result.output:find("clocks running:\n00000001  implementer  30 min", 1, true) ~= nil,
         true
     )
+end)
+
+testing.test("follow returns the dropped reason when the stop is refused", function()
+    local previous = os.getenv("XDG_STATE_HOME") or ""
+    ffi.C.setenv("XDG_STATE_HOME", support.tempdir(), 1)
+    local card = colored("green")
+    card.outcomes = outcomes(2)
+    card.column = PROGRESS_NAME
+    local backend = fake({ card })
+    backend.stages = board.stages()
+    local started = role_clock.start(card, "implementer")
+    backend.refusal = "Pomb is down."
+    local reason, detail = role_clock.follow(backend, card, support.COLUMN_NAME.REVIEW, LEAD)
+    local left = role_clock.read(ID_C)
+    ffi.C.setenv("XDG_STATE_HOME", previous, 1)
+    testing.eq(started.code, nil, started.message)
+    testing.eq(reason, role_clock.Reason.DROPPED)
+    testing.eq(detail, "Pomb is down.")
+    testing.eq(left.role, "reviewer")
+end)
+
+testing.test("count returns the read reason for an unreadable queue", function()
+    local previous = os.getenv("XDG_STATE_HOME") or ""
+    ffi.C.setenv("XDG_STATE_HOME", support.tempdir(), 1)
+    local pending = queue_store.new("dotfiles")
+    assert(fs.mkdir(pending.path, { parents = true }))
+    local count, message, reason = pending:count()
+    ffi.C.setenv("XDG_STATE_HOME", previous, 1)
+    testing.eq(count, nil)
+    testing.eq(reason, queue_store.Reason.READ)
+    testing.ok(message ~= "", "the system's text is kept")
 end)
 
 local function claim_counter(fence_of)

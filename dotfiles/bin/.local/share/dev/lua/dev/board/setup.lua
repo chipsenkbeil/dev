@@ -60,11 +60,12 @@ function M.board_name(ctx, flags)
     return name, backend == nil
 end
 
----Append a `[board]` section for a Pomb board to the project's config, or die.
+---Append a `[board]` section for a Pomb board to the project's config.
 ---@param root string the project root
 ---@param name string the board's name
----@param sentence fun(text: string): string capitalises and ends a sentence
-function M.write_section(root, name, sentence)
+---@return true? ok true when the section was written
+---@return string? message the system's text when the write failed
+function M.write_section(root, name)
     local path = root .. "/.dev/config.toml"
     local existing = fs.exists(path) and fs.read(path) or ""
     local gap = existing == "" and "" or (existing:sub(-1) == "\n" and "\n" or "\n\n")
@@ -78,8 +79,9 @@ function M.write_section(root, name, sentence)
         ok, message = fs.write(path, existing .. gap .. section)
     end
     if not ok then
-        verb.die("Cannot write " .. path .. ". " .. sentence(tostring(message)))
+        return nil, tostring(message)
     end
+    return true
 end
 
 ---Name this machine.

@@ -3333,6 +3333,15 @@ testing.test(
     end
 )
 
+testing.test("sync on an unreadable queue names the file and the system's reason", function()
+    local root, home = pomb()
+    assert(fs.mkdir(queue_path(home), { parents = true }))
+    local out, code = pomb_dev(root, home, { "board", "sync" })
+    testing.eq(code, 1)
+    testing.ok(out:find("Cannot read the queue at " .. queue_path(home) .. ". ", 1, true), out)
+    testing.ok(out:find("The queue is left in place.", 1, true), out)
+end)
+
 testing.test("a queue that is not a list of commands is malformed", function()
     local root, home = bad_queue('{"sub":"move"}\n')
     local out, code = pomb_dev(root, home, { "board", "sync" })

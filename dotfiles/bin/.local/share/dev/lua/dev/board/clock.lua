@@ -23,6 +23,10 @@ local COLUMN_ROLES = {
 ---@class dev.board.clock
 local M = {}
 
+---Why a clock could not follow a card.
+---@enum dev.board.clock.Reason
+M.Reason = { DROPPED = "dropped", NOT_STARTED = "not_started" }
+
 ---The most minutes one entry logs.
 M.MAX_MINUTES = 1440
 
@@ -259,7 +263,8 @@ end
 ---@param card dev.board.Card the card
 ---@param column string? the column the card is in now, nil to only stop
 ---@param claimant string the name the claim is held under
----@return string? warning why the clock could not follow, nil when it did
+---@return dev.board.clock.Reason? reason why the clock could not follow, nil when it did
+---@return string? detail the clock's own message for the reason
 function M.follow(backend, card, column, claimant)
     if backend.timed == false then
         return nil
@@ -269,21 +274,21 @@ function M.follow(backend, card, column, claimant)
     if running and running.role == role then
         return nil
     end
-    local warning
+    local reason, detail
     if running then
         local stopped = M.stop(backend, card)
         if stopped.code then
             fs.remove(M.path(card.id))
-            warning = stopped.message .. " The clock was dropped."
+            reason, detail = M.Reason.DROPPED, stopped.message
         end
     end
     if role and not board.labelled(card, board.NEEDS_HUMAN) then
         local started = M.start(card, role)
-        if started.code and not warning then
-            warning = started.message
+        if started.code and not reason then
+            reason, detail = M.Reason.NOT_STARTED, started.message
         end
     end
-    return warning
+    return reason, detail
 end
 
 ---Run `time start` or `time stop` from its parsed words and flags.

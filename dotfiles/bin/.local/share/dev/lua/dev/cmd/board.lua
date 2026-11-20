@@ -2,6 +2,7 @@ local board = require("dev.board")
 local board_setup = require("dev.board.setup")
 local check = require("dev.board.check")
 local claims = require("dev.board.claims")
+local role_clock = require("dev.board.clock")
 local config = require("dev.config")
 local device = require("dev.board.device")
 local dev_os = require("dev.os")
@@ -45,6 +46,21 @@ local function sentence(text)
         text = text .. "."
     end
     return text
+end
+
+local function clock_note(opening, reason, detail)
+    local text = opening .. " " .. sentence(detail)
+    if reason == role_clock.Reason.DROPPED then
+        text = text .. " The clock was dropped."
+    end
+    return text
+end
+
+local function queue_unreadable(path, reason, message)
+    if reason == queue.Reason.READ then
+        return "Cannot read the queue at " .. path .. ". " .. sentence(message)
+    end
+    return sentence(message)
 end
 
 ---The sentence for each reason `pomb.new` refuses with
@@ -1889,10 +1905,9 @@ local function move_once(backend, args, opts)
         return to_done and unqueued(failure(refused)) or failure(refused)
     end
     if own_claim then
-        local unclocked =
-            require("dev.board.clock").follow(backend, card, column, claimant((agent_name())))
-        if unclocked then
-            verb.note("Moved, but its clock did not follow. " .. sentence(unclocked))
+        local reason, detail = role_clock.follow(backend, card, column, claimant((agent_name())))
+        if reason then
+            verb.note(clock_note("Moved, but its clock did not follow.", reason, detail))
         end
     end
     if own_claim and column ~= stages.progress and column ~= stages.blocked then
@@ -4766,10 +4781,10 @@ function commands.take(backend, args)
         end
         card.column = stages.progress
     end
-    local unclocked = require("dev.board.clock").follow(backend, card, card.column, claimant(name))
-    if unclocked then
+    local reason, detail = role_clock.follow(backend, card, card.column, claimant(name))
+    if reason then
         verb.note(
-            "Took card " .. short .. ", but its clock did not follow. " .. sentence(unclocked)
+            clock_note("Took card " .. short .. ", but its clock did not follow.", reason, detail)
         )
     end
     if from then
@@ -4808,9 +4823,9 @@ function commands.release(backend, args)
         return failure(board.release_refusal(reason, message, detail, held.fence))
     end
     claims.stop(card.id)
-    local unclocked = require("dev.board.clock").follow(backend, card, nil, "")
-    if unclocked then
-        verb.note("Released, but the clock did not stop. " .. sentence(unclocked))
+    local stuck, cause = role_clock.follow(backend, card, nil, "")
+    if stuck then
+        verb.note(clock_note("Released, but the clock did not stop.", stuck, cause))
     end
     return {
         output = string.format(
@@ -5100,7 +5115,10 @@ M.handlers["board init"] = function(ctx)
         verb.die(sentence(message))
     end
     if missing then
-        board_setup.write_section(ctx.root, name, sentence)
+        local written, failed = board_setup.write_section(ctx.root, name)
+        if not written then
+            verb.die("Cannot write " .. ctx.root .. "/.dev/config.toml. " .. sentence(failed))
+        end
         print("wrote [board] to .dev/config.toml")
     end
     print(
@@ -5122,7 +5140,7 @@ local function description_args(args)
     if flags["--file"] then
         text, message = fs.read(flags["--file"])
         if not text then
-            return nil, "Cannot read " .. flags["--file"] .. ": " .. sentence(tostring(message))
+            return nil, "Cannot read " .. flags["--file"] .. ": " .. tostring(message) .. "."
         end
     elseif dev_os.isatty(0) then
         return nil, "Needs the description from --file PATH or standard input."
@@ -5219,9 +5237,11 @@ local function open_board(ctx)
     local pending
     if found.backend == board.Backend.POMB then
         pending = queue.new(found.name)
-        local waiting, why = pending:count()
+        local waiting, why, reason = pending:count()
         if not waiting then
-            stderr_line(sentence(why) .. " The queue is left in place.")
+            stderr_line(
+                queue_unreadable(pending.path, reason, why) .. " The queue is left in place."
+            )
         elseif waiting > 0 then
             replay(backend, pending, stderr_news)
         end
@@ -5350,9 +5370,11 @@ M.handlers["board status"] = function(ctx)
     print("board: " .. found.name)
     if found.backend == board.Backend.POMB then
         local pending = queue.new(found.name)
-        local waiting, why = pending:count()
+        local waiting, why, reason = pending:count()
         if not waiting then
-            stderr_line(sentence(why) .. " The queue is left in place.")
+            stderr_line(
+                queue_unreadable(pending.path, reason, why) .. " The queue is left in place."
+            )
         elseif waiting > 0 then
             local backend = M.open(found)
             if backend then
@@ -5400,9 +5422,9 @@ M.handlers["board sync"] = function(ctx)
         verb.die("A local board has nothing to sync.")
     end
     local pending = queue.new(found.name)
-    local waiting, message = pending:count()
+    local waiting, message, reason = pending:count()
     if not waiting then
-        verb.die(sentence(message) .. " The queue is left in place.")
+        verb.die(queue_unreadable(pending.path, reason, message) .. " The queue is left in place.")
     end
     if waiting == 0 then
         print("Nothing is queued.")
