@@ -251,9 +251,9 @@ testing.test("the closing note names each failed check once", function()
         .. "lint:fail('a', 'one'); lint:fail('b', 'two'); lint:fail('a', 'three'); "
         .. "os.exit(lint:finish())"
     local snippet = ("package.path = %q; " .. code):format(package.path, root)
-    local errors = root .. "/stderr.txt"
-    dev_os.capture({ "luajit", "-e", snippet }, { stderr = errors })
-    testing.eq(assert(fs.read(errors)), "one\ntwo\nthree\nThese checks failed: a, b.\n")
+    local stderr_path = root .. "/stderr.txt"
+    dev_os.capture({ "luajit", "-e", snippet }, { stderr = stderr_path })
+    testing.eq(assert(fs.read(stderr_path)), "one\ntwo\nthree\nThese checks failed: a, b.\n")
     fs.remove(root, { recursive = true })
 end)
 
@@ -305,10 +305,10 @@ testing.test("standalone writes each problem line to standard error", function()
     assert(fs.write(root .. "/.dev/y.sh", "#!/bin/sh\n"), "fixture setup failed")
     local code = "require('lintset').new({ root = %q, verbose = 0 }):standalone()"
     local snippet = ("package.path = %q; " .. code):format(package.path, root)
-    local errors = root .. "/stderr.txt"
-    local out = dev_os.capture({ "luajit", "-e", snippet }, { stderr = errors })
+    local stderr_path = root .. "/stderr.txt"
+    local out = dev_os.capture({ "luajit", "-e", snippet }, { stderr = stderr_path })
     testing.eq(out, "> standalone shell\n")
     local reason = "shell outside .dev/standalone, port it to Lua (dev help porting)\n"
-    testing.eq(assert(fs.read(errors)), ".dev/x.sh: " .. reason .. ".dev/y.sh: " .. reason)
+    testing.eq(assert(fs.read(stderr_path)), ".dev/x.sh: " .. reason .. ".dev/y.sh: " .. reason)
     fs.remove(root, { recursive = true })
 end)
