@@ -293,6 +293,12 @@ local function fake(cards, times, finished)
     return backend
 end
 
+local function only_comment_reads(backend)
+    for _, call in ipairs(backend.calls) do
+        testing.ok(call[1] == "comments", call[1])
+    end
+end
+
 local function sample()
     return {
         {
@@ -4396,9 +4402,7 @@ testing.test("the claimant cannot delete an outcome under any name it is given",
         testing.eq(result.code, 1)
         testing.ok(result.message:find("claimed by project-run/a", 1, true), result.message)
         testing.ok(result.message:find("Pass the change back", 1, true), result.message)
-        for _, call in ipairs(backend.calls) do
-            testing.eq(call[1], "comments")
-        end
+        only_comment_reads(backend)
         result = cmd_board.run(
             "outcome",
             { "cccccccc", "--delete", "1", "--reason", "x", "--as", "project-run/b" },
@@ -4432,9 +4436,7 @@ do
                 result.message
             )
             testing.ok(result.message:find("Move the card to Backlog", 1, true), result.message)
-            for _, call in ipairs(backend.calls) do
-                testing.eq(call[1], "comments")
-            end
+            only_comment_reads(backend)
         end)
     end)
 
@@ -4447,9 +4449,7 @@ do
                 result.message:find("claimed by dotfiles/implementer/a", 1, true),
                 result.message
             )
-            for _, call in ipairs(backend.calls) do
-                testing.eq(call[1], "comments")
-            end
+            only_comment_reads(backend)
         end)
     end)
 
@@ -4470,9 +4470,7 @@ do
                     result.message:find("claimed by dotfiles/implementer/a", 1, true),
                     result.message
                 )
-                for _, call in ipairs(backend.calls) do
-                    testing.eq(call[1], "comments")
-                end
+                only_comment_reads(backend)
             end)
         end
     end)
@@ -4484,9 +4482,7 @@ do
                 local result = cmd_board.run(edit[1], edit[2], backend)
                 testing.eq(result.code, 1)
                 testing.ok(result.message:find("Only the lead may", 1, true), result.message)
-                for _, call in ipairs(backend.calls) do
-                    testing.eq(call[1], "comments")
-                end
+                only_comment_reads(backend)
             end)
         end
     end)
@@ -4515,7 +4511,7 @@ do
         end)
     end)
 
-    local function released_by(name, claimant)
+    local function backend_with_released_claim(name, claimant)
         local card = colored("green")
         card.claimant = claimant
         card.outcomes = outcomes(2)
@@ -4528,7 +4524,7 @@ do
     end
 
     testing.test("a claim released with no work does not make a past claimant", function()
-        local backend = released_by("project-run/main")
+        local backend = backend_with_released_claim("project-run/main")
         backend.listed[2] = nil
         as_agent("project-run/main", function()
             local result = cmd_board.run(
@@ -4542,7 +4538,7 @@ do
     end)
 
     testing.test("a later claimant's note does not make an idle claim a past claimant", function()
-        local backend = released_by("project-run/main")
+        local backend = backend_with_released_claim("project-run/main")
         local other = board.claim_record("project-run/a")
         backend.listed[2] = { id = COMMENT_2, who = "human", body = other }
         backend.listed[3] = { id = COMMENT_1, who = "human", body = "Built the change." }
@@ -4553,7 +4549,7 @@ do
 
     testing.test("a name that released the card cannot reclaim the finish line", function()
         local released = "project-run/a"
-        local backend = released_by(released)
+        local backend = backend_with_released_claim(released)
         as_agent(released, function()
             local runs = {
                 { "outcome", { "cccccccc", "A", "new", "outcome" } },
@@ -4570,40 +4566,34 @@ do
                 )
             end
         end)
-        for _, call in ipairs(backend.calls) do
-            testing.eq(call[1], "comments")
-        end
+        only_comment_reads(backend)
     end)
 
     testing.test("an --as name of a former claimant cannot reclaim the finish line", function()
         local released = "project-run/a"
-        local backend = released_by(released)
+        local backend = backend_with_released_claim(released)
         as_agent("project-run/b", function()
             local result =
                 cmd_board.run("outcome", { "cccccccc", "--convert", "--as", released }, backend)
             testing.eq(result.code, 1)
             testing.ok(result.message:find("was claimed by " .. released, 1, true), result.message)
         end)
-        for _, call in ipairs(backend.calls) do
-            testing.eq(call[1], "comments")
-        end
+        only_comment_reads(backend)
     end)
 
     testing.test("a failed comments read refuses the reclaim check with its message", function()
-        local backend = released_by("project-run/a")
+        local backend = backend_with_released_claim("project-run/a")
         backend.listed_error = "comments are unavailable"
         as_agent("project-run/b", function()
             local result = cmd_board.run("checks", { "cccccccc", "dev test" }, backend)
             testing.eq(result.code, 1)
             testing.eq(result.message, "Comments are unavailable.")
         end)
-        for _, call in ipairs(backend.calls) do
-            testing.eq(call[1], "comments")
-        end
+        only_comment_reads(backend)
     end)
 
     testing.test("a name that never claimed the card and the lead can still change it", function()
-        local backend = released_by("project-run/a")
+        local backend = backend_with_released_claim("project-run/a")
         as_agent("project-run/b", function()
             testing.eq(cmd_board.run("checks", { "cccccccc", "dev test" }, backend).code, nil)
         end)
@@ -4615,7 +4605,7 @@ do
             )
             testing.eq(result.code, nil)
         end)
-        backend = released_by("lead", "lead")
+        backend = backend_with_released_claim("lead", "lead")
         as_agent(LEAD, function()
             local result = cmd_board.run(
                 "outcome",
@@ -4669,9 +4659,7 @@ testing.test(
                 )
             end
         end)
-        for _, call in ipairs(backend.calls) do
-            testing.eq(call[1], "comments")
-        end
+        only_comment_reads(backend)
     end
 )
 
@@ -4772,15 +4760,18 @@ testing.test("convert refuses a claimant's ticks but moves an unticked checklist
     local result =
         cmd_board.run("outcome", { "cccccccc", "--convert", "--as", "project-run/a" }, backend)
     testing.eq(result.code, 1)
-    for _, call in ipairs(backend.calls) do
-        testing.eq(call[1], "comments")
-    end
+    only_comment_reads(backend)
     card.description = V1
+    local add = backend.add_outcome
+    function backend:add_outcome(id, text, fence)
+        card.outcomes[#card.outcomes + 1] = { id = "s" .. (#card.outcomes + 1), name = text }
+        return add(self, id, text, fence)
+    end
     as_agent(LEAD, function()
         result = cmd_board.run("outcome", { "cccccccc", "--convert" }, backend)
     end)
-    testing.ok(not (result.message or ""):find("claimed", 1, true), result.message)
-    testing.eq(backend.calls[#backend.calls][1], "add_outcome")
+    testing.eq(result.output, "outcome cccccccc converted 1 outcome")
+    testing.eq(backend.calls[#backend.calls][1], "set_description")
 end)
 
 testing.test("outcome warns about a path in the text and still writes", function()
