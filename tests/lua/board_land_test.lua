@@ -4316,6 +4316,22 @@ testing.test("land removes the worktree and branch in a git project", function()
     ffi.C.setenv("DEV_WS_ROOT", "", 1)
 end)
 
+testing.test("land cleanup leaves a stray file named like the card in place", function()
+    local base = assert(fs.realpath(support.tempdir()))
+    local root = assert(fs.realpath(support.tempdir()))
+    support.git(root, "init", "-q", "-b", "master")
+    support.git(root, "commit", "-q", "--allow-empty", "-m", "base")
+    local folder = base .. "/" .. fs.basename(root)
+    assert(fs.mkdir(folder, { parents = true }), "mkdir failed")
+    local stray = folder .. "/card"
+    assert(fs.write(stray, "x"), "write failed")
+    ffi.C.setenv("DEV_WS_ROOT", base, 1)
+    local lines = cmd_board.clean_up(root, "card")
+    ffi.C.setenv("DEV_WS_ROOT", "", 1)
+    testing.ok(lines:find("Kept the workspace.", 1, true), lines)
+    testing.eq(fs.exists(stray), true)
+end)
+
 local function git_dev(project, args, extra)
     local env = {}
     for name, value in pairs(support.GIT_IDENT) do

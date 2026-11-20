@@ -601,6 +601,8 @@ end
 ---@field warn fun(line: string)? nil when unset, called with a line for each process inside the
 ---   folder before it moves
 ---@field missing string? nil when unset, the recorded folder that is already gone
+---@field stray boolean? false when unset, refuses a plain file as not a workspace and otherwise
+---   moves it to the trash
 
 ---@class dev.cmd.ws.detach.Opts
 ---@field backend dev.vcs.Backend? the backend that forgets or removes, nil to do nothing
@@ -851,7 +853,7 @@ function M.remove(root, name, opts)
     end
     local real = fs.realpath(path)
     local real_root = fs.realpath(root)
-    local stray = fs.is_file(path)
+    local stray = opts.stray and fs.is_file(path)
     if not fs.is_dir(path) and not stray then
         if opts.inside and real_base and real_root and not under(real_root, real_base) then
             return refused({ reason = Refusal.OUTSIDE, path = root, base = base })
@@ -928,6 +930,7 @@ M.handlers["ws rm"] = function(ctx)
     local name = parse(ctx)
     local result = M.remove(ctx.root, name, {
         forgotten = discard,
+        stray = true,
         show = function(argv)
             verb.show(ctx, argv)
         end,

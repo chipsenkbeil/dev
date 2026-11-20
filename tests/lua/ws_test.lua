@@ -1,3 +1,4 @@
+local ffi = require("ffi")
 local testing = require("dev.testing")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
@@ -1029,6 +1030,30 @@ testing.test("ws rm moves a stray file to the trash", function()
     -- Expect no jj run and the workspace untouched
     testing.eq(fs.exists(log), false)
     testing.eq(fs.is_dir(path), true)
+end)
+
+testing.test("ws.remove refuses a stray file unless it is given stray = true", function()
+    -- Drop a stray file under the repo's workspace folder
+    local base = assert(fs.realpath(support.tempdir()))
+    local root = assert(fs.realpath(support.tempdir()))
+    local folder = base .. "/" .. fs.basename(root)
+    assert(fs.mkdir(folder, { parents = true }))
+    local stray = folder .. "/check.log"
+    assert(fs.write(stray, "x"))
+    ffi.C.setenv("DEV_WS_ROOT", base, 1)
+
+    -- Remove it without the option, then with it
+    local refused = cmd_ws.remove(root, "check.log")
+    local kept = fs.exists(stray)
+    local moved = cmd_ws.remove(root, "check.log", { stray = true })
+    ffi.C.setenv("DEV_WS_ROOT", "", 1)
+
+    -- Expect the first refused with the file kept and the second to move it
+    testing.eq(refused.ok, false)
+    testing.eq(refused.reason, cmd_ws.Refusal.NOT_WORKSPACE)
+    testing.eq(kept, true)
+    testing.eq(moved.ok, true, moved.message)
+    testing.eq(fs.exists(stray), false)
 end)
 
 testing.test("ws rm still refuses a folder with uncommitted changes", function()
