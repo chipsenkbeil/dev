@@ -3088,6 +3088,42 @@ testing.test("queued add --board replays on the named board with its flags as ty
     testing.ok(calls(root):find("/api/boards/board-3", 1, true), calls(root))
 end)
 
+testing.test("a crossboard note replays on the named board once Pomb is back", function()
+    local root, home = pomb()
+    assert(
+        fs.write(
+            root .. "/boards.json",
+            '[{"id":"board-1","name":"dotfiles","archived":false},'
+                .. '{"id":"board-3","name":"ci","archived":false}]'
+        )
+    )
+    assert(
+        fs.write(
+            root .. "/ci.json",
+            '{"id":"board-3","name":"ci","columns":[{"id":"col-ci-backlog","name":"Backlog"}]}'
+        )
+    )
+    assert(fs.write(root .. "/down", ""))
+    local args = { ID_A:sub(1, 8), "--board", "ci", "kept", "words" }
+    local out, code = pomb_dev(root, home, { "board", "note", unpack(args) })
+    testing.eq(out, QUEUED)
+    testing.eq(code, 0)
+    local entries = document(queue_path(home))
+    testing.eq(#entries, 1)
+    testing.eq(entries[1].sub, "note")
+    testing.eq(entries[1].args, args)
+    assert(fs.remove(root .. "/down"))
+    out, code = pomb_dev(root, home, { "board", "sync" })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("synced note aaaaaaaa", 1, true), out)
+    testing.ok(calls(root):find("/api/boards/board-3", 1, true), calls(root))
+    local note_call = "POST https://pomb.example/api/tasks/" .. ID_A .. "/comments"
+    testing.ok(calls(root):find(note_call, 1, true), calls(root))
+    testing.ok(fs.read(root .. "/bodies"):find("kept words", 1, true), "note body was not sent")
+    local left = fs.exists(queue_path(home)) and document(queue_path(home)) or {}
+    testing.eq(#left, 0)
+end)
+
 testing.test("link posts to the task and queues while Pomb is unreachable", function()
     local root, home = pomb()
     local out, code =
