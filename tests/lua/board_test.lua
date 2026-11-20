@@ -12806,6 +12806,47 @@ testing.test("add --top --id-only prints the id alone", function()
     testing.ok(pomb_out:match("^%x%x%x%x%x%x%x%x%-[%x%-]+\n?$"), pomb_out)
 end)
 
+testing.test("add --before --id-only prints the id alone", function()
+    local root, home, ids = local_cards()
+    local out, code = dev(root, home, add_args("Mid", { "--before", ids.Three, "--id-only" }))
+    testing.eq(code, 0, out)
+    testing.ok(out:match("^%x%x%x%x%x%x%x%x%-[%x%-]+\n?$"), out)
+    local pomb_out, status = pomb_placed({ "--before", "11111111-b", "--id-only" })
+    testing.eq(status, 0, pomb_out)
+    testing.ok(pomb_out:match("^%x%x%x%x%x%x%x%x%-[%x%-]+\n?$"), pomb_out)
+end)
+
+testing.test("add --after --id-only prints the id alone", function()
+    local root, home, ids = local_cards()
+    local out, code = dev(root, home, add_args("Mid", { "--after", ids.One, "--id-only" }))
+    testing.eq(code, 0, out)
+    testing.ok(out:match("^%x%x%x%x%x%x%x%x%-[%x%-]+\n?$"), out)
+    local pomb_out, status = pomb_placed({ "--after", "11111111-a", "--id-only" })
+    testing.eq(status, 0, pomb_out)
+    testing.ok(pomb_out:match("^%x%x%x%x%x%x%x%x%-[%x%-]+\n?$"), pomb_out)
+end)
+
+testing.test("add exits 1 when the move after it fails", function()
+    -- Refuse the move that places the added card
+    local backend = fake(sample())
+    function backend:move()
+        return nil, "pomb refused"
+    end
+
+    -- Add a card at the top of its column
+    local args = new_card_args()
+    args[#args + 1] = "--top"
+    local result = cmd_board.run("add", args, backend)
+
+    -- Report the card as added but not placed
+    testing.eq(result.code, 1)
+    testing.ok(
+        result.message:find("cccccccc was added to Backlog but not placed.", 1, true),
+        result.message
+    )
+    testing.ok(result.unqueued)
+end)
+
 local function crowded(rooms)
     local mover = planned()
     mover.column = support.COLUMN_NAME.VERIFY
