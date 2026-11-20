@@ -40,6 +40,7 @@ local function env_of(home, extra)
         HOME = home,
         XDG_STATE_HOME = home .. "/state",
         CLAUDE_SESSION_ID = "one",
+        DEV_AGENT = "dotfiles/one",
         DEV_PASS_LOCK = home .. "/pass.lock",
     }
     for name, value in pairs(extra or {}) do
@@ -1692,7 +1693,7 @@ testing.test("a local board appends, rewords, ticks and unticks outcomes by numb
     out, code = dev(root, home, { "board", "outcome", a, "C works" })
     testing.eq(out, "outcome " .. a .. " 3 added\n")
     out = dev(root, home, { "board", "outcome", a, "--tick", "2" })
-    testing.eq(out, "outcome " .. a .. " 2 ticked\n")
+    testing.eq(out, "outcome " .. a .. " 2 ticked by dotfiles/one\n")
     out = dev(
         root,
         home,
@@ -1942,7 +1943,7 @@ testing.test("a local board ticks an outcome while this machine holds the claim"
     local out, code = dev(root, home, { "board", "take", a })
     testing.eq(code, 0, out)
     out, code = dev(root, home, { "board", "outcome", a, "--tick", "1" })
-    testing.eq(code, 2, out)
+    testing.eq(code, 1, out)
     testing.eq(document(file_of(home)).cards[1].outcomes[1].done, false)
     out, code = dev(root, home, { "board", "outcome", a, "--tick", "1", "--as", "r/reviewer" })
     testing.eq(code, 0, out)
@@ -2260,7 +2261,7 @@ testing.test("a move by another name after the lease lapsed is refused", functio
     local root, home = local_board()
     local a = lapsed_in_progress(root, home)
     local out, code = dev(root, home, { "board", "move", a, Column.REVIEW }, {
-        CLAUDE_SESSION_ID = "other",
+        DEV_AGENT = "dotfiles/other",
     })
     testing.eq(code, 1, out)
     testing.ok(out:find("The claim of ", 1, true), out)
@@ -2323,7 +2324,7 @@ testing.test("a move by another name with no claim state leaves the claim held",
     assert(fs.write(file_of(home), assert(json.encode(doc))))
     without_claim_state(home)
     dev(root, home, { "board", "move", a, Column.REVIEW }, {
-        CLAUDE_SESSION_ID = "other",
+        DEV_AGENT = "dotfiles/other",
     })
     testing.ok(document(file_of(home)).cards[1].claim ~= nil, "claim kept")
 end)
@@ -2333,7 +2334,7 @@ testing.test("a move while another claimant holds the card is refused", function
     local a = lapsed_in_progress(root, home)
 
     -- Another claimant takes the lapsed card
-    local out, code = dev(root, home, { "board", "take", a }, { CLAUDE_SESSION_ID = "other" })
+    local out, code = dev(root, home, { "board", "take", a }, { DEV_AGENT = "dotfiles/other" })
     testing.eq(code, 0, out)
 
     -- The first claimant's move is refused
@@ -2432,7 +2433,12 @@ end)
 testing.test("on a local board an early tick keeps a Review card in Review", function()
     local root, home = local_board()
     local a = in_review(root, home)
-    local out, code = dev(root, home, { "board", "outcome", a, "Second", "works" })
+    local out, code = dev(
+        root,
+        home,
+        { "board", "outcome", a, "Second", "works" },
+        { DEV_AGENT = "dotfiles/planner" }
+    )
     testing.eq(code, 0, out)
     out, code = dev(root, home, { "board", "outcome", a, "--tick", "1", "--as", "r/verifier" })
     testing.eq(code, 0, out)
@@ -2472,26 +2478,24 @@ testing.test("take holds a claim with an expiry and no loop, and release gives i
         "expiry in the future"
     )
     out = dev(root, home, { "board", "ls" })
-    testing.ok(out:find("dev@", 1, true), out)
+    testing.ok(out:find("dotfiles/one", 1, true), out)
     out = dev(root, home, { "board", "next" })
     testing.eq(out, "No ready cards.\n")
-    out, code = dev(root, home, { "board", "take", a }, { CLAUDE_SESSION_ID = "other" })
+    out, code = dev(root, home, { "board", "take", a }, { DEV_AGENT = "dotfiles/other" })
     testing.eq(code, 1)
-    testing.ok(out:find("is claimed by dev@", 1, true), out)
+    testing.ok(out:find("is claimed by dotfiles/one", 1, true), out)
     out = dev(root, home, { "board", "take", a })
     testing.eq(out:find("took " .. a .. ", fence 1, held for 50m\n\n", 1, true), 1, out)
     out = dev(root, home, { "board", "release", a })
     testing.eq(out, "released " .. a .. ", fence 1\n")
     out = dev(root, home, { "board", "ls", "--column", Column.PROGRESS })
     testing.ok(out:find("Card", 1, true), out)
-    out = dev(root, home, { "board", "take", a }, { CLAUDE_SESSION_ID = "other" })
+    out = dev(root, home, { "board", "take", a }, { DEV_AGENT = "dotfiles/other" })
     testing.eq(out:find("took " .. a .. ", fence 2, held for 50m\n\n", 1, true), 1, out)
 end)
 
-local function unnamed_card(tty)
+local function unnamed_card()
     local root, home = local_board()
-    assert(fs.write(root .. "/bin/ps", "#!/bin/sh\necho '" .. tty .. "'\n"))
-    assert(dev_os.run({ "chmod", "755", root .. "/bin/ps" }) == 0, "chmod failed")
     local out = dev(root, home, {
         "board",
         "add",
@@ -2516,23 +2520,27 @@ local function unnamed_card(tty)
     return root, home, prefix_of(out)
 end
 
-testing.test("two runs from one terminal share a claimant", function()
-    local root, home, a = unnamed_card("ttys042")
-    local out, code = dev(root, home, { "board", "take", a }, { CLAUDE_SESSION_ID = "" })
-    testing.eq(code, 0, out)
-    out, code = dev(root, home, { "board", "take", a }, { CLAUDE_SESSION_ID = "" })
-    testing.eq(code, 0, out)
-    out = dev(root, home, { "board", "ls" }, { CLAUDE_SESSION_ID = "" })
-    testing.ok(out:find("-ttys042", 1, true), out)
+testing.test("a caller with no DEV_AGENT claims nothing on a local board", function()
+    local root, home, a = unnamed_card()
+    local out, code = dev(root, home, { "board", "take", a }, { DEV_AGENT = "" })
+    testing.eq(code, 2, out)
+    testing.ok(out:find("Set DEV_AGENT to <repo>/<role>[/<card>]", 1, true), out)
+    testing.eq(document(file_of(home)).cards[1].claim, nil)
 end)
 
-testing.test("a caller with no terminal keeps the pid in its claimant", function()
-    local root, home, a = unnamed_card("??")
-    local out, code = dev(root, home, { "board", "take", a }, { CLAUDE_SESSION_ID = "" })
+testing.test("take --from with no DEV_AGENT keeps the old claim", function()
+    local root, home, a = unnamed_card()
+    local out, code = dev(root, home, { "board", "take", a })
     testing.eq(code, 0, out)
-    out, code = dev(root, home, { "board", "take", a }, { CLAUDE_SESSION_ID = "" })
-    testing.eq(code, 1)
-    testing.ok(out:find("is claimed by dev@", 1, true), out)
+    out, code = dev(
+        root,
+        home,
+        { "board", "take", a, "--from", "dotfiles/one" },
+        { DEV_AGENT = "" }
+    )
+    testing.eq(code, 2, out)
+    testing.ok(out:find("Set DEV_AGENT to <repo>/<role>[/<card>]", 1, true), out)
+    testing.eq(document(file_of(home)).cards[1].claim.claimant, "dotfiles/one")
 end)
 
 testing.test("a stale fence is refused once another process holds the claim", function()
@@ -2564,7 +2572,7 @@ testing.test("a stale fence is refused once another process holds the claim", fu
     assert(fs.write(file_of(home), assert(json.encode(doc))))
     local out, code = dev(root, home, { "board", "note", a, "hello" })
     testing.eq(code, 1)
-    testing.ok(out:find("is held by dev@", 1, true) and out:find("fence 9", 1, true), out)
+    testing.ok(out:find("is held by dotfiles/one", 1, true) and out:find("fence 9", 1, true), out)
 end)
 
 testing.test("an expired claim does not block the card", function()

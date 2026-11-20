@@ -1727,11 +1727,11 @@ A Ready card moves to In Progress with the claim. A card in any other column
 keeps its column.
 
 The claimant is the name from `take --as NAME`, else the `DEV_AGENT`
-environment variable, else `dev@<host>:<session>`. The session is
-`CLAUDE_SESSION_ID`, else the login user and the controlling terminal of dev's
-process, else that process's pid when it has no terminal. A name is one word of
-letters, digits and `.`, `-`, `_` and `/`, else exit 2. `ls` shows it as the
-holder.
+environment variable. With neither set, `take` and a `move` into In Progress are
+refused with `Set DEV_AGENT to <repo>/<role>[/<card>] to claim a card.` (exit 2)
+and claim nothing, so neither verb holds a claim under a host name. A name is
+one word of letters, digits and `.`, `-`, `_` and `/`, else exit 2. `ls` shows
+it as the holder.
 
 Agents name themselves `<repo>/<role>[/<card>]`: the board name, any role word
 and an optional card id, as in `dotfiles/lead` and
@@ -1740,8 +1740,7 @@ The usual roles are `lead`, `runner`, `planner`, `implementer`, `code-examiner`,
 `style-examiner`, `recheck-examiner`, `verifier`, `land`, `release` and `check`.
 
 A grab on a Pomb card sends the role part of that name as the owner's `role`,
-so `dotfiles/implementer/f5f0e007` sends `implementer`. A name with no role
-part, such as the default `dev@<host>:<session>`, sends no role.
+so `dotfiles/implementer/f5f0e007` sends `implementer`.
 
 A name of another shape is refused with
 `An agent name is <repo>/<role>[/<card>], got NAME.` (exit 2). That happens when
@@ -1749,8 +1748,6 @@ A name of another shape is refused with
 came from `DEV_AGENT` or `--as`. Every other verb on a card already claimed
 under that exact name passes, so a card claimed under an older name finishes and
 lands under it.
-
-An unset or empty `DEV_AGENT` is accepted.
 
 `move CARD progress` takes the claim itself, under the same name and with the
 same keep-alive loop, when nobody holds the card. A card with children stays
@@ -3064,9 +3061,8 @@ Who may record:
 
 - The card's claimant is refused for every kind (exit 1), whether NAME is the
   claimant or the caller is. The caller is its `DEV_AGENT` or, with that unset,
-  the default name a claim without a name is held under (a `dev@host:session`
-  name that `take` gives). This keeps a claimant from reviewing its own change
-  under either name.
+  the default name a review without a name uses (a `dev@host:session` name).
+  This keeps a claimant from reviewing its own change under either name.
 - So is every name that took the card before, read from its `dev-claim:` notes,
   so a claim that lapsed does not free its holder to review.
 - The message names the claimant and says a reviewer other than it must record
@@ -4272,9 +4268,8 @@ A full in-flight limit:
 
 The claim:
 
-- It is `POST /api/tasks/{id}/owner` with `name` NAME, else `DEV_AGENT`, else
-  `dev@<host>:<CLAUDE_SESSION_ID, else the user and terminal, else the pid>`,
-  and `ttl_seconds` 900.
+- It is `POST /api/tasks/{id}/owner` with `name` NAME, else `DEV_AGENT`, and
+  `ttl_seconds` 900. With neither, dev claims nothing and exits 2.
 - NAME is one word of letters, digits and `.`, `-`, `_` and `/`, at most 200
   characters, else exit 2.
 - When this machine already holds a fence, dev renews it through

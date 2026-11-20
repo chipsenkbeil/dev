@@ -380,7 +380,25 @@ testing.test("a tick writes a dev-tick record naming who ticked", function()
     testing.eq(comments(home)[1].body, "dev-tick: by=dotfiles/verifier outcome=1")
 end)
 
-testing.test("review refuses a default-named claimant when DEV_AGENT is unset", function()
+testing.test("a take with DEV_AGENT unset claims nothing, so no claimant reviews itself", function()
+    local root, home = git_root()
+    local id = card_in(root, home)
+    local out, code = support.dev(root, { "board", "take", id }, {
+        env = {
+            HOME = home,
+            XDG_STATE_HOME = home .. "/state",
+            JJ_USER = "t",
+            JJ_EMAIL = "t@example.com",
+            DEV_AGENT = "",
+            CLAUDE_SESSION_ID = "dotfiles/builder",
+        },
+    })
+    testing.eq(code, 2, out)
+    testing.ok(out:find("Set DEV_AGENT to <repo>/<role>[/<card>]", 1, true), out)
+    testing.eq(#comments(home), 0)
+end)
+
+testing.test("review refuses an older default-named claimant when DEV_AGENT is unset", function()
     local root, home = git_root()
     local id = card_in(root, home)
     local function run(session, args)
@@ -395,10 +413,25 @@ testing.test("review refuses a default-named claimant when DEV_AGENT is unset", 
             },
         })
     end
-    must(run("dotfiles/builder", { "board", "take", id }))
+    must(support.dev(root, { "board", "take", id }, {
+        env = {
+            HOME = home,
+            XDG_STATE_HOME = home .. "/state",
+            JJ_USER = "t",
+            JJ_EMAIL = "t@example.com",
+            DEV_AGENT = "dotfiles/builder",
+        },
+    }))
+    local host = dev_os.capture({ "hostname", "-s" }):gsub("%s+$", "")
+    local old = "dev@" .. host .. ":builder"
+    local path = support.board_file(home, "mine")
+    local doc = assert(json.decode(assert(fs.read(path))))
+    doc.cards[1].claim.claimant = old
+    doc.cards[1].comments[1].body = "dev-claim: by=" .. old
+    assert(fs.write(path, assert(json.encode(doc))))
     for _, kind in ipairs({ "code", "style", "recheck" }) do
         local out, code = run(
-            "dotfiles/builder",
+            "builder",
             support.with_of(kind, {
                 "board",
                 "review",
@@ -416,7 +449,6 @@ testing.test("review refuses a default-named claimant when DEV_AGENT is unset", 
         testing.eq(code, 1, out)
         testing.ok(out:find("cannot review its own change", 1, true), out)
     end
-    testing.eq(#comments(home), 1)
     local out, code = run("reviewer", {
         "board",
         "review",

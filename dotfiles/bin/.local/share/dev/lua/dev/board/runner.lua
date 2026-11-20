@@ -37,11 +37,16 @@ local function owner_holds(card)
     end
 end
 
----Refuse a name that is not <repo>/<role>[/<card>] when it would take a new claim.
+local UNNAMED_REFUSAL = "Set DEV_AGENT to <repo>/<role>[/<card>] to claim a card."
+
+---Refuse a missing name, or one that is not <repo>/<role>[/<card>], when it would take a new claim.
 ---@param name string? the agent name, nil when none is set
 ---@return dev.cmd.board.Result? err the usage error, nil when the name passes
 local function shape_refusal(name)
-    if name and not board.agent_shape(name) then
+    if not name then
+        return usage(UNNAMED_REFUSAL)
+    end
+    if not board.agent_shape(name) then
         return usage("An agent name is <repo>/<role>[/<card>], got " .. name .. ".")
     end
 end
@@ -141,10 +146,13 @@ end
 ---Claim a card and start the keepalive that renews the claim.
 ---@param backend dev.board.Backend the board
 ---@param card dev.board.Card the card to claim
----@param name string? the agent name, nil to name the host and session
+---@param name string? the agent name, nil when none is set, which is refused
 ---@return dev.cmd.board.Result result the output, or a message and the exit code
 ---@return integer? fence the fence of the claim, nil when it failed
 local function claim_card(backend, card, name)
+    if not name then
+        return usage(UNNAMED_REFUSAL)
+    end
     local held = claims.read(card.id)
     local who = claimant(name)
     local fence, message = backend:claim(card.id, who, {

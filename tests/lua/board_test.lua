@@ -6750,7 +6750,7 @@ local function dev(root, home, args, opts)
         ROOT = root,
         XDG_STATE_HOME = home .. "/state",
         CI = "",
-        DEV_AGENT = opts.agent or "",
+        DEV_AGENT = opts.agent == nil and "dotfiles/one" or opts.agent,
         DEV_PASS_LOCK = root .. "/pass.lock",
     }
     for name, value in pairs(opts.env or {}) do
@@ -7407,7 +7407,7 @@ testing.test("outcome posts a subtask and patches the Nth by its id", function()
     testing.eq(code, 0, out)
     testing.eq(out, "outcome 11111111 3 added\n")
     out, code = dev(root, home, { "board", "outcome", "11111111", "--tick", "1" })
-    testing.eq(out, "outcome 11111111 1 ticked\n")
+    testing.eq(out, "outcome 11111111 1 ticked by dotfiles/one\n")
     out = dev(
         root,
         home,
@@ -7434,7 +7434,12 @@ testing.test("a claimed card's tick needs a name other than the claimant's", fun
     local claimed =
         export_with_subtasks_card({ holder = "project-run/a", lease_expires_at = LIVE_LEASE })
     local root, home = sandbox({ export = claimed })
-    local out, code = dev(root, home, { "board", "outcome", "11111111", "--tick", "1" })
+    local out, code = dev(
+        root,
+        home,
+        { "board", "outcome", "11111111", "--tick", "1" },
+        { agent = "" }
+    )
     testing.eq(code, 2, out)
     testing.ok(out:find("needs the ticker's name", 1, true), out)
     out, code = dev(
@@ -9649,14 +9654,14 @@ testing.test(
         local calls = read(root, "calls")
         testing.ok(calls:find("/api/tasks/" .. ID_A .. "/owner", 1, true), calls)
         testing.ok(calls:find('"ttl_seconds":900', 1, true), calls)
-        testing.ok(calls:find('"name":"dev@', 1, true), calls)
+        testing.ok(calls:find('"name":"dotfiles/one"', 1, true), calls)
         testing.ok(wait_until(function()
             return heartbeats(root) >= 3
         end))
         local renewed = read(root, "calls"):match("[^\n]*/owner/renew\n?")
         testing.ok(renewed:find("/api/tasks/" .. ID_A .. "/owner/renew", 1, true), renewed)
         testing.ok(renewed:find("If-Owner-Fence: 7", 1, true), renewed)
-        testing.ok(renewed:find('"name":"dev@', 1, true), renewed)
+        testing.ok(renewed:find('"name":"dotfiles/one"', 1, true), renewed)
         testing.ok(renewed:find('"ttl_seconds":900', 1, true), renewed)
         dev(root, home, { "board", "release", "11111111-a" })
     end
@@ -9694,15 +9699,27 @@ testing.test("a claim renew sends the role part of the name under DEV_AGENT", fu
     dev(root, home, { "board", "release", "11111111-a" }, agent)
 end)
 
-testing.test("take without DEV_AGENT sends no role with the grab", function()
+testing.test("take with no DEV_AGENT is refused and claims nothing", function()
     local root, home = sandbox({ export = PLANNED_EXPORT })
-    local out, code = dev(root, home, { "board", "take", "11111111-a" })
-    testing.eq(code, 0, out)
-    local calls = read(root, "calls")
-    local grab = calls:match('[^\n]*"ttl_seconds":900[^\n]*')
-    testing.ok(grab, calls)
-    testing.eq(grab:find('"role"', 1, true), nil)
-    dev(root, home, { "board", "release", "11111111-a" })
+    local out, code = dev(root, home, { "board", "take", "11111111-a" }, { agent = "" })
+    testing.eq(code, 2, out)
+    testing.ok(out:find("Set DEV_AGENT to <repo>/<role>[/<card>]", 1, true), out)
+    testing.eq(read(root, "calls"):find("/owner", 1, true), nil)
+    testing.eq(fs.exists(state_file(home)), false)
+end)
+
+testing.test("a move to progress with no DEV_AGENT is refused and claims nothing", function()
+    local root, home = sandbox({ export = PLANNED_EXPORT })
+    local out, code = dev(
+        root,
+        home,
+        { "board", "move", "11111111-a", support.Column.PROGRESS },
+        { agent = "" }
+    )
+    testing.eq(code, 2, out)
+    testing.ok(out:find("Set DEV_AGENT to <repo>/<role>[/<card>]", 1, true), out)
+    testing.eq(read(root, "calls"):find("/owner", 1, true), nil)
+    testing.eq(fs.exists(state_file(home)), false)
 end)
 
 testing.test("the state file holds the card, the fence and the pid at mode 600", function()
@@ -9732,7 +9749,7 @@ testing.test("release ends the owner lease and stops the loop", function()
     local released = read(root, "calls"):match("[^\n]*/owner/release\n?")
     testing.ok(released:find("/api/tasks/" .. ID_A .. "/owner/release", 1, true), released)
     testing.ok(released:find("If-Owner-Fence: 7", 1, true), released)
-    testing.ok(released:find('"name":"dev@', 1, true), released)
+    testing.ok(released:find('"name":"dotfiles/one"', 1, true), released)
     testing.eq(fs.exists(state_file(home)), false)
     testing.ok(loop_gone(pid))
     local after = settle(root)
