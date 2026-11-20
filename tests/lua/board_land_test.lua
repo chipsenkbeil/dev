@@ -1842,6 +1842,68 @@ esac
         end
     )
 
+    testing.test("land carries past two rebases the check and reviews", function()
+        local project = jj_project()
+        local id = review_ready(project)
+        local before = head(project.root)
+        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(project.root)
+        local middle = head(project.root)
+        testing.ok(middle ~= before, "the first rebase must rewrite the commit")
+        trunk_moves(project, { ["notes.txt"] = "notes\n" })
+        rebase_onto_trunk(project.root)
+        testing.ok(head(project.root) ~= middle, "the second rebase must rewrite the commit")
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
+        testing.eq(code, 0, out)
+        local list = comments(project.home)
+        testing.ok(
+            list[#list].body:find(
+                "The check and reviews were carried over from commit " .. before:sub(1, 12),
+                1,
+                true
+            ),
+            list[#list].body
+        )
+        testing.eq(column_of(project.home), support.COLUMN_NAME.DONE)
+    end)
+
+    testing.test("land carries past three rebases through nested directories", function()
+        local project = jj_project()
+        local id = review_ready(project, "rg -n G shared.txt")
+        local before = head(project.root)
+        local moves = {
+            { ["lib/deep/one.txt"] = "one\n" },
+            { ["docs/two.txt"] = "two\n", ["lib/three.txt"] = "three\n" },
+            { ["four/five/six.txt"] = "six\n" },
+        }
+        for _, files in ipairs(moves) do
+            trunk_moves(project, files)
+            rebase_onto_trunk(project.root)
+        end
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
+        testing.eq(code, 0, out)
+        local list = comments(project.home)
+        testing.ok(
+            list[#list].body:find(
+                "The check and reviews were carried over from commit " .. before:sub(1, 12),
+                1,
+                true
+            ),
+            list[#list].body
+        )
+    end)
+
+    testing.test("land refuses a carry past two rebases when the checks rows changed", function()
+        local project = jj_project()
+        local id = review_ready(project, "rg -n G shared.txt")
+        trunk_moves(project, { ["docs.txt"] = "docs\n" })
+        rebase_onto_trunk(project.root)
+        trunk_moves(project, { ["notes.txt"] = "notes\n" })
+        rebase_onto_trunk(project.root)
+        must(dev(project, { "board", "checks", id, "rg -n a shared.txt" }, { DEV_AGENT = "" }))
+        refused(project, id, { "checks rows changed" }, { LAND_TRUNK = LAND_TRUNK_KEEP })
+    end)
+
     testing.test("a recheck keeps its of kind across a rebase carry-over", function()
         local function rechecked(ofs)
             local project = jj_project()
