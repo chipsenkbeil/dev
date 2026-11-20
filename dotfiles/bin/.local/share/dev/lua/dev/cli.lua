@@ -1,6 +1,7 @@
 local abandon = require("dev.cmd.abandon")
 local board = require("dev.cmd.board")
 local box = require("dev.cmd.box")
+local ci = require("dev.cmd.ci")
 local complete = require("dev.complete")
 local config = require("dev.config")
 local connect = require("dev.cmd.connect")
@@ -286,6 +287,7 @@ local function builtin_handler(row)
             or misc[row.name]
             or tools.handlers[row.name]
             or box.handlers[row.name]
+            or ci.handlers[row.name]
             or board.handlers[row.name]
             or connect.handlers[row.name]
             or init.handlers[row.name]

@@ -727,6 +727,23 @@ assert_eq "a shown box with no ssh user exits 6" "$?" "6"
 assert_contains "the missing ssh user is named" "$out" "has no tailnet name or ssh user"
 assert_not_contains "no et without an ssh user" "$(calls)" "et --ssh-option"
 
+# --- ci logs ---
+
+reset
+out="$(inproj ci logs 4711 2>&1)"
+assert_eq "ci logs exits 0" "$?" "0"
+assert_eq "ci logs reads the run in the project root" "$(calls)" "ci -C $PROJ logs 4711"
+reset
+inproj ci logs 4711 --job lint >/dev/null 2>&1
+assert_eq "ci logs passes --job through" "$(calls)" "ci -C $PROJ logs 4711 --job lint"
+reset
+out="$(inproj ci logs 2>&1)"
+assert_eq "ci logs with no RUN exits 2" "$?" "2"
+assert_contains "ci logs with no RUN is a usage error" "$out" "dev ci logs: Missing RUN."
+assert_eq "ci logs with no RUN calls no ci" "$(calls)" ""
+out="$(inproj ci logs 4711 --frob 2>&1)"
+assert_eq "ci logs rejects an unknown flag" "$?" "2"
+
 # --- dispatch ---
 
 out="$(box --remote box ls 2>&1)"

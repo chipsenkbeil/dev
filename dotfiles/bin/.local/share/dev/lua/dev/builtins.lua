@@ -263,6 +263,19 @@ return {
         desc = "Same as dev connect",
     },
     {
+        words = { "ci" },
+        noun = true,
+        desc = "Read what ci recorded",
+        group = "Boxes",
+    },
+    {
+        words = { "ci", "logs" },
+        handler = "lua",
+        flags = "--job",
+        usage = "dev ci logs RUN [--job JOB]",
+        desc = "Print a ci run's log",
+    },
+    {
         words = { "board" },
         noun = true,
         desc = "Read and update the project's board",

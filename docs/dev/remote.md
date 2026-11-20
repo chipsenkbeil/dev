@@ -230,6 +230,8 @@ plain `dev --remote` run leave it unset, so they pass no `--priority`.
 passes `--detach` in place of `--follow`, and ci prints the run id and returns.
 
 Read the run later with `ci ps <run> -w`, `ci logs <run>` or `ci ps <run>`.
+`dev ci logs RUN [--job JOB]` runs `ci logs` for the run in the project root,
+for an agent that may call `dev` only.
 
 ## Replacing the runner
 

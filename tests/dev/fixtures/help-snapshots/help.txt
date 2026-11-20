@@ -27,6 +27,7 @@ Set up a machine or project
 Boxes
   connect               Attach to a box or machine, creating a box if needed
   box                   Create, show, stop, resume, extend, retag and delete dev boxes
+  ci                    Read what ci recorded
 
 Greeting
   greet                 Say hello.
