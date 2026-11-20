@@ -2636,12 +2636,17 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         return id, older, newer
     end
 
-    testing.test("land carries from an older checked commit when the newest one differs", function()
+    local function carry_commits(final_shared)
         local project = jj_project()
-        local id, older = two_checked_commits({
+        local id, older, newer = two_checked_commits({
             project = project,
-            final_shared = "a\nb\nc\nd\ne\nf\nG\n",
+            final_shared = final_shared,
         })
+        return project, id, older, newer
+    end
+
+    testing.test("land carries from an older checked commit when the newest one differs", function()
+        local project, id, older = carry_commits("a\nb\nc\nd\ne\nf\nG\n")
         local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
         local list = comments(project.home)
@@ -2746,21 +2751,13 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
     end)
 
     testing.test("land names the newest checked commit when no candidate carries", function()
-        local project = jj_project()
-        local id, older, newer = two_checked_commits({
-            project = project,
-            final_shared = "a\nb\nc\nd\ne\nf\nZ\n",
-        })
+        local project, id, older, newer = carry_commits("a\nb\nc\nd\ne\nf\nZ\n")
         local out = refused(project, id, { "differs from the checked commit " .. newer:sub(1, 12) })
         testing.eq(out:find(older:sub(1, 12), 1, true), nil, out)
     end)
 
     testing.test("land refuses at once when jj cannot read the newest checked commit", function()
-        local project = jj_project()
-        local id, older, newer = two_checked_commits({
-            project = project,
-            final_shared = "a\nb\nc\nd\ne\nf\nG\n",
-        })
+        local project, id, older, newer = carry_commits("a\nb\nc\nd\ne\nf\nG\n")
         local out = refused(
             project,
             id,
@@ -2773,11 +2770,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
     testing.test(
         "land refuses at once when jj cannot read the newest checked commit's change",
         function()
-            local project = jj_project()
-            local id, older, newer = two_checked_commits({
-                project = project,
-                final_shared = "a\nb\nc\nd\ne\nf\nG\n",
-            })
+            local project, id, older, newer = carry_commits("a\nb\nc\nd\ne\nf\nG\n")
             local out = refused(
                 project,
                 id,
@@ -2802,11 +2795,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
     }
     for _, case in ipairs(failed_reads) do
         testing.test("land refuses at once when jj cannot read the older " .. case.name, function()
-            local project = jj_project()
-            local id, older, newer = two_checked_commits({
-                project = project,
-                final_shared = "a\nb\nc\nd\ne\nf\nG\n",
-            })
+            local project, id, older, newer = carry_commits("a\nb\nc\nd\ne\nf\nG\n")
             local out = refused(project, id, { case.message }, { [case.switch] = older })
             testing.eq(out:find("carried over", 1, true), nil, out)
             testing.eq(out:find(newer:sub(1, 12), 1, true), nil, out)
@@ -2814,11 +2803,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
     end
 
     testing.test("land names the older candidate when its interdiff read fails", function()
-        local project = jj_project()
-        local id, older = two_checked_commits({
-            project = project,
-            final_shared = "a\nb\nc\nd\ne\nf\nZ\n",
-        })
+        local project, id, older = carry_commits("a\nb\nc\nd\ne\nf\nZ\n")
         refused(
             project,
             id,
