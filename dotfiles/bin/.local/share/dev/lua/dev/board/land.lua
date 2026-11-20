@@ -1398,8 +1398,18 @@ local function patch_text(root, commit)
         return nil
     end
     local lines = {}
+    local index
     for line in out:gmatch("[^\n]*\n?") do
-        if line ~= "" and not line:find("^@@") and not line:find("^index ") then
+        if line:find("^diff ") then
+            index = nil
+        end
+        if line:find("^index ") then
+            index = line
+        elseif line:find("^Binary files") and index then
+            lines[#lines + 1] = index
+            lines[#lines + 1] = line
+            index = nil
+        elseif line ~= "" and not line:find("^@@") then
             lines[#lines + 1] = line
         end
     end
@@ -1416,8 +1426,9 @@ end
 ---Rerun the configured recheck rows on the landing commit when its patch is not the checked one.
 ---
 ---The patch is the commit's diff with its context lines, read without the hunk headers and blob
----ids, so a rebase that moves the lines or lets trunk touch other files leaves it equal and runs
----no row. A row fails the landing when it does not pass, and the first failure stops the run.
+---ids, except the blob ids of a binary file, so a rebase that moves the lines or lets trunk touch
+---other files leaves it equal and runs no row. A row fails the landing when it does not pass, and
+---the first failure stops the run.
 ---@param opts dev.board.land.recheck_problem.Opts the project, the carried commit and the
 ---   configured rows
 ---@return string? problem the refusal naming the failing row and its run id, nil when none ran or

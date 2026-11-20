@@ -2100,6 +2100,29 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         testing.ok(fs.is_file(marker), "the recheck row never ran")
     end)
 
+    testing.test("land reruns the recheck rows when a binary file changes", function()
+        -- Check a commit that holds a binary file, then change the file's bytes
+        local project = jj_project()
+        assert(fs.write(project.root .. "/blob.bin", "a\0one\0"), "write failed")
+        local before = head(project.root)
+        assert(fs.write(project.root .. "/blob.bin", "a\0two\0"), "write failed")
+        testing.ok(head(project.root) ~= before, "the commit did not change")
+
+        -- Recheck the new commit and expect the row to run and fail
+        local ran = 0
+        local problem = land.recheck_problem({
+            root = project.root,
+            commit = before,
+            card = "abc12345",
+            rows = { "false" },
+            note = function()
+                ran = ran + 1
+            end,
+        })
+        testing.eq(ran, 1)
+        testing.ok(problem and problem:find("recheck row failed", 1, true), tostring(problem))
+    end)
+
     testing.test("land takes no turn while the recheck rows run", function()
         -- Set up a recheck row that copies the board while it runs
         local snapshot = support.tempdir() .. "/board.json"

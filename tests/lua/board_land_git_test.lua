@@ -335,6 +335,29 @@ testing.test("git recheck skips rows on an unchanged patch", function()
     testing.ok(problem and problem:find("recheck row failed", 1, true), tostring(problem))
 end)
 
+testing.test("git recheck reruns rows when a binary file changes", function()
+    local root = with_origin({})
+    git(root, "checkout", "-q", "-b", "work")
+    write(root, "blob.bin", "a\0one\0")
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "feat: blob")
+    local checked = head(root)
+    write(root, "blob.bin", "a\0two\0")
+    git(root, "commit", "-q", "-a", "--amend", "-m", "feat: blob")
+    local ran = 0
+    local problem = land.recheck_problem({
+        root = root,
+        commit = checked,
+        card = "abc12345",
+        rows = { "false" },
+        note = function()
+            ran = ran + 1
+        end,
+    })
+    testing.eq(ran, 1)
+    testing.ok(problem and problem:find("recheck row failed", 1, true), tostring(problem))
+end)
+
 testing.test(
     "git recheck narrows a plain remote test row to the suites the change covers",
     function()
