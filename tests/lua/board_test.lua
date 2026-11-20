@@ -862,6 +862,51 @@ testing.test("add names the card when its blocked-by link fails", function()
     testing.ok(result.unqueued)
 end)
 
+testing.test("add reports the links made before a failing blocked-by", function()
+    -- Refuse the link to the second blocker after recording the first
+    local backend = fake(sample())
+    local link = backend.link
+    function backend:link(id, kind, other)
+        link(self, id, kind, other)
+        if other == ID_B then
+            return nil, "pomb refused"
+        end
+        return true
+    end
+
+    -- Add a card with two blockers
+    local result = cmd_board.run("add", {
+        "X",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+        "--blocked-by",
+        "11111111-a",
+        "--blocked-by",
+        "11111111-b",
+    }, backend)
+
+    -- Report how many links were made before the refusal
+    testing.eq(result.code, 1)
+    testing.eq(
+        result.message,
+        "cccccccc was added to Backlog but its blocked_by link to 11111111 was not. "
+            .. "1 of 2 links were made before it. Reason: pomb refused."
+    )
+
+    -- Record both link attempts and no more
+    testing.eq(backend.calls[2], { "link", ID_C, "blocked_by", ID_A })
+    testing.eq(backend.calls[3], { "link", ID_C, "blocked_by", ID_B })
+    testing.eq(#backend.calls, 3)
+end)
+
 testing.test("add names the card when its from link fails", function()
     local backend = fake(sample())
     function backend:link()
