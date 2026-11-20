@@ -3221,6 +3221,24 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         return first, second
     end
 
+    testing.test(
+        "land exits 1 and names the stop when the landing stopped without a word",
+        function()
+            local project = jj_project()
+            local id = verified_card(project)
+            local held = wiring.land_held
+            wiring.land_held = function()
+                return { output = "" }
+            end
+            local ok, result = pcall(land_through_stub, project, id, function() end)
+            wiring.land_held = held
+            assert(ok, result)
+            testing.eq(result.code, 1, result.output)
+            testing.ok(result.message:find("landing stopped", 1, true), result.message)
+            testing.ok(result.message:find(id:sub(1, board.MIN_PREFIX), 1, true), result.message)
+        end
+    )
+
     testing.test("land retries after trunk moved and closes both cards", function()
         local project = jj_project()
         local first, second = two_cards(project)
@@ -3690,7 +3708,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         testing.ok(claim_of(project.home, id).expires_at > short, out)
     end)
 
-    testing.test("a review record renews the claimant's claim", function()
+    testing.test("a review record leaves the claimant's claim as it was", function()
         local project = jj_project()
         local id = new_card(project)
         local builder = { DEV_AGENT = "dotfiles/builder" }
@@ -3701,7 +3719,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         testing.eq(code, 0, out)
         local claim = claim_of(project.home, id)
         testing.eq(claim.fence, fence)
-        testing.ok(claim.expires_at > short, claim.expires_at)
+        testing.eq(claim.expires_at, short)
     end)
 
     testing.test("a move by the claimant renews its claim", function()

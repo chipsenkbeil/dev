@@ -3753,6 +3753,16 @@ function commands.land(backend, args)
             clean_up = M.clean_up,
         })
         if not result.moved then
+            if not result.code and not (result.output or ""):find("^landed") then
+                result = failure(
+                    "Card "
+                        .. short
+                        .. " cannot land. The landing stopped after the recheck without pushing,"
+                        .. " and no step said why. Run `dev board land "
+                        .. short
+                        .. "` again."
+                )
+            end
             if hold.hold and result.code and not result.landed and not result.lost then
                 result.message = result.message .. wiring.kept_note(short)
                 return result
