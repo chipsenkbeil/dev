@@ -386,7 +386,7 @@ end
 ---Report whether a card outside Done blocks a card.
 ---A blocker the board no longer holds does not.
 ---@param id string the card id
----@return boolean? blocked, string? blocker the open blocker's id, or with nil the message that says the board cannot be read
+---@return boolean? blocked, string? blocker the open blocker's id, or the message when nil
 function Backend:blocked(id)
     local doc, message = self:__read()
     if not doc then

@@ -9880,6 +9880,22 @@ testing.test("take refuses a card with an open blocker and names it", function()
     testing.ok(result.message:find("Pomb is down", 1, true), result.message)
 end)
 
+testing.test("take lets a planner take a blocked card", function()
+    local export = export_with_first_card({
+        column_id = BACKLOG_COLUMN,
+        description = PLANNED_TEXT,
+        subtasks = SUBTASKS,
+        fields = "{}",
+    })
+    local links = '[{"kind":"blocked_by","target_id":"22222222-0000-0000-0000-000000000000"}]'
+    local root, home = sandbox({ export = export, links = links })
+    local agent = { agent = PLANNER }
+    local out, code = dev(root, home, { "board", "take", "11111111-a" }, agent)
+    testing.eq(code, 0, out)
+    testing.ok(out:find("^took 11111111"), out)
+    dev(root, home, { "board", "release", "11111111-a" }, agent)
+end)
+
 testing.test("take refuses a red Backlog card", function()
     local export = export_with_first_card({
         column_id = BACKLOG_COLUMN,
@@ -9982,6 +9998,21 @@ testing.test("take of a card in Review is not held to the Ready requirements", f
     local out, code = dev(root, home, { "board", "take", "11111111-a" })
     testing.eq(code, 0, out)
     testing.ok(out:find("^took 11111111"), out)
+end)
+
+testing.test("move to In Progress takes a card from Review past an open blocker", function()
+    local export = export_with_first_card({
+        column_id = support.column_id(support.Column.REVIEW),
+        description = PLANNED_TEXT,
+        subtasks = SUBTASKS,
+        fields = "{}",
+    })
+    local links = '[{"kind":"blocked_by","target_id":"22222222-0000-0000-0000-000000000000"}]'
+    local root, home = sandbox({ export = export, links = links })
+    local out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.PROGRESS })
+    testing.eq(code, 0, out)
+    testing.ok(not out:find("blocked by open card", 1, true), out)
+    dev(root, home, { "board", "release", "11111111-a" })
 end)
 
 testing.test("take of a card in Verify is not held to the Ready requirements", function()

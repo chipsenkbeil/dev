@@ -4453,6 +4453,46 @@ testing.test("next on a Pomb board skips a card whose blocker cannot be read", f
     testing.ok(not out:find("bbbbbbbb", 1, true), out)
 end)
 
+testing.test("blocked returns the open blocker id on a Pomb board", function()
+    local root, home = pomb()
+    local env = { ROOT = root, DEV_MAX_SIZE = "" }
+    assert(fs.write(root .. "/links_b.json", blocked_by(ID_C)))
+    assert(fs.write(root .. "/export.json", blocked_export(READY_COLUMN)))
+    local out, code = dev(root, home, { "board", "move", "bbbbbbbb", Column.PROGRESS }, env)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("is blocked by open card " .. ID_C, 1, true), out)
+end)
+
+testing.test("blocked returns the open blocker id on a local board", function()
+    local root, home = local_board()
+    local function add(name)
+        return prefix_of((dev(root, home, {
+            "board",
+            "add",
+            name,
+            "--column",
+            Column.READY,
+            "--size",
+            "1",
+            "--description",
+            PLANNED,
+            "--done-when",
+            JUDGED,
+            "--done-when",
+            JUDGED,
+            "--done-when",
+            JUDGED,
+            "--checks",
+            "dev test",
+        })))
+    end
+    local blocked, blocker = add("Blocked"), add("Blocker")
+    dev(root, home, { "board", "link", blocked, "blocked_by", blocker })
+    local out, code = dev(root, home, { "board", "move", blocked, Column.PROGRESS })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("is blocked by open card " .. blocker, 1, true), out)
+end)
+
 testing.test(
     "add --id-only prints the full id alone and sends warnings to standard error",
     function()

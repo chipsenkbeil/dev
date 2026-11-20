@@ -1535,7 +1535,7 @@ end
 ---Refuse a card that has not started while an open card blocks it.
 ---@param backend dev.board.Backend the board
 ---@param card dev.board.Card the card
----@return dev.cmd.board.Result? refused the failure, nil when the card has started or nothing open blocks it
+---@return dev.cmd.board.Result? refused the failure, nil when the card has started or is free
 local function blocker_refusal(backend, card)
     if not before_work(backend.stages, card) then
         return nil

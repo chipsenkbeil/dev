@@ -1162,7 +1162,7 @@ end
 ---Report whether a card outside Done blocks a card.
 ---A blocker that cannot be read counts as blocking.
 ---@param id string the card id
----@return boolean? blocked, string? blocker the open blocker's id, or with nil the message that says the board cannot be read
+---@return boolean? blocked, string? blocker the open blocker's id, or the message when nil
 function Backend:blocked(id)
     local links, message = self:links(id)
     if not links then
