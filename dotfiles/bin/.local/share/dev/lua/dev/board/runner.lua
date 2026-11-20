@@ -180,9 +180,10 @@ local function claim_card(backend, card, name)
     end
     local ticks, minutes = claims.cap(card.size)
     local state = { card = card.id, fence = fence }
-    ok, message = claims.write(state)
+    local reason, detail
+    ok, message, reason, detail = claims.write(state)
     if not ok then
-        return abandon_claim(backend, card.id, fence, message)
+        return abandon_claim(backend, card.id, fence, board.file_refusal(reason, message, detail))
     end
     local pid
     pid, message = backend:keepalive(card.id, fence, ticks, claims.path(card.id), who)
@@ -190,9 +191,9 @@ local function claim_card(backend, card, name)
         return abandon_claim(backend, card.id, fence, message)
     end
     state.pid = pid
-    ok, message = claims.write(state)
+    ok, message, reason, detail = claims.write(state)
     if not ok then
-        return abandon_claim(backend, card.id, fence, message)
+        return abandon_claim(backend, card.id, fence, board.file_refusal(reason, message, detail))
     end
     if pid == 0 then
         return {
@@ -243,22 +244,23 @@ local function renew_claim(backend, card, name, seconds)
         return message
     end
     local ticks = claims.cap(card.size, seconds)
-    local ok
-    ok, message = claims.write({ card = card.id, fence = fence, pid = held.pid })
+    local ok, reason, detail
+    ok, message, reason, detail = claims.write({ card = card.id, fence = fence, pid = held.pid })
     if not ok then
-        return message
+        return board.file_refusal(reason, message, detail)
     end
     local pid
     pid, message = backend:keepalive(card.id, fence, ticks, claims.path(card.id), who)
     if not pid then
         return message
     end
-    ok, message = claims.replace({ card = card.id, fence = fence, pid = pid }, held.pid)
+    ok, message, reason, detail =
+        claims.replace({ card = card.id, fence = fence, pid = pid }, held.pid)
     if not ok then
         if pid > 0 then
             dev_os.run({ "kill", tostring(pid) }, { stderr = "null" })
         end
-        return message
+        return board.file_refusal(reason, message, detail)
     end
     return nil
 end

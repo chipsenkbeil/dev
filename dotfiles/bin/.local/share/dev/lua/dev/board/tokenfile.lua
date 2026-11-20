@@ -1,3 +1,4 @@
+local board = require("dev.board")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local xdg = require("dev.xdg")
@@ -39,16 +40,17 @@ end
 ---Name the file of an agent.
 ---@param name string the agent's name, the `DEV_AGENT` value
 ---@return string? path the file, under the token directory
----@return string? message why the name could not be hashed
+---@return nil message always nil, the reason names the refusal
+---@return dev.board.FileReason? reason why the name could not be hashed
 function M.path(name)
     local argv = checksum_command()
     if not argv then
-        return nil, "Neither shasum nor sha256sum is on PATH."
+        return nil, nil, board.FileReason.NO_HASHER
     end
     local out, code = dev_os.capture_input(argv, name, { stderr = "null" })
     local sum = code == 0 and out:match("^(%x+)")
     if not sum or #sum ~= HASH_LENGTH then
-        return nil, "Could not hash the agent name."
+        return nil, nil, board.FileReason.HASH_FAILED
     end
     return M.dir() .. "/" .. sum:lower()
 end
@@ -65,22 +67,24 @@ end
 ---@param token string the raw token
 ---@param expires integer the expiry in Unix seconds, 0 for none
 ---@return true? ok true on success
----@return string? message why it failed
+---@return string? message the lower layer's message, nil when the reason names the refusal
+---@return dev.board.FileReason? reason the fixed reason it failed
+---@return string? detail the path or directory the reason names
 function M.write(name, token, expires)
-    local path, message = M.path(name)
+    local path, message, reason = M.path(name)
     if not path then
-        return nil, message
+        return nil, message, reason
     end
     local dir = M.dir()
     if
         dev_os.run({ "sh", "-c", 'umask 077 && mkdir -p -- "$1" && chmod 700 "$1"', "sh", dir })
         ~= 0
     then
-        return nil, "Cannot make " .. dir .. "."
+        return nil, nil, board.FileReason.MAKE_DIR, dir
     end
     local pending = path .. ".new"
     if dev_os.run({ "sh", "-c", 'umask 077 && : >"$1"', "sh", pending }) ~= 0 then
-        return nil, "Cannot write " .. path .. "."
+        return nil, nil, board.FileReason.WRITE, path
     end
     local ok
     ok, message = fs.write(pending, string.format("%s\n%d\n", token, expires))
@@ -90,7 +94,7 @@ function M.write(name, token, expires)
     end
     if dev_os.run({ "mv", "-f", pending, path }) ~= 0 then
         fs.remove(pending)
-        return nil, "Cannot write " .. path .. "."
+        return nil, nil, board.FileReason.WRITE, path
     end
     return true
 end
@@ -99,7 +103,9 @@ end
 ---@param name string the agent's name
 ---@return dev.board.tokenfile.Token? found the token, nil when there is no file or it cannot be
 ---   read
----@return string? message why a file that exists cannot be used
+---@return nil message always nil, the reason names the refusal
+---@return dev.board.FileReason? reason why a file that exists cannot be used
+---@return string? detail the path of that file
 function M.read(name)
     local path = M.path(name)
     if not path or not fs.exists(path) then
@@ -108,7 +114,7 @@ function M.read(name)
     local text = fs.read(path)
     local found = text and parse(text)
     if not found then
-        return nil, "The token file " .. path .. " is not a token file."
+        return nil, nil, board.FileReason.NOT_TOKEN_FILE, path
     end
     return found
 end
@@ -116,19 +122,19 @@ end
 ---Delete an agent's token file.
 ---@param name string the agent's name
 ---@return true? ok true when the file is gone, or there was none
----@return string? message why it could not be deleted
+---@return string? message the lower layer's message, nil when the reason names the refusal
+---@return dev.board.FileReason? reason the fixed reason it could not be deleted
+---@return string? detail the path the reason names
 function M.remove(name)
-    local path, message = M.path(name)
+    local path, message, reason = M.path(name)
     if not path then
-        return nil, message
+        return nil, message, reason
     end
     if not fs.exists(path) then
         return true
     end
-    local ok
-    ok, message = fs.remove(path)
-    if not ok then
-        return nil, "Cannot delete " .. path .. "."
+    if not fs.remove(path) then
+        return nil, nil, board.FileReason.DELETE, path
     end
     return true
 end

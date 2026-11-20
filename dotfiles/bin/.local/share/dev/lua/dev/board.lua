@@ -1,10 +1,14 @@
-local claims = require("dev.board.claims")
 local text = require("dev.text")
 
 ---The board seam: the column names, the card helpers and the one interface the
 ---`dev board` commands call, which a backend implements.
 ---@class dev.board
 local M = {}
+
+-- dev.board.claims requires this module, so the require waits for the first call
+local function claims_module()
+    return require("dev.board.claims")
+end
 
 -- dev.cmd.board requires this module, so the require waits for the first call
 local function cmd_board()
@@ -487,6 +491,43 @@ function M.seat_refusal(reason, why, seat)
             seat,
             why
         )
+    end
+    return text.sentence(why)
+end
+
+---The fixed reasons a token file or claim state could not be used, named beside no message.
+---@enum dev.board.FileReason
+M.FileReason = {
+    NO_HASHER = "no_hasher",
+    HASH_FAILED = "hash_failed",
+    MAKE_DIR = "make_dir",
+    WRITE = "write",
+    NOT_TOKEN_FILE = "not_token_file",
+    DELETE = "delete",
+    PROTECT = "protect",
+}
+
+---Write why a token file or claim state could not be used, from the reason.
+---@param reason dev.board.FileReason? the fixed reason
+---@param why string? the lower layer's message, which a reason code leaves out
+---@param detail string? the path or directory the reason names
+---@return string message the text
+function M.file_refusal(reason, why, detail)
+    local Reason = M.FileReason
+    if reason == Reason.NO_HASHER then
+        return "Neither shasum nor sha256sum is on PATH."
+    elseif reason == Reason.HASH_FAILED then
+        return "Could not hash the agent name."
+    elseif reason == Reason.MAKE_DIR then
+        return "Cannot make " .. detail .. "."
+    elseif reason == Reason.WRITE then
+        return "Cannot write " .. detail .. "."
+    elseif reason == Reason.NOT_TOKEN_FILE then
+        return "The token file " .. detail .. " is not a token file."
+    elseif reason == Reason.DELETE then
+        return "Cannot delete " .. detail .. "."
+    elseif reason == Reason.PROTECT then
+        return "Cannot protect " .. detail .. "."
     end
     return text.sentence(why)
 end
@@ -1715,7 +1756,7 @@ function CardHandle:carry_proof()
         end
         return nil, unproven or lacking[1]
     end
-    local held = claims.read(self.card.id)
+    local held = claims_module().read(self.card.id)
     local fence = held and held.fence
     local function write(body)
         local noted, why_not = backend:note(self.card.id, body, fence)

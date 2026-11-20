@@ -1,3 +1,4 @@
+local board = require("dev.board")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local xdg = require("dev.xdg")
@@ -72,7 +73,9 @@ end
 ---Write a card's state with mode 600.
 ---@param state dev.board.claims.State the state to keep
 ---@return true? ok true on success
----@return string? message why it failed
+---@return string? message the lower layer's message, nil when the reason names the refusal
+---@return dev.board.FileReason? reason the fixed reason it failed
+---@return string? detail the path or directory the reason names
 function M.write(state)
     local dir = M.dir()
     local ok, message = fs.mkdir(dir, { parents = true })
@@ -82,11 +85,11 @@ function M.write(state)
     local path = M.path(state.card)
     local pending = path .. ".new"
     if dev_os.run({ "chmod", "700", dir }) ~= 0 then
-        return nil, "Cannot protect " .. dir .. "."
+        return nil, nil, board.FileReason.PROTECT, dir
     end
     local made = dev_os.run({ "sh", "-c", 'umask 077 && : >"$1"', "sh", pending })
     if made ~= 0 then
-        return nil, "Cannot write " .. path .. "."
+        return nil, nil, board.FileReason.WRITE, path
     end
     local body =
         string.format("card=%s\nfence=%d\npid=%d\n", state.card, state.fence, state.pid or 0)
@@ -95,7 +98,7 @@ function M.write(state)
         return nil, message
     end
     if dev_os.run({ "mv", "-f", pending, path }) ~= 0 then
-        return nil, "Cannot write " .. path .. "."
+        return nil, nil, board.FileReason.WRITE, path
     end
     return true
 end
@@ -141,13 +144,15 @@ end
 ---@param state dev.board.claims.State the state with the new loop's pid
 ---@param old_pid integer? the pid of the loop to stop
 ---@return true? ok true on success
----@return string? message why the state could not be written
+---@return string? message the lower layer's message, nil when the reason names the refusal
+---@return dev.board.FileReason? reason the fixed reason the state could not be written
+---@return string? detail the path or directory the reason names
 function M.replace(state, old_pid)
-    local ok, message = M.write(state)
+    local ok, message, reason, detail = M.write(state)
     if ok and old_pid and old_pid > 0 and old_pid ~= state.pid and alive(old_pid) then
         dev_os.run({ "kill", tostring(old_pid) }, { stderr = "null" })
     end
-    return ok, message
+    return ok, message, reason, detail
 end
 
 return M

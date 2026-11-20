@@ -143,19 +143,38 @@ local function take_stub(card)
     return stub
 end
 
-testing.test(
-    "a state write that cannot make its pending file names the path in a sentence",
-    function()
-        local previous = os.getenv("XDG_STATE_HOME") or ""
-        ffi.C.setenv("XDG_STATE_HOME", support.tempdir(), 1)
-        local path = claims.path(CARD)
-        assert(fs.mkdir(path .. ".new", { parents = true }))
-        local ok, message = claims.write({ card = CARD, fence = 1, pid = 1 })
-        ffi.C.setenv("XDG_STATE_HOME", previous, 1)
-        testing.eq(ok, nil)
-        testing.eq(message, "Cannot write " .. path .. ".")
-    end
-)
+testing.test("a state write that cannot make its pending file returns the write reason", function()
+    local previous = os.getenv("XDG_STATE_HOME") or ""
+    ffi.C.setenv("XDG_STATE_HOME", support.tempdir(), 1)
+    local path = claims.path(CARD)
+    assert(fs.mkdir(path .. ".new", { parents = true }))
+    local ok, message, reason, detail = claims.write({ card = CARD, fence = 1, pid = 1 })
+    ffi.C.setenv("XDG_STATE_HOME", previous, 1)
+    testing.eq({ ok, message, reason, detail }, { nil, nil, board.FileReason.WRITE, path })
+end)
+
+testing.test("a take that cannot write its claim state prints the write sentence once", function()
+    local previous = os.getenv("XDG_STATE_HOME") or ""
+    ffi.C.setenv("XDG_STATE_HOME", support.tempdir(), 1)
+    local path = claims.path(CARD)
+    assert(fs.mkdir(path .. ".new", { parents = true }))
+    local card = {
+        id = CARD,
+        name = "x",
+        column = support.COLUMN_NAME.PROGRESS,
+        size = "1 Pomodoro",
+        labels = {},
+        outcomes = {},
+        checks = {},
+    }
+    local result = cmd_board.run(
+        "take",
+        { "11111111", "--as", "dotfiles/implementer/11111111" },
+        take_stub(card)
+    )
+    ffi.C.setenv("XDG_STATE_HOME", previous, 1)
+    testing.eq(result.message, "Cannot write " .. path .. ".")
+end)
 
 testing.test("a take starts a clock under the role of the card's column", function()
     local previous = os.getenv("XDG_STATE_HOME") or ""

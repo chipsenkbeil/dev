@@ -238,9 +238,9 @@ local function filed()
     if not name or name == "" then
         return nil
     end
-    local found, message = tokenfile.read(name)
+    local found, _, reason, detail = tokenfile.read(name)
     if not found then
-        return nil, message
+        return nil, reason and board.file_refusal(reason, nil, detail)
     end
     if found.expires > 0 and found.expires <= os.time() then
         return nil, FILE_EXPIRED
@@ -2563,17 +2563,18 @@ function Backend:mint(role, name, opts)
     local expires = tonumber(reply.expires_at) or 0
     tokenfile.sweep(os.time())
     local ok
-    ok, message = tokenfile.write(name, raw, expires)
+    local reason, detail
+    ok, message, reason, detail = tokenfile.write(name, raw, expires)
     if not ok then
         local undone, why = self:revoke(name)
-        local kept = "Cannot keep the token: " .. (message:gsub("%.$", ""))
+        local kept = board.file_refusal(reason, message, detail)
         if not undone then
-            return nil, kept .. ". It stays issued: " .. dev_text.sentence(why)
+            return nil, kept .. " The token stays issued. " .. dev_text.sentence(why)
         end
         if not undone.revoked then
-            return nil, kept .. ". Pomb listed no token to revoke."
+            return nil, kept .. " Pomb listed no token to revoke."
         end
-        return nil, kept .. ". It was revoked."
+        return nil, kept .. " The token was revoked."
     end
     return {
         role = present(reply.role_name) or role,
@@ -2628,9 +2629,10 @@ function Backend:revoke(name)
         return nil, message
     end
     local ok
-    ok, message = tokenfile.remove(name)
+    local reason, detail
+    ok, message, reason, detail = tokenfile.remove(name)
     if not ok then
-        return nil, "Revoked the token. " .. dev_text.sentence(message)
+        return nil, "Revoked the token. " .. board.file_refusal(reason, message, detail)
     end
     return { revoked = revoked }
 end

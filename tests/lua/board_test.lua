@@ -13485,3 +13485,19 @@ testing.test("failure leaves a message that already ends in punctuation", functi
     testing.eq(guards.failure("Is it done?").message, "Is it done?")
     testing.eq(guards.failure("Stop now!").message, "Stop now!")
 end)
+
+testing.test("file_refusal writes one sentence per reason", function()
+    local Reason = board.FileReason
+    local path = "/state/dev/tokens/abc"
+    testing.eq(board.file_refusal(Reason.NO_HASHER), "Neither shasum nor sha256sum is on PATH.")
+    testing.eq(board.file_refusal(Reason.HASH_FAILED), "Could not hash the agent name.")
+    testing.eq(board.file_refusal(Reason.MAKE_DIR, nil, path), "Cannot make " .. path .. ".")
+    testing.eq(board.file_refusal(Reason.WRITE, nil, path), "Cannot write " .. path .. ".")
+    testing.eq(
+        board.file_refusal(Reason.NOT_TOKEN_FILE, nil, path),
+        "The token file " .. path .. " is not a token file."
+    )
+    testing.eq(board.file_refusal(Reason.DELETE, nil, path), "Cannot delete " .. path .. ".")
+    testing.eq(board.file_refusal(Reason.PROTECT, nil, path), "Cannot protect " .. path .. ".")
+    testing.eq(board.file_refusal(nil, "no space left"), "No space left.")
+end)
