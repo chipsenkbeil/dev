@@ -35,13 +35,7 @@ local function sandbox(files)
     for name, body in pairs(files) do
         assert(fs.write(root .. "/" .. name .. ".json", (body:gsub("\n", "")) .. "\n"))
     end
-    local body = ([[#!/bin/sh
-echo "$*" >> "%s/log"
-cat "%s/$2.json"
-[ "$1" != fleet ] || cat "%s/shapes.json"
-]]):format(root, root, root)
-    assert(fs.write(root .. "/bin/ci", body))
-    assert(dev_os.run({ "chmod", "755", root .. "/bin/ci" }) == 0, "chmod failed")
+    support.fake_ci(root)
     return root
 end
 

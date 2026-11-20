@@ -137,6 +137,27 @@ function M.sandbox(files, tools)
     return root
 end
 
+---Write the fake `ci` into a sandbox's `bin`.
+---
+---It logs its arguments to `log` under root, prints the `<second argument>.json` file and, for
+---`fleet`, the `shapes.json` file after it, then exits with the number in an `rc` file under
+---root when one exists.
+---@param root string the project's real path from `sandbox`
+function M.fake_ci(root)
+    local body = table
+        .concat({
+            "#!/bin/sh",
+            'echo "$*" >> "%s/log"',
+            'cat "%s/$2.json"',
+            '[ "$1" != fleet ] || cat "%s/shapes.json"',
+            '[ ! -f "%s/rc" ] || exit "$(cat "%s/rc")"',
+            "",
+        }, "\n")
+        :format(root, root, root, root, root)
+    assert(fs.write(root .. "/bin/ci", body))
+    assert(dev_os.run({ "chmod", "755", root .. "/bin/ci" }) == 0, "chmod failed")
+end
+
 ---@class support.dev.Opts
 ---@field cwd string? where to run, the project root when nil
 ---@field code string? the exit code the stubs return

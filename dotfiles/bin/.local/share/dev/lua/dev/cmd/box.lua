@@ -479,6 +479,7 @@ end
 ---@return dev.cmd.box.Doc shapes the decoded shapes document
 ---@return string raw ci's output exactly as it printed it
 function M.fleet(sub, opts)
+    local FLEET_DOCS = 2
     local argv = { "ci", "fleet", "targets", "--box" }
     local target = opts and opts.target
     if target then
@@ -503,7 +504,7 @@ function M.fleet(sub, opts)
         end
         os.exit(code or Exit.FAILED)
     end
-    for i = 1, 2 do
+    for i = 1, FLEET_DOCS do
         if type(docs[i]) ~= "table" or docs[i].ok ~= true then
             verb.die("The command `ci fleet targets --box` printed no ok document.")
         end
@@ -997,7 +998,7 @@ M.handlers["box targets"] = function(ctx)
         verb.usage_error(ctx, "unexpected argument " .. parsed.pos[1])
     end
     M.need_ci()
-    local doc, sized, raw = M.fleet("targets")
+    local doc, shapes, raw = M.fleet("targets")
     if parsed.json then
         io.write(raw:match("^[^\n]*\n?"))
         return 0
@@ -1017,10 +1018,10 @@ M.handlers["box targets"] = function(ctx)
             print()
         end
         first = false
-        local machine = find_machine(sized.machines, name)
+        local machine = find_machine(shapes.machines, name)
         local head = ui.paint(screen, name, ui.Style.BOLD)
         if machine then
-            local more = more_boxes(sized.cap)
+            local more = more_boxes(shapes.cap)
             head = head .. text.GAP .. room_words(machine) .. (more == "" and "" or " · " .. more)
         end
         print(head)
@@ -1035,7 +1036,7 @@ M.handlers["box targets"] = function(ctx)
                     cell(target.target),
                     os_name(target),
                     cell(target.image),
-                    min_shape(target, sized.shapes or {}),
+                    min_shape(target, shapes.shapes or {}),
                     now,
                 }
             end
@@ -1163,17 +1164,17 @@ end
 ---@param project string? the project the box is for
 ---@return string target the picked target's name
 local function pick_target(project)
-    local doc, sized = M.fleet("create")
+    local doc, shapes = M.fleet("create")
     local targets = doc.targets or {}
     local items, enabled = {}, 0
     for i, target in ipairs(targets) do
-        local fits = target_fit(target, sized.shapes or {})
+        local fits = target_fit(target, shapes.shapes or {})
         items[i] = {
             value = cell(target.target),
             cells = {
                 cell(target.target),
                 os_name(target) .. " · " .. cell(target.image),
-                "from " .. min_shape(target, sized.shapes or {}),
+                "from " .. min_shape(target, shapes.shapes or {}),
                 "@ " .. table.concat(target.machines or {}, ","),
                 fits == Fit.WAIT and WAITS_FOR_ROOM .. " · " .. why_not(target) or nil,
             },
@@ -1194,7 +1195,7 @@ local function pick_target(project)
     end
     return choose(items, {
         title = "What should the " .. (project and project .. " " or "") .. "box run?",
-        note = room_note(sized.machines, names),
+        note = room_note(shapes.machines, names),
     })
 end
 

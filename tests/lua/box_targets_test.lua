@@ -1,5 +1,4 @@
 local testing = require("dev.testing")
-local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local support = require("support")
 
@@ -22,13 +21,7 @@ local function sandbox(files)
     for name, body in pairs(files) do
         assert(fs.write(root .. "/" .. name .. ".json", (body:gsub("\n", "")) .. "\n"))
     end
-    local body = ([[#!/bin/sh
-echo "$*" >> "%s/log"
-cat "%s/$2.json"
-[ "$1" != fleet ] || cat "%s/shapes.json"
-]]):format(root, root, root)
-    assert(fs.write(root .. "/bin/ci", body))
-    assert(dev_os.run({ "chmod", "755", root .. "/bin/ci" }) == 0, "chmod failed")
+    support.fake_ci(root)
     return root
 end
 
@@ -96,3 +89,46 @@ testing.test("targets refuses an argument", function()
     testing.eq(code, 2)
     fs.remove(root, { recursive = true })
 end)
+
+testing.test(
+    "targets after a shapes-only failure exits with ci's code and prints its message",
+    function()
+        local root = sandbox({
+            targets = TARGETS,
+            shapes = '{"ok":false,"error":{"message":"the shapes are unavailable"}}',
+        })
+        assert(fs.write(root .. "/rc", "3"))
+        local out, code = support.dev(root, { "box", "targets" }, ENV)
+        testing.eq(code, 3)
+        testing.eq(out, "dev box targets: the shapes are unavailable\n")
+        fs.remove(root, { recursive = true })
+    end
+)
+
+testing.test("targets after both requests failed prints both messages and ci's code", function()
+    local root = sandbox({
+        targets = '{"ok":false,"error":{"message":"the targets are unavailable"}}',
+        shapes = '{"ok":false,"error":{"message":"the shapes are unavailable"}}',
+    })
+    assert(fs.write(root .. "/rc", "4"))
+    local out, code = support.dev(root, { "box", "targets" }, ENV)
+    testing.eq(code, 4)
+    testing.eq(
+        out,
+        "dev box targets: the targets are unavailable\n"
+            .. "dev box targets: the shapes are unavailable\n"
+    )
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test(
+    "targets after empty output with a non-zero exit prints nothing and ci's code",
+    function()
+        local root = sandbox({ targets = "", shapes = "" })
+        assert(fs.write(root .. "/rc", "5"))
+        local out, code = support.dev(root, { "box", "targets" }, ENV)
+        testing.eq(code, 5)
+        testing.eq(out, "")
+        fs.remove(root, { recursive = true })
+    end
+)

@@ -37,13 +37,7 @@ local function sandbox()
         assert(fs.write(root .. "/" .. name .. ".json", body))
     end
     assert(fs.write(root .. "/install-tools.json", '{"ok":true,"installed":[]}'))
-    local body = ([[#!/bin/sh
-echo "$*" >> "%s/log"
-cat "%s/$2.json"
-[ "$1" != fleet ] || cat "%s/shapes.json"
-]]):format(root, root, root)
-    assert(fs.write(root .. "/bin/ci", body))
-    assert(dev_os.run({ "chmod", "755", root .. "/bin/ci" }) == 0, "chmod failed")
+    support.fake_ci(root)
     return root
 end
 
@@ -187,13 +181,7 @@ end)
 testing.test("retag prints the box's own error and exits with ci's code", function()
     local root = sandbox()
     assert(fs.write(root .. "/retag.json", FAILED_RETAG))
-    local body = '#!/bin/sh\necho "$*" >> "'
-        .. root
-        .. '/log"\ncat "'
-        .. root
-        .. '/$2.json"\nexit 1\n'
-    assert(fs.write(root .. "/bin/ci", body))
-    assert(dev_os.run({ "chmod", "755", root .. "/bin/ci" }) == 0, "chmod failed")
+    assert(fs.write(root .. "/rc", "1"))
     local out, code =
         support.dev(root, { "box", "retag", "run-a", "--target", "linux-dev" }, env(root))
     testing.eq(code, 1)
