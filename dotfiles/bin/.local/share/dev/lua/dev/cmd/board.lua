@@ -2355,7 +2355,6 @@ end
 local Owner = {}
 
 function commands.ask(backend, args)
-    local fields = { ["--question"] = "text", ["--recommend"] = "recommended", ["--why"] = "why" }
     if #args < 1 then
         return usage(
             "Needs a card, --question TEXT, --choice COLUMN=LABEL, --recommend N and --why TEXT."
@@ -2374,13 +2373,15 @@ function commands.ask(backend, args)
                 return usage("The --choice flag takes COLUMN=LABEL, not " .. value .. ".")
             end
             question.choices[#question.choices + 1] = { column = column, label = label }
-        elseif fields[flag] == "recommended" then
+        elseif flag == "--recommend" then
             if not value:match("^%d+$") then
                 return usage("The --recommend flag takes a choice number, not " .. value .. ".")
             end
             question.recommended = tonumber(value)
-        elseif fields[flag] then
-            question[fields[flag]] = value
+        elseif flag == "--question" then
+            question.text = value
+        elseif flag == "--why" then
+            question.why = value
         else
             return usage("Unknown flag " .. flag .. ".")
         end
