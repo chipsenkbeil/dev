@@ -4988,10 +4988,14 @@ local function init_refusal(message, reason)
     return sentence(message)
 end
 
----Print one warning line from the layout change, with the hint when the token may not change the board.
----@param line string the warning
+---Print one warning from the layout change, with the hint when the token may not change the board.
+---@param line string a `Warning`, or a finished sentence
+---@param detail string? the backend's message for a `Warning`
 ---@param reason dev.board.init.Reason? what `init.run` named
-local function init_warning(line, reason)
+local function init_warning(line, detail, reason)
+    if line == init.Warning.ROLES_UNREADABLE then
+        line = "Agent roles were not checked. The roles list could not be read. " .. detail
+    end
     verb.note(reason and init_refusal(line, reason) or line)
 end
 

@@ -28,7 +28,7 @@ local ID_D = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
 local LINK_A = "link: https://pomb.example/t/" .. ID_A
 local MOVED_A = "moved 11111111 out of " .. board.DEFAULT_NAMES.blocked
 local MOVED_B = "moved 11111111 out of " .. board.DEFAULT_NAMES.icebox
-local TRIMMED_NOTICE = "\nevents were trimmed, check the board"
+local TRIMMED_NOTICE = "\nEvents were trimmed. Check the board."
 local LEAD = "dotfiles/lead/1"
 local PROGRESS_COLUMN = support.column_id(support.Column.PROGRESS)
 local READY_COLUMN = support.column_id(support.Column.READY)
@@ -12209,7 +12209,7 @@ testing.test(
         local result, _, path = waited({
             { message = "Board unavailable: pomb answered 410: too old", oldest = "17" },
         }, { "--for", "lead" })
-        testing.eq(result.output, "events were trimmed, check the board")
+        testing.eq(result.output, "Events were trimmed. Check the board.")
         testing.eq(result.message, nil)
         testing.eq(fs.read(path .. ".lead.cursor"), "17\n")
     end

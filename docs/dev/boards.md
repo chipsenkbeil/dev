@@ -402,7 +402,7 @@ What it lays out:
     on a role whose `boards` list holds this board, it posts nothing and
     prints `agent roles unchanged`. A failed read counts as not granted, and
     when the post is then refused for `roles.grant`, `init` prints `Agent roles
-    not checked, since the roles list could not be read` with the read's
+    were not checked. The roles list could not be read.` with the read's
     failure in place of the line that leaves the roles for `--admin`.
   - Otherwise it posts `{"boards":[board id]}` to Pomb's
     `/api/v1/agent-roles/standard` right after the columns.
@@ -1640,12 +1640,12 @@ that `--for human` ignores a move made, or an owner comment written, before it
 started. With no cursor file the first call starts from now.
 
 When Pomb has dropped the events after the stored cursor, `wait` stores the
-oldest one it still has, prints `events were trimmed, check the board` and exits
+oldest one it still has, prints `Events were trimmed. Check the board.` and exits
 0. Look at the board and run it again. A stage wait (`--for ready`, `review`,
 `verify` or `release`) instead stores the oldest cursor and keeps waiting.
 `--for human` also keeps waiting on a trim, and exits only when a card that
 sat in Blocked or Icebox when it started has left it. It then prints
-`events were trimmed, check the board` after the lines it holds.
+`Events were trimmed. Check the board.` after the lines it holds.
 
 An unreachable Pomb (no route, a locked `pass`, a gateway error) is retried
 after a pause that doubles from 30 seconds to 5 minutes and starts over after a
@@ -4485,7 +4485,7 @@ The cursor:
   prints its held lines. With no file, the first call asks without a
   cursor and starts from the cursor Pomb answers.
 - an expired cursor (410) stores the backend's oldest cursor and prints
-  `events were trimmed, check the board` (exit 0). A stage wait stores it and
+  `Events were trimmed. Check the board.` (exit 0). A stage wait stores it and
   keeps waiting.
 - `--for human` stores the oldest cursor when it holds no line and rereads
   the cards instead (`Owner.sitting` at the start, `Owner.departed` on a

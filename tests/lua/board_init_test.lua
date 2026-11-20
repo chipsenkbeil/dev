@@ -286,7 +286,7 @@ local function run(layout)
             lines[#lines + 1] = line
         end
     end, {
-        warn = function(line, warning_reason)
+        warn = function(line, _, warning_reason)
             warnings[#warnings + 1] = line
             warned[#warned + 1] = warning_reason
         end,
@@ -1483,6 +1483,21 @@ testing.test("a card wearing a disabled colour is reported on every run and left
     testing.eq(second_warnings, { report })
 end)
 
+testing.test("an unreadable roles list warns with the warning and the read failure", function()
+    local layout = fake_layout({ columns = template_columns() })
+    function layout:add_roles()
+        return nil, "Pomb answered 500", "roles.unreadable"
+    end
+    local calls = {}
+    local changes = init.run(layout, "demo", function() end, {
+        warn = function(...)
+            calls[#calls + 1] = { ... }
+        end,
+    })
+    testing.ok(changes ~= nil)
+    testing.eq(calls, { { init.Warning.ROLES_UNREADABLE, "Pomb answered 500" } })
+end)
+
 testing.test("a token that may not enable colours leaves them and carries on", function()
     local layout = fake_layout({ columns = template_columns() })
     local set_color = layout.set_color
@@ -2213,7 +2228,7 @@ testing.test("init-lead-roles-read-fails-names-the-failure", function()
     local out, code = dev(root, home, tmp, { "board", "init" })
     testing.eq(code, 0, out)
     testing.ok(
-        out:find("Agent roles not checked, since the roles list could not be read: ", 1, true),
+        out:find("Agent roles were not checked. The roles list could not be read. ", 1, true),
         out
     )
     testing.ok(out:find("settings.read", 1, true), out)
@@ -2231,7 +2246,7 @@ testing.test("init-lead-roles-list-that-is-not-a-list-names-the-fallback", funct
     testing.eq(code, 0, out)
     testing.ok(
         out:find(
-            "Agent roles not checked, since the roles list could not be read: "
+            "Agent roles were not checked. The roles list could not be read. "
                 .. "Pomb sent a roles list dev cannot read.",
             1,
             true

@@ -35,6 +35,10 @@ M.HIGHLIGHTS = {
 ---@enum dev.board.init.Reason
 M.Reason = { NEEDS_ADMIN = "needs_admin" }
 
+---What a warning is about, when its first argument is not already a sentence.
+---@enum dev.board.init.Warning
+M.Warning = { ROLES_UNREADABLE = "roles_unreadable" }
+
 local DEFAULT_VALUE = "white"
 local LIMIT_GROUP_CARDS = 4
 
@@ -237,9 +241,7 @@ local function roles_step(layout, state, say)
     local created, message, missing = layout:add_roles()
     if created == nil then
         if missing == "roles.unreadable" then
-            state.warn(
-                "Agent roles not checked, since the roles list could not be read: " .. message
-            )
+            state.warn(M.Warning.ROLES_UNREADABLE, message)
             return true
         end
         if missing == "roles.grant" then
@@ -362,7 +364,7 @@ local function enabled_step(layout, state, say)
                 local ok, message = layout:set_color(color.id, { enabled = enable })
                 if not ok then
                     if needs_admin(message) then
-                        state.warn(LEFT_ENABLED, M.Reason.NEEDS_ADMIN)
+                        state.warn(LEFT_ENABLED, nil, M.Reason.NEEDS_ADMIN)
                         return true
                     end
                     return nil, message
@@ -382,7 +384,7 @@ local function highlights_step(layout, state, say)
     local added, message = layout:add_highlights(M.HIGHLIGHTS)
     if added == nil then
         if needs_admin(message) then
-            state.warn(LEFT_HIGHLIGHTS, M.Reason.NEEDS_ADMIN)
+            state.warn(LEFT_HIGHLIGHTS, nil, M.Reason.NEEDS_ADMIN)
             return true
         end
         return nil, message
@@ -512,7 +514,7 @@ end
 ---@field stages? dev.board.Stages the column set to lay out, the standard names when nil
 ---@field lanes? string[] the lanes the board config lists, an empty list when nil
 ---@field warn_first_lane? boolean whether to warn when the first lane is unlisted, false when nil
----@field warn? fun(line: string, reason: dev.board.init.Reason?) prints one warning line, standard error when nil, with the reason when the token may not change the board
+---@field warn? fun(line: string, detail: string?, reason: dev.board.init.Reason?) prints one warning, where `line` is a `Warning` with its `detail`, or a sentence, and `reason` is set when the token may not change the board; standard error when nil
 
 ---Bring a board to the standard, saying each change as it is made.
 ---

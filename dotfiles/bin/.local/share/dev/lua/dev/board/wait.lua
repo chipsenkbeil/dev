@@ -54,7 +54,7 @@ local WAIT_RETRY_SECONDS = 30
 local WAIT_LIMITED_MAX_SECONDS = 300
 local WAIT_JITTER = 0.25
 local WAIT_RETRIES = 10
-local WAIT_TRIMMED = "events were trimmed, check the board"
+local WAIT_TRIMMED = "Events were trimmed. Check the board."
 local WAIT_LIMITED_NOTICE = "Pomb holds too many open waits for this token. Waiting for one to end."
 
 ---Check whether the newest comment on a card is the owner's.
