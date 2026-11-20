@@ -1,3 +1,5 @@
+local ffi = require("ffi")
+
 local testing = require("dev.testing")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
@@ -521,6 +523,22 @@ testing.test("render_readme returns the unreadable reason", function()
     testing.eq(reason, templates.Reason.UNREADABLE)
     testing.eq(type(detail), "string")
     fs.remove(root, { recursive = true })
+end)
+
+testing.test("dir returns the no_dir reason", function()
+    if dev_os.getuid() == 0 then
+        return
+    end
+    local clone = support.sandbox({}, {})
+    local previous = os.getenv("DOTFILES") or ""
+    ffi.C.setenv("DOTFILES", clone, 1)
+    local dir, message, reason, detail = templates.dir(Kind.LUA)
+    ffi.C.setenv("DOTFILES", previous, 1)
+    testing.eq(dir, nil)
+    testing.eq(message, nil)
+    testing.eq(reason, templates.Reason.NO_DIR)
+    testing.eq(detail, clone .. "/dotfiles/claude/.claude/skills/style/lint/lua")
+    fs.remove(clone, { recursive = true })
 end)
 
 testing.test("dir returns the no_set reason", function()

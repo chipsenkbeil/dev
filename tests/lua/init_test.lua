@@ -84,6 +84,24 @@ testing.test("init names the Gerrit project after the project in a dry run", fun
     fs.remove(root, { recursive = true })
 end)
 
+testing.test("init prints the no lint templates sentence for a clone with no lint set", function()
+    if dev_os.getuid() == 0 then
+        return
+    end
+    local root = project()
+    local clone = support.sandbox({}, {})
+    local out, code = support.dev(
+        root,
+        { "init", "--type", "lua", "--dry-run", "--no-gerrit" },
+        { env = { DOTFILES = clone } }
+    )
+    testing.eq(code, 1, out)
+    testing.ok(out:find("There are no lint templates at " .. clone, 1, true), out)
+    testing.ok(out:find("Set DOTFILES to the dotfiles repo.", 1, true), out)
+    fs.remove(clone, { recursive = true })
+    fs.remove(root, { recursive = true })
+end)
+
 testing.test("init skips the lint set for a type that has none", function()
     local root = project()
     local out = support.dev(root, { "init", "--type", "godot", "--dry-run", "--no-gerrit" })
