@@ -3675,6 +3675,7 @@ testing.test("the local add refuses a second run card of the same name", functio
     testing.eq(second, nil)
     testing.ok(message:find("already has the run card", 1, true), message)
     testing.ok(message:find(first.id:sub(1, board.MIN_PREFIX), 1, true), message)
+    testing.ok(message:find("run --end", 1, true), message)
 
     -- A run card of another name is accepted
     assert(backend:add("run other", icebox, { labels = { board.RUN } }))
