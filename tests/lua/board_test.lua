@@ -3689,6 +3689,22 @@ testing.test(
     end
 )
 
+testing.test("the outcome hints are full sentences", function()
+    local card = colored("green")
+    card.outcomes = outcomes(3)
+    local backend = fake({ card })
+    for _, args in ipairs({
+        { "cccccccc", "1", "--tick" },
+        { "cccccccc", "Fix", "--convert" },
+        { "cccccccc", "2" },
+    }) do
+        local message = cmd_board.run("outcome", args, backend).message
+        testing.ok(message:find("^%u"), message)
+        testing.ok(message:find("%.$"), message)
+        testing.eq(message:find(";", 1, true), nil)
+    end
+end)
+
 testing.test("outcome refuses an append whose first word starts with --", function()
     local card = colored("green")
     card.outcomes = outcomes(3)

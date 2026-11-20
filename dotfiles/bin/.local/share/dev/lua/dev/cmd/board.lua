@@ -2695,18 +2695,22 @@ local function misplaced_outcome_form(args)
         local mode = OUTCOME_FLAGS[word]
         if mode or word == CONVERT_FLAG then
             if mode and number then
-                return "put the flag before the number: dev board outcome CARD "
+                return "Put the flag before the number: dev board outcome CARD "
                     .. word
                     .. " "
                     .. number
+                    .. "."
             end
-            return "the outcome text holds the flag " .. word .. ", which goes right after the card"
+            return "The outcome text holds the flag "
+                .. word
+                .. ", which goes right after the card."
         end
     end
     local only = table.concat(args, " ", 2):match("^%s*(%d+)%s*$")
     if only then
-        return "the outcome text is only a number; to tick it use dev board outcome CARD --tick "
+        return "The outcome text is only a number. To tick it use dev board outcome CARD --tick "
             .. only
+            .. "."
     end
 end
 
