@@ -183,6 +183,14 @@ assert_eq "a flags line after group and hidden lines is read" "$(cd "$PROJ" && D
 rm "$PROJ/.dev/ordered.sh"
 check_topic badnoun $'# badnoun: Quotes a subcommand that does not exist\n\nRun `dev widget zap`.'
 assert_eq "__topics check fails on a made-up subcommand" "$rc" "1"
+wide_words="de $(printf 'word %.0s' {1..20})end"
+check_topic wide "$(printf '# wide: A wide prose line\n\n%s' "$wide_words")"
+assert_eq "__topics check fails on a prose line over 80 columns" "$rc" "1"
+assert_contains "__topics check names the wide line" "$out" ".dev/topics/wide.md:3: the line is wider than 80 columns"
+check_topic wide $'# wide: A wide fenced line\n\n```\n'"$wide_words"$'\n```'
+assert_eq "__topics check accepts a long fenced line" "$rc" "0"
+check_topic wide "$(printf '# wide: A long unbreakable token\n\n%s' "$(printf 'x%.0s' {1..90})")"
+assert_eq "__topics check accepts a long unbreakable token" "$rc" "0"
 check_topic badhead 'No heading here'
 assert_eq "__topics check fails on a bad first line" "$rc" "1"
 assert_contains "__topics check explains the first line" "$out" "the first line must be"

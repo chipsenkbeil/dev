@@ -2,7 +2,10 @@ local fs = require("dev.fs")
 local header = require("dev.header")
 local project = require("dev.project")
 local registry = require("dev.registry")
+local text_width = require("dev.text").width
 
+local MAX_WIDTH = 80
+local CODEPOINT = "[%z\1-\127\194-\244][\128-\191]*"
 local NAME = "^[A-Za-z0-9_-]+$"
 local ACCEPTED_FLAGS = { ["--"] = true, ["-h"] = true, ["--help"] = true }
 for _, flag in ipairs(registry.GLOBAL_FLAGS) do
@@ -119,6 +122,14 @@ local function shown_path(root, path)
     return path:sub(1, #prefix) == prefix and path:sub(#prefix + 1) or path
 end
 
+local function can_wrap(line)
+    if text_width(line) <= MAX_WIDTH then
+        return false
+    end
+    local head = line:match("^" .. string.rep(CODEPOINT, MAX_WIDTH))
+    return head ~= nil and line:find(" ", #head + 1, true) ~= nil
+end
+
 local function check_file(reg, file, out)
     local shown = shown_path(reg.root, file.path)
     local function problem(line, message)
@@ -156,6 +167,9 @@ local function check_file(reg, file, out)
                 end
             end
         else
+            if line:sub(1, 1) ~= "|" and can_wrap(line) then
+                problem(number, "the line is wider than 80 columns")
+            end
             for span in line:gmatch("`(dev [^`]*)`") do
                 local err = command_error(reg, span)
                 if err then

@@ -229,8 +229,9 @@ alone`, in a dry run and a real one. The workspace of a Done card whose
 folder is elsewhere gets the same line, with the reason
 `Its folder is not where ws new puts it.` Ignored files do not count as
 changes, as with `ws rm`. A project with no board, or a board that cannot be
-read, skips the card test and says so. A board setting that is invalid stops prune with exit 1
-before any change. `dev.cmd.board.finished(root)` lists the Done short ids.
+read, skips the card test and says so. A board setting that is invalid stops
+prune with exit 1 before any change. `dev.cmd.board.finished(root)` lists the
+Done short ids.
 
 A forget, removal or abandon that fails gets a line saying so, and prune goes
 on with the rest. It exits with the code of the first failure after the count

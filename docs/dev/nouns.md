@@ -81,6 +81,7 @@ A `.md` file in `.dev/topics/` is a topic, shown by `dev help <topic>`. Its
 first line is `# <name>: <summary>`, where the name is the file name.
 
 Run `dev __topics check` to check the format, the names and every quoted `dev`
-line.
+line. It also flags a prose line wider than 80 columns that has a space past
+column 80. Fenced lines and table rows may run longer.
 
 dev refuses to run any project script as root.
