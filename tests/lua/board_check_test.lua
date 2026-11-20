@@ -1315,3 +1315,30 @@ testing.test("the claimant's note is found by the token that posted the claim", 
     testing.eq(noted(claim, note("agents", "dev-review: x", STATUS)), false)
     testing.eq(noted(claim, note("agents", "old"), claim), false)
 end)
+
+testing.test("board.worked finds a note after a claim record and stops at the next one", function()
+    local STATUS, DECISION = board.NoteKind.STATUS, board.NoteKind.DECISION
+    local function note(who, body, kind)
+        return { who = who, body = body, kind = kind }
+    end
+    local claim = note("agents", board.claim_record("r/one"), STATUS)
+    local function worked(...)
+        return board.worked({ ... }, "r/one")
+    end
+    testing.eq(worked(note("agents", "built it")), false)
+    testing.eq(worked(claim), false)
+    testing.eq(worked(claim, note("agents", "built it")), true)
+    testing.eq(worked(claim, note("other", "built it")), false)
+    testing.eq(worked(claim, note("agents", "ruled", DECISION)), false)
+    testing.eq(worked(claim, note("agents", "dev-check: x", STATUS)), false)
+    testing.eq(worked(claim, claim, note("agents", "built it")), true)
+    testing.eq(
+        worked(
+            claim,
+            note("agents", board.claim_record("r/two"), STATUS),
+            note("agents", "built it")
+        ),
+        false
+    )
+    testing.eq(worked(claim, note("agents", "built it"), claim), true)
+end)

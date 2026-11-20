@@ -945,6 +945,29 @@ function M.reserved(body)
     return false
 end
 
+---@class dev.board.noted_after.Opts
+---@field stop_at_claim boolean? stop the scan at the next claim record
+
+---Say whether a work note by the claim record's poster follows the comment at an index.
+---@param comments {who: string, body: string, kind: string?}[] the card's comments, oldest first
+---@param at integer the index of the claim record
+---@param opts dev.board.noted_after.Opts
+---@return boolean noted true when a later non-decision, non-reserved note has the same poster
+local function noted_after(comments, at, opts)
+    local who = comments[at].who
+    for i = at + 1, #comments do
+        local comment = comments[i]
+        if opts.stop_at_claim and comment.body:sub(1, #M.CLAIM_PREFIX) == M.CLAIM_PREFIX then
+            return false
+        end
+        local decision = comment.kind == M.NoteKind.DECISION
+        if comment.who == who and not decision and not M.reserved(comment.body) then
+            return true
+        end
+    end
+    return false
+end
+
 ---Say whether a note followed the claimant's claim record, posted by the token that wrote it.
 ---@param comments {who: string, body: string, kind: string?}[] the card's comments, oldest first
 ---@param claimant string the name the claim record holds
@@ -960,15 +983,7 @@ function M.noted_since_claim(comments, claimant)
     if not at then
         return nil
     end
-    local who = comments[at].who
-    for i = at + 1, #comments do
-        local comment = comments[i]
-        local decision = comment.kind == M.NoteKind.DECISION
-        if comment.who == who and not decision and not M.reserved(comment.body) then
-            return true
-        end
-    end
-    return false
+    return noted_after(comments, at, {})
 end
 
 ---Say whether a name posted a note after one of its claim records, so it did work on the card.
@@ -978,17 +993,8 @@ end
 function M.worked(comments, name)
     local record = M.claim_record(name)
     for at, comment in ipairs(comments) do
-        if comment.body == record then
-            for i = at + 1, #comments do
-                local later = comments[i]
-                if later.body:sub(1, #M.CLAIM_PREFIX) == M.CLAIM_PREFIX then
-                    break
-                end
-                local decision = later.kind == M.NoteKind.DECISION
-                if later.who == comment.who and not decision and not M.reserved(later.body) then
-                    return true
-                end
-            end
+        if comment.body == record and noted_after(comments, at, { stop_at_claim = true }) then
+            return true
         end
     end
     return false
