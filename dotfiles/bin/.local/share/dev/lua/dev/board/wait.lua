@@ -120,7 +120,7 @@ local function lead_cards(backend, stages, label)
     if not cards then
         return nil, message
     end
-    local waiting = {}
+    local waiting, held = {}, {}
     for _, card in ipairs(cards) do
         if
             card.column == stages.blocked
@@ -132,12 +132,66 @@ local function lead_cards(backend, stages, label)
             if skipped == nil then
                 return nil, why
             end
-            if not skipped then
+            if skipped then
+                held[card.id] = true
+            else
                 waiting[card.id] = true
             end
         end
     end
-    return waiting
+    return waiting, held
+end
+
+---Check whether one reply moved a card into the done column.
+---@param events dev.board.Event[] the events of one reply
+---@param stages dev.board.Stages the column names
+---@return boolean reached true when a card moved to the done column
+local function reached_done(events, stages)
+    for _, event in ipairs(events) do
+        if event.kind == EventKind.MOVED and event.column == stages:done_column() then
+            return true
+        end
+    end
+    return false
+end
+
+---@class dev.board.wait.released_lines.Opts
+---@field leads table<string, boolean> the ids waiting now
+---@field skipped table<string, boolean> the ids still skipped now
+---@field done boolean whether this reply moved a card into the done column
+---@field stages dev.board.Stages the column names
+---@field label string the needs label the wait watches
+
+---Name the held cards that a done move has freed, once each.
+---
+---A freed card is named once and then forgotten.
+---@param held table<string, boolean> the ids skipped so far, changed in place
+---@param opts dev.board.wait.released_lines.Opts what the latest reply showed
+---@return string[] lines one line per freed card
+local function released_lines(held, opts)
+    local leads, skipped, done = opts.leads, opts.skipped, opts.done
+    local ids = {}
+    for id in pairs(skipped) do
+        held[id] = true
+    end
+    for id in pairs(held) do
+        if done and leads[id] then
+            ids[#ids + 1] = id
+            held[id] = nil
+        elseif not skipped[id] and not leads[id] then
+            held[id] = nil
+        end
+    end
+    table.sort(ids)
+    local lines = {}
+    for _, id in ipairs(ids) do
+        lines[#lines + 1] = id:sub(1, board.MIN_PREFIX)
+            .. " is labelled "
+            .. opts.label
+            .. " in "
+            .. opts.stages.blocked
+    end
+    return lines
 end
 
 ---Find the cards the owner commented on since the wait began.
@@ -467,6 +521,7 @@ function M.wait(backend, args, opts)
     local clock = opts.now or store.now
     local started = clock()
     local held, touched, last = {}, {}, nil
+    local watched = {}
     local sat
     if only == WaitFor.HUMAN then
         local why
@@ -503,15 +558,16 @@ function M.wait(backend, args, opts)
             WAIT_FOR_KINDS[only] or WAIT_KINDS,
             last and math.max(1, M.SETTLE_SECONDS - (clock() - last))
         )
-        local leads
+        local leads, skipped
         if reply and board.BLOCKED_LABELS[only] and #reply.events > 0 then
-            local why
-            leads, why = lead_cards(backend, stages, board.BLOCKED_LABELS[only])
-            if not leads then
-                if not pomb.unreachable(why, true) then
-                    return failure(why)
+            local found, second = lead_cards(backend, stages, board.BLOCKED_LABELS[only])
+            if found then
+                leads, skipped = found, second
+            else
+                if not pomb.unreachable(second, true) then
+                    return failure(second)
                 end
-                reply, message = nil, why
+                reply, message = nil, second
             end
         end
         local spoke
@@ -565,6 +621,18 @@ function M.wait(backend, args, opts)
                         touched[event.task_id] = true
                         held[#held + 1] = line
                     end
+                end
+            end
+            if leads then
+                local freed = released_lines(watched, {
+                    leads = leads,
+                    skipped = skipped,
+                    done = reached_done(reply.events, stages),
+                    stages = stages,
+                    label = board.BLOCKED_LABELS[only],
+                })
+                for _, line in ipairs(freed) do
+                    lines[#lines + 1] = line
                 end
             end
             if #lines > 0 then

@@ -11659,6 +11659,16 @@ end
 local function waited(replies, args, opts)
     opts = opts or {}
     local backend, seen = waiter(replies)
+    if opts.before then
+        local inner = backend.wait
+        function backend:wait(...)
+            local change = opts.before[#seen.afters + 1]
+            if change then
+                change()
+            end
+            return inner(self, ...)
+        end
+    end
     function backend:cards()
         local down = opts.cards_errors and table.remove(opts.cards_errors, 1)
         if down then
@@ -12148,6 +12158,118 @@ testing.test("wait --for lead skips a run card and a card an open card blocks", 
         got("3", { kind = "task_added", task_id = ID_C, column = support.COLUMN_NAME.BLOCKED }),
     }, { "--for", "lead" }, { cards = cards, blockers = { [ID_B] = true } })
     testing.eq(result.output, "cccccccc is labelled needs:lead in Blocked")
+end)
+
+local function held_card(label)
+    return { id = ID_A, column = support.COLUMN_NAME.BLOCKED, labels = { label } }
+end
+
+local function done_event(id)
+    return { kind = "task_moved", task_id = id, column = support.COLUMN_NAME.DONE }
+end
+
+local function blocked_event(id)
+    return { kind = "task_added", task_id = id, column = support.COLUMN_NAME.BLOCKED }
+end
+
+local function lead_card(id)
+    return { id = id, column = support.COLUMN_NAME.BLOCKED, labels = { board.NEEDS_LEAD } }
+end
+
+testing.test("wait --for lead announces a card once its last blocker is Done", function()
+    local blockers = { [ID_A] = true }
+    local result, _, path = waited({
+        got("1"),
+        got("2", blocked_event(ID_A)),
+        got("3", done_event(ID_B)),
+    }, { "--for", "lead" }, {
+        cards = { held_card(board.NEEDS_LEAD) },
+        blockers = blockers,
+        before = {
+            [3] = function()
+                blockers[ID_A] = nil
+            end,
+        },
+    })
+    testing.eq(result.output, "11111111 is labelled needs:lead in Blocked")
+    testing.eq(fs.read(path .. ".lead.cursor"), "3\n")
+end)
+
+testing.test("wait --for lead keeps quiet while another open blocker holds the card", function()
+    local result, seen = waited({
+        got("1"),
+        got("2", blocked_event(ID_A)),
+        got("3", done_event(ID_B)),
+        got("4", blocked_event(ID_C)),
+    }, { "--for", "lead" }, {
+        cards = { lead_card(ID_A), lead_card(ID_C) },
+        blockers = { [ID_A] = true },
+    })
+    testing.eq(result.output, "cccccccc is labelled needs:lead in Blocked")
+    testing.eq(#seen.afters, 4)
+end)
+
+testing.test("wait --for planner announces a held card once its last open child closes", function()
+    local epic = held_card(board.NEEDS_PLANNER)
+    epic.epic = { done = 1, total = 2 }
+    local result = waited({
+        got("1"),
+        got("2", blocked_event(ID_A)),
+        got("3", done_event(ID_B)),
+    }, { "--for", "planner" }, {
+        cards = { epic },
+        before = {
+            [3] = function()
+                epic.epic.done = 2
+            end,
+        },
+    })
+    testing.eq(result.output, "11111111 is labelled needs:planner in Blocked")
+end)
+
+testing.test(
+    "wait --for lead announces a card once when its own event arrives with Done",
+    function()
+        local blockers = { [ID_A] = true }
+        local result = waited({
+            got("1"),
+            got("2", blocked_event(ID_A)),
+            got("3", blocked_event(ID_A), done_event(ID_B)),
+        }, { "--for", "lead" }, {
+            cards = { lead_card(ID_A) },
+            blockers = blockers,
+            before = {
+                [3] = function()
+                    blockers[ID_A] = nil
+                end,
+            },
+        })
+        testing.eq(result.output, "11111111 is labelled needs:lead in Blocked")
+    end
+)
+
+testing.test("wait --for lead announces a card once and not on a later Done event", function()
+    local blockers = { [ID_A] = true }
+    local cards = { lead_card(ID_A), lead_card(ID_C) }
+    local first, _, path = waited({
+        got("1"),
+        got("2", blocked_event(ID_A)),
+        got("3", done_event(ID_B)),
+    }, { "--for", "lead" }, {
+        cards = cards,
+        blockers = blockers,
+        before = {
+            [3] = function()
+                blockers[ID_A] = nil
+            end,
+        },
+    })
+    testing.eq(first.output, "11111111 is labelled needs:lead in Blocked")
+    local later = waited({
+        got("4", done_event(ID_B)),
+        got("5", blocked_event(ID_C)),
+    }, { "--for", "lead" }, { cards = cards, blockers = blockers, path = path })
+    testing.eq(later.output, "cccccccc is labelled needs:lead in Blocked")
 end)
 
 testing.test("wait --for lead fails and keeps the cursor on unreadable blockers", function()
