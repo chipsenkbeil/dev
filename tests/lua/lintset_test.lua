@@ -154,6 +154,35 @@ testing.test("files lists a jj checkout with jj file list, not ignored files", f
     fs.remove(root, { recursive = true })
 end)
 
+testing.test("files says why when jj file list fails and still lists the files", function()
+    if not dev_os.which("jj") then
+        print("skip - jj is not installed")
+        return
+    end
+    local root = support.tempdir()
+    assert(fs.mkdir(root .. "/src", { parents = true }), "mkdir src failed")
+    assert(fs.mkdir(root .. "/.dev", { parents = true }), "mkdir dev failed")
+    assert(fs.write(root .. "/src/new.rs", ""), "fixture setup failed")
+    assert(fs.write(root .. "/.dev/lint-ignore", "{a\n"), "fixture setup failed")
+    assert(dev_os.run({ "jj", "git", "init", root }) == 0, "jj git init failed")
+    local notes = {}
+    local note = verb.note
+    verb.note = function(text)
+        notes[#notes + 1] = text
+    end
+    local ok, files = pcall(function()
+        return lint_for(root):files({ "*.rs" })
+    end)
+    verb.note = note
+    fs.remove(root, { recursive = true })
+    assert(ok, files)
+    testing.eq(notes, {
+        "jj file list failed with exit 1. A bad glob in .dev/lint-ignore is the usual cause."
+            .. " Lint falls back to git or rg.",
+    })
+    testing.eq(files, { "src/new.rs" })
+end)
+
 testing.test("dev_lua lists the Lua under .dev and .ci with skip_hidden set", function()
     local root = support.tempdir()
     for _, dir in ipairs({ ".dev", ".ci", ".claude", "src" }) do
