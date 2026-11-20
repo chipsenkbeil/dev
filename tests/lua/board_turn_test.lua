@@ -845,6 +845,33 @@ testing.test("a waiter whose card is done is not handed a turn that frees meanwh
     testing.eq(turn.holder(backend), nil)
 end)
 
+testing.test("turn stops on a failed renewal that leaves the hold in place", function()
+    -- Hold the turn, then fail the next claim once
+    local backend = backend_at(board_home())
+    local _, short = landing_card(backend)
+    assert(turn.take(backend, "alpha", short, { hold = true, seconds = 600 }))
+    local claim = backend.claim
+    local claims = 0
+    backend.claim = function(self, ...)
+        claims = claims + 1
+        if claims == 1 then
+            return nil, "the board is down"
+        end
+        return claim(self, ...)
+    end
+
+    -- Run the turn verb and expect the renewal's message with no second take
+    local result
+    as_agent("alpha", function()
+        result = cmd_board.run("turn", { short, "--wait", "600" }, backend)
+    end)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("The board is down.", 1, true), result.message)
+    testing.eq(claims, 1)
+    testing.eq(assert(turn.holder(backend)).name, "alpha")
+    testing.ok(turn.held(backend, "alpha", short), "the hold stayed the caller's")
+end)
+
 testing.test("move and turn refuse a bad wait with the same message", function()
     local backend = backend_at(board_home())
     local _, short = landing_card(backend)

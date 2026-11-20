@@ -3832,6 +3832,9 @@ function commands.turn(backend, args)
                 ),
             }
         end
+        if turn.held(backend, name, short) then
+            return failure(message)
+        end
     end
     hold, message = wiring.await_turn({
         backend = backend,
