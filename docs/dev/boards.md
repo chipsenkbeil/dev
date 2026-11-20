@@ -3239,10 +3239,15 @@ lists each one that fails. A refusal can leave the change rebased onto trunk.
   `land` reads `ci ps -a --json --repo PROJECT`, with PROJECT the name in the
   remote's `ssh://host/project` URL, and takes the newest run whose source
   ends in the commit's first 12 digits. A failed run refuses and names the run
-  and its failed jobs from `ci ps RUN --json`. A run still going, a passed
-  run or none at all passes, and a line says which was seen, so `land` never
-  waits. `--ignore-change-run REASON` skips the check and writes the reason in
-  the `done` note. Other forges skip it.
+  and its failed jobs from `ci ps RUN --json`. A run still going or a commit
+  with no run passes with a line that says so, and `land` never waits. When
+  `require_change_run = true` under `[board.land]`, which is off by default, a
+  run still going refuses and names the run, and a commit the rebase rewrote
+  needs a run of its own. A rebased commit with none refuses and says to upload
+  it with `jj submit` or land with `--ignore-change-run REASON`. Both refusals
+  come before the landing turn and hold no lock. `--ignore-change-run REASON`
+  skips the check and writes the reason in the `done` note. Other forges skip
+  it.
 - A `code` and a `style` review of the working-copy change are recorded. A
   review of an earlier commit of the change counts when `jj interdiff` between
   that commit and the landing one is empty, so a clean rebase keeps its reviews
@@ -3456,6 +3461,9 @@ The settings:
 - `deploys = true` under `[board.land]` makes `land` move the card to Release,
   where it waits until it is live. Without it `land` moves the card to Done.
   This repo sets it.
+- `require_change_run = true` under `[board.land]` makes a Gerrit `land` refuse
+  a change run still going and a rebased commit with no run. It is off by
+  default, and then only a failed run refuses.
 - `board.land.verb` names the repo's own land command, as the words to type.
   When it is a non-empty string, `dev board land` and `dev land`
   refuse before any turn, push or move and print that command, to keep a

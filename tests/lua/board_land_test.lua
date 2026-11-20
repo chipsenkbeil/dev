@@ -934,8 +934,10 @@ case "$*" in
 esac
 ]]
 
-    local function gerrit_project()
-        local project = jj_project()
+    local REQUIRE_RUN = "\n[board.land]\nrequire_change_run = true\n"
+
+    local function gerrit_project(extra, status)
+        local project = jj_project(extra)
         jj(project.root, "git", "remote", "add", "gerrit", "ssh://c@g:29418/dotfiles")
         local id = verified_card(project)
         local commit = head(project.root)
@@ -947,7 +949,9 @@ esac
                 stubs .. "/runs.json",
                 '{"runs":[{"run":"r9","source":"pushed@'
                     .. commit:sub(1, 12)
-                    .. '","status":"failed","created_at":5}]}'
+                    .. '","status":"'
+                    .. (status or "failed")
+                    .. '","created_at":5}]}'
             ),
             "write failed"
         )
@@ -957,6 +961,27 @@ esac
         }
         return project, id, commit
     end
+
+    testing.test("with the opt-in, land refuses a rebased commit with no change run", function()
+        local project, id = gerrit_project(REQUIRE_RUN, "passed")
+        trunk_moves(project, { ["moved.txt"] = "moved\n" })
+        refused(
+            project,
+            id,
+            { "no change run of the rebased commit", "`jj submit`", "--ignore-change-run REASON" },
+            project.env
+        )
+    end)
+
+    testing.test("with the opt-in, land refuses a change run still going", function()
+        local project, id, commit = gerrit_project(REQUIRE_RUN, "running")
+        refused(
+            project,
+            id,
+            { "The change run r9 of commit " .. commit:sub(1, 12) .. " is still going" },
+            project.env
+        )
+    end)
 
     testing.test("land refuses a card whose gerrit change run failed and names the run", function()
         local project, id, commit = gerrit_project()

@@ -586,6 +586,8 @@ end
 ---@field ignore_change_run string? the reason to land past a failed gerrit change run
 ---@field change_run_read boolean? true when the change run was read before the rebase
 
+local REQUIRE_CHANGE_RUN = "board.land.require_change_run"
+
 ---Name why a failed gerrit change run of the commit stops the landing.
 ---@param root string the project root
 ---@param commit string the commit whose run is read
@@ -595,7 +597,28 @@ local function failed_change_run(root, commit, ignore)
     if ignore then
         return nil
     end
-    local problem, seen = land.change_run_problem(root, commit)
+    local problem, seen =
+        land.change_run_problem(root, commit, config.get(root, REQUIRE_CHANGE_RUN) == true)
+    if seen then
+        verb.note(seen)
+    end
+    return problem
+end
+
+---Name why the change run of a commit the rebase rewrote stops the landing, when the project
+---requires one.
+---@param root string the project root
+---@param ignore string? the reason to land past the run
+---@return string? problem the refusal, nil when the landing may go on
+local function rebased_change_run(root, ignore)
+    if ignore or config.get(root, REQUIRE_CHANGE_RUN) ~= true then
+        return nil
+    end
+    local state, bad = land.state(root)
+    if not state then
+        return bad
+    end
+    local problem, seen = land.rebased_run_problem(root, state.commit)
     if seen then
         verb.note(seen)
     end
@@ -895,6 +918,16 @@ local function land_prepare(opts)
     local refused, rebased = land_rebase(backend, card, name)
     if refused then
         return refused
+    end
+    local unlisted = rebased and rebased_change_run(backend.root, opts.ignore_change_run)
+    if unlisted then
+        return failure(
+            "Card "
+                .. short
+                .. " cannot land for these reasons.\n  - "
+                .. unlisted
+                .. "\nThe change was rebased onto trunk."
+        )
     end
     local fresh
     fresh, message = backend:comments(card.id)

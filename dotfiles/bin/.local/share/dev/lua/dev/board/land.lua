@@ -581,15 +581,19 @@ local function failed_jobs(root, run)
     return names
 end
 
----Say whether the gerrit change run of the commit failed.
+---Say whether the gerrit change run of the commit failed, or is still going when the project
+---requires finished runs.
 ---
----Outside gerrit it finds nothing to refuse. A run still going or none at all never refuses a
----landing, and the second value says which was seen.
+---Outside gerrit it finds nothing to refuse. None at all never refuses here, and the second value
+---says so. The third value is true when a run of the commit exists, false when the lookup found
+---none, and nil when nothing was looked up.
 ---@param root string the project root
 ---@param commit string the commit to land
----@return string? problem the refusal, nil when the run did not fail or none was found
+---@param require_run boolean? true to refuse a run still going
+---@return string? problem the refusal, nil when the run passed or none was found
 ---@return string? seen the line that says what was found instead, nil outside gerrit
-function M.change_run_problem(root, commit)
+---@return boolean? found whether a run of the commit exists, nil when nothing was looked up
+function M.change_run_problem(root, commit, require_run)
     local found = forge.resolve(root)
     if not found or found.kind ~= forge.Kind.GERRIT then
         return nil
@@ -610,7 +614,18 @@ function M.change_run_problem(root, commit)
     local digits = commit:sub(1, COMMIT_CHARS)
     local newest = newest_run(doc.runs, digits)
     if not newest then
-        return nil, "No change run of commit " .. digits .. " was found, so nothing was waited on."
+        return nil, "No change run of commit " .. digits .. " was found.", false
+    end
+    local going = newest.status == "running" or newest.status == "queued"
+    if going and require_run then
+        return string.format(
+            "The change run %s of commit %s is still going. Wait for it to finish, or land with "
+                .. "`--ignore-change-run REASON`.",
+            newest.run,
+            digits
+        ),
+            nil,
+            true
     end
     if newest.status ~= "failed" then
         return nil,
@@ -619,7 +634,8 @@ function M.change_run_problem(root, commit)
                 newest.run,
                 digits,
                 tostring(newest.status)
-            )
+            ),
+            true
     end
     local jobs = failed_jobs(root, newest.run)
     return string.format(
@@ -629,6 +645,29 @@ function M.change_run_problem(root, commit)
         digits,
         #jobs > 0 and (" in " .. table.concat(jobs, ", ")) or "",
         newest.run
+    ),
+        nil,
+        true
+end
+
+---Say why a commit that a rebase rewrote may not land, from its gerrit change run.
+---
+---It judges the rebased commit as `change_run_problem` does with finished runs required, and also
+---refuses when no run of it exists. The rebase left the run of the earlier commit behind.
+---@param root string the project root
+---@param commit string the rebased commit to land
+---@return string? problem the refusal, nil when the run passed or nothing was looked up
+---@return string? seen the line that says what was found instead, nil outside gerrit
+function M.rebased_run_problem(root, commit)
+    local problem, seen, found = M.change_run_problem(root, commit, true)
+    if problem or found ~= false then
+        return problem, seen
+    end
+    return string.format(
+        "The rebase moved the commit, and no change run of the rebased commit %s exists. Upload "
+            .. "it with `jj submit` and wait for its run, or land with "
+            .. "`--ignore-change-run REASON`.",
+        commit:sub(1, COMMIT_CHARS)
     )
 end
 
