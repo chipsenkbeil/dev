@@ -1756,15 +1756,13 @@ lasts 900 seconds after each renewal:
   size's cap and the row's `--timeout`, so a row that runs past the cap keeps
   the claim for its whole run.
 - `land`, before its checks and again after its recheck.
-- `review`, when it records a review on the card. The reviewer renews under the
-  claimant's name, not its own.
 - `move`, before it moves the card. A move to any column but In Progress or
   Blocked then releases the claim.
 
 Only a caller that holds the card's claim state and is its claimant renews
-anything, except that `review` needs only the claim state on this machine. A
-renewal that fails prints a note and the command goes on. It leaves the old
-claim and loop as they were and never releases the claim.
+anything, and `review` renews nothing. A renewal that fails prints a note and
+the command goes on. It leaves the old claim and loop as they were and never
+releases the claim.
 
 A `move` out of In Progress to any column but Blocked also releases the claim
 once the move has succeeded. The claimant gets that release from a machine that

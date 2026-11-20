@@ -293,6 +293,34 @@ testing.test(
     end
 )
 
+testing.test("review does not renew the claimants claim", function()
+    local root, home = git_root()
+    local id = card_in(root, home)
+    must(dev(root, home, { "board", "take", id, "--as", "dotfiles/builder" }))
+    local file = support.board_file(home, "mine")
+    local doc = assert(json.decode(assert(fs.read(file))))
+    local expires_at = "2999-01-01T00:00:00Z"
+    doc.cards[1].claim.expires_at = expires_at
+    assert(fs.write(file, assert(json.encode(doc))))
+    local out, code = dev(root, home, {
+        "board",
+        "review",
+        id,
+        "--kind",
+        "code",
+        "--by",
+        "dotfiles/other",
+        "--rev",
+        "HEAD",
+        "--verdict",
+        "clean",
+    })
+    testing.eq(code, 0, out)
+    testing.ok(not out:find("not renewed", 1, true), out)
+    doc = assert(json.decode(assert(fs.read(file))))
+    testing.eq(doc.cards[1].claim.expires_at, expires_at)
+end)
+
 testing.test("note refuses a body that begins with the dev-tick prefix", function()
     local root, home = git_root()
     local id = card_in(root, home)

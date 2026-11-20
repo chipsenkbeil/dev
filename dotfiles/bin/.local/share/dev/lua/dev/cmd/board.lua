@@ -3354,9 +3354,6 @@ function commands.review(backend, args)
             )
         )
     end
-    if card.claimant then
-        wiring.renew_claim(backend, card, card.claimant)
-    end
     local ok
     local warnings
     local seat_note = ""
