@@ -3156,9 +3156,9 @@ conflicts after the rebase is left alone and named, with the
 `jj workspace update-stale` command to run there.
 
 When the newest `dev-check:` record at the commit does not parse and its mode is
-not `expect-fail` (as with one written before rows carried run ids), `land`
-refuses it as unreadable and says to run `dev board check` again, not that no
-record exists.
+not `expect-fail` (as with one whose head lacks the `rows` or `sum` field),
+`land` refuses it as unreadable and says to run `dev board check` again, not
+that no record exists.
 
 The landing turn:
 
