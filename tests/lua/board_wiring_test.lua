@@ -197,13 +197,13 @@ local function claim_stub(fails)
     end
     function stub:comments()
         if fails == "comments" then
-            return nil, "pomb is down"
+            return nil, "Pomb is down."
         end
         return {}
     end
     function stub:note()
         if fails == "note" then
-            return nil, "note refused"
+            return nil, "Note refused."
         end
         return true
     end
@@ -229,7 +229,14 @@ testing.test("take keeps a renewed claim when the comments cannot be read", func
     testing.eq(result.code, nil)
     testing.eq(fence, 3)
     testing.eq(stub.released, 0)
-    testing.ok(result.output:find("pomb is down", 1, true), result.output)
+    testing.ok(
+        result.output:find(
+            "The claim is kept. Its comments could not be read. Pomb is down.",
+            1,
+            true
+        ),
+        result.output
+    )
 end)
 
 testing.test("single_plan.records the one row of a one-row card", function()
@@ -283,6 +290,17 @@ testing.test("a land whose release is refused with a reason prints the sentence"
         "Landed, but the claim was not released. "
             .. "The claim on dddd4444 is not held with fence 3.",
     })
+end)
+
+testing.test("a dropped first claim names the card in its own sentence", function()
+    backend_at(board_home())
+    for _, case in ipairs({ { "note", "Note refused." }, { "comments", "Pomb is down." } }) do
+        local fails, why = case[1], case[2]
+        local stub = claim_stub(fails)
+        local result =
+            runner.claim_card(stub, { id = "cccc3333", size = "1 Pomodoro" }, "dotfiles/a")
+        testing.eq(result.message, "The claim on cccc3333 was dropped. " .. why)
+    end
 end)
 
 testing.test("take releases a first claim when the note or the comments fail", function()

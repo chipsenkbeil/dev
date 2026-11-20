@@ -171,12 +171,10 @@ local function claim_card(backend, card, name)
                 backend,
                 card.id,
                 fence,
-                "the claim on " .. card.id:sub(1, board.MIN_PREFIX) .. " was dropped: " .. why
+                "The claim on " .. card.id:sub(1, board.MIN_PREFIX) .. " was dropped. " .. why
             )
         end
-        warning = "\nThe claim is kept. Its comments could not be read: "
-            .. (why:gsub("[%.%s]+$", ""))
-            .. "."
+        warning = "\nThe claim is kept. Its comments could not be read. " .. why
     end
     local ticks, minutes = claims.cap(card.size)
     local state = { card = card.id, fence = fence }
