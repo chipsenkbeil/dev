@@ -140,7 +140,7 @@ end
 local function checked(commit, mode, rows)
     local lines, commands = {}, {}
     for i, row in ipairs(rows) do
-        local result, run_id, command = row:match("^(%a+) (%S+) (.+)$")
+        local result, run_id, command = row:match("^([%a-]+) (%S+) (.+)$")
         lines[i] = i .. " " .. result .. " " .. run_id
         commands[i] = command
     end
@@ -198,6 +198,16 @@ testing.test("land reads a short check record and refuses rows that changed", fu
     testing.ok(problem:find("Run `dev board check` again", 1, true), problem)
     local swapped = land.checks_problem({ pass }, STATE, { "dev test", "dev lint" })
     testing.ok(swapped:find("checks rows changed", 1, true), swapped)
+end)
+
+testing.test("land accepts a not-run row and still refuses a failed one", function()
+    local rows = { "dev lint", "dev test" }
+    local skipped =
+        checked(COMMIT, check.Mode.RUN, { "pass 8cb600 dev lint", "not-run - dev test" })
+    testing.eq(land.checks_problem({ skipped }, STATE, rows), nil)
+    local failed = checked(COMMIT, check.Mode.RUN, { "not-run - dev lint", "fail 1f2e3d dev test" })
+    local problem = land.checks_problem({ failed }, STATE, rows)
+    testing.ok(problem:find("Row 2, `dev test`, ended with fail.", 1, true), problem)
 end)
 
 testing.test("an old check record is refused with a rerun sentence", function()

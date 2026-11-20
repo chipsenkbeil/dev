@@ -404,8 +404,9 @@ function M.checks_problem(comments, state, rows)
     end
     local bad = {}
     for i, row in ipairs(latest.rows) do
-        if row.result ~= check.Result.PASS then
-            bad[#bad + 1] = string.format("Row %d, `%s`, ended with %s.", i, rows[i], row.result)
+        local result = row.result
+        if result ~= check.Result.PASS and result ~= check.Result.NOT_RUN then
+            bad[#bad + 1] = string.format("Row %d, `%s`, ended with %s.", i, rows[i], result)
         end
     end
     if #bad > 0 then

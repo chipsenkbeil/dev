@@ -2897,8 +2897,8 @@ command.
   `run` line the row prints. A shared run prints one `rows N, M run <id>` line
   for all its rows. `land`'s recheck and `ship` print none.
 - A row for a file the `mac_only` setting lists is recorded as `not-run` with
-  `-` for its run id and starts no run. It does not make the check fail, but
-  `land` reads only a `pass` as a pass.
+  `-` for its run id and starts no run. It does not make the check fail, and
+  `land` accepts it as it does a `pass`.
 - A row that failed with no run id adds a second line under it, indented by
   two spaces, with the last line the row printed. A row that printed a run id,
   a negated row and a row that timed out add none.
