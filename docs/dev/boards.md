@@ -3681,8 +3681,8 @@ The cards left in Release:
 - A card whose move fails stays in Release, is listed, and makes `ship` exit
   1.
 - A card whose move succeeds but whose note fails stays in Done with no `done`
-  note. `ship` lists it under `moved to Done with no done note, write it by
-  hand:` and exits 1.
+  note. `ship` lists it under `These cards moved to Done with no done note.
+  Write each note by hand:` and exits 1.
 - Neither write is queued.
 
 A failing command:

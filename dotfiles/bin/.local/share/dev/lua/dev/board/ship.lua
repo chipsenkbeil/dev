@@ -140,22 +140,22 @@ end
 ---@return boolean? reverted true when the card's revert is in the revision, so it goes back to Ready
 function Ship.reason(backend, card, commit, name)
     if guards.done_refusal(card, backend.stages:done_column()) then
-        return "an outcome is not ticked"
+        return "An outcome is not ticked."
     end
     local comments = backend:comments(card.id)
     local landed = comments and land.landed_commit(comments)
     if not landed then
-        return "no landed commit in its notes"
+        return "The card has no landed commit in its notes."
     end
     if not land.holds(backend.root, landed, commit) then
-        return "landed commit " .. land.short(landed) .. " is not in " .. name
+        return "Its landed commit " .. land.short(landed) .. " is not in " .. name .. "."
     end
     local pending = revert.reverted(comments)
     if pending then
         if land.reverts(backend.root, pending, commit) then
             return nil, landed, true
         end
-        return "its revert of " .. pending .. " has not landed in " .. name, landed
+        return "Its revert of " .. pending .. " has not landed in " .. name .. ".", landed
     end
     return nil, landed
 end
@@ -182,7 +182,7 @@ function Ship.reopen(backend, card, deps)
     )
     local moved = deps.move_card(backend, { card.id, backend.stages.ready })
     if moved.code then
-        return "the move to " .. backend.stages.ready .. " was refused. " .. moved.message
+        return "The move to " .. backend.stages.ready .. " was refused. " .. moved.message
     end
 end
 
@@ -232,12 +232,12 @@ local function ship_batch(backend, cards, rev, commit, deps)
             landed_commits[#landed_commits + 1] = landed
         end
         if reason then
-            kept[#kept + 1] = "  " .. short .. " " .. card.name .. " (" .. reason .. ")"
+            kept[#kept + 1] = "  " .. short .. " " .. card.name .. ": " .. reason
         elseif reverted then
             local refusal = Ship.reopen(backend, card, deps)
             if refusal then
                 ok = false
-                kept[#kept + 1] = "  " .. short .. " " .. card.name .. " (" .. refusal .. ")"
+                kept[#kept + 1] = "  " .. short .. " " .. card.name .. ": " .. refusal
             else
                 reopened[#reopened + 1] = "  " .. short .. " " .. card.name
             end
@@ -256,18 +256,16 @@ local function ship_batch(backend, cards, rev, commit, deps)
                     .. short
                     .. " "
                     .. card.name
-                    .. " ("
-                    .. (why or "the note was not written")
-                    .. ")"
+                    .. ": "
+                    .. (why or "The note was not written.")
             else
                 ok = false
                 kept[#kept + 1] = "  "
                     .. short
                     .. " "
                     .. card.name
-                    .. " ("
+                    .. ": "
                     .. (result and result.message or why)
-                    .. ")"
             end
         end
     end
@@ -283,21 +281,23 @@ local function ship_batch(backend, cards, rev, commit, deps)
         lines[#lines + 1] = line
     end
     if #reopened > 0 then
-        lines[#lines + 1] = "reverted, back in " .. backend.stages.ready .. ":"
+        lines[#lines + 1] = "These cards were reverted and are back in "
+            .. backend.stages.ready
+            .. ":"
         for _, line in ipairs(reopened) do
             lines[#lines + 1] = line
         end
     end
     if #kept > 0 then
-        lines[#lines + 1] = "left in " .. backend.stages.release .. ":"
+        lines[#lines + 1] = "These cards stay in " .. backend.stages.release .. ":"
         for _, line in ipairs(kept) do
             lines[#lines + 1] = line
         end
     end
     if #stranded > 0 then
-        lines[#lines + 1] = "moved to "
+        lines[#lines + 1] = "These cards moved to "
             .. backend.stages:done_column()
-            .. " with no done note, write it by hand:"
+            .. " with no done note. Write each note by hand:"
         for _, line in ipairs(stranded) do
             lines[#lines + 1] = line
         end

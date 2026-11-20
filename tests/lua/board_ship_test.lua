@@ -192,7 +192,7 @@ if dev_os.which("jj") then
         end
         testing.eq((state(home, open)), support.COLUMN_NAME.RELEASE)
         testing.ok(out:find("shipped 2 cards", 1, true), out)
-        testing.ok(out:find("left in Release", 1, true), out)
+        testing.ok(out:find("These cards stay in Release:", 1, true), out)
         testing.ok(out:find(open:sub(1, 4), 1, true), out)
     end)
 
@@ -209,17 +209,21 @@ if dev_os.which("jj") then
         backend.root = root
         backend.stages = board.stages(nil, {})
         backend.note = function()
-            return nil, "the board refused the note"
+            return nil, "The board refused the note."
         end
         local result = cmd_board.run("ship", { "--", "true" }, backend)
         testing.eq(result.code, 1, result.message)
         testing.ok(
-            result.message:find("moved to Done with no done note, write it by hand:", 1, true),
+            result.message:find(
+                "These cards moved to Done with no done note. Write each note by hand:",
+                1,
+                true
+            ),
             result.message
         )
         testing.ok(
             result.message:find(
-                id:sub(1, board.MIN_PREFIX) .. " First (the board refused the note)",
+                id:sub(1, board.MIN_PREFIX) .. " First: The board refused the note.",
                 1,
                 true
             ),
@@ -714,7 +718,7 @@ if dev_os.which("jj") then
             local out, code = dev(root, home, { "board", "ship" })
             testing.eq(code, 1, out)
             testing.ok(out:find("waits on the owner", 1, true), out)
-            testing.ok(out:find("left in Release", 1, true), out)
+            testing.ok(out:find("These cards stay in Release:", 1, true), out)
             testing.eq((state(home, id)), support.COLUMN_NAME.RELEASE)
             testing.eq(#done_notes(select(2, state(home, id))), 0)
         end
@@ -751,7 +755,7 @@ if dev_os.which("jj") then
         testing.eq(#notes, 1)
         testing.ok(notes[1]:find(pinned:sub(1, 12), 1, true), notes[1])
         testing.eq((state(home, late)), support.COLUMN_NAME.RELEASE)
-        testing.ok(out:find("left in Release", 1, true), out)
+        testing.ok(out:find("These cards stay in Release:", 1, true), out)
         testing.ok(out:find(late:sub(1, 4), 1, true), out)
         testing.ok(out:find("is not in", 1, true), out)
         testing.eq(#done_notes(select(2, state(home, late))), 0)
