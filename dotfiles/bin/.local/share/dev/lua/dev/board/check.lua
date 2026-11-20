@@ -277,9 +277,9 @@ local function rg_paths(words)
     return paths
 end
 
----List the paths a `dev test` row gives after its double dash.
+---List the paths a `dev test` row gives after its double dash, the words with a slash.
 ---@param words string[] the row's words, dev first
----@return string[] paths the words after the double dash, empty when the row is not a test row
+---@return string[] paths the slashed words after the double dash, empty on a non-test row
 local function test_paths(words)
     local paths = {}
     if words[1] ~= DEV_COMMAND then
@@ -292,7 +292,9 @@ local function test_paths(words)
     local dashed = false
     for k = verb_at + 1, #words do
         if dashed then
-            paths[#paths + 1] = words[k]
+            if words[k]:find("/", 1, true) then
+                paths[#paths + 1] = words[k]
+            end
         elseif words[k] == DOUBLE_DASH then
             dashed = true
         end
@@ -313,6 +315,7 @@ local function on_path(name)
 end
 
 ---Say why a checks row can never run in the workspace at `root`.
+---A `dev test` word with no slash is a test name and is not checked.
 ---@param row string the row as the card holds it
 ---@param root string the workspace the row runs in
 ---@return string? message why the row cannot run, nil when it can

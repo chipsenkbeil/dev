@@ -1005,8 +1005,9 @@ and nothing is written, when it:
   double dash that is no file or directory in the workspace, once a leading
   `./` and a trailing slash are dropped
 
-A test name goes after the double dash, as in `dev --remote test -- NAME`. A
-leading `! ` is allowed. Rows already on a card are not rewritten.
+The path check covers only a word with a slash. A test name goes after the
+double dash, as in `dev --remote test -- NAME`, and is not checked. A leading
+`! ` is allowed. Rows already on a card are not rewritten.
 
 `show` prints the rows under the description. Icebox is exempt.
 

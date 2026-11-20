@@ -271,6 +271,18 @@ testing.test("a dev test row naming a missing suite is unrunnable", function()
     testing.eq(check.unrunnable("dev --remote lint -- missing", root), nil)
 end)
 
+testing.test("a dev test row naming a bare test name is runnable", function()
+    local root = support.tempdir()
+    local row = "dev --remote test -- ui_layout_should_equal_the_love2d_golden"
+    testing.eq(check.unrunnable(row, root), nil)
+end)
+
+testing.test("a dev test row naming a missing path is still refused", function()
+    local root = support.tempdir()
+    local why = check.unrunnable("dev --remote test -- tests/lua/x_test.lua", root)
+    testing.ok(why:find('"tests/lua/x_test.lua"', 1, true), why)
+end)
+
 local function ready_candidate(root, home, row)
     must(dev(root, home, { "board", "init" }))
     support.drop_turn_card(support.board_file(home, "mine"))
