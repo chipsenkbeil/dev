@@ -9530,6 +9530,71 @@ testing.test("take refuses a red Backlog card", function()
     testing.eq(read(root, "calls"):find("/owner", 1, true), nil)
 end)
 
+testing.test("take of an Icebox card is refused for a runner and allowed for a planner", function()
+    local export = export_with_first_card({
+        column_id = ICEBOX_COLUMN,
+        color_id = false,
+        description = PLANNED_TEXT,
+        subtasks = SUBTASKS,
+    })
+    local root, home = sandbox({ export = export })
+    local implementer = { agent = "dotfiles/implementer/abc" }
+
+    -- Refuse the take for a runner because the card has no size
+    local out, code = dev(root, home, { "board", "take", "11111111-a" }, implementer)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("has no size. It cannot enter Ready.", 1, true), out)
+    testing.eq(read(root, "calls"):find("/owner", 1, true), nil)
+
+    -- Refuse the take for a runner when the card is red
+    root, home = sandbox({
+        export = export_with_first_card({
+            column_id = ICEBOX_COLUMN,
+            color_id = "red-id",
+            description = PLANNED_TEXT,
+            subtasks = SUBTASKS,
+        }),
+    })
+    out, code = dev(root, home, { "board", "take", "11111111-a" }, implementer)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("is red, more than 3 Pomodori", 1, true), out)
+    testing.eq(read(root, "calls"):find("/owner", 1, true), nil)
+
+    -- Allow the take for a planner
+    root, home = sandbox({ export = export })
+    out, code = dev(root, home, { "board", "take", "11111111-a" }, { agent = PLANNER })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("^took 11111111"), out)
+    dev(root, home, { "board", "release", "11111111-a" }, { agent = PLANNER })
+end)
+
+testing.test("take of an epic with children skips the outcome and checks requirements", function()
+    local export = export_with_first_card({
+        description = PLANNED_TEXT,
+        subtasks = "[]",
+        fields = "{}",
+    })
+    local root, home = sandbox({ export = export, task = EPIC_TASK:format(3) })
+    local out, code = dev(root, home, { "board", "take", "11111111-a" })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("^took 11111111"), out)
+    dev(root, home, { "board", "release", "11111111-a" })
+end)
+
+testing.test("take of a childless epic with no outcomes is refused", function()
+    local export = export_with_first_card({
+        description = PLANNED_TEXT,
+        subtasks = "[]",
+        fields = "{}",
+    })
+    local task = EPIC_TASK:format(0):gsub('"children_total":3', '"children_total":0', 1)
+    local root, home = sandbox({ export = export, task = task })
+    local out, code = dev(root, home, { "board", "take", "11111111-a" })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("Done when outcomes for an epic", 1, true), out)
+    testing.eq(read(root, "calls"):find("/owner", 1, true), nil)
+end)
+
 testing.test("take of a Ready card with no checks row is refused", function()
     local export = export_with_first_card({
         column_id = support.column_id(support.Column.READY),
