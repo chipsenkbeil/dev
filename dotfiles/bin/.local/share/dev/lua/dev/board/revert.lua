@@ -12,7 +12,9 @@ M.AFTER_SECONDS = 3600
 ---@enum dev.board.revert.Reason
 M.Reason = { CONFLICT = "conflict", FAILED = "failed" }
 
-local CASE_SEPARATOR = "; "
+local CASE_DELIMITER = ";"
+local CASE_SPACE = " "
+local CASE_SEPARATOR = CASE_DELIMITER .. CASE_SPACE
 local RED_PATTERN = "^Ship went red .*%(epoch (%d+)%)%.$"
 local LANDED_PATTERNS = { "^Landed commit ", "^landed %x+ on ", "^Landed change " }
 
@@ -22,7 +24,11 @@ local LANDED_PATTERNS = { "^Landed commit ", "^landed %x+ on ", "^Landed change 
 ---@param cases string[]? the failing cases the ship printed
 ---@return string text the note
 function M.red_text(commit, now, cases)
-    local on = cases and #cases > 0 and (" on " .. table.concat(cases, CASE_SEPARATOR)) or ""
+    local escaped = {}
+    for _, case in ipairs(cases or {}) do
+        escaped[#escaped + 1] = case:gsub("[\\;]", "\\%0")
+    end
+    local on = #escaped > 0 and (" on " .. table.concat(escaped, CASE_SEPARATOR)) or ""
     return string.format(
         "Ship went red at commit %s%s with this card a suspect (epoch %d).",
         commit,
@@ -39,10 +45,24 @@ function M.red_cases(body)
     if not list then
         return nil
     end
-    local cases = {}
-    for case in (list .. CASE_SEPARATOR):gmatch("(.-)" .. CASE_SEPARATOR:gsub("%p", "%%%0")) do
-        cases[#cases + 1] = case
+    local cases, current, pos = {}, {}, 1
+    while pos <= #list do
+        local char = list:sub(pos, pos)
+        if char == "\\" and pos < #list then
+            pos = pos + 1
+            current[#current + 1] = list:sub(pos, pos)
+        elseif char == CASE_DELIMITER then
+            cases[#cases + 1] = table.concat(current)
+            current = {}
+            if list:sub(pos + 1, pos + 1) == CASE_SPACE then
+                pos = pos + 1
+            end
+        else
+            current[#current + 1] = char
+        end
+        pos = pos + 1
     end
+    cases[#cases + 1] = table.concat(current)
     return cases
 end
 

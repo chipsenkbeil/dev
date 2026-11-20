@@ -1,5 +1,6 @@
 local testing = require("dev.testing")
 local board = require("dev.board")
+local revert = require("dev.board.revert")
 local cmd_board = require("dev.cmd.board")
 local dev_os = require("dev.os")
 local localboard = require("dev.board.localboard")
@@ -612,6 +613,27 @@ if dev_os.which("jj") then
         testing.eq(code, 1, out)
         testing.ok(out:find("until it lands", 1, true), out)
         testing.eq((state(home, id)), support.COLUMN_NAME.RELEASE)
+    end)
+
+    testing.test("ship.reverts.a.suspect.red.twice.on.a.case.name.with.a.semicolon", function()
+        local root, home, id = red_card(REVERT_NOW)
+        red_ship_again(root, home, "odd; case")
+        local out, code = red_ship_again(root, home, "odd; case")
+        testing.eq(code, 1, out)
+        testing.ok(out:find("until it lands", 1, true), out)
+        testing.eq((state(home, id)), support.COLUMN_NAME.RELEASE)
+    end)
+
+    testing.test("red.text.round.trips.a.case.name.with.a.semicolon.and.a.space", function()
+        local cases = { "a; b", "plain", "", "back\\slash", "end\\", " x", "x ", "", ";; \\; x" }
+        local text = revert.red_text("abc1234", 100, cases)
+        testing.eq(revert.red_cases(text), cases)
+    end)
+
+    testing.test("red.cases.reads.a.note.written.with.plain.case.names", function()
+        local text = "Ship went red at commit abc1234 on first case; other case with this card "
+            .. "a suspect (epoch 100)."
+        testing.eq(revert.red_cases(text), { "first case", "other case" })
     end)
 
     testing.test("ship.keys.a.red.by.its.file.when.no.case.is.printed", function()
