@@ -982,6 +982,43 @@ testing.test("sign-in refusal names each reason", function()
     end
 end)
 
+local function refused_sign_in(stubs, sentence)
+    local root, home, tmp = sandbox()
+    for name, body in pairs(stubs(root, tmp)) do
+        executable(root .. "/bin/" .. name, body)
+    end
+    local out, code = dev(root, home, tmp, { "board", "init", "--admin" })
+    testing.eq(code, 1)
+    testing.ok(out:find(sentence, 1, true), out)
+    testing.eq(read(root, "calls"):find("/api/boards", 1, true), nil)
+end
+
+testing.test("sign-in refusal names an unreachable Pomb", function()
+    refused_sign_in(function()
+        return { curl = table.concat({ "#!/bin/sh", "exit 7", "" }, "\n") }
+    end, "Cannot reach https://pomb.example/api/v1/auth/device (curl exit 7).\n")
+end)
+
+testing.test("sign-in refusal names a sign-in with no code", function()
+    refused_sign_in(function()
+        return { curl = table.concat({ "#!/bin/sh", "printf '{}\\n200'", "" }, "\n") }
+    end, "Pomb sent a sign-in with no code.\n")
+end)
+
+testing.test("sign-in refusal names a temp file that cannot be made", function()
+    refused_sign_in(function()
+        return { mktemp = table.concat({ "#!/bin/sh", "exit 1", "" }, "\n") }
+    end, "Cannot make a temporary file for the sign-in.\n")
+end)
+
+testing.test("sign-in refusal names a temp file that cannot be written", function()
+    refused_sign_in(function(_, tmp)
+        return {
+            mktemp = table.concat({ "#!/bin/sh", "echo '" .. tmp .. "/missing/body'", "" }, "\n"),
+        }
+    end, "Cannot write the temporary file for the sign-in.\n")
+end)
+
 testing.test("a token the approver lowered is refused", function()
     local root, home, tmp = sandbox()
     assert(fs.write(root .. "/whoami.json", '{"kind":"token","name":"x","scope":"work"}'))
