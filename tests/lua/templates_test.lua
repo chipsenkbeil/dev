@@ -7,6 +7,7 @@ local support = require("support")
 
 local Kind = project.Kind
 local MARKER = "-- --- project-specific checks below ---"
+local DENY_MARK = "# --- project-specific entries below (dev sync keeps them) ---"
 
 local CARGO =
     '[package]\nname = "x"\n\n[workspace.lints.rust]\nunsafe_code = "forbid"\n\n[workspace.lints.clippy]\npedantic = "warn"\n\n[dependencies]\nserde = "1"\n'
@@ -83,8 +84,6 @@ testing.test("render keeps a project's advisories ignore array in deny.toml", fu
         want .. mark .. "\nkept = 1\n"
     )
 end)
-
-local DENY_MARK = "# --- project-specific entries below (dev sync keeps them) ---"
 
 local function render_deny(project_head, template_head)
     local root = support.sandbox({
