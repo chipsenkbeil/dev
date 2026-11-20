@@ -7,7 +7,6 @@ local dev_text = require("dev.text")
 local guards = require("dev.board.guards")
 local land = require("dev.board.land")
 local remote = require("dev.remote")
-local render = require("dev.board.render")
 local runner = require("dev.board.runner")
 local board_select = require("dev.board.select")
 local scm = require("dev.scm")
@@ -337,7 +336,7 @@ local function check_rows(opts)
         short,
         land.short(before.commit),
         summary.passed,
-        render.count_text(#rows, "row")
+        dev_text.count(#rows, "row")
     )
     if flags.expect_fail and summary.proves_nothing > 0 then
         verdict = verdict
@@ -355,7 +354,7 @@ local function check_rows(opts)
             .. string.format(
                 "%sThe baseline left out %s that trunk proof %s covers.",
                 verdict:sub(-1) == "." and " " or ". ",
-                render.count_text(skipped, "standard row"),
+                dev_text.count(skipped, "standard row"),
                 proof
             )
     end

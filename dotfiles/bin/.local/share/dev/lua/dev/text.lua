@@ -115,6 +115,14 @@ function M.sentence(s)
     return s
 end
 
+---Count things with the noun in the singular or the plural.
+---@param count integer how many
+---@param noun string the noun in the singular
+---@return string text the count and the noun, such as `1 card` or `2 cards`
+function M.count(count, noun)
+    return count .. " " .. noun .. (count == 1 and "" or "s")
+end
+
 ---Find a word in a list.
 ---@param list any[] the list
 ---@param word any the item to find

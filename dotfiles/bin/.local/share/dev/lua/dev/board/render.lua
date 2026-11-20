@@ -1,4 +1,5 @@
 local board = require("dev.board")
+local dev_text = require("dev.text")
 local ui = require("dev.ui")
 
 ---The terminal table and summary the `board ls` verb prints.
@@ -11,24 +12,30 @@ local UNSIZED_CELLS = 3
 local METER_CELLS = 4
 local GROUP_INDENT = "  "
 ---The size colors from smallest to largest.
-local SIZE_ORDER = { "yellow", "green", "blue", "red" }
+local SIZE_ORDER = { board.SIZES["1"], board.SIZES["2"], board.SIZES["3"], board.SIZES["3+"] }
 ---How many dots each size color draws.
-local SIZE_DOTS = { yellow = 1, green = 2, blue = 3, red = 4 }
+local SIZE_DOTS = {
+    [board.SIZES["1"]] = 1,
+    [board.SIZES["2"]] = 2,
+    [board.SIZES["3"]] = 3,
+    [board.SIZES["3+"]] = 4,
+}
 ---The word the legend gives each size color.
-local SIZE_WORDS = { yellow = "1", green = "2", blue = "3", red = ">3" }
+local SIZE_WORDS = {
+    [board.SIZES["1"]] = "1",
+    [board.SIZES["2"]] = "2",
+    [board.SIZES["3"]] = "3",
+    [board.SIZES["3+"]] = ">3",
+}
 ---The style each size color paints with.
 local SIZE_STYLES = {
-    yellow = ui.Style.YELLOW,
-    green = ui.Style.GREEN,
-    blue = ui.Style.BLUE,
-    red = ui.Style.RED,
+    [board.SIZES["1"]] = ui.Style.YELLOW,
+    [board.SIZES["2"]] = ui.Style.GREEN,
+    [board.SIZES["3"]] = ui.Style.BLUE,
+    [board.SIZES["3+"]] = ui.Style.RED,
 }
 ---The table headers, before a column is left out.
 local HEADERS = { "ID", "COLUMN", "LANE", "SIZE", "LABELS", "DONE", "HELD BY", "NAME" }
-
-local function count_text(count, noun)
-    return count .. " " .. noun .. (count == 1 and "" or "s")
-end
 
 local function column_style(stages, column)
     if column == stages.progress then
@@ -124,7 +131,7 @@ local function summary_lines(screen, cards, stages)
     for _, card in ipairs(cards) do
         counts[card.column] = (counts[card.column] or 0) + 1
     end
-    local parts = { ui.paint(screen, count_text(#cards, "card"), ui.Style.BOLD) }
+    local parts = { ui.paint(screen, dev_text.count(#cards, "card"), ui.Style.BOLD) }
     local shown = {}
     for _, column in ipairs(stages.list) do
         shown[#shown + 1] = column
@@ -181,7 +188,7 @@ local function terminal_grouped(screen, cards, opts)
         end
         out[#out + 1] = ui.paint(screen, column, ui.Style.BOLD)
             .. "  "
-            .. ui.paint(screen, count_text(#groups[column], "card"), ui.Style.DIM)
+            .. ui.paint(screen, dev_text.count(#groups[column], "card"), ui.Style.DIM)
         for _, line in ipairs(groups[column]) do
             out[#out + 1] = GROUP_INDENT .. line
         end
@@ -257,7 +264,5 @@ function M.history(events)
     end
     return table.concat(board.table_lines(rows), "\n")
 end
-
-M.count_text = count_text
 
 return M

@@ -64,6 +64,12 @@ testing.test("sentence keeps an identifier at the start lowercase", function()
     testing.eq(text.sentence("plain words here"), "Plain words here.")
 end)
 
+testing.test("count keeps the singular for one and pluralises the rest", function()
+    testing.eq(text.count(1, "card"), "1 card")
+    testing.eq(text.count(2, "card"), "2 cards")
+    testing.eq(text.count(0, "row"), "0 rows")
+end)
+
 testing.test("index_of finds the first place of a word and nil when it is absent", function()
     testing.eq(text.index_of({ "a", "b", "a" }, "a"), 1)
     testing.eq(text.index_of({ "a", "b", "a" }, "b"), 2)

@@ -24,7 +24,8 @@ local ship = require("dev.board.ship")
 local stale = require("dev.board.stale")
 local store = require("dev.board.store")
 local tokenfile = require("dev.board.tokenfile")
-local text_width = require("dev.text").width
+local dev_text = require("dev.text")
+local text_width = dev_text.width
 local turn = require("dev.board.turn")
 local ui = require("dev.ui")
 local vcs = require("dev.vcs")
@@ -279,10 +280,6 @@ local function plain(label)
         return nil, usage("Label " .. label .. " must be one word that does not start with -.")
     end
     return label
-end
-
-local function count_text(count, noun)
-    return count .. " " .. noun .. (count == 1 and "" or "s")
 end
 
 local function card_line(card)
@@ -3132,14 +3129,6 @@ function commands.rename(backend, args)
     return { output = "renamed " .. card.id:sub(1, board.MIN_PREFIX) }
 end
 
----Count things with the noun in the singular or the plural.
----@param count integer how many
----@param noun string the noun in the singular
----@return string text the count and the noun
-local function counted(count, noun)
-    return count .. " " .. noun .. (count == 1 and "" or "s")
-end
-
 ---Find a card and replace one of its custom fields under its claim's fence.
 ---@param backend dev.board.Backend the board
 ---@param ref string the card
@@ -3198,7 +3187,7 @@ function commands.checks(backend, args)
     if not card then
         return short
     end
-    return { output = "set checks " .. short .. ", " .. counted(#runs, "row") }
+    return { output = "set checks " .. short .. ", " .. dev_text.count(#runs, "row") }
 end
 
 function commands.check(backend, args)
@@ -3733,7 +3722,7 @@ function commands.ship(backend, args)
     return ship.ship(backend, args, {
         move_card = move_card,
         outcome = commands.outcome,
-        count_text = count_text,
+        count_text = dev_text.count,
     })
 end
 
@@ -3978,7 +3967,7 @@ local function set_names(backend, args, key, noun)
     if not card then
         return short
     end
-    return { output = "set " .. noun .. "s " .. short .. ", " .. counted(#names, "name") }
+    return { output = "set " .. noun .. "s " .. short .. ", " .. dev_text.count(#names, "name") }
 end
 
 function commands.tests(backend, args)

@@ -2,6 +2,7 @@ local cmd_board = require("dev.cmd.board")
 local dev_os = require("dev.os")
 local forge = require("dev.forge")
 local fs = require("dev.fs")
+local dev_text = require("dev.text")
 local vcs = require("dev.vcs")
 local verb = require("dev.verb")
 
@@ -950,10 +951,6 @@ M.handlers["ws rm"] = function(ctx)
     return 0
 end
 
-local function counted(count, noun)
-    return count .. " " .. noun .. (count == 1 and "" or "s")
-end
-
 local function jj_lines(root, ...)
     local argv = vcs.with(vcs.base(root, vcs.JJ, { quiet = true }), ...)
     local out, code = dev_os.capture(argv, { stderr = "null" })
@@ -1260,9 +1257,9 @@ M.handlers["ws prune"] = function(ctx)
         string.format(
             "%s %s and %s. Left %s alone.",
             dry and "Would prune" or "Pruned",
-            counted(pruned, backend == vcs.JJ and "workspace" or "worktree"),
-            counted(abandoned, "head"),
-            counted(left, "item")
+            dev_text.count(pruned, backend == vcs.JJ and "workspace" or "worktree"),
+            dev_text.count(abandoned, "head"),
+            dev_text.count(left, "item")
         )
     )
     return failure or 0
