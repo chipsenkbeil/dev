@@ -69,7 +69,6 @@ local QUOTA_EXCEEDED = "quota_exceeded"
 local TOKEN_EXPIRED = "token_expired"
 local WHOAMI_PATH = "/api/v1/auth/whoami"
 local PERMISSIONS_PATH = "/api/v1/auth/permissions"
-local EXPIRED = "The role token expired. Mint it again from its issuer."
 local ROLES_PATH = "/api/v1/agent-roles/standard"
 local CARD_LOCKED = "card_locked"
 local LINKS_DELETE = "links.delete"
@@ -84,8 +83,6 @@ local NEEDS_LEAD_LANE = "Making a lane needs swimlanes.create, which only the le
     .. "Set [board.pomb] lead_token in ~/.config/dev/config.toml, "
     .. "then run `dev board init` without `--admin`."
 local NOT_YOURS = "that comment is not yours to change"
-local LOCKED = "pomb locked this card: comments, moves, edits, reorders and resizes are refused"
-    .. " until the owner answers and the label that locks it is removed"
 local CHECKS_DEFINITION = {
     key = board.CHECKS_FIELD,
     label = "Checks",
@@ -160,24 +157,11 @@ end
 local function denied(doc, role)
     local permission = present(doc.permission) or "needed"
     local board_id = present(doc.board_id)
-    local token = role and ("This token (role " .. role .. ")") or "This token"
+    local detail = { permission = permission, board_id = board_id, role = role }
     if board_id then
-        return unavailable(
-            token
-                .. " has the "
-                .. permission
-                .. " permission but is not assigned to board "
-                .. board_id
-                .. ". Add the board to the token"
-        )
+        return board.transport_refusal(board.TransportReason.UNASSIGNED, detail)
     end
-    return unavailable(
-        "Pomb answered 403. "
-            .. token
-            .. " lacks the "
-            .. permission
-            .. " permission on every board. Use a token that has it"
-    )
+    return board.transport_refusal(board.TransportReason.DENIED, detail)
 end
 
 ---Tell whether a failure means Pomb could not be asked, as opposed to Pomb
@@ -288,13 +272,13 @@ function M.token(ref)
         stderr = "null",
     })
     if code == TIMED_OUT then
-        return nil, unavailable("pass timed out")
+        return nil, board.transport_refusal(board.TransportReason.PASS_TIMEOUT)
     elseif code ~= 0 then
-        return nil, unavailable("pass is locked or has no entry " .. entry)
+        return nil, board.transport_refusal(board.TransportReason.PASS_ENTRY, { entry = entry })
     end
     local token, source = out:match("^([^\n]*)\n?([^\n]*)")
     if not token:find(TOKEN_PATTERN) then
-        return nil, unavailable("pass gave a token that is empty or not plain text")
+        return nil, board.transport_refusal(board.TransportReason.PASS_EMPTY)
     end
     tokens[entry] = token
     from_keychain[entry] = source == KEYCHAIN_SOURCE
@@ -430,7 +414,11 @@ function Backend:__request(method, path, body, fence, seconds, file, save)
     )
     if code ~= 0 then
         self.__limited = nil
-        return nil, unavailable("cannot reach " .. self.__opts.url .. " (curl exit " .. code .. ")")
+        return nil,
+            board.transport_refusal(
+                board.TransportReason.UNREACHABLE,
+                { url = self.__opts.url, code = code }
+            )
     end
     local text, hint, status = out:match("^(.*)\nretry%-after:([^\n]*)\n(%d+)$")
     if not text then
@@ -450,7 +438,7 @@ function Backend:__request(method, path, body, fence, seconds, file, save)
     status = tonumber(status)
     if not status or doc == nil then
         self.__limited = nil
-        return nil, unavailable("pomb sent an answer dev cannot read")
+        return nil, board.transport_refusal(board.TransportReason.UNREADABLE)
     end
     if status ~= TOO_MANY_REQUESTS then
         self.__limited = nil
@@ -474,7 +462,10 @@ function Backend:__request(method, path, body, fence, seconds, file, save)
         end
     end
     if status == UNAUTHORIZED and self.__issued then
-        return nil, expired and unavailable(EXPIRED) or self.__issued, status, doc
+        return nil,
+            expired and board.transport_refusal(board.TransportReason.EXPIRED) or self.__issued,
+            status,
+            doc
     end
     if status == UNAUTHORIZED and not self.__healed and forget(self.__opts.token) then
         self.__healed = true
@@ -482,7 +473,7 @@ function Backend:__request(method, path, body, fence, seconds, file, save)
         return self:__request(method, path, body, fence, seconds, file, save)
     end
     if expired then
-        return nil, unavailable(EXPIRED), status, doc
+        return nil, board.transport_refusal(board.TransportReason.EXPIRED), status, doc
     end
     if status == FORBIDDEN and type(doc) == "table" and doc.code == PERMISSION_DENIED then
         return nil, denied(doc, self:__role()), status, doc
@@ -495,18 +486,32 @@ function Backend:__request(method, path, body, fence, seconds, file, save)
                 or present(doc.message)
                 or "that"
             return nil,
-                unavailable("pomb answered 403: the " .. role .. " role cannot " .. action),
+                board.transport_refusal(
+                    board.TransportReason.EXCEEDS,
+                    { role = role, action = action }
+                ),
                 status,
                 doc
         end
     end
     if status == FORBIDDEN and type(doc) == "table" and doc.code == CARD_LOCKED then
-        local reason = present(doc.message)
-        return nil, reason and ("pomb locked this card: " .. reason) or LOCKED, status, doc
+        return nil,
+            board.transport_refusal(
+                board.TransportReason.LOCKED,
+                { message = present(doc.message) }
+            ),
+            status,
+            doc
     end
     if status >= HTTP_ERROR then
         local detail = type(doc) == "table" and present(doc.message) or "no message"
-        return nil, unavailable("pomb answered " .. status .. ": " .. tostring(detail)), status, doc
+        return nil,
+            board.transport_refusal(
+                board.TransportReason.REFUSED,
+                { status = status, message = tostring(detail) }
+            ),
+            status,
+            doc
     end
     return doc
 end
@@ -561,7 +566,7 @@ function Backend:whoami()
         return nil, message
     end
     if type(doc) ~= "table" then
-        return nil, unavailable("pomb sent an answer dev cannot read")
+        return nil, board.transport_refusal(board.TransportReason.UNREADABLE)
     end
     local boards = {}
     if type(doc.boards) == "table" then
@@ -600,7 +605,7 @@ function Backend:permissions()
         return nil, message
     end
     if type(doc) ~= "table" or #doc == 0 then
-        return nil, unavailable("pomb sent an answer dev cannot read")
+        return nil, board.transport_refusal(board.TransportReason.UNREADABLE)
     end
     local catalog = {}
     for _, entry in ipairs(doc) do
@@ -1890,7 +1895,7 @@ function Backend:attach(id, path)
     end
     local result = type(doc) == "table" and type(doc.results) == "table" and doc.results[1]
     if type(result) ~= "table" then
-        return nil, unavailable("pomb sent an answer dev cannot read")
+        return nil, board.transport_refusal(board.TransportReason.UNREADABLE)
     end
     if type(result.error) == "table" then
         return nil,
@@ -1898,7 +1903,7 @@ function Backend:attach(id, path)
     end
     local made = result.attachment
     if type(made) ~= "table" then
-        return nil, unavailable("pomb sent an answer dev cannot read")
+        return nil, board.transport_refusal(board.TransportReason.UNREADABLE)
     end
     return { id = made.id, name = made.name, size = made.size }
 end

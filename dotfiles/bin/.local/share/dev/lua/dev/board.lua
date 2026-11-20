@@ -548,6 +548,79 @@ function M.file_refusal(reason, why, detail)
     return text.sentence(why)
 end
 
+---The fixed reasons a Pomb request or its token could not be used.
+---@enum dev.board.TransportReason
+M.TransportReason = {
+    UNREACHABLE = "unreachable",
+    UNREADABLE = "unreadable",
+    REFUSED = "refused",
+    EXPIRED = "expired",
+    DENIED = "denied",
+    UNASSIGNED = "unassigned",
+    EXCEEDS = "exceeds",
+    LOCKED = "locked",
+    PASS_TIMEOUT = "pass_timeout",
+    PASS_ENTRY = "pass_entry",
+    PASS_EMPTY = "pass_empty",
+}
+
+local UNAVAILABLE = "Board unavailable: "
+local LOCKED_DEFAULT = "comments, moves, edits, reorders and resizes are refused"
+    .. " until the owner answers and the label that locks it is removed"
+
+local function token_name(detail)
+    return detail.role and ("This token (role " .. detail.role .. ")") or "This token"
+end
+
+---Write why Pomb or its token could not be used, from the reason.
+---@param reason dev.board.TransportReason the fixed reason
+---@param detail table<string, any>? what the reason names: url and code, status and message, permission,
+---   board_id, role, action or entry
+---@return string message the text
+function M.transport_refusal(reason, detail)
+    local Reason = M.TransportReason
+    detail = detail or {}
+    if reason == Reason.UNREACHABLE then
+        return UNAVAILABLE .. "Cannot reach " .. detail.url .. " (curl exit " .. detail.code .. ")."
+    elseif reason == Reason.UNREADABLE then
+        return UNAVAILABLE .. "Pomb sent an answer dev cannot read."
+    elseif reason == Reason.REFUSED then
+        return UNAVAILABLE .. with_cause("Pomb answered " .. detail.status, detail.message)
+    elseif reason == Reason.EXPIRED then
+        return UNAVAILABLE .. "The role token expired. Mint it again from its issuer."
+    elseif reason == Reason.DENIED then
+        return UNAVAILABLE
+            .. "Pomb answered 403. "
+            .. token_name(detail)
+            .. " lacks the "
+            .. detail.permission
+            .. " permission on every board. Use a token that has it."
+    elseif reason == Reason.UNASSIGNED then
+        return UNAVAILABLE
+            .. token_name(detail)
+            .. " has the "
+            .. detail.permission
+            .. " permission but is not assigned to board "
+            .. detail.board_id
+            .. ". Add the board to the token."
+    elseif reason == Reason.EXCEEDS then
+        return UNAVAILABLE
+            .. with_cause(
+                "Pomb answered 403",
+                "the " .. detail.role .. " role cannot " .. detail.action
+            )
+    elseif reason == Reason.LOCKED then
+        return with_cause("Pomb locked this card", detail.message or LOCKED_DEFAULT)
+    elseif reason == Reason.PASS_TIMEOUT then
+        return UNAVAILABLE .. "Pass timed out."
+    elseif reason == Reason.PASS_ENTRY then
+        return UNAVAILABLE .. "Pass is locked or has no entry " .. detail.entry .. "."
+    elseif reason == Reason.PASS_EMPTY then
+        return UNAVAILABLE .. "Pass gave a token that is empty or not plain text."
+    end
+    error("unknown transport reason " .. tostring(reason))
+end
+
 ---Write why a claim was not released, from the reason the backend named.
 ---@param reason dev.board.ReleaseReason? the reason the backend named
 ---@param why string? the backend's message, which a reason code leaves out

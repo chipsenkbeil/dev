@@ -13679,3 +13679,66 @@ testing.test("file_refusal writes one sentence per reason", function()
     testing.eq(board.file_refusal(Reason.NOT_JSON, nil, path), path .. " is not valid JSON.")
     testing.eq(board.file_refusal(nil, "no space left"), "No space left.")
 end)
+
+testing.test("transport_refusal writes one sentence per transport reason", function()
+    local Reason = board.TransportReason
+    local prefix = "Board unavailable: "
+    testing.eq(
+        board.transport_refusal(Reason.UNREACHABLE, { url = "https://p.test", code = 7 }),
+        prefix .. "Cannot reach https://p.test (curl exit 7)."
+    )
+    testing.eq(
+        board.transport_refusal(Reason.UNREADABLE),
+        prefix .. "Pomb sent an answer dev cannot read."
+    )
+    testing.eq(
+        board.transport_refusal(Reason.REFUSED, { status = 502, message = "bad gateway." }),
+        prefix .. "Pomb answered 502: bad gateway."
+    )
+    testing.eq(
+        board.transport_refusal(Reason.EXPIRED),
+        prefix .. "The role token expired. Mint it again from its issuer."
+    )
+    testing.eq(
+        board.transport_refusal(Reason.DENIED, { permission = "tasks.edit", role = "lead" }),
+        prefix
+            .. "Pomb answered 403. This token (role lead) lacks the tasks.edit permission "
+            .. "on every board. Use a token that has it."
+    )
+    testing.eq(
+        board.transport_refusal(Reason.UNASSIGNED, { permission = "tasks.edit", board_id = "b9" }),
+        prefix
+            .. "This token has the tasks.edit permission but is not assigned to board b9. "
+            .. "Add the board to the token."
+    )
+    testing.eq(
+        board.transport_refusal(Reason.EXCEEDS, { role = "worker", action = "tasks.bin" }),
+        prefix .. "Pomb answered 403: the worker role cannot tasks.bin."
+    )
+    testing.eq(
+        board.transport_refusal(Reason.LOCKED, { message = "owner pending" }),
+        "Pomb locked this card: owner pending."
+    )
+    testing.eq(
+        board.transport_refusal(Reason.LOCKED, { message = "Owner pending." }),
+        "Pomb locked this card: Owner pending."
+    )
+    testing.eq(
+        board.transport_refusal(Reason.EXCEEDS, { role = "worker", action = "Too much." }),
+        prefix .. "Pomb answered 403: the worker role cannot Too much."
+    )
+    testing.eq(
+        board.transport_refusal(Reason.LOCKED, {}),
+        "Pomb locked this card: comments, moves, edits, reorders and resizes are refused "
+            .. "until the owner answers and the label that locks it is removed."
+    )
+    testing.eq(board.transport_refusal(Reason.PASS_TIMEOUT), prefix .. "Pass timed out.")
+    testing.eq(
+        board.transport_refusal(Reason.PASS_ENTRY, { entry = "pomb/x" }),
+        prefix .. "Pass is locked or has no entry pomb/x."
+    )
+    testing.eq(
+        board.transport_refusal(Reason.PASS_EMPTY),
+        prefix .. "Pass gave a token that is empty or not plain text."
+    )
+end)
