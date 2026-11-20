@@ -2854,8 +2854,8 @@ dev-check: commit=<full commit id> change=<change id, - in git> mode=run rows=2 
   error: Failed to run the pipeline
 ```
 
-A row's line holds its index, result and ci run id and no command text, so
-the record stays under Pomb's 5000-byte comment cap up to about 300 rows.
+A row's line holds its index, result and ci run id and no command text. That
+keeps the record under Pomb's 5000-byte comment cap up to about 300 rows.
 `sum` is a hash of the card's checks rows in order, and land refuses a record
 whose `sum` differs from the card's rows with ``The checks rows changed since
 the newest check run at commit <12 characters>. Run `dev board check` again.``

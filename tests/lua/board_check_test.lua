@@ -86,6 +86,17 @@ local function comments(home)
     return doc.cards[1].comments or {}
 end
 
+local function expected_head(commit, change, mode, commands)
+    return string.format(
+        "dev-check: commit=%s change=%s mode=%s rows=%d sum=%s",
+        commit,
+        change,
+        mode,
+        #commands,
+        check.fingerprint(commands)
+    )
+end
+
 testing.test("a row is split into words and a shell character is refused", function()
     testing.eq(check.argv("dev --remote  lint"), { "dev", "--remote", "lint" })
     for _, row in ipairs({
@@ -317,14 +328,7 @@ testing.test("check records each row and the commit, and the run is clean in git
     testing.ok(out:find("1 pass - true", 1, true) and out:find("2 fail - false", 1, true), out)
     testing.ok(out:find("recorded on " .. id .. " at commit " .. head:sub(1, 12), 1, true), out)
     local body = comments(home)[1].body
-    testing.eq(
-        body,
-        "dev-check: commit="
-            .. head
-            .. " change=- mode=run rows=2 sum="
-            .. check.fingerprint({ "true", "false" })
-            .. "\n1 pass -\n2 fail -"
-    )
+    testing.eq(body, expected_head(head, "-", "run", { "true", "false" }) .. "\n1 pass -\n2 fail -")
     testing.eq(comments(home)[1].kind, "status")
     must(dev(root, home, { "board", "checks", id, "true" }))
     out, code = dev(root, home, { "board", "check", id })
@@ -348,6 +352,10 @@ testing.test("check records the ci run id each row printed", function()
 end)
 
 testing.test("a 147 row check record stays under the pomb comment cap", function()
+    local COMMENT_CAP_BYTES = 5000
+    local SHORT_RECORD_BYTES = 3000
+
+    -- Fill 147 failing rows with long commands and reasons
     local state = { commit = string.rep("a", 40), change = string.rep("k", 32) }
     local rows, commands = {}, {}
     for i = 1, 147 do
@@ -359,17 +367,21 @@ testing.test("a 147 row check record stays under the pomb comment cap", function
             reason = string.rep("a long reason ", 30),
         }
     end
+
+    -- Check the record fits the cap and parses back whole
     local body = check.record(state, rows, false)
-    testing.ok(#body < 5000, #body)
+    testing.ok(#body < COMMENT_CAP_BYTES, #body)
     local record = check.parse(body)
     testing.eq(#record.rows, 147)
     testing.eq(record.sum, check.fingerprint(commands))
+
+    -- Check passing rows with run ids and no reasons make a short record
     for i = 1, 147 do
         rows[i].reason = nil
         rows[i].run_id = "007201"
         rows[i].result = "pass"
     end
-    testing.ok(#check.record(state, rows, false) < 3000)
+    testing.ok(#check.record(state, rows, false) < SHORT_RECORD_BYTES)
 end)
 
 testing.test("show lists a short check record", function()
@@ -985,11 +997,7 @@ testing.test("--expect-fail records failing rows and reports a passing one", fun
     testing.eq(code, 0, out)
     testing.eq(
         comments(home)[1].body,
-        "dev-check: commit="
-            .. head
-            .. " change=- mode=expect-fail rows=1 sum="
-            .. check.fingerprint({ "false" })
-            .. "\n1 fail -"
+        expected_head(head, "-", "expect-fail", { "false" }) .. "\n1 fail -"
     )
     must(dev(root, home, { "board", "checks", id, "true", "false" }))
     out, code = dev(root, home, { "board", "check", id, "--expect-fail" })
@@ -1196,13 +1204,7 @@ if has_jj then
             local commit, change = want:match("^(%x+) (%a+)")
             testing.eq(
                 comments(home)[1].body,
-                "dev-check: commit="
-                    .. commit
-                    .. " change="
-                    .. change
-                    .. " mode=run rows=1 sum="
-                    .. check.fingerprint({ "true" })
-                    .. "\n1 pass -"
+                expected_head(commit, change, "run", { "true" }) .. "\n1 pass -"
             )
             testing.ok(out:find(commit:sub(1, 12), 1, true), out)
         end

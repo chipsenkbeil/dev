@@ -95,7 +95,7 @@ local NO_CHANGE = "-"
 local NO_RUN = "-"
 local RUN_LINE = "^run (%x+)$"
 local REASON_INDENT = "  "
-local REASON_MAX = 120
+local REASON_MAX_BYTES = 120
 local COMMENT_BUDGET_BYTES = 4800
 local NEWLINE_BYTE = 10
 local FNV_OFFSET = 2166136261
@@ -1006,6 +1006,7 @@ end
 ---@param expect_fail boolean whether every row was meant to fail
 ---@return string text the comment body, which begins with the reserved prefix
 function M.record(state, rows, expect_fail)
+    -- Build each row line and add up the bytes the lines take
     local commands = {}
     local lines = {}
     local size = 0
@@ -1014,6 +1015,8 @@ function M.record(state, rows, expect_fail)
         lines[i] = string.format("%d %s %s", i, row.result, row.run_id)
         size = size + #lines[i] + 1
     end
+
+    -- Build the head with the row count and the fingerprint of the commands
     local head = string.format(
         "%s commit=%s change=%s mode=%s rows=%d sum=%s",
         board.CHECK_PREFIX,
@@ -1027,10 +1030,12 @@ function M.record(state, rows, expect_fail)
         head = head .. " proof=" .. state.proof
     end
     size = size + #head
+
+    -- Emit each row line, and its reason line while the budget holds
     local out = { head }
     for i, row in ipairs(rows) do
         out[#out + 1] = lines[i]
-        local reason = row.reason and (REASON_INDENT .. row.reason:sub(1, REASON_MAX))
+        local reason = row.reason and (REASON_INDENT .. row.reason:sub(1, REASON_MAX_BYTES))
         if reason and size + #reason + 1 <= COMMENT_BUDGET_BYTES then
             out[#out + 1] = reason
             size = size + #reason + 1
@@ -1056,6 +1061,7 @@ end
 ---@param body string the comment body
 ---@return dev.board.check.Record? record nil when the body is not a record
 function M.parse(body)
+    -- Split the head from the row lines and read the head fields
     local head, rest = body:match("^([^\n]*)\n?(.*)$")
     local bare, proof = head:match("^(.*) proof=(%S+)$")
     head = bare or head
@@ -1064,6 +1070,8 @@ function M.parse(body)
     if prefix ~= board.CHECK_PREFIX then
         return nil
     end
+
+    -- Read each row line, and attach each reason line to the row above it
     local rows = {}
     for line in rest:gmatch("[^\n]+") do
         local reason = line:match("^%s+(%S.*)$")
@@ -1083,6 +1091,8 @@ function M.parse(body)
             rows[#rows + 1] = { result = result, run_id = run_id }
         end
     end
+
+    -- Refuse a record whose row count differs from its head
     if #rows ~= tonumber(count) then
         return nil
     end
