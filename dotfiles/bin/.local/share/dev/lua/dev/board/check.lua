@@ -107,6 +107,7 @@ local DRAIN_NOTHING_NEW = "nothing new starts"
 local DRAIN_OFF = "`ci fleet drain off"
 local ERROR_PREFIX = "^error: "
 local TIMEOUT_EXIT = 124
+local NEGATED_PASS_EXIT = 1
 local DRAINING_EXIT = 12
 local DRAIN_CAP = "The drain did not lift within"
 local NOT_EXECUTABLE_EXIT = 126
@@ -348,7 +349,7 @@ end
 
 ---Split a checks row into the words of one command.
 ---
----A leading `! ` marks a negated row and is dropped, since `run` reads it from the row.
+---A leading `! ` marks a negated row and is dropped.
 ---@param row string the row as the card holds it
 ---@return string[]? argv the command and its arguments
 ---@return string? message why the row is not a plain command, from `refusal`
@@ -646,10 +647,10 @@ function M.run(opts)
     local passed = code == 0
     local note
     if negated then
-        passed = code == 1
+        passed = code == NEGATED_PASS_EXIT
         if code == 0 then
             note = "A match was found."
-        elseif code ~= 1 and code ~= TIMEOUT_EXIT then
+        elseif code ~= NEGATED_PASS_EXIT and code ~= TIMEOUT_EXIT then
             note = string.format("The command failed with exit %d, which is an error.", code)
         end
     end
