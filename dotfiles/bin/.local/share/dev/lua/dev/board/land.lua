@@ -474,6 +474,13 @@ function M.stack_note(root)
     if vcs.backend(root) ~= vcs.JJ or parent_on_trunk(root) then
         return nil
     end
+    local found = forge.resolve(root)
+    if found then
+        local _, code = fetch(root, found.remote)
+        if code == 0 and parent_on_trunk(root) then
+            return nil
+        end
+    end
     return "The parent of this change is not on trunk. "
         .. "Land refuses it when that parent is unlanded, so "
         .. "squash the commits into one change before the final check."

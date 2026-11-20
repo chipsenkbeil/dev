@@ -1436,14 +1436,41 @@ esac
         local id = new_card(project)
         to_verify(project, id)
         approve_reviews(project, id)
-        local clean = dev(project, { "board", "check", id })
+        local reads = support.tempdir() .. "/fetch.log"
+        local clean = dev(project, { "board", "check", id }, { FETCH_LOG = reads })
         testing.eq(clean:find("squash the commits", 1, true), nil, clean)
+        testing.eq(fs.read(reads), nil)
         jj(project.root, "new", "-m", "second")
         assert(fs.write(project.root .. "/more.txt", "two\n"), "write failed")
-        local out, code = dev(project, { "board", "check", id })
+        local out, code = dev(project, { "board", "check", id }, { FETCH_LOG = reads })
         testing.eq(code, 0, out)
         testing.ok(out:find("squash the commits into one change", 1, true), out)
+        testing.eq(fs.read(reads), "fetch\n")
     end)
+
+    testing.test(
+        "no stack note prints when the parent landed after the workspace was made",
+        function()
+            local project = jj_project()
+            local id = new_card(project)
+            to_verify(project, id)
+            approve_reviews(project, id)
+            jj(project.root, "new", "-m", "second")
+            assert(fs.write(project.root .. "/more.txt", "two\n"), "write failed")
+            local parent = jj(project.root, "log", "-r", "@-", "--no-graph", "-T", "commit_id")
+            must(dev_os.run({
+                "git",
+                "--git-dir=" .. project.root .. "/.git",
+                "push",
+                "-q",
+                project.bare,
+                parent .. ":refs/heads/master",
+            }, { stdout = "null", stderr = "null" }))
+            local out, code = dev(project, { "board", "check", id })
+            testing.eq(code, 0, out)
+            testing.eq(out:find("squash the commits", 1, true), nil, out)
+        end
+    )
 
     testing.test("an expect-fail record never counts as a passing check", function()
         local project = jj_project()
