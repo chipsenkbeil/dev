@@ -396,6 +396,22 @@ testing.test("a 147 row check record stays under the pomb comment cap", function
     testing.ok(#check.record(state, rows, false) < SHORT_RECORD_BYTES)
 end)
 
+testing.test("show names each check row command", function()
+    local root, home = git_root()
+    local id = card_with(root, home, { "true", "echo run 8cb600" })
+    local out, code = dev(root, home, { "board", "check", id })
+    testing.eq(code, 0, out)
+    out, code = dev(root, home, { "board", "show", id })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("2 pass 8cb600 echo run 8cb600", 1, true), out)
+
+    must(dev(root, home, { "board", "checks", id, "true", "echo run 8cb601" }))
+    out, code = dev(root, home, { "board", "show", id })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("2 pass 8cb600", 1, true), out)
+    testing.eq(out:find("2 pass 8cb600 echo", 1, true), nil, out)
+end)
+
 testing.test("show lists a short check record", function()
     local root, home = git_root()
     local id = card_with(root, home, { "true", "echo run 8cb600" })

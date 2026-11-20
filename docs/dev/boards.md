@@ -2923,8 +2923,11 @@ dev-check: commit=<full commit id> change=<change id, - in git> mode=run rows=2 
   error: Failed to run the pipeline
 ```
 
-A row's line holds its index, result and ci run id and no command text. That
-keeps the record under Pomb's 5000-byte comment cap up to about 300 rows.
+The stored record holds no command text, only each row's index, result and ci
+run id, which keeps it under Pomb's 5000-byte comment cap up to about 300
+rows. `show` adds each row's command after the run id when the record's `rows`
+count and `sum` match the card's checks rows. Otherwise it prints the record as
+stored.
 `sum` is a hash of the card's checks rows in order, and land refuses a record
 whose `sum` differs from the card's rows with ``The checks rows changed since
 the newest check run at commit <12 characters>. Run `dev board check` again.``

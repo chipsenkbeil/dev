@@ -1025,9 +1025,28 @@ local function body_column(rows)
     return text_width(board.table_lines(marked)[1]) - text_width("x")
 end
 
+---Add each row's command to a `dev-check:` record that ran the card's current checks rows.
+---@param lines string[] the comment body's lines
+---@param body string the comment body
+---@param checks string[] the card's checks rows
+---@return string[] lines the lines, with a command after each row line when the record matches
+local function named_rows(lines, body, checks)
+    local record = check.parse(body)
+    if not record or #record.rows ~= #checks or record.sum ~= check.fingerprint(checks) then
+        return lines
+    end
+    local named = {}
+    for i, line in ipairs(lines) do
+        local index = line:match("^(%d+) ")
+        named[i] = index and line .. " " .. checks[tonumber(index)] or line
+    end
+    return named
+end
+
 ---Format the comments as aligned table rows, one per comment.
 ---@param list dev.board.Comment[]
----@param opts? { whole: boolean } `whole` prints every line of each body, not only the first
+---@param opts? { whole?: boolean, checks?: string[] } `whole` prints every line of each body, not
+---   only the first, and `checks` names each row of a matching `dev-check:` record
 ---@return string
 local function comment_lines(list, opts)
     if #list == 0 then
@@ -1036,6 +1055,9 @@ local function comment_lines(list, opts)
     local rows, rests = {}, {}
     for i, comment in ipairs(list) do
         local lines = body_lines(comment.body)
+        if opts and opts.checks then
+            lines = named_rows(lines, comment.body, opts.checks)
+        end
         rows[i] = {
             comment.id:sub(1, board.MIN_PREFIX),
             comment.who,
@@ -1088,7 +1110,7 @@ function commands.notes(backend, args)
     if not list then
         return failure(message)
     end
-    return { output = comment_lines(list) }
+    return { output = comment_lines(list, { checks = card.checks }) }
 end
 
 function commands.history(backend, args)
@@ -1226,7 +1248,7 @@ local function card_view(backend, card)
         .. "\n\n"
         .. outcomes
         .. blocks
-        .. comment_lines(list, { whole = true })
+        .. comment_lines(list, { whole = true, checks = card.checks })
 end
 
 function commands.show(backend, args)
