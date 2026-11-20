@@ -872,6 +872,34 @@ testing.test("turn stops on a failed renewal that leaves the hold in place", fun
     testing.ok(turn.held(backend, "alpha", short), "the hold stayed the caller's")
 end)
 
+testing.test("a failed renewal of a hold that is gone takes the turn again", function()
+    -- Hold the turn, then let the next claim free it and fail
+    local backend = backend_at(board_home())
+    local _, short = landing_card(backend)
+    local first = assert(turn.take(backend, "alpha", short, { hold = true, seconds = 600 }))
+    local claim = backend.claim
+    local claims = 0
+    backend.claim = function(self, ...)
+        claims = claims + 1
+        if claims == 1 then
+            assert(backend:release(first.card, first.fence))
+            return nil, "the claim is gone"
+        end
+        return claim(self, ...)
+    end
+
+    -- Run the turn verb and expect a fresh hold with a new fence
+    local result
+    as_agent("alpha", function()
+        result = cmd_board.run("turn", { short, "--wait", "60" }, backend)
+    end)
+    testing.eq(result.code, nil)
+    testing.ok(result.output:find("Holding the landing turn for", 1, true) == 1, result.output)
+    testing.eq(assert(turn.holder(backend)).name, "alpha")
+    local second = assert(turn.held(backend, "alpha", short))
+    testing.ok(second.fence ~= first.fence, "the new hold kept the first fence")
+end)
+
 testing.test("move and turn refuse a bad wait with the same message", function()
     local backend = backend_at(board_home())
     local _, short = landing_card(backend)
