@@ -1490,7 +1490,7 @@ testing.test("agent-roles-exceeds-grant: a board the init token does not hold is
     local out, code = dev(root, home, tmp, { "board", "init" })
     testing.eq(code, 1)
     testing.ok(out:find("The token does not hold board demo (board-1)", 1, true), out)
-    testing.ok(out:find("add the board to the token", 1, true), out)
+    testing.ok(out:find("Add the board to the token", 1, true), out)
     testing.eq(out:find("--admin", 1, true), nil)
     local after = {}
     local seen = false

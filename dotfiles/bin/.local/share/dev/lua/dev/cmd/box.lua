@@ -1339,10 +1339,11 @@ local function pick_name(ctx, parsed, opts)
     if not M.interactive() then
         verb.usage_error(
             ctx,
-            "no box given and no terminal to pick one; pass a name, like dev "
+            "No box given and no terminal to pick one. Pass a name, like dev "
                 .. ctx.name
                 .. " ci-abc"
                 .. (opts.example or "")
+                .. "."
         )
     end
     M.need_ci()

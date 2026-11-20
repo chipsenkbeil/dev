@@ -355,7 +355,7 @@ assert_eq "tools install passes ci's message on" "$out" "dev box tools install: 
 reset
 out="$(box box tools install 2>&1)"
 assert_eq "tools install needs a box name" "$?" "2"
-assert_eq "tools install says to pass a name" "$out" "dev box tools install: no box given and no terminal to pick one; pass a name, like dev box tools install ci-abc"
+assert_eq "tools install says to pass a name" "$out" "dev box tools install: No box given and no terminal to pick one. Pass a name, like dev box tools install ci-abc."
 assert_eq "ci is not called for tools install without a name" "$(calls)" ""
 
 reset

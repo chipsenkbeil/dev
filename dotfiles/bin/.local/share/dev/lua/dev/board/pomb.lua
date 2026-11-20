@@ -69,7 +69,7 @@ local QUOTA_EXCEEDED = "quota_exceeded"
 local TOKEN_EXPIRED = "token_expired"
 local WHOAMI_PATH = "/api/v1/auth/whoami"
 local PERMISSIONS_PATH = "/api/v1/auth/permissions"
-local EXPIRED = "The role token expired; mint it again from its issuer."
+local EXPIRED = "The role token expired. Mint it again from its issuer."
 local ROLES_PATH = "/api/v1/agent-roles/standard"
 local CARD_LOCKED = "card_locked"
 local LINKS_DELETE = "links.delete"
@@ -160,7 +160,7 @@ end
 local function denied(doc, role)
     local permission = present(doc.permission) or "needed"
     local board_id = present(doc.board_id)
-    local token = role and ("this token (role " .. role .. ")") or "this token"
+    local token = role and ("This token (role " .. role .. ")") or "This token"
     if board_id then
         return unavailable(
             token
@@ -168,15 +168,15 @@ local function denied(doc, role)
                 .. permission
                 .. " permission but is not assigned to board "
                 .. board_id
-                .. "; add the board to the token"
+                .. ". Add the board to the token"
         )
     end
     return unavailable(
-        "pomb answered 403: "
+        "Pomb answered 403. "
             .. token
             .. " lacks the "
             .. permission
-            .. " permission on every board; use a token that has it"
+            .. " permission on every board. Use a token that has it"
     )
 end
 
@@ -2715,7 +2715,7 @@ function Backend:__missing()
                 .. name
                 .. " for this token, which is assigned only to "
                 .. (#names > 0 and table.concat(names, ", ") or "no boards")
-                .. "; if the board exists, add it to the token"
+                .. ". If the board exists, add it to the token"
         )
     end
     return unavailable("pomb has no board named " .. name)
@@ -2973,7 +2973,7 @@ function Backend:add_roles()
                         .. self.__opts.name
                         .. " ("
                         .. id
-                        .. "), so it cannot be granted the standard roles; add the board to the token"
+                        .. "), so it cannot be granted the standard roles. Add the board to the token"
                 )
         end
         local detail = type(doc) == "table" and present(doc.message) or "no message"

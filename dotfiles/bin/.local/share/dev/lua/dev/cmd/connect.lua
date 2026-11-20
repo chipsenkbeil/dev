@@ -410,7 +410,7 @@ local function choose(boxes, others, project)
     if not box.interactive() then
         verb.usage_error(
             { name = "box connect" },
-            "no box given and no terminal to pick one; pass a name, like dev box connect ci-abc"
+            "No box given and no terminal to pick one. Pass a name, like dev box connect ci-abc."
         )
     end
     local opts = {

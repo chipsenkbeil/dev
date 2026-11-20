@@ -10558,8 +10558,8 @@ testing.test("a permission_denied with no board says the token lacks it everywhe
     testing.eq(code, 1)
     testing.eq(
         out,
-        "Board unavailable: Pomb answered 403: this token lacks the tasks.edit permission "
-            .. "on every board; use a token that has it.\n"
+        "Board unavailable: Pomb answered 403. This token lacks the tasks.edit permission "
+            .. "on every board. Use a token that has it.\n"
     )
 end)
 
@@ -10575,7 +10575,7 @@ testing.test("a permission_denied with a board says the board is not assigned", 
     testing.eq(
         out,
         "Board unavailable: This token has the tasks.edit permission but is not assigned "
-            .. "to board board-9; add the board to the token.\n"
+            .. "to board board-9. Add the board to the token.\n"
     )
 end)
 
@@ -10601,8 +10601,8 @@ testing.test("role-refusal-denied names the refused permission and the role", fu
     testing.eq(code, 1)
     testing.eq(
         out,
-        "Board unavailable: Pomb answered 403: this token (role implementer) lacks the "
-            .. "tasks.edit permission on every board; use a token that has it.\n"
+        "Board unavailable: Pomb answered 403. This token (role implementer) lacks the "
+            .. "tasks.edit permission on every board. Use a token that has it.\n"
     )
 end)
 
@@ -10642,7 +10642,7 @@ testing.test("role-refusal-expired says the role token expired and to mint it ag
     )
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
-    testing.eq(out, "Board unavailable: The role token expired; mint it again from its issuer.\n")
+    testing.eq(out, "Board unavailable: The role token expired. Mint it again from its issuer.\n")
 end)
 
 testing.test("an insufficient_scope 403 still reports the server's message", function()
@@ -10673,7 +10673,7 @@ testing.test("a board missing from a token's assigned boards gets its own messag
     testing.eq(
         out,
         "Board unavailable: Pomb lists no board named dotfiles for this token, which is "
-            .. "assigned only to Other; if the board exists, add it to the token.\n"
+            .. "assigned only to Other. If the board exists, add it to the token.\n"
     )
 end)
 

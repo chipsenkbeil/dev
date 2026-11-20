@@ -269,11 +269,11 @@ function M.require_terminal(ctx, opts)
         M.mark(ctx:stderr(), Mark.FAIL),
         " ",
         opts.command,
-        ": no ",
+        ": No ",
         opts.missing,
-        " given and no terminal to pick one; pass ",
+        " given and no terminal to pick one. Pass ",
         opts.hint,
-        "\n"
+        ".\n"
     )
     os.exit(2)
 end

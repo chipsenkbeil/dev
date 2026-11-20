@@ -418,7 +418,7 @@ What it lays out:
     The lead token can run init once the roles exist, as the post is then
     skipped. A `permission_denied` is shown with the missing permission, and an
     `exceeds_grant` as `Board unavailable: The token (role R) does not hold
-    board X (ID), so it cannot be granted the standard roles; add the board to
+    board X (ID), so it cannot be granted the standard roles. Add the board to
     the token.` with nothing created.
   - When the refused permission is `roles.grant`, `init` prints ``The agent
     roles are left for `dev board init --admin`.``, counts no change and goes
@@ -428,11 +428,11 @@ What it lays out:
 - role refusals: a refusal reads the token's `role_name` from
   `GET /api/v1/auth/whoami`, once, and only then.
   - A `permission_denied` 403 and an `exceeds_grant` 403 name the refused
-    permission or action and the role, as `this token (role implementer)
+    permission or action and the role, as `This token (role implementer)
     lacks the tasks.edit permission`.
   - A token with no role gets the plain text with no role named.
   - A 401 with the code `token_expired`, matched on the code and never the
-    message, prints `The role token expired; mint it again from its issuer.`
+    message, prints `The role token expired. Mint it again from its issuer.`
 - palette: yellow is `1 Pomodoro`, green `2 Pomodori`, blue `3 Pomodori`, red
   `>3 Pomodori` and white `Unsized`, with white as the default. A card keeps
   its colour in every column, so the colour is the only record of its size.
@@ -506,7 +506,7 @@ dev prints two messages for the new refusal:
 
 A board missing from `GET /api/boards` on a token assigned only some boards
 is reported as `Board unavailable: Pomb lists no board named X for this token,
-which is assigned only to NAMES; if the board exists, add it to the token.` On a
+which is assigned only to NAMES. If the board exists, add it to the token.` On a
 token that sees every board it stays `Board unavailable: Pomb has no board named
 X.`
 
@@ -4828,18 +4828,17 @@ The approver may grant a lower scope, so `GET /api/v1/auth/whoami` must say
   permission `GET /api/v1/auth/permissions` lists with `admin` in its
   `presets`, and `boards` must be `all`.
 
-A 403 with `code` `permission_denied` reads as follows. Each message is two
-clauses joined by a semicolon or a plain `but`:
+A 403 with `code` `permission_denied` reads as follows. Each message is
+full sentences:
 
-- `board_id` null: `Pomb answered 403: this token lacks the <permission>
-  permission on every board`, a semicolon and `use a token that has it`. The
-  `--admin` hint applies.
-- `board_id` set: `This token has the <permission> permission but is not
-  assigned to board <id>`, a semicolon and `add the board to the token`. No
+- `board_id` null: `Pomb answered 403. This token lacks the <permission>
+  permission on every board.` and `Use a token that has it.` The `--admin`
   hint applies.
+- `board_id` set: `This token has the <permission> permission but is not
+  assigned to board <id>.` and `Add the board to the token.` No hint applies.
 
 A board absent from `/api/boards` reads `Board unavailable: Pomb lists no board
-named X for this token, which is assigned only to NAMES; if the board exists,
+named X for this token, which is assigned only to NAMES. If the board exists,
 add it to the token.` when `whoami` returns a `boards` list, else `Board
 unavailable: Pomb has no board named X.`
 

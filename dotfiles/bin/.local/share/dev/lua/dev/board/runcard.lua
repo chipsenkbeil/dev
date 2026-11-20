@@ -79,7 +79,7 @@ local function start_run(backend, name, quoted, deps)
         "--problem",
         "A run keeps its orders and resume steps on the board, so a session finds them after compaction.",
         "--out-of-scope",
-        "The work on other cards; this card holds only the run's state.",
+        "The work on other cards. This card holds only the run's state.",
         "--done-when",
         "The orders below are carried out " .. board.JUDGEMENT,
         "--done-when",

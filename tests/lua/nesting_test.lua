@@ -133,7 +133,7 @@ testing.test("the old hyphenated words are gone", function()
     testing.ok(out:find("dev __topics: unknown subcommand frob", 1, true), out)
     out, code = dev(root, { "box", "tools", "install" })
     testing.eq(code, 2)
-    testing.ok(out:find("no box given and no terminal to pick one", 1, true), out)
+    testing.ok(out:find("No box given and no terminal to pick one", 1, true), out)
     fs.remove(root, { recursive = true })
 end)
 

@@ -392,8 +392,8 @@ Without a terminal a missing name is a usage error with exit 2. The line ends
 like this, in the verb's own words, with `-y` only for `delete`:
 
 ```
-no box given and no terminal to pick one; pass a name,
-like dev box delete ci-abc -y
+No box given and no terminal to pick one. Pass a name,
+like dev box delete ci-abc -y.
 ```
 
 ### Errors and data
