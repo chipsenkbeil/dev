@@ -5279,7 +5279,7 @@ M.handlers["board token mint"] = function(ctx)
         { hours = hours, renew = flags["--renew"] ~= nil }
     )
     if not issued then
-        verb.die(sentence(message))
+        verb.die(message)
     end
     local stamp = issued.expires > 0 and os.date("!%Y-%m-%dT%H:%M:%SZ", issued.expires) or "never"
     print(
@@ -5306,7 +5306,7 @@ M.handlers["board token revoke"] = function(ctx)
     local backend = open_lead(ctx, "revokes a role token")
     local done, message = backend:revoke(flags["--as"])
     if not done then
-        verb.die(sentence(message))
+        verb.die(message)
     end
     print(
         done.revoked and ("revoked the role token of " .. flags["--as"])
@@ -5322,7 +5322,7 @@ function Owner.print_needs_human(found)
     end
     local rows, unreadable = backend:needs_human()
     if not rows then
-        verb.die(sentence(unreadable))
+        verb.die(unreadable)
     end
     if #rows == 0 then
         verb.say("No cards.")

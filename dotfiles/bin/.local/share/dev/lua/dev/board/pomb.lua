@@ -3,7 +3,6 @@ local board_limits = require("dev.board.limits")
 local box = require("dev.cmd.box")
 local claims = require("dev.board.claims")
 local dev_os = require("dev.os")
-local dev_text = require("dev.text")
 local fs = require("dev.fs")
 local json = require("dev.json")
 local project = require("dev.project")
@@ -2555,8 +2554,7 @@ function Backend:mint(role, name, opts)
     end
     if failed then
         if deleted then
-            failed = dev_text.sentence(failed)
-                .. " The old token was already deleted, so mint again without --renew."
+            failed = failed .. " The old token was already deleted, so mint again without --renew."
         end
         return nil, failed
     end
@@ -2573,7 +2571,7 @@ function Backend:mint(role, name, opts)
         local undone, why = self:revoke(name)
         local kept = board.file_refusal(reason, message, detail)
         if not undone then
-            return nil, kept .. " The token stays issued. " .. dev_text.sentence(why)
+            return nil, kept .. " The token stays issued. " .. why
         end
         if not undone.revoked then
             return nil, kept .. " Pomb listed no token to revoke."
