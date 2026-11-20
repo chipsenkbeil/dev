@@ -839,6 +839,13 @@ M.LINK_KINDS = { M.LinkKind.BLOCKED_BY, M.LinkKind.BLOCKS, M.LinkKind.RELATED, M
 ---The fewest characters of a card id that name a card.
 M.MIN_PREFIX = 8
 
+---Test whether `word` is long enough, and made of hex digits and hyphens, to name a card.
+---@param word string the word to test
+---@return boolean named true when the word can be a card id or a prefix of one
+function M.is_card_prefix(word)
+    return #word >= M.MIN_PREFIX and word:find("^[%x-]+$") ~= nil
+end
+
 ---The comment kinds, with question sent only by `ask`.
 M.NoteKind = {
     DECISION = "decision",
@@ -1206,7 +1213,7 @@ end
 function M.resolve(items, word, noun)
     noun = noun or "card"
     local prefix = word:lower()
-    if #prefix < M.MIN_PREFIX or not prefix:find("^[%x-]+$") then
+    if not M.is_card_prefix(prefix) then
         return nil,
             ("A %s id needs at least %d hex characters: %s."):format(noun, M.MIN_PREFIX, word)
     end

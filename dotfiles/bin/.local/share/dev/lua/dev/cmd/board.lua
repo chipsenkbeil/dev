@@ -34,7 +34,6 @@ local board_wait = require("dev.board.wait")
 local wiring = require("dev.board.wiring")
 
 local NO_BOARD = "This project has no board."
-local ID_CHARS = "^[%x-]+$"
 local UNKNOWN_COLUMN = "?"
 local USAGE = guards.USAGE
 local FAILURE = guards.FAILURE
@@ -294,7 +293,7 @@ local function link_suffix(backend, card)
 end
 
 local function find_card(backend, word)
-    if #word >= board.MIN_PREFIX and word:find(ID_CHARS) then
+    if board.is_card_prefix(word) then
         local card = backend:card(word:lower())
         if card and card.column ~= UNKNOWN_COLUMN then
             return card

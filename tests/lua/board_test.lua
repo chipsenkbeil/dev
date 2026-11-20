@@ -462,6 +462,16 @@ testing.test("resolve takes a unique prefix of at least 8 characters", function(
     testing.eq(board.resolve(cards, "CCCCCCCC").id, ID_C)
 end)
 
+testing.test("is_card_prefix wants 8 or more hex digits and hyphens", function()
+    testing.ok(board.is_card_prefix("11111111"))
+    testing.ok(board.is_card_prefix("11111111-a"))
+    testing.ok(board.is_card_prefix("CCCCCCCC"))
+    testing.ok(not board.is_card_prefix("1111111"))
+    testing.ok(not board.is_card_prefix("zzzzzzzz"))
+    testing.ok(not board.is_card_prefix("1111 1111"))
+    testing.ok(not board.is_card_prefix(""))
+end)
+
 testing.test("resolve refuses a short, unknown or ambiguous prefix", function()
     local cards = sample()
     local card, message = board.resolve(cards, "1111111")
