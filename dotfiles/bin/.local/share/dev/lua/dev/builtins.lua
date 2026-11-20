@@ -409,8 +409,8 @@ return {
     {
         words = { "board", "due" },
         handler = "lua",
-        usage = "dev board due CARD (DATE | --clear)",
-        desc = "Set or clear a card's due date",
+        usage = "dev board due CARD [DATE | --clear]",
+        desc = "Show, set or clear a card's due date",
     },
     {
         words = { "board", "links" },

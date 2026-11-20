@@ -74,15 +74,24 @@ testing.test("a local card stores its due date and show prints it only while set
     testing.ok(not out:find("due:", 1, true), out)
 end)
 
-testing.test("due refuses a date that does not exist and a call with no date", function()
+testing.test("due with no date shows the due date or says the card has none", function()
+    local dev, card = local_board()
+    local out, code = dev({ "board", "due", card })
+    testing.eq(code, 0, out)
+    testing.eq(out, card .. " has no due date\n")
+    dev({ "board", "due", card, "2027-01-21" })
+    out, code = dev({ "board", "due", card })
+    testing.eq(code, 0, out)
+    testing.eq(out, card .. " due 2027-01-21\n")
+end)
+
+testing.test("due refuses a date that does not exist and a date with --clear", function()
     local dev, card = local_board()
     for _, bad in ipairs({ "2027-02-30", "2027-1-5", "soon", "2027-13-01" }) do
         local out, code = dev({ "board", "due", card, bad })
         testing.eq(code, 2, out)
     end
-    local out, code = dev({ "board", "due", card })
-    testing.eq(code, 2, out)
-    out, code = dev({ "board", "due", card, "2027-01-21", "--clear" })
+    local out, code = dev({ "board", "due", card, "2027-01-21", "--clear" })
     testing.eq(code, 2, out)
 end)
 

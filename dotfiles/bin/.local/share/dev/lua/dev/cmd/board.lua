@@ -4219,12 +4219,7 @@ function commands.due(backend, args)
     if not flags then
         return words
     end
-    if
-        #words < 1
-        or #words > 2
-        or (flags["--clear"] and #words ~= 1)
-        or (#words == 1 and not flags["--clear"])
-    then
+    if #words < 1 or #words > 2 or (flags["--clear"] and #words ~= 1) then
         return usage("Needs a card, and a YYYY-MM-DD date or --clear.")
     end
     local date = words[2]
@@ -4236,6 +4231,12 @@ function commands.due(backend, args)
         return err
     end
     local short = card.id:sub(1, board.MIN_PREFIX)
+    if #words == 1 and not flags["--clear"] then
+        if card.due then
+            return { output = short .. " due " .. card.due }
+        end
+        return { output = short .. " has no due date" }
+    end
     local held = claims.read(card.id)
     local ok, message = backend:set_due(card.id, date, held and held.fence)
     if not ok then

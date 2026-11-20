@@ -2309,8 +2309,10 @@ session responsible for a card.
 
 ### due
 
-`dev board due CARD (DATE | --clear)` sets or clears a card's due date.
+`dev board due CARD [DATE | --clear]` shows, sets or clears a card's due date.
 
+- With only `CARD` it prints `<id prefix> due DATE`, or
+  `<id prefix> has no due date`.
 - `DATE` is `YYYY-MM-DD` and must be a real calendar day. Anything else exits 2
   before any request.
 - `DATE` sends `PATCH /api/tasks/{id}` with `{"due_at": "DATE"}`, the bare
