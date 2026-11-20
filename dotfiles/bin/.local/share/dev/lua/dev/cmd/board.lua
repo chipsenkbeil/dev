@@ -2092,17 +2092,20 @@ end
 ---@param args string[] the arguments after `move`
 ---@return boolean
 local function closes_epic(backend, args)
-    local flags, words = parse(args, MOVE_FLAGS)
+    local home, rest = guards.on_board(backend, args)
+    if not home then
+        return false
+    end
+    local flags, words = parse(rest, MOVE_FLAGS)
     if not flags or #words < 2 then
         return false
     end
-    backend.stages = backend.stages
-        or board.stages(backend.column_map, backend:done_columns() or {})
-    local column = named_column(backend, table.concat(words, " ", 2))
-    if not column or column ~= backend.stages:done_column() then
+    home.stages = home.stages or board.stages(home.column_map, home:done_columns() or {})
+    local column = named_column(home, table.concat(words, " ", 2))
+    if not column or column ~= home.stages:done_column() then
         return false
     end
-    local card = find_card(backend, words[1])
+    local card = find_card(home, words[1])
     return card ~= nil and (card.epic ~= nil or card.kind == board.Kind.EPIC)
 end
 

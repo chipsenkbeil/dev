@@ -233,7 +233,9 @@ runs it spawns is a separate matter that the line does not cover.
 ### Closing an epic
 
 `dev board move EPIC done` on a Pomb board reads the card with the worker
-token first. When the card is an epic and the column is the Done column, dev
+token first. The card may be `BOARD:PREFIX`, as in
+`dev board move BOARD:EPIC done`, and dev reads the card and the Done column
+on that board. When the card is an epic and the column is the Done column, dev
 opens the board again with `[board.pomb] lead_token`, as `delete` does, and
 sends the move with it, and never queues it when Pomb is unreachable. Pomb
 grants `epics.manage` to the `lead` preset and above. A `DEV_AGENT` that is not

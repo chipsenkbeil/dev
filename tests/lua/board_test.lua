@@ -7714,6 +7714,58 @@ testing.test("a worker's move of an epic into Done is refused before the move", 
     testing.eq(read(root, "calls"):find("/move", 1, true), nil)
 end)
 
+local function epic_on_other_board()
+    local root, home = epic_sandbox(2, true)
+    assert(
+        fs.write(
+            root .. "/boards.json",
+            '[{"id":"board-1","name":"dotfiles","archived":false},'
+                .. '{"id":"board-2","name":"General","archived":false}]'
+        )
+    )
+    assert(
+        fs.write(
+            root .. "/general.json",
+            (DETAIL:gsub('"id":"board%-1","name":"dotfiles"', '"id":"board-2","name":"General"'))
+        )
+    )
+    return root, home
+end
+
+testing.test("the lead closes an epic given as BOARD:PREFIX with the lead token", function()
+    local root, home = epic_on_other_board()
+    local out, code = dev(
+        root,
+        home,
+        { "board", "move", "General:11111111", support.Column.DONE },
+        { agent = LEAD }
+    )
+    testing.eq(code, 0, out)
+    local sent = read(root, "move_stdin")
+    testing.ok(
+        sent:find("Bearer " .. LEAD_SECRET, 1, true),
+        "the move did not carry the lead token"
+    )
+    testing.eq(sent:find(WORK_SECRET, 1, true), nil)
+end)
+
+testing.test(
+    "a worker's move of a BOARD:PREFIX epic into Done is refused before it is sent",
+    function()
+        local root, home = epic_on_other_board()
+        local out, code = dev(
+            root,
+            home,
+            { "board", "move", "General:11111111", support.Column.DONE },
+            { agent = "dotfiles/implementer/82f0e002/1" }
+        )
+        testing.eq(code, 1, out)
+        testing.ok(out:find("Only the lead closes an epic", 1, true), out)
+        testing.eq(read(root, "move_stdin"), "")
+        testing.eq(read(root, "calls"):find("/move", 1, true), nil)
+    end
+)
+
 testing.test("the lead's close of an epic names the open children", function()
     local root, home = epic_sandbox(1, true)
     local out, code = dev(
