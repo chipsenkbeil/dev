@@ -2225,13 +2225,47 @@ testing.test("links lists each link with the kind, the id prefix and the board",
     local result = cmd_board.run("links", { "11111111-a" }, backend)
     testing.eq(
         result.output,
-        "blocked_by  cccccccc  -\nblocks      dddddddd  ci\nrelated     11111111  -"
+        "blocked_by  cccccccc  -   Done\nblocks      dddddddd  ci  -\nrelated     11111111  -   Backlog"
     )
     testing.eq(backend.calls[1], { "links", ID_A })
     testing.eq(cmd_board.run("links", { "11111111-b" }, fake(sample())).output, "No links.")
     testing.eq(cmd_board.run("links", {}, backend).code, 2)
     testing.eq(cmd_board.run("links", { "deadbeef" }, backend).code, 1)
 end)
+
+testing.test(
+    "links prints the column on another board and a dash for an unreadable card",
+    function()
+        local backend = fake(sample())
+        local sibling = fake({
+            { id = ID_D, name = "Ci card", column = "Release", size = "unsized", labels = {} },
+        })
+        backend.sibling = sibling
+        backend.held = {
+            { kind = "blocked_by", id = ID_D, board = "ci" },
+            { kind = "blocked_by", id = ID_C, board = "ci" },
+            { kind = "related", id = ID_B },
+            { kind = "related", id = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee" },
+        }
+        local result = cmd_board.run("links", { "11111111-a" }, backend)
+        testing.eq(
+            result.output,
+            "blocked_by  dddddddd  ci  Release\n"
+                .. "blocked_by  cccccccc  ci  -\n"
+                .. "related     11111111  -   Backlog\n"
+                .. "related     eeeeeeee  -   -"
+        )
+        backend.sibling = nil
+        result = cmd_board.run("links", { "11111111-a" }, backend)
+        testing.eq(
+            result.output,
+            "blocked_by  dddddddd  ci  -\n"
+                .. "blocked_by  cccccccc  ci  -\n"
+                .. "related     11111111  -   Backlog\n"
+                .. "related     eeeeeeee  -   -"
+        )
+    end
+)
 
 testing.test(
     "unlink removes the held link of that kind and target, and refuses one it lacks",
@@ -8308,9 +8342,10 @@ testing.test("next skips a card held by a blocker that is not in Done", function
     testing.eq(out, "No ready cards.\n")
 end)
 
-local function far_sandbox(column)
-    local link = '[{"kind":"blocked_by",'
-        .. '"target_id":"dddddddd-dddd-4ddd-8ddd-dddddddddddd","board_id":"board-2"}]'
+local function far_sandbox(column, links)
+    local link = links
+        or '[{"kind":"blocked_by",'
+            .. '"target_id":"dddddddd-dddd-4ddd-8ddd-dddddddddddd","board_id":"board-2"}]'
     local root, home = sandbox({ links = link })
     assert(
         fs.write(
@@ -9192,18 +9227,12 @@ testing.test(
             .. '{"id":"l3","kind":"related","target_id":"'
             .. ID_B
             .. '","board_id":null}]'
-        local root, home = sandbox({ links = links })
-        assert(
-            fs.write(
-                root .. "/boards.json",
-                '[{"id":"board-1","name":"dotfiles"},{"id":"board-2","name":"ci"}]'
-            )
-        )
+        local root, home = far_sandbox("far-done", links)
         local out, code = dev(root, home, { "board", "links", "11111111-a" })
         testing.eq(code, 0, out)
         testing.eq(
             out,
-            "blocked_by  cccccccc  -\nblocks      dddddddd  ci\nrelated     11111111  -\n"
+            "blocked_by  cccccccc  -   Backlog\nblocks      dddddddd  ci  Done\nrelated     11111111  -   Ready\n"
         )
         testing.ok(
             read(root, "calls"):find("/api/tasks/" .. ID_A .. "/links", 1, true),

@@ -1185,14 +1185,17 @@ testing.test(
         dev(root, home, { "board", "link", a, "related", c })
         local out, code = dev(root, home, { "board", "links", a })
         testing.eq(code, 0, out)
-        testing.eq(out, "blocked_by  " .. b .. "  -\nrelated     " .. c .. "  -\n")
+        testing.eq(
+            out,
+            "blocked_by  " .. b .. "  -  Backlog\nrelated     " .. c .. "  -  Backlog\n"
+        )
         out = dev(root, home, { "board", "links", b })
-        testing.eq(out, "blocks  " .. a .. "  -\n")
+        testing.eq(out, "blocks  " .. a .. "  -  Backlog\n")
         out = dev(root, home, { "board", "links", c })
-        testing.eq(out, "related  " .. a .. "  -\n")
+        testing.eq(out, "related  " .. a .. "  -  Backlog\n")
         dev(root, home, { "board", "link", c, "related", a })
         out = dev(root, home, { "board", "links", c })
-        testing.eq(out, "related  " .. a .. "  -\n")
+        testing.eq(out, "related  " .. a .. "  -  Backlog\n")
         local d = prefix_of((dev(root, home, {
             "board",
             "add",
@@ -1269,7 +1272,10 @@ testing.test(
         local out, code = dev(root, home, { "board", "unlink", a, "related", c })
         testing.eq(code, 0, out)
         testing.eq(out, "unlinked " .. a .. " related " .. c .. "\n")
-        testing.eq(dev(root, home, { "board", "links", a }), "blocked_by  " .. b .. "  -\n")
+        testing.eq(
+            dev(root, home, { "board", "links", a }),
+            "blocked_by  " .. b .. "  -  Backlog\n"
+        )
         out, code = dev(root, home, { "board", "unlink", c, "related", a })
         testing.eq(code, 1, out)
         out, code = dev(root, home, { "board", "unlink", b, "blocks", a })
@@ -1445,6 +1451,41 @@ testing.test("responsible is stored on a local card and show prints it only whil
     testing.eq(out, "cleared " .. card .. " responsible\n")
     out = dev(root, home, { "board", "show", card })
     testing.ok(not out:find("responsible:", 1, true), out)
+end)
+
+testing.test("links prints the column of each linked card", function()
+    local root, home = local_board()
+    local function plain(name, column)
+        return prefix_of((dev(root, home, {
+            "board",
+            "add",
+            name,
+            "--problem",
+            "x",
+            "--change",
+            "x",
+            "--out-of-scope",
+            "y",
+            "--size",
+            "1",
+            "--done-when",
+            "a",
+            "--column",
+            column,
+        })))
+    end
+    local a = plain("A", Column.BACKLOG)
+    local b = plain("B", Column.ICEBOX)
+    local c = plain("C", Column.BACKLOG)
+    dev(root, home, { "board", "link", a, "blocked_by", b })
+    dev(root, home, { "board", "link", a, "related", c })
+    local out, code = dev(root, home, { "board", "links", a })
+    testing.eq(code, 0, out)
+    testing.eq(out, "blocked_by  " .. b .. "  -  Icebox\nrelated     " .. c .. "  -  Backlog\n")
+    out, code = dev(root, home, { "board", "move", b, Column.BACKLOG })
+    testing.eq(code, 0, out)
+    out = dev(root, home, { "board", "links", a })
+    testing.eq(out, "blocked_by  " .. b .. "  -  Backlog\nrelated     " .. c .. "  -  Backlog\n")
 end)
 
 testing.test("link parent sets one epic and show and links report it", function()

@@ -1308,6 +1308,7 @@ its `next` skips a card that a card outside Done blocks.
 - the kind as the card sees it (`blocked_by`, `blocks`, `related` or `parent`)
 - the other card's id prefix
 - the name of its board, with `-` for this board
+- its column with `-` when the card cannot be read
 
 A card with no links prints `No links.` It lists both sides of a link, the ones
 the card holds and the ones another card holds on it, which show as `blocks`,
@@ -2379,7 +2380,8 @@ session responsible for a card.
 
 - It prints one aligned line each: the kind (`blocked_by`, `blocks`,
   `related`, `parent` or `child`, as the card sees it), the other card's
-  8-character id prefix and its board name (`-` for this board).
+  8-character id prefix, its board name (`-` for this board) and its column
+  (`-` when the card cannot be read).
 - The order is the one the backend gives, else it prints `No links.`
 - A Pomb board reads `GET /api/tasks/{id}/links`. That lists the links the card
   holds and a `blocks`, `related` or `child` entry for each link another card

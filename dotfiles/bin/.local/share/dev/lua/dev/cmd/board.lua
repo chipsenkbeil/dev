@@ -4167,12 +4167,31 @@ function commands.files(backend, args)
     return set_names(backend, args, board.FILES_FIELD, "file")
 end
 
-local function link_rows(list)
+local function link_rows(list, columns)
     local rows = {}
-    for _, link in ipairs(list) do
+    for at, link in ipairs(list) do
         rows[#rows + 1] = { link.kind, link.id:sub(1, board.MIN_PREFIX), link.board or "-" }
+        if columns then
+            rows[#rows][4] = columns[at]
+        end
     end
     return table.concat(board.table_lines(rows), "\n")
+end
+
+local function link_columns(backend, list)
+    local columns, others = {}, {}
+    for at, link in ipairs(list) do
+        local reader = backend
+        if link.board then
+            if others[link.board] == nil then
+                others[link.board] = backend:other_board(link.board) or false
+            end
+            reader = others[link.board]
+        end
+        local linked = reader and reader:card(link.id)
+        columns[at] = linked and linked.column or "-"
+    end
+    return columns
 end
 
 local function link_ends(backend, args)
@@ -4798,7 +4817,7 @@ function commands.links(backend, args)
     if #list == 0 then
         return { output = "No links." }
     end
-    return { output = link_rows(list) }
+    return { output = link_rows(list, link_columns(backend, list)) }
 end
 
 function commands.stale(backend, args, now)
