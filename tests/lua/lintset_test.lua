@@ -53,6 +53,21 @@ testing.test("spacing in shell passes a comment heading the next case arm", func
     testing.eq(lintset.spacing("run \\\n    --flag\n# then\nfinish\n", "#"), { 3 })
 end)
 
+testing.test("spacing in shell skips a heredoc body and flags a comment after it", function()
+    testing.eq(lintset.spacing("cat <<EOF\n# data\nEOF\n", "#"), {})
+    testing.eq(lintset.spacing("cat <<'EOF'\nx\n# data\nEOF\n", "#"), {})
+    testing.eq(lintset.spacing("cat <<-EOF\n\t# data\n\tEOF\n", "#"), {})
+    testing.eq(lintset.spacing("cat <<EOF\n# data\nEOF\n# after\nnext\n", "#"), { 4 })
+    testing.eq(lintset.spacing("cat <<< word\n# after\nnext\n", "#"), { 2 })
+    testing.eq(lintset.spacing("cat <<\\EOF\n# data\nEOF\n", "#"), {})
+end)
+
+testing.test("spacing in shell ignores a heredoc marker in a string or a comment", function()
+    testing.eq(lintset.spacing('echo "cmd <<EOF"\n# after\nnext\n', "#"), { 2 })
+    testing.eq(lintset.spacing("foo # see <<EOF\n# after\nnext\n", "#"), { 2 })
+    testing.eq(lintset.spacing("x=$[1<<n]\n# after\nnext\n", "#"), { 2 })
+end)
+
 testing.test("spacing skips doc comments and block comments", function()
     testing.eq(lintset.spacing("local a = 1\n--- doc\nlocal b\n", "--"), {})
     testing.eq(lintset.spacing("local a = 1\n\n--[[\nnote\n]]\nlocal b\n", "--"), {})
