@@ -1616,6 +1616,17 @@ local function ready_refusal(backend, card, shape)
             )
         end
     end
+    if children == 0 then
+        local unrunnable = guards.row_refusal(card.checks, backend.root)
+        if unrunnable then
+            return failure(
+                "Card "
+                    .. card.id:sub(1, board.MIN_PREFIX)
+                    .. " has a checks row that cannot run and cannot enter Ready. "
+                    .. unrunnable.message
+            )
+        end
+    end
     local comments, why = backend:comments(card.id)
     if not comments then
         return failure(why)

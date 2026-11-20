@@ -3269,7 +3269,10 @@ local function ready_with(config, checks)
     local card = colored("green")
     card.checks = checks
     local backend = fake({ card })
-    backend.root = support.sandbox({ [".dev/config.toml"] = config }, {})
+    backend.root = support.sandbox({
+        [".dev/config.toml"] = config,
+        ["tests/lua/board_test.lua"] = "x\n",
+    }, {})
     return cmd_board.run("move", { "cccccccc", support.Column.READY }, backend), backend
 end
 
@@ -3318,14 +3321,18 @@ end)
 
 testing.test("move to Ready refuses an outcome that names no deciding check", function()
     local card = planned()
-    card.checks = { "dev --remote test", "dev (x) y" }
+    card.checks = { "dev --remote test", "dev x y" }
     card.outcomes = {
         { id = "s1", name = "A is refused " .. board.CHECK_OPEN .. "remote test)", done = false },
         { id = "s2", name = "B reads well " .. board.JUDGEMENT, done = false },
         { id = "s3", name = "C works", done = false },
         { id = "s4", name = "D works " .. board.CHECK_OPEN .. "nothing)", done = false },
         { id = "s5", name = "E blank " .. board.CHECK_OPEN .. "  )", done = false },
-        { id = "s6", name = "F parens " .. board.CHECK_OPEN .. "dev (x) y)", done = false },
+        {
+            id = "s6",
+            name = "F parens (x) " .. board.CHECK_OPEN .. "dev x y)",
+            done = false,
+        },
     }
     local result = cmd_board.run("move", { "cccccccc", support.Column.READY }, fake({ card }))
     testing.eq(result.code, 1)

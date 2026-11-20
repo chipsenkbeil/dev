@@ -245,6 +245,64 @@ testing.test("board checks refuses an unrunnable row and keeps the old rows", fu
     testing.ok(out:find('"words"', 1, true), out)
 end)
 
+testing.test("a dev test row naming a missing suite is unrunnable", function()
+    local root = support.tempdir()
+    assert(fs.mkdir(root .. "/tests/lua", { parents = true }))
+    assert(fs.write(root .. "/tests/lua/a_test.lua", "x\n"))
+    local why = check.unrunnable("dev --remote test -- tests/lua/b_test.lua", root)
+    testing.ok(why:find('"tests/lua/b_test.lua"', 1, true), why)
+    testing.ok(why:find("names no suite in the workspace", 1, true), why)
+    testing.ok(check.unrunnable("dev test -- tests/lua/a_test.lua tests/nope", root))
+    testing.ok(check.unrunnable("! dev --local test -- ./missing/", root))
+    testing.eq(check.unrunnable("dev --remote test -- tests/lua/a_test.lua", root), nil)
+    testing.eq(check.unrunnable("dev --remote test -- ./tests/lua/", root), nil)
+    testing.eq(check.unrunnable("dev --remote test", root), nil)
+    testing.eq(check.unrunnable("dev --remote lint -- missing", root), nil)
+end)
+
+local function ready_candidate(root, home, row)
+    must(dev(root, home, { "board", "init" }))
+    support.drop_turn_card(support.board_file(home, "mine"))
+    local out = dev(root, home, {
+        "board",
+        "add",
+        "Card",
+        "--description",
+        support.READY_DESCRIPTION,
+        "--size",
+        "2",
+        "--done-when",
+        "a (reviewer judgement)",
+        "--done-when",
+        "b (reviewer judgement)",
+        "--done-when",
+        "c (reviewer judgement)",
+        "--checks",
+        row,
+    })
+    return assert(out:match("added (%x+)"), out)
+end
+
+testing.test("move ready refuses a card whose rg row names a missing path", function()
+    local root, home = git_root({ ["a.txt"] = "x\n" })
+    local id = ready_candidate(root, home, "rg -n x a.txt")
+    assert(fs.remove(root .. "/a.txt"))
+    local out, code = dev(root, home, { "board", "move", id, "ready" })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("has a checks row that cannot run and cannot enter Ready.", 1, true), out)
+    testing.ok(out:find('gives rg the word "a.txt"', 1, true), out)
+end)
+
+testing.test("move ready refuses a card whose dev test row names a missing suite", function()
+    local root, home = git_root({ ["tests/a_test.lua"] = "x\n" })
+    local id = ready_candidate(root, home, "dev --remote test -- tests/a_test.lua")
+    assert(fs.remove(root .. "/tests/a_test.lua"))
+    local out, code = dev(root, home, { "board", "move", id, "ready" })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("has a checks row that cannot run and cannot enter Ready.", 1, true), out)
+    testing.ok(out:find("names no suite in the workspace", 1, true), out)
+end)
+
 testing.test("the reserved prefix is found whatever its case and leading space", function()
     testing.ok(board.reserved("dev-check: commit=x"))
     testing.ok(board.reserved("  DEV-CHECK: x"))
@@ -705,7 +763,7 @@ end
 ---@field watch string? the shell the fake `ci ps --watch` runs
 
 local function group_check(opts)
-    local root, home, head = git_root()
+    local root, home, head = git_root({ ["tests/a_test.lua"] = "x\n" })
     local id = card_with(root, home, opts.rows or { "dev --remote lint", "dev --remote test" })
     local env = fake_ci(group_ci(opts, head))
     local log = support.tempdir() .. "/ci.log"

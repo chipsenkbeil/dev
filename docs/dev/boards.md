@@ -945,6 +945,10 @@ A card needs a checks row to enter Ready too. The checks live in the board's
 
 - `move CARD ready` refuses a card with no row (exit 1), unless the card has
   children.
+- `move CARD ready` also refuses a card with a row that cannot run (exit 1). It
+  says `Card ID has a checks row that cannot run and cannot enter Ready.` and
+  then the row's reason, such as an rg row naming a missing path or a
+  `dev test` row naming a path that is no suite in the workspace.
 - `add --column ready` without `--checks` is a usage error (exit 2).
 - On a Pomb board that has no checks field, both say so and point to
   `dev board init`, which defines the field once and never touches one that
@@ -970,6 +974,9 @@ and nothing is written, when it:
 - starts with a dotted run such as `dev.--remote.lint`
 - passes a word to `dev --remote test` or `dev --remote lint` before the double
   dash
+- gives `dev test`, with or without `--remote` or `--local`, a path after the
+  double dash that is no file or directory in the workspace, once a leading
+  `./` and a trailing slash are dropped
 
 A test name goes after the double dash, as in `dev --remote test -- NAME`. A
 leading `! ` is allowed. Rows already on a card are not rewritten.

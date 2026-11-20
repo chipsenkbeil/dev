@@ -254,6 +254,38 @@ local function rg_paths(words)
     return paths
 end
 
+---List the paths a `dev test` row gives after its double dash.
+---@param words string[] the row's words, dev first
+---@return string[] paths the words after the double dash, empty when the row is not a test row
+local function test_paths(words)
+    local paths = {}
+    if words[1] ~= DEV_COMMAND then
+        return paths
+    end
+    local i = 2
+    while i <= #words and words[i] ~= DOUBLE_DASH do
+        local word = words[i]
+        if registry.VALUE_FLAGS[word] then
+            i = i + 1
+        elseif word:sub(1, 1) ~= "-" then
+            break
+        end
+        i = i + 1
+    end
+    if words[i] ~= STANDARD_TEST then
+        return paths
+    end
+    local dashed = false
+    for k = i + 1, #words do
+        if dashed then
+            paths[#paths + 1] = words[k]
+        elseif words[k] == DOUBLE_DASH then
+            dashed = true
+        end
+    end
+    return paths
+end
+
 ---Say whether a program named `name` sits in a PATH directory, which a shell builtin does not.
 ---@param name string the first word of a row
 ---@return boolean found true when a PATH directory holds an executable of that name
@@ -282,6 +314,16 @@ function M.unrunnable(row, root)
     end
     if not first:find("/", 1, true) and not on_path(first) then
         return string.format("The row %q runs %q, which is not on PATH.", row, first)
+    end
+    for _, path in ipairs(test_paths(words)) do
+        local bare = path:gsub("^%./", ""):gsub("/+$", "")
+        if not fs.exists(fs.join(root, bare)) then
+            return string.format(
+                "The row %q gives dev test the path %q, which names no suite in the workspace.",
+                row,
+                path
+            )
+        end
     end
     if first ~= RG_COMMAND then
         return nil
