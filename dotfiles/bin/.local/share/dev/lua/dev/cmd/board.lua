@@ -1738,6 +1738,29 @@ end
 
 local MOVE_FLAGS = { [runner.FLAG] = true, [WAIT_FLAG] = true, ["--lane"] = true }
 
+---Remove the workspace of a no-change card that has moved to Done.
+---
+---Only the card's own workspace goes: the working copy must sit in a folder named for the card, and
+---`land.workspace_problem` must find it to be the card's.
+---@param backend dev.board.Backend the board
+---@param card dev.board.Card the card that moved
+---@param opts dev.cmd.board.move.Opts? the checks and the removal, injected by tests
+---@return string lines the cleanup's lines behind a newline, empty when nothing was removed or kept
+local function no_change_clean_up(backend, card, opts)
+    if not (backend.root and board.labelled(card, board.NO_CHANGE)) then
+        return ""
+    end
+    local short = card.id:sub(1, board.MIN_PREFIX)
+    local folder = fs.realpath(backend.root) or backend.root
+    if fs.basename(folder) ~= short then
+        return ""
+    end
+    if (opts and opts.workspace_problem or land.workspace_problem)(backend.root, short) then
+        return ""
+    end
+    return (opts and opts.clean_up or M.clean_up)(backend.root, short)
+end
+
 ---Move a card to a column, checking its outcomes first when the column is Done.
 ---@param backend dev.board.Backend the board
 ---@param args string[] the card and the column
@@ -2009,6 +2032,9 @@ local function move_once(backend, args, opts)
             .. closes:sub(1, board.MIN_PREFIX)
             .. " has every child Done and can close now."
     end
+    if to_done and card.column ~= column and not (opts and opts.landed) then
+        result.output = result.output .. no_change_clean_up(backend, card, opts)
+    end
     if started then
         card.column = column
         return claimed_view(backend, card, result)
@@ -2023,6 +2049,10 @@ end
 ---   of a move into Release or Done covers, `land.state` when nil
 ---@field holds (fun(root: string, commit: string, rev: string): boolean)? says whether
 ---   trunk holds a card's landed commit, `land.holds` when nil
+---@field workspace_problem (fun(root: string, short: string): string?)? says why the working copy
+---   is not the card's own workspace, `land.workspace_problem` when nil
+---@field clean_up (fun(root: string, short: string): string)? removes the card's workspace after a
+---   no-change move into Done, `M.clean_up` when nil
 ---@field nap (fun(seconds: number))? sleeps between tries, `dev.os.nap` when nil
 ---@field random dev.board.turn.Random? jitters the sleeps, `turn.entropy` when nil
 ---@field now (fun(): integer)? the clock in seconds since the epoch, `store.now` when nil

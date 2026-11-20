@@ -3518,6 +3518,11 @@ Cleanup never changes the exit code or the card's column.
 
 - A shell left inside the workspace stays in the moved folder under the trash,
   and the output says to run the next command from another folder.
+- A move into Done of a card with the no-change label runs the same cleanup
+  after the move line. That card never lands, so the move does it. The cleanup
+  acts only when the working copy is in a folder named for the card and is the
+  card's own workspace, so a move from any other folder, a git main checkout
+  included, removes nothing. A workspace with uncommitted changes stays.
 - A workspace outside the central root, or one with changes not in a commit,
   stays. The output names it and why.
 - A jj workspace whose `@` holds the landed change is moved to a new change on
@@ -4068,6 +4073,9 @@ The refusals run in this order:
   runs inside the land. A jj project's land has an empty working
   copy after its merge, so it reads `workspace:state()` before the merge and
   passes it to `move_to`, `move_to_release` or `move_to_done`.
+- A move into Done of a card with the no-change label, made from the card's own
+  workspace, removes that workspace the way the land cleanup does, and prints
+  its lines after the move line. A move from any other folder removes nothing.
 - A move into Review is refused unless the card is in In Progress under a claim
   or comes back from Verify, and a move into Verify is always refused. A card
   outside Review reads ``Card <id prefix> cannot move to <column> from

@@ -14588,13 +14588,22 @@ do
         testing.ok(result.message:find("dev board check", 1, true), result.message)
     end)
 
-    local function empty_move(backend, column, holds)
+    local function empty_move(backend, column, holds, extra)
         local opts = {
             holds = holds,
             state = function()
                 return nil, "The working-copy commit is empty. There is no change to land."
             end,
+            workspace_problem = function()
+                return "This is not the card's workspace."
+            end,
+            clean_up = function()
+                error("a workspace was removed")
+            end,
         }
+        for key, value in pairs(extra or {}) do
+            opts[key] = value
+        end
         return cmd_board.move(backend, { "cccccccc", column or support.COLUMN_NAME.DONE }, opts)
     end
 
@@ -14668,6 +14677,63 @@ do
     )
 
     testing.test("a card labelled no-change moves to Done with an empty working copy", function()
+        local backend = proof_backend({ ticked = true, labels = { board.NO_CHANGE } })
+        local result = empty_move(backend)
+        testing.eq(result.code, nil)
+        testing.eq(result.output, "moved cccccccc to Done")
+    end)
+
+    testing.test("a no-change card moved to Done removes its workspace", function()
+        local backend = proof_backend({ ticked = true, labels = { board.NO_CHANGE } })
+        backend.root = "/w/cccccccc"
+        local cleaned = {}
+        local result = empty_move(backend, nil, nil, {
+            workspace_problem = function()
+                return nil
+            end,
+            clean_up = function(root, short)
+                cleaned[#cleaned + 1] = { root, short }
+                return "\nDeleted bookmark cccccccc\nThe workspace is gone."
+            end,
+        })
+        testing.eq(result.code, nil)
+        testing.eq(
+            result.output,
+            "moved cccccccc to Done\nDeleted bookmark cccccccc\nThe workspace is gone."
+        )
+        testing.eq(cleaned, { { "/w/cccccccc", "cccccccc" } })
+    end)
+
+    testing.test("a no-change card keeps a workspace with uncommitted changes", function()
+        local backend = proof_backend({ ticked = true, labels = { board.NO_CHANGE } })
+        backend.root = "/w/cccccccc"
+        local kept = "Kept the workspace. /w/cccccccc holds changes not in a commit."
+        local result = empty_move(backend, nil, nil, {
+            workspace_problem = function()
+                return nil
+            end,
+            clean_up = function()
+                return "\n" .. kept
+            end,
+        })
+        testing.eq(result.code, nil)
+        testing.eq(result.output, "moved cccccccc to Done\n" .. kept)
+        testing.eq(backend.calls[#backend.calls], { "move", ID_C, support.COLUMN_NAME.DONE })
+    end)
+
+    testing.test("a no-change card moved from a git main checkout keeps workspaces", function()
+        local backend = proof_backend({ ticked = true, labels = { board.NO_CHANGE } })
+        backend.root = "/projects/repo"
+        local result = empty_move(backend, nil, nil, {
+            workspace_problem = function()
+                return nil
+            end,
+        })
+        testing.eq(result.code, nil)
+        testing.eq(result.output, "moved cccccccc to Done")
+    end)
+
+    testing.test("a no-change card moved from another folder keeps workspaces", function()
         local backend = proof_backend({ ticked = true, labels = { board.NO_CHANGE } })
         local result = empty_move(backend)
         testing.eq(result.code, nil)
