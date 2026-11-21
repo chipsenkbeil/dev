@@ -240,6 +240,17 @@ testing.test("abandon.sends.the.query.then.the.review.abandon", function()
     fs.remove(root, { recursive = true })
 end)
 
+testing.test("abandon.queries.a.change.by.its.number", function()
+    local root, env = abandon_fixture(OPEN_ROW)
+    local out, code = support.dev(root, { "abandon", "101" }, { env = env })
+    testing.eq(code, 0, out)
+    local want = "-o BatchMode=yes -p 29418 c@g.example gerrit query --format=JSON "
+        .. "--current-patch-set project:proj/sub change:101\n"
+        .. "-o BatchMode=yes -p 29418 c@g.example gerrit review --abandon abc123\n"
+    testing.eq(calls(root), want)
+    fs.remove(root, { recursive = true })
+end)
+
 testing.test("abandon.sends.the.reason.as.the.message", function()
     local root, env = abandon_fixture(OPEN_ROW)
     local out, code = support.dev(

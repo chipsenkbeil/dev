@@ -29,10 +29,10 @@ local function parse(ctx)
         end
     end
     if not change then
-        verb.usage_error(ctx, "Name the Change-Id to abandon.")
+        verb.usage_error(ctx, "Name the change number or Change-Id to abandon.")
     end
     if not change:match("^[%w]+$") then
-        verb.usage_error(ctx, "The Change-Id " .. change .. " is not a Change-Id.")
+        verb.usage_error(ctx, change .. " is not a change number or Change-Id.")
     end
     return change, reason
 end
@@ -87,7 +87,7 @@ end
 ---
 ---It queries the change for its current revision, refuses one that is missing or not NEW, then
 ---sends `gerrit review --abandon`, with `--reason TEXT` as the message.
----@param ctx dev.Ctx the verb's context, whose `args` are a Change-Id and `--reason TEXT`
+---@param ctx dev.Ctx the verb's context, whose `args` hold a change number or Change-Id
 ---@return integer code 0 when the change was abandoned, 1 otherwise
 function M.run(ctx)
     local change, reason = parse(ctx)

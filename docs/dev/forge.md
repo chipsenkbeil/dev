@@ -30,9 +30,9 @@ dev help push
 
 ## dev abandon
 
-`dev abandon CHANGE_ID` abandons an open change on the project's Gerrit, for a
-draft that was pushed and is no longer wanted. `--reason TEXT` sends TEXT as
-the abandon message.
+`dev abandon CHANGE` abandons an open change on the project's Gerrit, for a
+draft that was pushed and is no longer wanted. CHANGE is a change number or a
+Change-Id. `--reason TEXT` sends TEXT as the abandon message.
 
 It refuses a forge that is not gerrit with exit 1. It reads
 `remote.<remote of record>.url`, which must be `ssh://[user@]host[:port]/project`,
@@ -44,6 +44,7 @@ is missing or not NEW exits 1 and sends no review call. Otherwise dev sends
 set's revision. It never restores a change.
 
 ```
+dev abandon 101
 dev abandon I8473b95934b5732ac55d26311a706c9c2bde9940
 dev abandon I8473b95934b5732ac55d26311a706c9c2bde9940 --reason "superseded"
 ```

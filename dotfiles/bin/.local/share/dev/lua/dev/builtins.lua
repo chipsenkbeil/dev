@@ -64,8 +64,8 @@ return {
         words = { "abandon" },
         handler = "lua",
         flags = "--reason",
-        usage = "dev abandon CHANGE_ID [--reason TEXT]",
-        desc = "Abandon an open Gerrit change by its Change-Id",
+        usage = "dev abandon CHANGE [--reason TEXT]",
+        desc = "Abandon an open Gerrit change by its number or Change-Id",
         group = "Share it",
     },
     {
