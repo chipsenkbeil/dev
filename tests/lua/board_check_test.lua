@@ -1511,6 +1511,14 @@ if has_jj then
         testing.eq(#comments(home), 0)
     end)
 
+    testing.test("check --expect-fail records in a workspace not named for the card", function()
+        local root, home, ws = workspace()
+        local id = card_with(root, home, { "false" })
+        local out, code = dev(root, home, { "board", "check", id, "--expect-fail" }, ws)
+        testing.eq(code, 0, out)
+        testing.eq(#comments(home), 1)
+    end)
+
     testing.test("check refuses an empty jj working-copy commit and names its parent", function()
         local root, home, ws = workspace()
         local id = card_with(root, home, { "true" })

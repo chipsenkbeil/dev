@@ -3354,9 +3354,11 @@ function commands.check(backend, args)
         return err
     end
     local short = card.id:sub(1, board.MIN_PREFIX)
-    local elsewhere = guards.workspace_refusal(backend, short)
-    if elsewhere then
-        return elsewhere
+    if not opts.expect_fail then
+        local elsewhere = guards.workspace_refusal(backend, short)
+        if elsewhere then
+            return elsewhere
+        end
     end
     if #card.checks == 0 then
         return failure("Card " .. short .. " has no checks rows. Set them with `dev board checks`.")

@@ -2837,8 +2837,11 @@ The workspace rule:
   and do nothing else, unless the working copy's workspace is named for the
   card's id prefix, the name `dev ws new CARD` gives.
 - The refusal names the workspace it found.
-- A git project is not checked, and no flag or environment variable turns the
-  rule off.
+- `check --expect-fail` runs in any workspace, and a failing baseline never
+  counts for land. A baseline from a trunk workspace made with `dev ws new`
+  needs no rename.
+- A git project is not checked, and no other flag or environment variable turns
+  the rule off.
 
 How a row runs:
 
