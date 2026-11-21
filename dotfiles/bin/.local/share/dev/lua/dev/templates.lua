@@ -807,10 +807,17 @@ end
 ---The file that records which dev modules and functions the dev baked into ci's images provides.
 M.BAKED = ".dev/baked.txt"
 
----List the dev modules a template file requires and the functions it takes from them.
+---List the dev modules and functions a template file takes, skipping full-line comments.
 ---@param text string the template file's text
 ---@return string[] calls the sorted entries, each a module or a function
 function M.dev_calls(text)
+    local kept = {}
+    for line in (text .. "\n"):gmatch("([^\n]*)\n") do
+        if not line:find("^%s*%-%-") then
+            kept[#kept + 1] = line
+        end
+    end
+    text = table.concat(kept, "\n")
     local found = {}
     local alias = {}
     for name, module in text:gmatch('local ([%a_][%w_]*) = require%("(dev%.[%w_.]+)"%)') do

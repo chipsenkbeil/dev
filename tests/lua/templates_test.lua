@@ -142,6 +142,16 @@ testing.test("dev_calls lists the modules and functions a template takes from de
     })
 end)
 
+testing.test("dev_calls ignores a call named only in a comment", function()
+    local text = table.concat({
+        'local ui = require("dev.ui")',
+        "-- see ui.confirm",
+        "    --- also ui.ask",
+        "",
+    }, "\n")
+    testing.eq(templates.dev_calls(text), { "dev.ui" })
+end)
+
 testing.test("dev_calls lists nothing for a file that requires no dev module", function()
     testing.eq(templates.dev_calls('local fs = require("lfs")\nreturn fs.exists(a)\n'), {})
 end)
