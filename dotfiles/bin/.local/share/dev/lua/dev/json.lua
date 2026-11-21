@@ -252,13 +252,16 @@ function M.decode(text)
     return nil, unwrap(value)
 end
 
-local function is_object_marked(t)
-    local mt = getmetatable(t)
+---Tell whether `value` is a table that `decode` or `json.object` marked as an object.
+---@param value any
+---@return boolean is_object false for arrays, `json.null` and every non-table
+function M.is_object(value)
+    local mt = getmetatable(value)
     return mt ~= nil and mt.__jsonobject == true
 end
 
 local function is_array(t)
-    if is_object_marked(t) then
+    if M.is_object(t) then
         return false
     end
     local n = 0
