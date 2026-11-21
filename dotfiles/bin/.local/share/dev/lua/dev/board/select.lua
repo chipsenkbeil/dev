@@ -29,6 +29,12 @@ local function module_name(path)
     return (tail:gsub("/init$", ""):gsub("/", "."))
 end
 
+local function is_verb(path)
+    return path:match("%.lua$") ~= nil
+        and path:sub(1, #TESTS_PREFIX) ~= TESTS_PREFIX
+        and module_name(path) == nil
+end
+
 local function requires(text)
     return text:gmatch(REQUIRE)
 end
@@ -83,7 +89,7 @@ end
 ---A touched suite is picked itself. A touched Lua module picks every Lua suite that requires it,
 ---directly, through the modules that require it, or through a concatenated require, and no other.
 ---A touched file that is not a Lua module or a suite, a touched test helper, or a touched module
----that no Lua suite reaches leaves the map unsure.
+---that no Lua suite reaches or that a verb file loads leaves the map unsure.
 ---@param sources table<string, string> the text of each Lua file and suite by path from the root
 ---@param touched string[] the paths the change touches
 ---@return string[]? suites the sorted suite paths, nil when the whole suite should run
@@ -110,6 +116,11 @@ function M.pick(sources, touched)
     end
     for _, path in ipairs(changed) do
         local closure = closure_of(names[path], users, prefix_users)
+        for member in pairs(closure) do
+            if sources[member] and is_verb(member) then
+                return nil
+            end
+        end
         local reached = false
         for suite, text in pairs(sources) do
             if is_suite(suite) and suite:match("%.lua$") then

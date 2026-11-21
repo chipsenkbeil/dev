@@ -456,6 +456,10 @@ the working-copy change (`dev.board.select`). This is the selection rule:
   whole suite as the backstop.
 - A touched file that is not a Lua module or a suite, a touched test helper,
   or a touched module that no Lua suite reaches leaves the whole suite running.
+- A touched module that a verb file loads, directly or through other modules,
+  leaves the whole suite running. A verb file is a Lua file under `.dev` that
+  is not a module, not a suite and not under `tests/`. Its parity suites run it
+  as a subprocess and never require the module, so the map cannot name them.
 - A moved or copied file counts at both its old and its new path.
 
 The recorded row stays the card's own plain row, so the checks fingerprint does

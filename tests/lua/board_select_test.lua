@@ -88,6 +88,21 @@ testing.test("a change that touches a non-Lua file runs the whole suite", functi
     end
 end)
 
+testing.test("a module a verb loads leaves the map unsure, directly or through another", function()
+    local all = sources()
+    all[".dev/bump.lua"] = 'local fs = require("dev.fs")'
+    testing.eq(board_select.pick(all, { LIB .. "fs.lua" }), nil)
+    all[".dev/bump.lua"] = 'local board = require("dev.board")'
+    testing.eq(board_select.pick(all, { LIB .. "fs.lua" }), nil)
+    testing.eq(board_select.pick(all, { LIB .. "board.lua" }), nil)
+end)
+
+testing.test("a module a verb does not reach still picks its suites", function()
+    local all = sources()
+    all[".dev/bump.lua"] = 'local fs = require("dev.fs")'
+    testing.eq(board_select.pick(all, { LIB .. "text.lua" }), { "tests/lua/text_test.lua" })
+end)
+
 testing.test("a test helper leaves the map unsure", function()
     testing.eq(board_select.pick(sources(), { "tests/lua/support.lua" }), nil)
 end)
