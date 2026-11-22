@@ -387,6 +387,32 @@ testing.test("the reserved prefix is found whatever its case and leading space",
     testing.eq(board.reserved("Tests pass, dev-check: fine"), false)
 end)
 
+local BARE_CONFIG =
+    '[board]\nbackend = "local"\nname = "mine"\n[board.lint]\nbare_rows = ["dev --remote test"]\n'
+
+testing.test("check refuses a card with no bare row before it runs any row", function()
+    local root, home =
+        git_root({ [".dev/config.toml"] = BARE_CONFIG, ["tests/a_test.lua"] = "x\n" })
+    local id = card_with(root, home, { "true", "dev --remote test -- tests/a_test.lua" })
+    local out, code = dev(root, home, { "board", "check", id })
+    testing.eq(code, 1, out)
+    testing.ok(
+        out:find("lacks the bare row dev --remote test and cannot be checked.", 1, true),
+        out
+    )
+    testing.ok(not out:find("1 pass", 1, true), out)
+    testing.eq(#comments(home), 0)
+end)
+
+testing.test("check refuses a bare_rows that is not a list of commands", function()
+    local config = '[board]\nbackend = "local"\nname = "mine"\n[board.lint]\nbare_rows = "x"\n'
+    local root, home = git_root({ [".dev/config.toml"] = config })
+    local id = card_with(root, home, { "true" })
+    local out, code = dev(root, home, { "board", "check", id })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("`bare_rows` setting of `[board.lint]` must be a list", 1, true), out)
+end)
+
 testing.test("check records each row and the commit, and the run is clean in git", function()
     local root, home, head = git_root()
     local id = card_with(root, home, { "true", "false" })

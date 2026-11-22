@@ -1617,19 +1617,20 @@ local function checks_refusal(backend, card, children)
     )
 end
 
----Read the checks rows the project requires of every card.
+---Read a list of checks rows from the `[board.lint]` table.
 ---@param backend dev.board.Backend the board
----@return string[]? rows the required rows, nil when the project lists none
+---@param key string the setting, `required` or `bare_rows`
+---@return string[]? rows the listed rows, nil when the project lists none
 ---@return dev.cmd.board.Result? err the failure when the setting is not a list of commands
-local function required_rows(backend)
+local function lint_rows(backend, key)
     if not backend.root then
         return nil
     end
-    local rows = config.get(backend.root, "board.lint.required")
+    local rows = config.get(backend.root, "board.lint." .. key)
     if rows == nil then
         return nil
     end
-    local bad = failure("The `required` setting of `[board.lint]` must be a list of commands.")
+    local bad = failure("The `" .. key .. "` setting of `[board.lint]` must be a list of commands.")
     if type(rows) ~= "table" or (#rows == 0 and next(rows) ~= nil) then
         return nil, bad
     end
@@ -1646,7 +1647,7 @@ end
 ---@param card dev.board.Card the card
 ---@return dev.cmd.board.Result? refused the failure, nil when the card holds every required row
 local function required_refusal(backend, card)
-    local required, err = required_rows(backend)
+    local required, err = lint_rows(backend, "required")
     if err then
         return err
     end
@@ -1660,6 +1661,33 @@ local function required_refusal(backend, card)
             .. " lacks the required row "
             .. table.concat(missing, ", ")
             .. " and cannot enter Ready. Add it with `dev board checks CARD CMD...`."
+    )
+end
+
+---Refuse a card whose checks lack a bare row the project lists in `bare_rows`.
+---@param backend dev.board.Backend the board
+---@param card dev.board.Card the card
+---@param action string what the refusal says the card cannot do, such as `enter Ready`
+---@return dev.cmd.board.Result? refused the failure, nil when the card holds every bare row
+local function bare_refusal(backend, card, action)
+    local bare, err = lint_rows(backend, "bare_rows")
+    if err then
+        return err
+    end
+    local missing = board.missing_bare_rows(card.checks, bare or {})
+    if #missing == 0 then
+        return nil
+    end
+    return failure(
+        "Card "
+            .. card.id:sub(1, board.MIN_PREFIX)
+            .. " lacks the bare row "
+            .. table.concat(missing, ", ")
+            .. " and cannot "
+            .. action
+            .. ". A named row such as `"
+            .. missing[1]
+            .. " -- FILE` does not count. Add it with `dev board checks CARD CMD...`."
     )
 end
 
@@ -1693,6 +1721,10 @@ local function ready_refusal(backend, card, shape)
         local unrequired = required_refusal(backend, card)
         if unrequired then
             return unrequired
+        end
+        local unbare = bare_refusal(backend, card, "enter Ready")
+        if unbare then
+            return unbare
         end
     end
     if children == 0 and not epic and not card.outcomes_unreadable then
@@ -3382,6 +3414,12 @@ function commands.check(backend, args)
     if #card.checks == 0 then
         return failure("Card " .. short .. " has no checks rows. Set them with `dev board checks`.")
     end
+    if card.epic == nil and card.kind ~= board.Kind.EPIC then
+        local unbare = bare_refusal(backend, card, "be checked")
+        if unbare then
+            return unbare
+        end
+    end
     local argvs = {}
     for i, run in ipairs(card.checks) do
         local argv, why = check.argv(run)
@@ -4875,7 +4913,7 @@ function commands.lint(backend, args)
     end
     local strict = flags[STRICT_FLAG] == true
     local open_only = flags[OPEN_FLAG] == true and not words[1]
-    local required, bad = required_rows(backend)
+    local required, bad = lint_rows(backend, "required")
     if bad then
         return bad
     end

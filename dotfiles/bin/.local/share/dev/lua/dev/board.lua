@@ -1691,6 +1691,29 @@ function M.missing_rows(checks, required)
     return missing
 end
 
+---List the bare rows a card's checks lack.
+---
+---A checks row satisfies a bare row only when it equals it, so a row with arguments after it does
+---not count.
+---@param checks string[] the card's checks rows
+---@param bare string[] the rows the project lists
+---@return string[] missing the listed rows no checks row equals
+function M.missing_bare_rows(checks, bare)
+    local missing = {}
+    for _, row in ipairs(bare) do
+        local held = false
+        for _, check in ipairs(checks) do
+            if check == row then
+                held = true
+            end
+        end
+        if not held then
+            missing[#missing + 1] = row
+        end
+    end
+    return missing
+end
+
 ---List the outcomes that name no deciding check.
 ---
 ---An outcome names one by ending with `CHECK_OPEN`, a ROW and a closing parenthesis, where ROW is

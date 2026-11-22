@@ -1532,6 +1532,19 @@ no list keeps the rules above:
 required = ["dev --remote lint", "dev --remote test"]
 ```
 
+The `bare_rows` setting lists rows that must appear exactly, so `required`'s
+prefix rule does not apply: a card holding only `dev --remote test -- FILE`
+lacks the bare row `dev --remote test`. `dev board move CARD ready` refuses a
+card without one, and `dev board check` refuses it before it runs any row, so
+a card edited after Ready stays honest. An epic and a card with children are
+skipped. A `bare_rows` that is not a list of commands makes both exit 1 and
+name the setting:
+
+```toml
+[board.lint]
+bare_rows = ["dev --remote test"]
+```
+
 A `[board.check]` table sets the check timeout setting, the seconds one checks
 row may take, ci queue included. `dev board check`, the land recheck and
 `dev board ship` use it, and `--timeout` still overrides it for
@@ -4191,6 +4204,12 @@ A move into Ready:
   ``Card <id prefix> lacks the required row ROW and cannot enter Ready. Add it
   with `dev board checks CARD CMD...`.`` (exit 1, on both backends). A
   `required` that is not a list of commands is exit 1 too.
+- A card with no children that holds no row equal to a row listed in
+  `board.lint.bare_rows` is refused next, with
+  ``Card <id prefix> lacks the bare row ROW and cannot enter Ready. A named row
+  such as `ROW -- FILE` does not count. Add it with `dev board checks CARD
+  CMD...`.`` (exit 1, on both backends). A `bare_rows` that is not a list of
+  commands is exit 1 too.
 - An outcome that ends with neither `(check: ROW)` naming part of a checks row
   nor `(reviewer judgement)` is refused after the checks row, and the refusal
   names each such outcome (exit 1). An epic is not asked.

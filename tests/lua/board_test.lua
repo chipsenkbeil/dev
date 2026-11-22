@@ -3484,6 +3484,57 @@ testing.test("a required setting that is not a list of commands is refused", fun
     testing.eq(result.code, 1)
 end)
 
+local BARE_CONFIG = '[board.lint]\nbare_rows = ["dev --remote test"]\n'
+
+testing.test("move to Ready refuses a card with no bare row", function()
+    local result, backend = ready_with(BARE_CONFIG, { "dev --remote lint" })
+    testing.eq(result.code, 1)
+    testing.ok(
+        result.message:find("lacks the bare row dev --remote test and", 1, true),
+        result.message
+    )
+    testing.ok(result.message:find("cannot enter Ready.", 1, true), result.message)
+    testing.eq(#backend.calls, 0)
+    result = ready_with(
+        BARE_CONFIG,
+        { "dev --remote lint", "dev --remote test -- tests/lua/board_test.lua" }
+    )
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("does not count", 1, true), result.message)
+    result = ready_with(
+        '[board.lint]\nrequired = ["dev --remote test"]\nbare_rows = ["dev --remote lint"]\n',
+        { "dev --remote lint", "dev --remote test -- tests/lua/board_test.lua" }
+    )
+    testing.eq(result.code, nil)
+    result = ready_with(BARE_CONFIG, { "dev --remote lint", "dev --remote test" })
+    testing.eq(result.code, nil)
+end)
+
+testing.test("unchanged without bare rows, for an epic and for a card with children", function()
+    local result = ready_with("[board.lint]\nstrict = true\n", support.READY_CHECKS)
+    testing.eq(result.code, nil)
+    local card = planned()
+    card.checks = { "dev --remote lint" }
+    card.epic = { done = 0, total = 2 }
+    card.outcomes = { { id = "s1", name = "a", done = false } }
+    local backend = fake({ card })
+    backend.kin = { children = card.epic }
+    backend.root = support.sandbox({ [".dev/config.toml"] = BARE_CONFIG }, {})
+    result = cmd_board.run("move", { "cccccccc", support.Column.READY }, backend)
+    testing.eq(result.code, nil)
+end)
+
+testing.test("a bare_rows that is not a list is refused", function()
+    local want = "The `bare_rows` setting of `[board.lint]` must be a list of commands."
+    local result = ready_with('[board.lint]\nbare_rows = "dev --remote test"\n', { "dev test" })
+    testing.eq(result.code, 1)
+    testing.eq(result.message, want)
+    result = ready_with("[board.lint]\nbare_rows = [1]\n", { "dev test" })
+    testing.eq(result.code, 1)
+    result = ready_with("[board.lint.bare_rows]\nlint = true\n", { "dev test" })
+    testing.eq(result.code, 1)
+end)
+
 testing.test("move to Ready refuses an outcome that names no deciding check", function()
     local card = planned()
     card.checks = { "dev --remote test", "dev x y" }
