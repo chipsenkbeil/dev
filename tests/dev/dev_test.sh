@@ -910,7 +910,7 @@ if [ "$1" = -C ]; then
     shift 2
 fi
 case "$1 ${2:-}" in
-"run --list"*) printf '{"jobs":[{"name":"lint","targets":["%s"]},{"name":"test","targets":["%s"]},{"name":"widget.save","targets":["%s"]},{"name":"check","targets":["%s"]},{"name":"gadget","targets":["%s"]}]}\n' "$JOB_TARGET" "$JOB_TARGET" "$JOB_TARGET" "$JOB_TARGET" "$JOB_TARGET" ;;
+"run --list"*) printf '{"jobs":[{"name":"lint","targets":["%s"]},{"name":"test","targets":["%s"]},{"name":"widget-save","targets":["%s"]},{"name":"check","targets":["%s"]},{"name":"gadget","targets":["%s"]}]}\n' "$JOB_TARGET" "$JOB_TARGET" "$JOB_TARGET" "$JOB_TARGET" "$JOB_TARGET" ;;
 run*)
     printf 'ci -C %s' "$root" >>"$STUB_LOG"
     printf ' [%s]' "$@" >>"$STUB_LOG"
@@ -1007,7 +1007,7 @@ mkdir -p "$cip/.dev/widget"
 printf '#!/usr/bin/env bash\necho x\n' >"$cip/.dev/widget/save.sh"
 chmod +x "$cip/.dev/widget/save.sh"
 cirun "$cip" --remote widget save >/dev/null 2>&1
-assert_contains "--remote maps a subcommand to the job noun.sub" "$(log)" "[--job] [widget.save]"
+assert_contains "--remote maps a subcommand to the job noun-sub" "$(log)" "[--job] [widget-save]"
 out="$(cirun "$cip" widget --remote zap 2>&1)"
 assert_eq "--remote with an unknown subcommand exits 2" "$?" "2"
 assert_contains "--remote with an unknown subcommand names it" "$out" "unknown subcommand zap"

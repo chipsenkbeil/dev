@@ -32,7 +32,7 @@ local MACHINE_VERBS = {
 }
 local MACHINE_NOUNS =
     { tools = true, box = true, ci = true, board = true, ws = true, pi = true, antinote = true }
-local JOB_NAME = "^[A-Za-z0-9_.-]+$"
+local JOB_NAME = "^[A-Za-z0-9-]+$"
 local LOCAL_HINT = "Rerun it, or pass `--local` to run it here."
 local AGENT_HINT = "An agent runs it on ci, so fix ci and rerun."
 
@@ -76,7 +76,7 @@ end
 ---@return boolean
 function M.has_default_job(root, words, hint)
     hint = hint or LOCAL_HINT
-    local job = table.concat(words, ".")
+    local job = table.concat(words, "-")
     if not job:find(JOB_NAME) then
         return false
     end
@@ -233,7 +233,7 @@ end
 ---@return integer code
 function M.ci_runner(run, opts)
     local pipeline = opts.pipeline
-    local job = table.concat(run.words, ".")
+    local job = table.concat(run.words, "-")
     if not job:find(JOB_NAME) then
         verb.die(
             "The flag `--remote` needs a job name, not " .. table.concat(run.words, " ") .. "."

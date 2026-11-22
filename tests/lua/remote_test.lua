@@ -39,7 +39,7 @@ case "$1 ${2:-}" in
     if [ "$3" = bootstrap ] || [ "$3" = soak ]; then
         printf '{"jobs":[{"name":"%s"}]}\n' "$3"
     else
-        printf '{"jobs":[{"name":"test"},{"name":"widget.save"},{"name":"n.m.x"}]}\n'
+        printf '{"jobs":[{"name":"test"},{"name":"widget-save"},{"name":"n-m-x"}]}\n'
     fi
     ;;
 run*)
@@ -178,10 +178,10 @@ testing.test("--remote --priority puts --priority before the double dash", funct
     testing.ok(not log:find("--priority", 1, true), log)
 end)
 
-testing.test("a noun and its subcommand are one job named with a dot", function()
+testing.test("a noun and its subcommand are one job named with a hyphen", function()
     local root, base = setup({ ["widget/save.sh"] = "#!/usr/bin/env bash\ntrue\n" })
     local _, _, log = dev(root, base, { "--remote", "widget", "save" })
-    testing.ok(log:find("[--job] [widget.save]", 1, true), log)
+    testing.ok(log:find("[--job] [widget-save]", 1, true), log)
 end)
 
 testing.test("ci's exit code is dev's", function()
@@ -478,9 +478,9 @@ testing.test("-- before the verb or noun still names the job", function()
     testing.eq(log, "ci -C " .. root .. " [run] [--local] [--follow] [--job] [test] [--] [a]\n")
     _, code, log = dev(root, base, { "--remote", "--", "widget", "save" })
     testing.eq(code, 0)
-    testing.ok(log:find("[--job] [widget.save] [--]", 1, true), log)
+    testing.ok(log:find("[--job] [widget-save] [--]", 1, true), log)
     _, code, log = dev(root, base, { "--remote", "widget", "--", "save" })
-    testing.ok(log:find("[--job] [widget.save] [--]", 1, true), log)
+    testing.ok(log:find("[--job] [widget-save] [--]", 1, true), log)
 end)
 
 testing.test("-- before a machine-local noun is still refused", function()
@@ -575,11 +575,11 @@ testing.test("the project's __remote.lua keeps -v and -vv for the ci echo", func
     testing.ok(not out:find("+ ci", 1, true), out)
 end)
 
-testing.test("a noun nested two deep is one job with a dot between each word", function()
+testing.test("a noun nested two deep is one job with a hyphen between each word", function()
     local root, base = setup({ ["n/m/x.sh"] = "#!/usr/bin/env bash\ntrue\n" })
     local _, code, log = dev(root, base, { "--remote", "n", "m", "x" })
     testing.eq(code, 0)
-    testing.ok(log:find("[--job] [n.m.x]", 1, true), log)
+    testing.ok(log:find("[--job] [n-m-x]", 1, true), log)
 end)
 
 testing.test("DEV_REMOTE=0 runs here under the default and --remote still wins", function()
@@ -659,6 +659,13 @@ testing.test("--remote passes --priority to ci run only when DEV_CI_PRIORITY is 
     _, code, log = dev(root, base, { "--remote", "test" }, { DEV_CI_PRIORITY = "1" })
     testing.eq(code, 0)
     testing.ok(log:find("[--job] [test] [--priority] [--]", 1, true), log)
+end)
+
+testing.test("a word holding a dot or an underscore is not a job", function()
+    local remote = require("dev.remote")
+    local root = setup()
+    testing.eq(remote.has_default_job(root, { "a.b" }), false)
+    testing.eq(remote.has_default_job(root, { "widget", "save_it" }), false)
 end)
 
 testing.test("run label is unset for a bare run in a terminal", function()

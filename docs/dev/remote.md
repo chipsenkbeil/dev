@@ -152,8 +152,9 @@ the marker or `CI=true`. The denial names only `dev --remote test` or
 With no override, the runner is `ci`. A verb runs the job of the same name from
 the project's default pipeline (`.ci/jobs.lua`).
 
-`dev <noun> <sub>` runs the job `<noun>.<sub>`, and one level deeper it is
-`<noun>.<sub>.<sub2>`, with a dot between every word.
+`dev <noun> <sub>` runs the job `<noun>-<sub>`, and one level deeper it is
+`<noun>-<sub>-<sub2>`, with a hyphen between every word. ci refuses a dot in a
+job name. A word holding a dot or an underscore is no job, and ci is not asked.
 
 dev checks `ci run --list --json` first. A verb with no such job exits 1 with
 ``No job named <job> exists in the project's default pipeline (.ci/jobs.lua).

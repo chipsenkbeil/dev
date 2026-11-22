@@ -292,8 +292,8 @@ The runner is `.dev/__remote.lua` when the project has one, else `ci`. A
 `run = {words, args, detach, priority, job_timeout, root, verbose}`.
 
 The ci runner needs `ci` on PATH and checks `ci -C <root> run --list --json`
-for the job. The job is `<verb>`, or the words joined by a dot for a
-subcommand (`<noun>.<sub>`, and `<noun>.<sub>.<sub2>` one level deeper). It
+for the job. The job is `<verb>`, or the words joined by a hyphen for a
+subcommand (`<noun>-<sub>`, and `<noun>-<sub>-<sub2>` one level deeper). It
 then runs `ci -C <root> run --local --follow --job <job> -- <args>` on
 example-box, with `--detach` in place of `--follow`, and never falls back to a
 local run.
