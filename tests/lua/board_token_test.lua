@@ -12,6 +12,7 @@ local LEAD = "pomb_LEADtoken0123456789"
 local WORKER = "pomb_WORKERtoken0123456789"
 local RAW = "pomb_ROLEtoken0123456789"
 local STANDING = "pomb_STANDINGtoken0123456789"
+local VERIFIER_STANDING = "pomb_VERIFIERSTANDINGtoken0123"
 local ENV_TOKEN = "pomb_ENVtoken0123456789"
 local NAME = "dotfiles/implementer/72f0e012/1"
 local EXPIRES = 4102444800
@@ -90,6 +91,8 @@ local function sandbox()
             .. LEAD
             .. '" ;; *Reviewer*) echo "'
             .. STANDING
+            .. '" ;; *Verifier*) echo "'
+            .. VERIFIER_STANDING
             .. '" ;; *) echo "'
             .. WORKER
             .. '" ;; esac\n'
@@ -817,16 +820,21 @@ local REVIEWERS = {
     "dotfiles/code-examiner/bff0e010",
     "dotfiles/style-examiner/bff0e010",
     "dotfiles/recheck-examiner/bff0e010",
-    "dotfiles/verifier/bff0e010",
+}
+local VERIFIER = "dotfiles/verifier/bff0e010"
+local SEATS = {
+    "dotfiles/code-examiner/bff0e010",
+    "dotfiles/style-examiner/bff0e010",
+    "dotfiles/recheck-examiner/bff0e010",
+    VERIFIER,
 }
 
-local function standing(home)
-    assert(
-        fs.write(
-            home .. "/.config/dev/config.toml",
-            USER .. 'reviewer_token = "pass:secrets/reviewer/token/pomb"\n'
-        )
-    )
+local function standing(home, verifier)
+    local lines = USER .. 'reviewer_token = "pass:secrets/reviewer/token/pomb"\n'
+    if verifier then
+        lines = lines .. 'verifier_token = "pass:secrets/verifier/token/pomb"\n'
+    end
+    assert(fs.write(home .. "/.config/dev/config.toml", lines))
 end
 
 local function filed_as(root, home, name)
@@ -856,8 +864,38 @@ testing.test("a reviewer name sends the standing reviewer token", function()
     end
 end)
 
+testing.test("a verifier name sends the standing verifier token", function()
+    local root, home = sandbox()
+    filed_as(root, home, VERIFIER)
+    standing(home, true)
+    local out, code = dev(root, home, { "board", "boards" }, {
+        agent = VERIFIER,
+        env = { DEV_BOARD_TOKEN = ENV_TOKEN },
+    })
+    testing.ok(code == 0, out)
+    local sent = read(root, "stdin")
+    testing.ok(sent:find("Bearer " .. VERIFIER_STANDING, 1, true), sent)
+    testing.eq(sent:find(STANDING, 1, true), nil, sent)
+    testing.eq(sent:find(RAW, 1, true), nil, sent)
+    testing.eq(sent:find(ENV_TOKEN, 1, true), nil, sent)
+    testing.eq(read(root, "calls"):find(STANDING, 1, true), nil)
+end)
+
+testing.test("a verifier name never sends the standing reviewer token", function()
+    local root, home = sandbox()
+    filed_as(root, home, VERIFIER)
+    standing(home)
+    local out, code = dev(root, home, { "board", "boards" }, { agent = VERIFIER })
+    testing.ok(code == 0, out)
+    local sent = read(root, "stdin")
+    testing.ok(sent:find("Bearer " .. RAW, 1, true), sent)
+    testing.eq(sent:find(STANDING, 1, true), nil, sent)
+    testing.eq(sent:find(VERIFIER_STANDING, 1, true), nil, sent)
+    testing.eq(occurrences(read(root, "calls"), "Reviewer"), 0)
+end)
+
 testing.test("a reviewer name with no standing token reads its own file", function()
-    for _, name in ipairs(REVIEWERS) do
+    for _, name in ipairs(SEATS) do
         local root, home = sandbox()
         filed_as(root, home, name)
         local out, code = dev(root, home, { "board", "boards" }, { agent = name })

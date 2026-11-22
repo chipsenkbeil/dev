@@ -686,10 +686,10 @@ local function seat_backend(root, refusal, reason)
     return backend
 end
 
-local function review_as(backend, kind, verdict)
+local function review_as(backend, kind, verdict, by)
     return require("dev.cmd.board").run(
         "review",
-        { "11111111", "--kind", kind, "--by", "r", "--rev", "HEAD", "--verdict", verdict },
+        { "11111111", "--kind", kind, "--by", by or "r", "--rev", "HEAD", "--verdict", verdict },
         backend
     )
 end
@@ -735,18 +735,18 @@ end)
 local OWNER_SEAT = "pomb answered 409: the task's owner cannot take a seat on it (owner_seat)"
 local MINT_HINT = "dev board token mint --role reviewer --as r"
 
-local function owner_seat_warning(with_token)
+local function owner_seat_warning(with_token, by)
     local previous_state = os.getenv("XDG_STATE_HOME") or ""
     local previous_runtime = os.getenv("XDG_RUNTIME_DIR") or ""
     ffi.C.setenv("XDG_RUNTIME_DIR", "", 1)
     ffi.C.setenv("XDG_STATE_HOME", support.tempdir(), 1)
     local written = true
     if with_token then
-        written = tokenfile.write("r", "pomb_token0123456789", 0)
+        written = tokenfile.write(by or "r", "pomb_token0123456789", 0)
     end
     local root = git_root()
     local backend = seat_backend(root, OWNER_SEAT)
-    local ran, result = pcall(review_as, backend, "code", "clean")
+    local ran, result = pcall(review_as, backend, "code", "clean", by)
     ffi.C.setenv("XDG_STATE_HOME", previous_state, 1)
     ffi.C.setenv("XDG_RUNTIME_DIR", previous_runtime, 1)
     assert(written, "token file was not written")
@@ -762,6 +762,17 @@ testing.test("review names the missing reviewer token on an owner_seat refusal",
     testing.ok(warning:find("No minted reviewer token file was found for r.", 1, true), warning)
     testing.ok(warning:find(MINT_HINT, 1, true), warning)
     testing.ok(warning:find("reviewer_token", 1, true), warning)
+end)
+
+testing.test("review names verifier_token in the missing token sentence for a verifier", function()
+    local name = "dotfiles/verifier/bff0e010"
+    local warning = owner_seat_warning(false, name)
+    testing.ok(
+        warning:find("No minted reviewer token file was found for " .. name, 1, true),
+        warning
+    )
+    testing.ok(warning:find("`verifier_token`", 1, true), warning)
+    testing.eq(warning:find("`reviewer_token`", 1, true), nil, warning)
 end)
 
 testing.test("review with a live token file adds no missing token sentence", function()

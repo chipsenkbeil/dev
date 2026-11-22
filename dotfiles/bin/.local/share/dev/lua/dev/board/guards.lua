@@ -498,14 +498,20 @@ local REVIEWER_ROLES = {
     ["code-examiner"] = true,
     ["style-examiner"] = true,
     ["recheck-examiner"] = true,
-    verifier = true,
 }
 
 ---Check whether a name has a reviewing role.
 ---@param name string the agent name
----@return boolean reviewer true for the code, style and recheck reviewers and the verifier
+---@return boolean reviewer true for the code, style and recheck reviewers
 local function is_reviewer(name)
     return REVIEWER_ROLES[role_of(name) or ""] == true
+end
+
+---Check whether a name has the verifier role.
+---@param name string the agent name
+---@return boolean verifier true for the verifier
+local function is_verifier(name)
+    return role_of(name) == "verifier"
 end
 
 ---Check whether a name has a role that edits a card without building it.
@@ -627,6 +633,7 @@ M.tick_refused = tick_refused
 M.claimant_refused = claimant_refused
 M.is_lead = is_lead
 M.is_reviewer = is_reviewer
+M.is_verifier = is_verifier
 M.delete_refusal = delete_refusal
 M.Refusal = Refusal
 

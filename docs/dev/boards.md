@@ -94,6 +94,7 @@ url = "https://pomb.example.com"
 token = "pass:secrets/worker/token/pomb.example.com"
 lead_token = "pass:secrets/lead/token/pomb.example.com"
 reviewer_token = "pass:secrets/reviewer/token/pomb.example.com"
+verifier_token = "pass:secrets/verifier/token/pomb.example.com"
 ```
 
 dev reads `[board.pomb]` from the user file alone, so a repository cannot send
@@ -282,13 +283,17 @@ owner's, and it compares tokens, never names. A reviewer on the shared agents
 token would hold the implementer's credential, so each reviewer holds a role
 token of its own.
 
-- The standing token: `reviewer_token` in `[board.pomb]` is a `pass:<entry>`
-  reference, as `lead_token` is. When the role segment of `DEV_AGENT` is
-  `code-examiner`, `style-examiner`, `recheck-examiner` or `verifier`, dev
-  sends that token in place of the `DEV_BOARD_TOKEN`, the token file and the
-  shared `token`. A runner, an implementer or any other name never sends it.
-- With `reviewer_token` unset nothing changes: dev reads the token file of the
-  name, then the shared token, and the lead mints per name as below.
+- The standing tokens: `reviewer_token` and `verifier_token` in `[board.pomb]`
+  are `pass:<entry>` references, as `lead_token` is. When the role segment of
+  `DEV_AGENT` is `code-examiner`, `style-examiner` or `recheck-examiner`, dev
+  sends `reviewer_token` in place of the `DEV_BOARD_TOKEN`, the token file and
+  the shared `token`. When it is `verifier`, dev sends `verifier_token` in the
+  same place and never `reviewer_token`. A runner, an implementer or any other
+  name never sends either.
+- With a standing token unset nothing changes: dev reads the token file of the
+  name, then the shared token, and the lead mints per name as below. A verifier
+  name with `verifier_token` unset reads its own token file, never
+  `reviewer_token`.
 - The lead mints one per reviewer name with `dev board token mint --role ROLE
   --as NAME`, for the code reviewer, the style reviewer, the recheck reviewer
   and the verifier, for example `dotfiles/code-examiner/f5f0e007`.
@@ -3133,8 +3138,9 @@ Pomb's code and says the seat was not set, and the review is still recorded and
 the command exits 0. An `owner_seat` refusal for a name with no token file adds
 that no minted reviewer token file was found for the name, and that the lead
 mints one with `dev board token mint --role reviewer --as NAME` or sets
-`reviewer_token` in `[board.pomb]`. A second recheck, which Pomb refuses with
-`seat_held` (the one recheck seat is taken), prints no warning and ends its
+`reviewer_token` in `[board.pomb]`, or `verifier_token` for a verifier name. A
+second recheck, which Pomb refuses with `seat_held` (the one recheck seat is
+taken), prints no warning and ends its
 output with
 `The recheck seat is already held, so only the card records this review.`
 The first recheck's seat verdict stands, and land reads only the review

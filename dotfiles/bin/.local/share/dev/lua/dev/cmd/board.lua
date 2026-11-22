@@ -98,6 +98,9 @@ local WAIT_FLAG = "--wait"
 local FROM_FLAG = "--from"
 local IGNORE_CHANGE_RUN_FLAG = "--ignore-change-run"
 local SET_FLAG = "--set"
+local LEAD_TOKEN_KEY = "lead_token"
+local REVIEWER_TOKEN_KEY = "reviewer_token"
+local VERIFIER_TOKEN_KEY = "verifier_token"
 local CLEARS_BLOCKERS_FLAG = "--clears-blockers"
 local BLOCKED_FLAG = "--blocked"
 local ID_ONLY_FLAG = "--id-only"
@@ -3633,10 +3636,11 @@ function commands.review(backend, args)
             local detail = board.seat_refusal(refusal, message, kind)
             if (message or ""):find(OWNER_SEAT_CODE, 1, true) and not tokenfile.read(by) then
                 detail = string.format(
-                    "%s No minted reviewer token file was found for %s. The lead mints one with `dev board token mint --role reviewer --as %s`, or sets `reviewer_token` in `[board.pomb]`.",
+                    "%s No minted reviewer token file was found for %s. The lead mints one with `dev board token mint --role reviewer --as %s`, or sets `%s` in `[board.pomb]`.",
                     detail,
                     by,
-                    by
+                    by,
+                    guards.is_verifier(by) and VERIFIER_TOKEN_KEY or REVIEWER_TOKEN_KEY
                 )
             end
             warnings = {
@@ -5253,8 +5257,22 @@ function M.run(sub, args, backend, now, screen)
     return run(backend, args, now, screen)
 end
 
-local LEAD_TOKEN_KEY = "lead_token"
-local REVIEWER_TOKEN_KEY = "reviewer_token"
+---The standing `[board.pomb]` token key a name sends in place of its own token.
+---@param token_key string the token key the caller asked for
+---@param agent string the agent name
+---@return string? key the standing key, nil when the name sends none
+local function standing_key(token_key, agent)
+    if token_key == LEAD_TOKEN_KEY then
+        return nil
+    end
+    if guards.is_verifier(agent) then
+        return VERIFIER_TOKEN_KEY
+    end
+    if guards.is_reviewer(agent) then
+        return REVIEWER_TOKEN_KEY
+    end
+    return nil
+end
 
 local function open_backend(settings, token_key)
     if settings.backend == board.Backend.LOCAL then
@@ -5274,12 +5292,11 @@ local function open_backend(settings, token_key)
             private = true,
         })
     end
-    local standing = token_key ~= LEAD_TOKEN_KEY
-        and guards.is_reviewer(os.getenv("DEV_AGENT") or "")
-        and config.user("board.pomb." .. REVIEWER_TOKEN_KEY) ~= nil
+    local key = standing_key(token_key, os.getenv("DEV_AGENT") or "")
+    local standing = key ~= nil and config.user("board.pomb." .. key) ~= nil
     local backend, reason = pomb.new({
         url = config.user("board.pomb.url"),
-        token = config.user("board.pomb." .. (standing and REVIEWER_TOKEN_KEY or token_key)),
+        token = config.user("board.pomb." .. (standing and key or token_key)),
         name = settings.name,
         lead = token_key == LEAD_TOKEN_KEY,
         standing = standing,
