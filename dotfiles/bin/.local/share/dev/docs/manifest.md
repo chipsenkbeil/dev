@@ -294,12 +294,10 @@ rg -o --no-filename 'script:scripts/[^ ",]+' .dev/tools.tsv | sort -u
 ## The driver
 
 `dev tools install` and `dev tools check` are built-in verbs for any project.
-They run `luajit dotfiles/bin/.local/share/dev/pkg.lua` from the dotfiles clone
-that holds `dev`, from the project root.
-
-`dev` finds the driver from its own location and `DOTFILES` overrides it, so a
-root-owned copy such as `/usr/local/lib/dotfiles` works. Nothing writes into
-the dotfiles tree.
+They run `luajit pkg.lua` from the directory that holds `dev`'s own `main.lua`,
+from the project root, and pass the project's `.dev/tools.tsv` as `--manifest`.
+The driver refuses `check` and `install` without `--manifest` and exits 2.
+Nothing writes into `dev`'s own directory.
 
 The driver reads the manifest, picks the tools, prints the status lines and
 runs the install and status commands in Lua. There is one module per manager

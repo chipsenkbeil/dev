@@ -337,6 +337,8 @@ testing.test("at -vv with the trace file missing the driver falls back to level 
     local dir = project(base, "p", "name binary pacman\n")
     local share = devproject.share
     devproject.share = base .. "/no-share"
+    assert(fs.mkdir(devproject.share, { parents = true }))
+    assert(fs.write(devproject.share .. "/pkg.lua", ""))
     local _, seen = run_as_root(dir, "tools check", { verbose = 2 })
     devproject.share = share
     local driver = driver_of(seen.argv)

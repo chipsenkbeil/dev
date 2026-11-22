@@ -112,9 +112,9 @@ local function manifest_refusal(reason, manifest, detail)
 end
 
 local function run_driver(ctx, sub, manifest, args)
-    local pkg = project.dotfiles_root() .. "/dotfiles/bin/.local/share/dev/pkg.lua"
+    local pkg = project.share .. "/pkg.lua"
     if not fs.is_file(pkg) then
-        return fail("no " .. pkg .. " (set DOTFILES to the dotfiles repo)")
+        return fail("The package driver " .. pkg .. " is missing.")
     end
     local is_root = dev_os.getuid() == 0
     local luajit = interpreter(ctx, is_root)

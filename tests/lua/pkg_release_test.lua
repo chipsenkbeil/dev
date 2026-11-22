@@ -409,7 +409,7 @@ testing.test("release rows route to the user scope and the release driver", func
 end)
 
 local MAIN = 'package.path = arg[1] .. "/?.lua"\n'
-    .. 'local code = require("dev.pkg").main({ unpack(arg, 3) }, { interpreter = "luajit", modules = arg[1], manifest = arg[2] })\n'
+    .. 'local code = require("dev.pkg").main({ unpack(arg, 2) }, { interpreter = "luajit", modules = arg[1] })\n'
     .. "io.stdout:flush()\n"
     .. "os.exit(code)\n"
 
@@ -426,9 +426,11 @@ testing.test("install and check read the pins file beside the manifest", functio
                 .. "base\n"
         )
     )
-    local function main(...)
+    local function main(sub, ...)
         local path = dir .. "/stubs:" .. os.getenv("PATH")
-        return dev_os.capture({ "luajit", dir .. "/main.lua", MODULES, dir .. "/tools.tsv", ... }, {
+        local argv =
+            { "luajit", dir .. "/main.lua", MODULES, sub, "--manifest", dir .. "/tools.tsv", ... }
+        return dev_os.capture(argv, {
             stderr = "stdout",
             env = env(dir, path),
         })

@@ -61,6 +61,15 @@ local function select_all(rows, column, group)
     return manifest.select(rows, { column = column, group = group })
 end
 
+testing.test("the driver refuses a run without --manifest", function()
+    local driver = REPO .. "/dotfiles/bin/.local/share/dev/pkg.lua"
+    for _, sub in ipairs({ "check", "install" }) do
+        local out, code = dev_os.capture({ "luajit", driver, sub }, { stderr = "stdout" })
+        testing.eq(code, 2)
+        testing.ok(out:find("--manifest", 1, true), out)
+    end
+end)
+
 testing.test("parse reads every row of the real manifest and finds its groups", function()
     local rows = manifest.parse(assert(fs.read(REPO .. "/.dev/tools.tsv")))
     testing.ok(#rows > 10, "the real manifest should hold many rows")

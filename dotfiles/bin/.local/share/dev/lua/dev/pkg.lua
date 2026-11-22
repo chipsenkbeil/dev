@@ -453,14 +453,13 @@ end
 
 ---Run `check` or `install` from a command line.
 ---@param argv string[] the arguments after the program name, starting with the subcommand
----@param defaults { interpreter: string, modules: string, manifest: string } the luajit that runs
----   the driver, dev's module directory and the manifest used without `--manifest`
+---@param defaults { interpreter: string, modules: string } the luajit that runs the driver and
+---   dev's module directory
 ---@return integer code the exit code
 function M.main(argv, defaults)
     local sub = argv[1]
     local args = { unpack(argv, 2) }
     local opts = {
-        manifest = defaults.manifest,
         interpreter = defaults.interpreter,
         modules = defaults.modules,
         dry_run = false,
@@ -475,10 +474,16 @@ function M.main(argv, defaults)
     if (sub == "check" or sub == "install") and dev_os.getuid() ~= 0 then
         dev_os.append_path(tool_dirs())
     end
-    if sub == "check" then
-        return parse_check(args, opts) and M.check(opts) or 2
-    elseif sub == "install" then
-        return parse_install(args, opts) and M.install(opts) or 2
+    if sub == "check" or sub == "install" then
+        local parse = sub == "check" and parse_check or parse_install
+        if not parse(args, opts) then
+            return 2
+        end
+        if not opts.manifest then
+            note("The " .. sub .. " subcommand needs `--manifest FILE`.")
+            return 2
+        end
+        return M[sub](opts)
     end
     note("unknown subcommand: " .. sub)
     stdout:write(USAGE)
