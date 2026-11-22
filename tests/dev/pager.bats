@@ -6,6 +6,9 @@ DEV="${BATS_TEST_DIRNAME}/../../dotfiles/bin/.local/bin/dev"
 
 setup() {
     require_pty
+    cp -R "${BATS_TEST_DIRNAME}/../../dotfiles/bin/.local" "$BATS_TEST_TMPDIR/home"
+    rm "$BATS_TEST_TMPDIR/home/share/dev/docs/overview.md"
+    DEV="$BATS_TEST_TMPDIR/home/bin/dev"
     OUT="$BATS_TEST_TMPDIR/out"
     PAGED="$BATS_TEST_TMPDIR/paged"
     PROJ="$BATS_TEST_TMPDIR/proj"

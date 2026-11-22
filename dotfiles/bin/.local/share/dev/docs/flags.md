@@ -218,13 +218,12 @@ the text prints directly without the filter line.
 ## Topics
 
 Topics are Markdown files whose first line is `# <name>: <summary>`. Built-in
-ones live in `docs/dev/` of the dotfiles clone that holds `dev` (found through
-`dotfiles_root`), and project ones in `.dev/topics/`. A topic may not share a
-name with a verb or a built-in topic.
+ones live in the `docs` folder beside `main.lua`, and project ones in
+`.dev/topics/`. A topic may not share a name with a verb or a built-in topic.
 
-`dev __topics check` checks the built-in topics when the project is the
-dotfiles clone `dev` reads them from (`DOTFILES` overrides it), and the
-project's topics in every project. For each topic it checks the first line,
+`dev __topics check` checks the built-in topics when that folder lies inside
+the project or `DEV_CHECKOUT` names the project, and the project's topics in
+every project. For each topic it checks the first line,
 the names, and that each backticked or fenced `dev` line followed by words
 names a real verb or subcommand and only flags `dev __flags` lists for it. It
 exits 1 with `file:line` for each problem.

@@ -31,7 +31,7 @@ local M = {}
 ---@param root string project root
 ---@return dev.topics.File[] files the topics, each directory in name order
 function M.files(root)
-    local builtin = project.dotfiles_root() .. "/docs/dev"
+    local builtin = project.share .. "/docs"
     local files = {}
     for _, dir in ipairs({ builtin, root .. "/.dev/topics" }) do
         for _, file in ipairs(fs.list(dir) or {}) do
@@ -144,10 +144,7 @@ local function check_file(reg, file, out)
     if not (first:sub(1, #prefix) == prefix and #first > #prefix) then
         problem(1, 'the first line must be "# ' .. file.name .. ': <summary>"')
     end
-    if
-        not file.builtin
-        and fs.is_file(project.dotfiles_root() .. "/docs/dev/" .. file.name .. ".md")
-    then
+    if not file.builtin and fs.is_file(project.share .. "/docs/" .. file.name .. ".md") then
         problem(1, "topic " .. file.name .. " is also a built-in topic")
     end
     if reg:find({ file.name }) then
@@ -182,11 +179,10 @@ end
 
 ---Check the topics and every script header against the real verbs and flags.
 ---
----The built-in topics document the dotfiles repository's own verbs, so they are
----checked when the project is the dotfiles clone dev reads them from
----(`DOTFILES` overrides it), and the project's topics in every project. A topic's first line must
----be `# <name>: <summary>`, its name may not clash
----with a built-in topic or a verb, and each backticked `dev ...` span or
+---The built-in topics sit in the `docs` folder beside `main.lua`, so they are
+---checked when that folder lies inside the project, and the project's topics in
+---every project. A topic's first line must be `# <name>: <summary>`, its name
+---may not clash with a built-in topic or a verb, and each backticked `dev ...` span or
 ---fenced `dev ...` line must name a real verb or subcommand and only flags
 ---`Registry:flags` or `Registry:shadowed_flags` lists. A script whose flags line declares
 ---`-h` or `--help` is a problem too.
@@ -194,8 +190,13 @@ end
 ---@return dev.topics.Problem[] problems the problems in the order they were found
 function M.check(reg)
     local out = {}
-    local here, clone = fs.realpath(reg.root), fs.realpath(project.dotfiles_root())
-    local own = here ~= nil and here == clone
+    local here, share = fs.realpath(reg.root), fs.realpath(project.share)
+    local checkout = os.getenv("DEV_CHECKOUT")
+    local own = here ~= nil
+        and (
+            here == checkout
+            or share ~= nil and (share == here or share:sub(1, #here + 1) == here .. "/")
+        )
     for _, file in ipairs(M.files(reg.root)) do
         if own or not file.builtin then
             check_file(reg, file, out)

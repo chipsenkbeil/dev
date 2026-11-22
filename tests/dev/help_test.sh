@@ -20,6 +20,11 @@ cp -R "$FIXTURES/help-project" "$PROJ"
 cp -R "$FIXTURES/help-dotfiles" "$FIXDOT"
 PROJ="$(cd "$PROJ" && pwd -P)"
 FIXDOT="$(cd "$FIXDOT" && pwd -P)"
+FIXHOME="$TMP/help-home"
+cp -R "$REPO/dotfiles/bin/.local" "$FIXHOME"
+rm -r "$FIXHOME/share/dev/docs"
+cp -R "$FIXTURES/help-dotfiles/docs" "$FIXHOME/share/dev/docs"
+FIXDEV="$FIXHOME/bin/dev"
 
 fails=0
 
@@ -47,7 +52,7 @@ assert_contains() {
 # fixture_dev <args...>: run dev in the fixture project against the fixture dotfiles, with the temp paths named.
 fixture_dev() {
     (
-        cd "$PROJ" && DOTFILES="$FIXDOT" "$DEV" "$@" 2>&1
+        cd "$PROJ" && DOTFILES="$FIXDOT" "$FIXDEV" "$@" 2>&1
         printf 'exit %s\n' "$?"
     ) |
         sed -e "s|$PROJ|<root>|g" -e "s|$FIXDOT|<dotfiles>|g"
@@ -112,7 +117,7 @@ done
 assert_eq "help widget save equals widget save --help" "$(fixture_dev help widget save)" "$(fixture_dev widget save --help)"
 assert_eq "dev equals dev help" "$(fixture_dev)" "$(fixture_dev help)"
 assert_eq "--topics prints name and summary separated by a tab" \
-    "$(cd "$PROJ" && DOTFILES="$FIXDOT" "$DEV" help --topics)" \
+    "$(cd "$PROJ" && DOTFILES="$FIXDOT" "$FIXDEV" help --topics)" \
     "$(printf 'flags\tThe global flags of the fixture\nnouns\tHow the fixture nouns work\noverview\tWhat the fixture project is for and where to start')"
 
 # Every non-hidden verb sits in exactly one group
@@ -135,12 +140,12 @@ done
 out="$(cd "$REPO" && DOTFILES="$REPO" "$DEV" __topics check 2>&1)"
 assert_eq "__topics check passes on the real topics" "$?" "0"
 assert_eq "__topics check is silent when the topics pass" "$out" ""
-out="$(cd "$PROJ" && DOTFILES="$FIXDOT" "$DEV" __topics check 2>&1)"
+out="$(cd "$PROJ" && DOTFILES="$FIXDOT" "$FIXDEV" __topics check 2>&1)"
 assert_eq "__topics check passes on the fixture topics" "$?" "0"
 
 check_topic() {
     printf '%s\n' "$2" >"$PROJ/.dev/topics/$1.md"
-    out="$(cd "$PROJ" && DOTFILES="$FIXDOT" "$DEV" __topics check 2>&1)"
+    out="$(cd "$PROJ" && DOTFILES="$FIXDOT" "$FIXDEV" __topics check 2>&1)"
     rc=$?
     rm "$PROJ/.dev/topics/$1.md"
 }
@@ -159,10 +164,10 @@ check_topic stacked $'# stacked: Quotes stacked verbose flags\n\nRun `dev -vvv l
 assert_eq "__topics check accepts -vvv" "$rc" "0"
 printf '#!/usr/bin/env bash\n# Declares a reserved flag.\n# flags: --ok -h\n' >"$PROJ/.dev/reserved.sh"
 chmod +x "$PROJ/.dev/reserved.sh"
-out="$(cd "$PROJ" && DOTFILES="$FIXDOT" "$DEV" __topics check 2>&1)"
+out="$(cd "$PROJ" && DOTFILES="$FIXDOT" "$FIXDEV" __topics check 2>&1)"
 assert_eq "__topics check fails on a script that declares -h" "$?" "1"
 assert_contains "__topics check names the script" "$out" ".dev/reserved.sh:1:"
-assert_contains "dev help warns about a reserved flag" "$(cd "$PROJ" && DOTFILES="$FIXDOT" "$DEV" help reserved 2>&1)" "declares -h"
+assert_contains "dev help warns about a reserved flag" "$(cd "$PROJ" && DOTFILES="$FIXDOT" "$FIXDEV" help reserved 2>&1)" "declares -h"
 rm "$PROJ/.dev/reserved.sh"
 check_topic subcheck $'# subcheck: Quotes noun subcommands\n\nRun `dev tools install --dry-run`.'
 assert_eq "__topics check accepts a real noun subcommand with its flag" "$rc" "0"
@@ -175,11 +180,11 @@ assert_eq "__topics check fails on a flag the subcommand lacks" "$rc" "1"
 assert_contains "__topics check names the subcommand's missing flag" "$out" "dev tools check takes no flag --no-such-flag"
 printf '#!/usr/bin/env bash\n# group: Elsewhere\n# hidden\n# Ordered header lines.\n# flags: --late\n' >"$PROJ/.dev/ordered.sh"
 chmod +x "$PROJ/.dev/ordered.sh"
-listing="$(cd "$PROJ" && DOTFILES="$FIXDOT" "$DEV" help -a)"
+listing="$(cd "$PROJ" && DOTFILES="$FIXDOT" "$FIXDEV" help -a)"
 assert_contains "a hidden line after a group line still hides the verb" " $(hidden_names "$listing" | tr '\n' ' ')" " ordered "
 assert_eq "the hidden verb is not in its group" "$(group_count "$listing" ordered)" "0"
-assert_eq "the curated view omits it" "$(cd "$PROJ" && DOTFILES="$FIXDOT" "$DEV" help | grep -c '^  ordered ' || true)" "0"
-assert_eq "a flags line after group and hidden lines is read" "$(cd "$PROJ" && DOTFILES="$FIXDOT" "$DEV" __flags ordered | sed -n 1p)" "--late"
+assert_eq "the curated view omits it" "$(cd "$PROJ" && DOTFILES="$FIXDOT" "$FIXDEV" help | grep -c '^  ordered ' || true)" "0"
+assert_eq "a flags line after group and hidden lines is read" "$(cd "$PROJ" && DOTFILES="$FIXDOT" "$FIXDEV" __flags ordered | sed -n 1p)" "--late"
 rm "$PROJ/.dev/ordered.sh"
 check_topic badnoun $'# badnoun: Quotes a subcommand that does not exist\n\nRun `dev widget zap`.'
 assert_eq "__topics check fails on a made-up subcommand" "$rc" "1"
@@ -212,7 +217,7 @@ fence() {
         $0 == "```" lang { on = 1; next }
         $0 == "```" { on = 0 }
         on { print }
-    ' "$REPO/docs/dev/porting.md"
+    ' "$REPO/dotfiles/bin/.local/share/dev/docs/porting.md"
 }
 for pair in sh:bash lua:lua; do
     ext=${pair%%:*}

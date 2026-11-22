@@ -205,7 +205,6 @@ CLONE="$TMP/a clone"
 mkdir -p "$CLONE/dotfiles/bin/.local/bin" "$CLONE/dotfiles/bin/.local/share"
 cp "$DEV" "$CLONE/dotfiles/bin/.local/bin/dev"
 cp -R "$REPO/dotfiles/bin/.local/share/dev" "$CLONE/dotfiles/bin/.local/share/dev"
-cp -R "$REPO/docs" "$CLONE/docs"
 out="$(cd "$NOPROJ" && PATH="$TMP/realjit:$NOLUA:/usr/bin:/bin" "$CLONE/dotfiles/bin/.local/bin/dev" help --topics 2>&1)"
 assert_contains "a clone under a path with a space finds the built-in topics" "$out" "remote"
 

@@ -112,7 +112,7 @@ testing.test("the completion names each global flag", function()
 end)
 
 testing.test("flags.md lists each global flag as a bullet", function()
-    local docs = source(REPO .. "/docs/dev/flags.md")
+    local docs = source(REPO .. "/dotfiles/bin/.local/share/dev/docs/flags.md")
     local listed = {}
     for head in docs:gmatch("\n%- ([^\n]-):") do
         for flag in head:gmatch("`(%-[%w%-]+)") do

@@ -75,31 +75,60 @@ testing.test("__topics check reports a .lua flags line with -h and exits 1", fun
     fs.remove(root, { recursive = true })
 end)
 
-testing.test("__topics check checks the built-in topics in the dotfiles clone itself", function()
-    local root = project({ ["a.lua"] = "--[[\nA.\n]]\nreturn 0\n" })
-    assert(fs.mkdir(root .. "/docs/dev", { parents = true }))
-    assert(fs.write(root .. "/docs/dev/bad.md", "# bad: A topic\n\n`dev nope`\n"))
-    local out, code = dev_os.capture(
-        { "luajit", MAIN, "__topics", "check" },
-        { cwd = root, stderr = "stdout", env = { DEV_SELF = SELF, DOTFILES = fs.realpath(root) } }
+local function share_copy(dir)
+    assert(
+        dev_os.run({ "cp", "-R", REPO .. "/dotfiles/bin/.local/share/dev", dir }) == 0,
+        "cp failed"
     )
+    local share = dir .. "/dev"
+    assert(fs.remove(share .. "/docs", { recursive = true }))
+    assert(fs.mkdir(share .. "/docs"))
+    assert(fs.write(share .. "/docs/bad.md", "# bad: A topic\n\n`dev nope`\n"))
+    return share
+end
+
+local function check_with(share, root, env)
+    return dev_os.capture({ "luajit", share .. "/main.lua", "__topics", "check" }, {
+        cwd = root,
+        stderr = "stdout",
+        env = env,
+        unset = { "DOTFILES" },
+    })
+end
+
+testing.test(
+    "__topics check checks the built-in topics when the share folder is in the project",
+    function()
+        local root = project({ ["a.lua"] = "--[[\nA.\n]]\nreturn 0\n" })
+        local share = share_copy(root)
+        local out, code = check_with(share, root, { DEV_SELF = SELF })
+        testing.eq(code, 1)
+        testing.eq(out, "dev/docs/bad.md:3: `dev nope`: no verb nope\n")
+        fs.remove(root, { recursive = true })
+    end
+)
+
+testing.test("__topics check reads the built-in topics beside main.lua", function()
+    local root = project({ ["a.lua"] = "--[[\nA.\n]]\nreturn 0\n" })
+    local share = share_copy(root)
+    assert(fs.write(share .. "/docs/good.md", "# good: A topic\n\n`dev lint`\n"))
+    assert(fs.mkdir(root .. "/.dev/topics", { parents = true }))
+    assert(fs.write(root .. "/.dev/topics/good.md", "# good: Clash\n\nText.\n"))
+    local out, code = check_with(share, root, { DEV_SELF = SELF })
     testing.eq(code, 1)
-    testing.eq(out, "docs/dev/bad.md:3: `dev nope`: no verb nope\n")
+    testing.ok(out:find("dev/docs/bad.md:3:", 1, true), out)
+    testing.ok(out:find(".dev/topics/good.md:1: topic good is also a built-in topic", 1, true), out)
+    testing.ok(not out:find("dev/docs/good.md", 1, true), out)
     fs.remove(root, { recursive = true })
 end)
 
 testing.test(
-    "__topics check skips the built-in topics when DOTFILES names another directory",
+    "__topics check skips the built-in topics when the share folder is outside the project",
     function()
         local root = project({ ["a.lua"] = "--[[\nA.\n]]\nreturn 0\n" })
         local other = support.tempdir()
-        assert(fs.mkdir(other .. "/docs/dev", { parents = true }))
-        assert(fs.write(other .. "/docs/dev/bad.md", "# bad: A topic\n\n`dev nope`\n"))
-        local out, code = dev_os.capture({ "luajit", MAIN, "__topics", "check" }, {
-            cwd = root,
-            stderr = "stdout",
-            env = { DEV_SELF = SELF, DOTFILES = fs.realpath(other) },
-        })
+        local share = share_copy(other)
+        local out, code = check_with(share, root, { DEV_SELF = SELF })
         testing.eq({ out, code }, { "", 0 })
         fs.remove(root, { recursive = true })
         fs.remove(other, { recursive = true })
