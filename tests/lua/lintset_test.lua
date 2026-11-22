@@ -68,6 +68,33 @@ testing.test("spacing in shell ignores a heredoc marker in a string or a comment
     testing.eq(lintset.spacing("x=$[1<<n]\n# after\nnext\n", "#"), { 2 })
 end)
 
+testing.test("spacing in shell treats an unclosed heredoc as code", function()
+    testing.eq(lintset.spacing("cat <<EOF\n# after\nnext\n", "#"), { 2 })
+    testing.eq(lintset.runs("cat <<EOF\n# a\n# b\n# c\n", "#"), { { line = 2, count = 3 } })
+end)
+
+testing.test("spacing in shell closes a dash heredoc on a tab terminator only", function()
+    testing.eq(lintset.spacing("cat <<-EOF\n    EOF\n# data\n\tEOF\nnext\n", "#"), {})
+    testing.eq(lintset.spacing("cat <<-EOF\n# data\n    EOF\nnext\n", "#"), { 2 })
+end)
+
+testing.test("spacing in shell reads a quoted heredoc word with spaces whole", function()
+    testing.eq(lintset.spacing("cat <<'END OF'\n# data\nEND OF\n# after\nnext\n", "#"), { 4 })
+    testing.eq(lintset.spacing('cat <<"END OF"\n# data\nEND\nEND OF\nnext\n', "#"), {})
+end)
+
+testing.test("spacing in shell tracks two heredocs on one line in order", function()
+    testing.eq(lintset.spacing("cat <<A <<B\n# a\nA\n# b\nB\n# after\nnext\n", "#"), { 6 })
+end)
+
+testing.test(
+    "spacing in shell finds an opener after hash in a count or an escaped quote",
+    function()
+        testing.eq(lintset.spacing("cat ${#x} <<EOF\n# data\nEOF\n", "#"), {})
+        testing.eq(lintset.spacing('echo \\" <<EOF\n# data\nEOF\n', "#"), {})
+    end
+)
+
 testing.test("spacing skips doc comments and block comments", function()
     testing.eq(lintset.spacing("local a = 1\n--- doc\nlocal b\n", "--"), {})
     testing.eq(lintset.spacing("local a = 1\n\n--[[\nnote\n]]\nlocal b\n", "--"), {})
