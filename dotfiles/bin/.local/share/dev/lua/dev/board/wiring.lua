@@ -406,7 +406,7 @@ local function check_rows(opts)
         narrowed[row] = count
         verb.note(string.format("Row %d narrowed to %d suites.", row, count))
     end)
-    ---@type table<integer, string[]> the suites narrowing added to each row, which `record` writes as ran=
+    ---@type table<integer, string[]> suites narrowing added per row, which `record` writes as ran=
     local ran = {}
     for row, count in pairs(narrowed) do
         ran[row] = { unpack(argvs[row], #argvs[row] - count + 1) }
