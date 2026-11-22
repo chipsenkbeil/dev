@@ -6,6 +6,7 @@ local tokenfile = require("dev.board.tokenfile")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local json = require("dev.json")
+local pomb = require("dev.board.pomb")
 local support = require("support")
 
 local has_jj = dev_os.which("jj") ~= nil
@@ -1100,3 +1101,97 @@ if has_jj then
         testing.ok(out:find("`dev board check` at this commit", 1, true), out)
     end)
 end
+
+local SEATS_ID = "11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+local SEATS_FAR_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+
+local function seats_root()
+    local root = support.sandbox({
+        ["boards.json"] = '[{"id":"board-1","name":"dotfiles","archived":false}]',
+        ["detail.json"] = '{"id":"board-1","name":"dotfiles","swimlanes":[],"columns":'
+            .. '[{"id":"col-icebox","name":"'
+            .. support.COLUMN_NAME.ICEBOX
+            .. '"}]}',
+        ["colors.json"] = "[]",
+        ["export.json"] = '{"tasks":[' .. support.pomb_export_task({
+            id = SEATS_ID,
+            name = "seat card",
+            column_id = "col-icebox",
+        }) .. "]}",
+        ["comments.json"] = "[]",
+    }, {})
+    assert(
+        fs.write(
+            root .. "/bin/curl",
+            support.pomb_curl(SEATS_ID, "22222222-bbbb-4bbb-8bbb-bbbbbbbbbbbb", SEATS_ID)
+        )
+    )
+    assert(dev_os.run({ "chmod", "755", root .. "/bin/curl" }) == 0, "chmod failed")
+    return root
+end
+
+local function on_seats(root, run)
+    local names = { "PATH", "ROOT", "DEV_BOARD_TOKEN" }
+    local previous = {}
+    for _, name in ipairs(names) do
+        previous[name] = os.getenv(name) or ""
+    end
+    ffi.C.setenv("PATH", root .. "/bin:" .. previous.PATH, 1)
+    ffi.C.setenv("ROOT", root, 1)
+    ffi.C.setenv("DEV_BOARD_TOKEN", "pomb_SECRETtoken0123456789", 1)
+    local ok, err = pcall(function()
+        run(assert(pomb.new({
+            url = "https://pomb.example",
+            token = "pass:secrets/worker/token/pomb",
+            name = "dotfiles",
+        })))
+    end)
+    for _, name in ipairs(names) do
+        ffi.C.setenv(name, previous[name], 1)
+    end
+    assert(ok, err)
+end
+
+testing.test("seats returns the verdict and revision of each seat", function()
+    local root = seats_root()
+    assert(
+        fs.write(
+            root .. "/task.seats.json",
+            '[{"name":"code","role":"reviewer","holder":"r","idle":false,'
+                .. '"verdict":"approved","revision":"abc123"},'
+                .. '{"name":"style","role":"reviewer","holder":null,"idle":true,'
+                .. '"verdict":null,"revision":null}]'
+        )
+    )
+    on_seats(root, function(backend)
+        local seats = assert(backend:seats(SEATS_ID))
+        testing.eq(#seats, 2)
+        testing.eq(seats[1].name, "code")
+        testing.eq(seats[1].role, "reviewer")
+        testing.eq(seats[1].verdict, "approved")
+        testing.eq(seats[1].revision, "abc123")
+        testing.eq(seats[1].idle, false)
+        testing.eq(seats[2].name, "style")
+        testing.eq(seats[2].verdict, nil)
+        testing.eq(seats[2].revision, nil)
+        testing.eq(seats[2].idle, true)
+    end)
+end)
+
+testing.test("seats returns an empty list for a task with no seats key", function()
+    on_seats(seats_root(), function(backend)
+        local seats = assert(backend:seats(SEATS_ID))
+        testing.eq(#seats, 0)
+    end)
+end)
+
+testing.test("seats returns the reason when the read fails", function()
+    local root = seats_root()
+    assert(fs.write(root .. "/far.json", '{"message":"gone"}'))
+    assert(fs.write(root .. "/far_gone", ""))
+    on_seats(root, function(backend)
+        local seats, message = backend:seats(SEATS_FAR_ID)
+        testing.eq(seats, nil)
+        testing.ok(message and message:find("gone", 1, true), tostring(message))
+    end)
+end)

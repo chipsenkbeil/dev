@@ -1506,6 +1506,34 @@ function Backend:seat_verdict(id, seat, name, verdict, revision)
     return true
 end
 
+function Backend:seats(id)
+    local ok, message = self:__load()
+    if not ok then
+        return nil, message
+    end
+    local task
+    task, message = self:__request("GET", "/api/tasks/" .. id)
+    if not task then
+        return nil, message
+    end
+    local seats = {}
+    if type(task.seats) ~= "table" then
+        return seats
+    end
+    for _, seat in ipairs(task.seats) do
+        if type(seat) == "table" then
+            seats[#seats + 1] = {
+                name = json.present(seat.name),
+                role = json.present(seat.role),
+                verdict = json.present(seat.verdict),
+                revision = json.present(seat.revision),
+                idle = json.present(seat.idle),
+            }
+        end
+    end
+    return seats
+end
+
 function Backend:escalate(id, tier, reason, fence)
     local ok, message = self:__load()
     if not ok then

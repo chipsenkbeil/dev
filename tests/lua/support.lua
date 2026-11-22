@@ -610,6 +610,9 @@ case "$last" in
             body=$(cat "$ROOT/task.json")
         fi
     fi
+    if [ -f "$ROOT/task.seats.json" ]; then
+        body="$(printf '%s' "$body" | sed 's|}$|,"seats":|')$(cat "$ROOT/task.seats.json")}"
+    fi
     if [ -f "$ROOT/owner_name" ]; then
         body=$(printf '%s' "$body" | sed "s|^{|{\"owner\":{\"holder\":{\"kind\":\"agent\",\
 \"name\":\"$(cat "$ROOT/owner_name")\"},\"lease_expires_at\":null,\"live\":true,\"fence\":7},\

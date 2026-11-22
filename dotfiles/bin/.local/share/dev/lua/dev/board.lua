@@ -178,6 +178,10 @@ end
 ---   SEAT taken by NAME and answered with `approved` or `changes_needed` at the revision, or nil,
 ---   Pomb's refusal and `no_seat` when the card has no such seat and the token cannot add it, nil
 ---   on a board with no seats
+---@field seats fun(self: dev.board.Backend, id: string): dev.board.Seat[]?, string? the seats the
+---   card holds, each with its name, role, verdict, revision and idle flag, a nil verdict and
+---   revision before an answer, an empty list for a card with no seats, or nil and why the read
+---   failed. The field is optional: it is nil on a board with no seats
 ---@field ask fun(self: dev.board.Backend, id: string, question: dev.board.Ask, fence: integer?):
 ---   boolean?, string? a structured question posted on the card, which Pomb moves to Blocked with
 ---   needs:human, or nil and Pomb's refusal
@@ -331,6 +335,13 @@ end
 ---@class dev.board.Question
 ---@field text string the question
 ---@field answer table<string, any>? how the question was answered, nil while it is open
+
+---@class dev.board.Seat
+---@field name string the seat's name
+---@field role string? the role the seat is for
+---@field verdict string? `approved` or `changes_needed`, nil before an answer
+---@field revision string? the change the holder suggests with the verdict
+---@field idle boolean? whether the seat has no live holder
 
 ---@class dev.board.Ask
 ---@field text string? the question

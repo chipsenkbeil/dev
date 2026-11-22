@@ -305,6 +305,11 @@ token of its own.
   prompt, and no token reaches a prompt, an argument list or a log.
 - A second round reuses NAME. While the earlier token lives, the lead mints
   again only after `dev board token revoke --as NAME` or its expiry.
+- The seat read: `Backend:seats` reads the card seats from the task, with `GET
+  /api/tasks/ID`, and returns a list of `{name, role, verdict, revision,
+  idle}`. A seat that has not answered has no verdict and no revision, and a
+  task with no `seats` key gives an empty list. A failed read returns nil and
+  the reason. A local board has no seats and leaves the field unset.
 
 ## Which token each tool holds
 
