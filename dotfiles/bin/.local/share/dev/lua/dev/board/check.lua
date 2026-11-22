@@ -122,6 +122,9 @@ local STANDARD_TEST = "test"
 local STANDARD_JOBS = { lint = true, [STANDARD_TEST] = true }
 local STANDARD_ROWS = { ["dev --remote lint"] = true, ["dev --remote test"] = true }
 local LOGS_SECONDS = 60
+local PASSED_STATE = "passed"
+---The ci job states of a job that ended without passing
+local ENDED_STATES = { failed = true, interrupted = true }
 
 ---How a checks row ended.
 ---@enum dev.board.check.Result
@@ -605,14 +608,22 @@ function M.never_started(argv, code, run_id)
     return is_remote(argv)
 end
 
+---Read the state of a ci run.
+---@param run_id string the ci run id
+---@return string? status the state ci reports, nil when ci cannot say
+local function run_status(run_id)
+    local out, code = dev_os.capture_timed({ CI_COMMAND, "ps", run_id, "--json" }, STATE_SECONDS)
+    local doc = code == 0 and json.decode(out) or nil
+    local status = type(doc) == "table" and doc.status or nil
+    return type(status) == "string" and status or nil
+end
+
 ---Say what state the ci run of a row that hit its limit was in.
 ---@param run_id string the ci run id the row printed
 ---@return string reason one sentence for the record, short enough to keep
 local function timeout_reason(run_id)
-    local out, code = dev_os.capture_timed({ CI_COMMAND, "ps", run_id, "--json" }, STATE_SECONDS)
-    local doc = code == 0 and json.decode(out) or nil
-    local status = type(doc) == "table" and doc.status or nil
-    if type(status) ~= "string" then
+    local status = run_status(run_id)
+    if not status then
         return "The ci run state could not be read at the limit."
     end
     return "The ci run was " .. status .. " at the limit and may still finish."
@@ -679,6 +690,14 @@ function M.run(opts)
     if result == M.Result.TIMEOUT and run_id then
         reason = timeout_reason(run_id)
         note = note or reason
+    end
+    if result == M.Result.PASS and run_id and not negated then
+        local status = run_status(run_id)
+        if status ~= PASSED_STATE then
+            result = M.Result.ERROR
+            note = status and string.format("The ci run %s was %s, not passed.", run_id, status)
+                or string.format("The state of ci run %s could not be read.", run_id)
+        end
     end
     if opts.argv[1] == RG_COMMAND and code == RG_USAGE_EXIT then
         result = M.Result.ERROR
@@ -903,7 +922,7 @@ end
 
 ---Read how each job of a ci run ended.
 ---@param run_id string the ci run id
----@return table<string, {passed: boolean, code: integer}>? jobs by job name, nil when ci cannot say
+---@return table<string, {passed: boolean, code: integer, state: string?}>? jobs by job name, nil when ci cannot say
 local function job_results(run_id)
     local out, code = dev_os.capture_timed({ CI_COMMAND, "ps", run_id, "--json" }, STATE_SECONDS)
     local doc = code == 0 and json.decode(out) or nil
@@ -914,8 +933,11 @@ local function job_results(run_id)
     for _, entry in ipairs(doc.jobs) do
         if type(entry) == "table" and type(entry.name) == "string" then
             local seen = results[entry.name] or { passed = true, code = 0 }
-            local failed = entry.state ~= "passed"
+            local failed = entry.state ~= PASSED_STATE
             seen.passed = seen.passed and not failed
+            if failed and not seen.state then
+                seen.state = tostring(entry.state)
+            end
             if failed and seen.code == 0 then
                 seen.code = type(entry.exit_code) == "number"
                         and entry.exit_code ~= 0
@@ -986,6 +1008,7 @@ function M.run_group(opts)
     local rows = {}
     for k, entry in ipairs(opts.plan.rows) do
         local found = results and results[entry.job]
+        local ended = found and ENDED_STATES[found.state]
         local row = {
             run = entry.run,
             run_id = run_id or NO_RUN,
@@ -1000,7 +1023,17 @@ function M.run_group(opts)
             if reason then
                 row.tail = reason .. "\n" .. row.tail
             end
-        elseif not (found and found.passed) and not (code == 0 and not results) then
+        elseif code == 0 and not (found and found.passed) and not ended then
+            row.result, row.code = M.Result.ERROR, 1
+            local what = "its jobs could not be read."
+            if found then
+                what = string.format("job %s was %s, not passed.", entry.job, found.state)
+            elseif results then
+                what = string.format("job %s is not among the jobs ci read.", entry.job)
+            end
+            row.tail =
+                string.format("The ci run %s: %s\n%s", run_id or NO_RUN, what, tail_of(output))
+        elseif not (found and found.passed) then
             row.result = M.Result.FAIL
             row.code = found and found.code or (code ~= 0 and code or 1)
             if not found then

@@ -22,12 +22,36 @@ local function setup(files)
     return root, home
 end
 
+local passing_ci_bin
+
+local function passing_ci_path()
+    if not passing_ci_bin then
+        passing_ci_bin = support.tempdir() .. "/bin"
+        assert(fs.mkdir(passing_ci_bin, { parents = true }), "mkdir failed")
+        assert(
+            fs.write(passing_ci_bin .. "/ci", '#!/bin/sh\necho \'{"status":"passed"}\'\n'),
+            "write failed"
+        )
+        assert(dev_os.run({ "chmod", "755", passing_ci_bin .. "/ci" }) == 0, "chmod failed")
+    end
+    return passing_ci_bin .. ":" .. os.getenv("PATH")
+end
+
+local function with_passing_ci(body)
+    local saved = dev_os.defaults.env.PATH
+    dev_os.defaults.env.PATH = passing_ci_path()
+    local ok, err = pcall(body)
+    dev_os.defaults.env.PATH = saved
+    assert(ok, err)
+end
+
 local function dev(root, home, args, cwd, extra)
     local env = {
         HOME = home,
         XDG_STATE_HOME = home .. "/state",
         JJ_USER = "t",
         JJ_EMAIL = "t@example.com",
+        PATH = passing_ci_path(),
     }
     for name, value in pairs(extra or {}) do
         env[name] = value
@@ -579,20 +603,23 @@ end)
 testing.test("check.run hands each ci run id to on_run_id before the row ends", function()
     local dir = support.tempdir()
     local seen = {}
-    local row = check.run({
-        root = dir,
-        run = "row",
-        argv = {
-            "sh",
-            "-c",
-            "echo run 8cb600; echo run ffffff; while [ ! -e seen ]; do sleep 0.1; done",
-        },
-        seconds = 30,
-        on_run_id = function(run_id)
-            seen[#seen + 1] = run_id
-            assert(fs.write(dir .. "/seen", "x"))
-        end,
-    })
+    local row
+    with_passing_ci(function()
+        row = check.run({
+            root = dir,
+            run = "row",
+            argv = {
+                "sh",
+                "-c",
+                "echo run 8cb600; echo run ffffff; while [ ! -e seen ]; do sleep 0.1; done",
+            },
+            seconds = 30,
+            on_run_id = function(run_id)
+                seen[#seen + 1] = run_id
+                assert(fs.write(dir .. "/seen", "x"))
+            end,
+        })
+    end)
     testing.eq(row.result, "pass")
     testing.eq(seen, { "8cb600" })
     testing.eq(row.run_id, "8cb600")
@@ -964,6 +991,33 @@ testing.test("a timeout row says when the ci state is unreadable", function()
     testing.ok(body:find("The ci run state could not be read at the limit.", 1, true), body)
 end)
 
+local function quick_row(ci_body)
+    local root, home = git_root({ ["quick.sh"] = "echo run 8cb600\n" })
+    local id = card_with(root, home, { "sh quick.sh" })
+    local out, code = dev(root, home, { "board", "check", id }, nil, fake_ci(ci_body))
+    return out, code, comments(home)[1].body
+end
+
+testing.test("a zero-exit row whose ci run is still running records error", function()
+    local out, code, body = quick_row([[echo '{"status":"running"}']])
+    testing.eq(code, 1, out)
+    testing.ok(body:find("1 error 8cb600", 1, true), body)
+    testing.ok(out:find("The ci run 8cb600 was running, not passed.", 1, true), out)
+end)
+
+testing.test("a zero-exit row whose ci run passed records pass", function()
+    local out, code, body = quick_row([[echo '{"status":"passed"}']])
+    testing.eq(code, 0, out)
+    testing.ok(body:find("1 pass 8cb600", 1, true), body)
+end)
+
+testing.test("a zero-exit row with an unreadable ci state records error naming the run", function()
+    local out, code, body = quick_row("exit 1")
+    testing.eq(code, 1, out)
+    testing.ok(body:find("1 error 8cb600", 1, true), body)
+    testing.ok(out:find("The state of ci run 8cb600 could not be read.", 1, true), out)
+end)
+
 local PASSED =
     '{"name":"lint","state":"passed","exit_code":0},{"name":"test","state":"passed","exit_code":0}'
 local TEST_FAILED =
@@ -1070,11 +1124,44 @@ testing.test("the words after the double dash of a test row reach the one ci run
     testing.ok(log:find("-- tests/a_test.lua", 1, true), log)
 end)
 
-testing.test("a shared run that exits 0 passes its rows when ci cannot list the jobs", function()
-    local out, code, body = group_check({ unreadable = true, run = group_run(0) })
-    testing.eq(code, 0, out)
-    testing.ok(body:find("2 pass 8cb600", 1, true), body)
+testing.test("a zero-exit shared run records error for a row whose job is unfinished", function()
+    local jobs = '{"name":"lint","state":"passed","exit_code":0},'
+        .. '{"name":"test","state":"running","exit_code":0}'
+    local out, code, body = group_check({ jobs = jobs, run = group_run(0) })
+    testing.eq(code, 1, out)
+    testing.ok(body:find("1 pass 8cb600", 1, true), body)
+    testing.ok(body:find("2 error 8cb600", 1, true), body)
+    testing.ok(out:find("The ci run 8cb600: job test was running, not passed.", 1, true), out)
 end)
+
+testing.test("a zero-exit shared run records error for a row whose job still waits", function()
+    local jobs = '{"name":"lint","state":"passed","exit_code":0},'
+        .. '{"name":"test","state":"waiting","exit_code":0}'
+    local out, code, body = group_check({ jobs = jobs, run = group_run(0) })
+    testing.eq(code, 1, out)
+    testing.ok(body:find("2 error 8cb600", 1, true), body)
+    testing.ok(out:find("job test was waiting, not passed.", 1, true), out)
+    testing.ok(not out:find("output of test", 1, true), out)
+end)
+
+testing.test("a zero-exit shared run names a job ci did not list", function()
+    local jobs = '{"name":"lint","state":"passed","exit_code":0}'
+    local out, code, body = group_check({ jobs = jobs, run = group_run(0) })
+    testing.eq(code, 1, out)
+    testing.ok(body:find("2 error 8cb600", 1, true), body)
+    testing.ok(out:find("job test is not among the jobs ci read.", 1, true), out)
+end)
+
+testing.test(
+    "a zero-exit shared run records error for every row when ci cannot list the jobs",
+    function()
+        local out, code, body = group_check({ unreadable = true, run = group_run(0) })
+        testing.eq(code, 1, out)
+        testing.ok(body:find("1 error 8cb600", 1, true), body)
+        testing.ok(body:find("2 error 8cb600", 1, true), body)
+        testing.ok(out:find("The ci run 8cb600: its jobs could not be read.", 1, true), out)
+    end
+)
 
 testing.test("a shared run the hub refused records nothing and names its first row", function()
     local out, code, body = group_check({ jobs = PASSED, run = REFUSED_STUB })
@@ -1420,7 +1507,10 @@ testing.test("a partial record that cannot be written does not stop the check", 
         tries = tries + 1
         return nil, "curl exit 28"
     end
-    local result = cmd_board.run("check", { "11111111" }, backend)
+    local result
+    with_passing_ci(function()
+        result = cmd_board.run("check", { "11111111" }, backend)
+    end)
     testing.eq(tries, 3)
     testing.ok(result.message:find("1 pass - true", 1, true), result.message)
     testing.ok(result.message:find("2 pass 8cb600 echo run 8cb600", 1, true), result.message)

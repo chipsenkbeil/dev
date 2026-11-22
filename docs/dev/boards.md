@@ -2894,6 +2894,11 @@ How a row runs:
   `ci ps RUN --json`. The record puts one reason line under the row, for
   example `The ci run was running at the limit and may still finish.`, or says
   the state could not be read. The run keeps going, so read it before a rerun.
+- A row that exits 0 after it printed a ci run id passes only when
+  `ci ps RUN --json` reads the run as `passed`. A run in any other state, or one
+  ci cannot be asked for, records `error` with a note naming the run and the
+  state. A ci run can exit 0 while it still waits for capacity. A negated row
+  is not read this way.
 - A card with no rows is exit 1.
 
 Rows that share one ci run:
@@ -2910,8 +2915,11 @@ Rows that share one ci run:
 - Every row of the shared run records its own result and the one run id. dev
   reads each job's result with `ci ps RUN --json`, so a failed job shows as
   that row failing, with the last 12 lines of `ci logs RUN --job NAME` under it.
-  The record keeps one line per row, so `land` reads it unchanged. A run that
-  exits 0 passes every row even when ci cannot be asked for the jobs.
+  The record keeps one line per row, so `land` reads it unchanged. An exit 0
+  proves nothing: ci has exited 0 for a run that still waited for capacity. A
+  row passes only when `ci ps RUN --json` reads its job as passed. A job that
+  has not ended, a job ci does not list, or a state ci cannot be asked for
+  records the row as `error` with a note naming the run and what it read.
 - The run starts when dev reaches the first of the rows, and each row keeps
   its place in the card's order. A row that is not a ci row runs on its own as
   before.
