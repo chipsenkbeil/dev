@@ -216,7 +216,8 @@ local function refuse_agent_local(project_root, words)
 end
 
 ---Agent roles that work in a workspace, never the primary checkout
-local WORKSPACE_ROLES = { implementer = true, planner = true, reviewer = true, verifier = true }
+local WORKSPACE_ROLES =
+    { runner = true, implementer = true, planner = true, reviewer = true, verifier = true }
 
 ---Mutating verbs refused in the primary checkout, by verb name
 local PRIMARY_GUARDED = {}

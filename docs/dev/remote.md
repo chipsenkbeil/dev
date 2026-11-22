@@ -192,10 +192,10 @@ When ci cannot be asked, the refusal fails with ci's error and the hint
 
 ### The primary checkout refusal
 
-A `DEV_AGENT` whose role, the second part of its name, is `implementer`,
-`planner`, `reviewer` or `verifier` is a workspace role. Such an agent is
-refused when a mutating verb runs with its root in the primary checkout, the
-folder a workspace or worktree belongs to.
+A `DEV_AGENT` whose role, the second part of its name, is `runner`,
+`implementer`, `planner`, `reviewer` or `verifier` is a workspace role. Such an
+agent is refused when a mutating verb runs with its root in the
+primary checkout, the folder a workspace or worktree belongs to.
 
 The mutating verbs are `install`, `uninstall`, `restow`, `stow`, `sync`,
 `setup`, `fmt`, `init`, `push`, `pull`, `follow`, `land`, `abandon`, `clean`,
