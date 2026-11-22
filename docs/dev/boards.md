@@ -2860,8 +2860,8 @@ command and prints `set checks <id prefix>, N rows`, or `1 row` for one.
 `dev board check CARD [--expect-fail] [--timeout SECONDS] [--run ID]`
 runs every checks row of the card and records the result as one comment
 on the card. A rerun at the same commit skips every row an earlier run
-recorded as passed, whatever its place, and a partial record holds the leading
-rows only (see the partial record below).
+recorded as passed, whatever its place, and a partial record holds every row up
+to the last one that passed (see the partial record below).
 
 Before its rows start, `check` posts a plain status note, `Check started at
 commit C on N rows, by NAME.`, so a card whose rows still wait in ci shows a
@@ -3053,10 +3053,12 @@ A record from before this form has no `rows` or `sum`, reads as unreadable and
 is refused the same way.
 
 A check with more than one row also posts a `dev-check:` record with
-`mode=partial` after each row that passes while every row before it passed, to
-keep the rows done so far when a check is cut off. The record has the same
-form as a run record, holds the leading rows only, and its `sum` is the hash of
-those rows' commands. The last row posts none, since the run record follows it.
+`mode=partial` after each row that passes and brings the passed rows past
+those the newest record holds, to keep the rows done so far when a check is cut
+off. The record has the same form as a run record and holds every row up to the
+last one that passed, with a `not-run` row for each earlier row that has not
+passed. Its `sum` is the hash of those rows' commands. The last row posts none
+(the run record follows it).
 A rerun at the same commit finds the newest `mode=partial` or `mode=run` record
 there whose commands are the leading rows of the card's, skips every row
 it holds as passed, even one after a row that failed, and says so for each. The

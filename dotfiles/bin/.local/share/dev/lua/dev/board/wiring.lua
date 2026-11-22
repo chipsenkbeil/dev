@@ -213,21 +213,25 @@ local function mac_only_files(root)
     return listed
 end
 
----Record the leading rows that passed, when more passed than the last record holds.
+---Record the rows that passed, when more passed than the last record holds.
 ---
----A record that cannot be written costs only the saving, so it is told and the check goes on. A
----working copy that moved off the checked commit gets no record.
+---The record holds every row up to the last one that passed, and each place before it that did not
+---pass is a not-run row. A record that cannot be written costs only the saving, so it is told and
+---the check goes on. A working copy that moved off the checked commit gets no record.
 ---@param opts dev.board.wiring.check_rows.Opts the card, its commit and the flags
 ---@param rows dev.board.check.Row[] the finished rows by their place in the card's checks
----@param posted integer how many leading rows the newest record of this run holds
----@return integer posted how many leading rows the newest record holds now
-local function post_partial(opts, rows, posted)
+---@param commands string[] the rows as the card holds them
+---@param posted integer how many passed rows the newest record of this run holds
+---@return integer posted how many passed rows the newest record holds now
+local function post_partial(opts, rows, commands, posted)
     local backend, card, before = opts.backend, opts.card, opts.before
 
-    -- Count the leading rows that passed
-    local count = 0
-    while rows[count + 1] and rows[count + 1].result == check.Result.PASS do
-        count = count + 1
+    -- Count the rows that passed and find the last of them
+    local count, last = 0, 0
+    for place = 1, #commands do
+        if rows[place] and rows[place].result == check.Result.PASS then
+            count, last = count + 1, place
+        end
     end
 
     -- Leave the record alone when nothing new passed or the working copy moved
@@ -236,9 +240,14 @@ local function post_partial(opts, rows, posted)
         return posted
     end
 
-    -- Write the leading rows as a partial record
+    -- Write the rows up to the last pass as a partial record
     local held = claims.read(card.id)
-    local leading = { unpack(rows, 1, count) }
+    local leading = {}
+    for place = 1, last do
+        local row = rows[place]
+        leading[place] = row and row.result == check.Result.PASS and row
+            or check.not_run(commands[place])
+    end
     local stamped = { commit = before.commit, change = before.change }
     local ok, message = backend:note(
         card.id,
@@ -391,8 +400,8 @@ end
 
 ---Run the card's rows and record the result.
 ---
----Each row that passes in a row from the first is saved in a partial record, and a rerun at the
----same commit skips those rows.
+---Each row that passes is saved in a partial record, and a rerun at the same commit skips those
+---rows.
 ---
 ---An `--expect-fail` run on a commit with a trunk proof runs the rows the card adds only. Without
 ---a proof it runs every row, which is then the only sign that trunk was green.
@@ -519,8 +528,10 @@ local function check_rows(opts)
         end
     end
     local posted = 0
-    while rows[posted + 1] do
-        posted = posted + 1
+    for i in ipairs(commands) do
+        if rows[i] then
+            posted = posted + 1
+        end
     end
 
     -- Tell a reader of the card that the rows have started
@@ -606,7 +617,7 @@ local function check_rows(opts)
             )
         end
         if not flags.expect_fail and i < #argvs then
-            posted = post_partial(opts, rows, posted)
+            posted = post_partial(opts, rows, commands, posted)
         end
     end
 
@@ -629,7 +640,7 @@ local function check_rows(opts)
         })[1]
         verb.note(string.format("row %d of %d ended: %s", i, #argvs, rows[i].result))
         if k < #waiting then
-            posted = post_partial(opts, rows, posted)
+            posted = post_partial(opts, rows, commands, posted)
         end
     end
     if fold then

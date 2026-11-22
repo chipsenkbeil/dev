@@ -556,6 +556,68 @@ testing.test("resume keeps a passed row after a failed one", function()
     testing.eq(kept[3].run_id, "8cb600")
 end)
 
+testing.test("resume keeps a row past an unrun row", function()
+    local state = { commit = string.rep("a", 40), change = "-" }
+    local commands = { "true", "false", "echo run 8cb600" }
+    local partial = {
+        body = check.record(state, {
+            { run = commands[1], run_id = "-", result = "pass" },
+            check.not_run(commands[2]),
+            { run = commands[3], run_id = "8cb600", result = "pass" },
+        }, check.Mode.PARTIAL),
+    }
+    local kept = check.resume({ partial }, state.commit, commands, {})
+    testing.eq(kept[1].result, "pass")
+    testing.eq(kept[2], nil)
+    testing.eq(kept[3].run_id, "8cb600")
+end)
+
+testing.test("a partial record marks unrun rows as not run", function()
+    local root, home, head = git_root()
+    local rows = { "true", "false", "echo run 8cb600", "false" }
+    local id = card_with(root, home, rows)
+    local _, code = dev(root, home, { "board", "check", id })
+    testing.eq(code, 1)
+    local held = all_comments(home)
+    testing.eq(#held, 3)
+    testing.eq(
+        held[2].body,
+        expected_head(head, "-", "partial", { rows[1], rows[2], rows[3] })
+            .. "\n1 pass -\n2 not-run -\n3 pass 8cb600"
+    )
+end)
+
+testing.test("a cut-off rerun keeps a kept row beyond the leading run", function()
+    local root, home, head = git_root()
+    local rows = { "true", "printenv GATE_OPEN", "echo run 8cb600", "false", "echo run 1f2e3d" }
+    local id = card_with(root, home, rows)
+    local _, code = dev(root, home, { "board", "check", id })
+    testing.eq(code, 1)
+    local before = #all_comments(home)
+    _, code = dev(root, home, { "board", "check", id }, nil, { GATE_OPEN = "1" })
+    testing.eq(code, 1)
+    local held = all_comments(home)
+    testing.eq(
+        held[before + 1].body,
+        expected_head(head, "-", "partial", rows)
+            .. "\n1 pass -\n2 pass -\n3 pass 8cb600\n4 not-run -\n5 pass 1f2e3d"
+    )
+end)
+
+testing.test("a partial is not rewritten when no new row passed", function()
+    local root, home = git_root()
+    local rows = { "true", "false", "echo run 8cb600", "false", "echo run 1f2e3d" }
+    local id = card_with(root, home, rows)
+    local _, code = dev(root, home, { "board", "check", id })
+    testing.eq(code, 1)
+    local before = #all_comments(home)
+    _, code = dev(root, home, { "board", "check", id })
+    testing.eq(code, 1)
+    local held = all_comments(home)
+    testing.eq(#held, before + 1)
+    testing.ok(not held[#held].body:find(" mode=partial ", 1, true), held[#held].body)
+end)
+
 testing.test("resume drops shared rows unless all passed", function()
     local state = { commit = string.rep("a", 40), change = "-" }
     local commands = { "true", "dev --remote lint", "dev --remote test", "true" }
