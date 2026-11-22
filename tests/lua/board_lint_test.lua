@@ -347,6 +347,49 @@ testing.test("lint refuses a required setting that is not a list of commands", f
     )
 end)
 
+local BARE_CONFIG = '[board.lint]\nbare_rows = ["dev --remote test"]\n'
+
+local function bare_cards()
+    return {
+        card(1, NAME.READY, {
+            outcomes = outcomes(3),
+            checks = { "dev --remote lint", "dev --remote test -- tests/lua/board_test.lua" },
+        }),
+        card(2, NAME.PROGRESS, {
+            outcomes = outcomes(3),
+            checks = { "dev --remote lint", "dev --remote test" },
+        }),
+        card(3, NAME.REVIEW, { outcomes = outcomes(3), checks = { "dev --remote lint" } }),
+        card(4, NAME.BACKLOG, { outcomes = outcomes(3), checks = { "dev test" } }),
+        card(5, NAME.REVIEW, { outcomes = outcomes(3), checks = { "dev --remote lint" } }),
+    }
+end
+
+testing.test("lint reports an open card missing a bare row", function()
+    local result = cmd_board.run("lint", {}, required_board(bare_cards(), BARE_CONFIG))
+    testing.eq(findings(result.output), {
+        "00000001 Ready checks lack the bare row: dev --remote test",
+        "00000005 Review checks lack the bare row: dev --remote test",
+    })
+    testing.eq(result.code, 1)
+end)
+
+testing.test("lint without a bare_rows list keeps today's findings", function()
+    local result = cmd_board.run("lint", {}, required_board(bare_cards(), ""))
+    testing.eq(result.output, "No findings.")
+    testing.eq(result.code, nil)
+end)
+
+testing.test("lint refuses a bare_rows setting that is not a list of commands", function()
+    local fake = required_board(bare_cards(), '[board.lint]\nbare_rows = "dev test"\n')
+    local result = cmd_board.run("lint", {}, fake)
+    testing.eq(result.code, 1)
+    testing.eq(
+        result.message,
+        "The `bare_rows` setting of `[board.lint]` must be a list of commands."
+    )
+end)
+
 testing.test(
     "lint flags an outcome that names no deciding check in Ready and In Progress",
     function()

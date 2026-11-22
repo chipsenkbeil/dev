@@ -1537,8 +1537,9 @@ prefix rule does not apply: a card holding only `dev --remote test -- FILE`
 lacks the bare row `dev --remote test`. `dev board move CARD ready` refuses a
 card without one, and `dev board check` refuses it before it runs any row, so
 a card edited after Ready stays honest. An epic and a card with children are
-skipped. A `bare_rows` that is not a list of commands makes both exit 1 and
-name the setting:
+skipped. `dev board lint` reports the same gap as
+`checks lack the bare row: ROW`. A `bare_rows` that is not a list of commands
+makes all three exit 1 and name the setting:
 
 ```toml
 [board.lint]
@@ -2649,6 +2650,9 @@ size, the v4 sections and the outcomes. It adds these:
   rows:
   `checks lack the required row: ROW`, once per listed row that
   `dev.board.missing_rows` finds no checks row satisfying.
+- In the same columns, for the same cards, when `board.lint.bare_rows` lists
+  rows: `checks lack the bare row: ROW`, once per listed row that
+  `dev.board.missing_bare_rows` finds no checks row equal to.
 - In Ready and In Progress, for a card with a checks row that is not an epic:
   `outcome names no deciding check: NAME`, once per outcome that ends with
   neither `(check: ROW)` naming part of a checks row nor `(reviewer

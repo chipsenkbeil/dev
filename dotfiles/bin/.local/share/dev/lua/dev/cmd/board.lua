@@ -4928,6 +4928,10 @@ function commands.lint(backend, args)
     if bad then
         return bad
     end
+    local bare, bad_bare = lint_rows(backend, "bare_rows")
+    if bad_bare then
+        return bad_bare
+    end
     local cards, message = backend:cards()
     if not cards then
         return failure(message)
@@ -4975,10 +4979,13 @@ function commands.lint(backend, args)
                 return { done = counts.done, total = counts.total, epic = family.epic }
             end,
         }
-        local rules, why, owned = lint.card(
-            card,
-            { stages = backend.stages, facts = facts, strict = strict, required = required }
-        )
+        local rules, why, owned = lint.card(card, {
+            stages = backend.stages,
+            facts = facts,
+            strict = strict,
+            required = required,
+            bare = bare,
+        })
         if not rules then
             return failure(why)
         end
