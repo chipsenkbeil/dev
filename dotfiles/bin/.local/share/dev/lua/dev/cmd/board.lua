@@ -559,6 +559,17 @@ local function looks_like_a_checks_row(word)
     return word:find("^dev ") ~= nil or word:find("^rg ") ~= nil or word:find("^! ") ~= nil
 end
 
+---Prose warnings for text just written, each ending with a note that the write happened.
+---@param findings string[] the bare warning lines from the board library
+---@return string[] warnings one line per finding
+local function written_warnings(findings)
+    local lines = {}
+    for _, line in ipairs(findings) do
+        lines[#lines + 1] = line .. " The write still went through."
+    end
+    return lines
+end
+
 ---Add a card, and record in `held` whether the parsed flags hold the --id-only switch.
 ---@param backend dev.board.Backend the board to add the card to
 ---@param args string[] the arguments after `add`
@@ -926,7 +937,7 @@ local function add_card(backend, args, held)
                 .. " "
                 .. card.column
                 .. link_suffix(backend, card),
-        warnings = board.prose_warnings(prose),
+        warnings = written_warnings(board.prose_warnings(prose)),
     }
 end
 
@@ -3114,7 +3125,7 @@ function commands.outcome(backend, args)
         end
         return {
             output = "outcome " .. prefix .. " " .. (#card.outcomes + 1) .. " added",
-            warnings = board.text_warnings(text),
+            warnings = written_warnings(board.text_warnings(text)),
         }
     end
     local number
@@ -3240,7 +3251,7 @@ function commands.outcome(backend, args)
         end
     end
     if text then
-        result.warnings = board.text_warnings(text)
+        result.warnings = written_warnings(board.text_warnings(text))
     end
     return result
 end
@@ -3292,7 +3303,7 @@ function commands.edit(backend, args)
     end
     return {
         output = "edited " .. card.id:sub(1, board.MIN_PREFIX),
-        warnings = board.prose_warnings(args[2]),
+        warnings = written_warnings(board.prose_warnings(args[2])),
     }
 end
 
@@ -5962,13 +5973,14 @@ for sub in pairs(commands) do
             verb.note(result.message)
             return result.code or FAILURE
         end
-        for _, line in ipairs(result.warnings or {}) do
-            stderr_line(line)
-        end
         if result.page then
             ui.page(result.output .. "\n")
         else
             print(result.output)
+        end
+        io.flush()
+        for _, line in ipairs(result.warnings or {}) do
+            stderr_line(line)
         end
         return result.code or 0
     end

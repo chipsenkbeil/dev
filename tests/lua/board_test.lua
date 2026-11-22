@@ -3797,7 +3797,10 @@ testing.test("add --done-when hands the outcomes to the backend and checks them"
         "--done-when",
         "see src/a.lua",
     }, backend)
-    testing.eq(result.warnings, { "Card prose holds a path: src/a.lua." })
+    testing.eq(
+        result.warnings,
+        { "Card prose holds a path: src/a.lua. The write still went through." }
+    )
 end)
 
 testing.test("show lists the outcomes with their ticks, and ls adds a done column", function()
@@ -5021,7 +5024,10 @@ testing.test("outcome warns about a path in the text and still writes", function
     local card = colored("green")
     local backend = fake({ card })
     local result = cmd_board.run("outcome", { "cccccccc", "see src/a.lua" }, backend)
-    testing.eq(result.warnings, { "Card prose holds a path: src/a.lua." })
+    testing.eq(
+        result.warnings,
+        { "Card prose holds a path: src/a.lua. The write still went through." }
+    )
     testing.eq(#backend.calls, 1)
 end)
 
@@ -5031,7 +5037,8 @@ testing.test("outcome warns about a step after the land and still writes", funct
     local result = cmd_board.run("outcome", { "cccccccc", "Holds Once The Lead rolls it" }, backend)
     testing.eq(result.warnings, {
         "Outcome names a step after the land: once the lead."
-            .. " A verifier ticks before the land, so describe the change itself.",
+            .. " A verifier ticks before the land, so describe the change itself."
+            .. " The write still went through.",
     })
     testing.eq(result.output, "outcome cccccccc 4 added")
     testing.eq(#backend.calls, 1)
@@ -9739,7 +9746,7 @@ end)
 
 testing.test("prose warnings reach standard error and the write still happens", function()
     local root, home = sandbox()
-    local warning = "Card prose holds a path: src/a.lua.\n"
+    local warning = "Card prose holds a path: src/a.lua. The write still went through.\n"
     local cases = {
         {
             args = {
@@ -9773,6 +9780,47 @@ testing.test("prose warnings reach standard error and the write still happens", 
         testing.ok(calls:find("-X " .. case.verb, 1, true), calls)
         testing.ok(calls:find(case.marker, 1, true), calls)
     end
+end)
+
+testing.test("add prints its prose warning after the added line", function()
+    local root, home = sandbox()
+    local out, code = dev(root, home, {
+        "board",
+        "add",
+        "Fresh",
+        "--description",
+        "## Problem\nlook in src/a.lua\n\n## Change\n- x\n\n## Out of scope\nnone\n",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    })
+    testing.eq(code, 0, out)
+    local added, warning = out:match("^(added [^\n]*)\n.*\n(Card prose [^\n]*)\n$")
+    testing.ok(added, out)
+    testing.eq(warning, "Card prose holds a path: src/a.lua. The write still went through.")
+end)
+
+testing.test("a prose warning says the write still went through", function()
+    local root, home = sandbox()
+    local _, code, errors = dev(root, home, {
+        "board",
+        "add",
+        "Fresh",
+        "--description",
+        "## Problem\nlook in src/a.lua and 2af0e003\n\n## Change\n- x\n\n## Out of scope\nnone\n",
+        "--size",
+        "1",
+        "--done-when",
+        "a",
+    }, { split = true })
+    testing.eq(code, 0)
+    local count = 0
+    for line in errors:gmatch("[^\n]+") do
+        count = count + 1
+        testing.ok(line:find("^Card prose holds .* The write still went through%.$"), line)
+    end
+    testing.eq(count, 2, errors)
 end)
 
 testing.test("edit finds the board from a subdirectory and not from outside the project", function()
@@ -11956,7 +12004,10 @@ testing.test("add with a hex id in its Problem still warns", function()
         "--done-when",
         "a",
     }, backend)
-    testing.eq(result.warnings, { "Card prose holds a hex id or hash: 2af0e003." })
+    testing.eq(
+        result.warnings,
+        { "Card prose holds a hex id or hash: 2af0e003. The write still went through." }
+    )
 end)
 
 testing.test("add and edit report prose warnings and still write", function()
@@ -11970,7 +12021,10 @@ testing.test("add and edit report prose warnings and still write", function()
         "--done-when",
         "a",
     }, backend)
-    testing.eq(result.warnings, { "Card prose holds a path: src/a.lua." })
+    testing.eq(
+        result.warnings,
+        { "Card prose holds a path: src/a.lua. The write still went through." }
+    )
     result = cmd_board.run(
         "add",
         { "X", "--description", V2, "--size", "1", "--done-when", "a" },
@@ -11982,7 +12036,10 @@ testing.test("add and edit report prose warnings and still write", function()
         { "cccccccc", "## Change\n- a/b.lua\n## Problem\nx/y.sh\n## Out of scope\nn" },
         backend
     )
-    testing.eq(result.warnings, { "Card prose holds a path: x/y.sh." })
+    testing.eq(
+        result.warnings,
+        { "Card prose holds a path: x/y.sh. The write still went through." }
+    )
 end)
 
 testing.test("split_checklist takes the Done when items and leaves the rest", function()

@@ -4550,8 +4550,9 @@ On a local board:
 ### Prose warnings
 
 `add` and `edit` warn when card prose holds a hex id, a hash or a path.
-The warning goes to standard error with no prefix, and the write still
-happens (exit 0, output unchanged).
+The warning follows the output on standard error and ends with `The
+write still went through.`, so a trimmed output still shows the write
+happened (exit 0, output unchanged).
 
 - messages: `Card prose holds a hex id or hash: <word>.` and
   `Card prose holds a path: <word>.`, one line per distinct word.
