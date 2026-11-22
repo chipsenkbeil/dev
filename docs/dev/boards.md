@@ -2957,7 +2957,7 @@ Rows that share one ci run:
   or fails the test name it holds, and a `test result:` summary line is not a
   result line. A row whose words no result line of that log names, as a bats
   log that names test cases and never files, runs on its own and records that
-  run's result.
+  run's result. An empty log reads the same way.
 - `--timeout` bounds the one run. A run that outlasts it records each of its
   rows as `timeout` with the state reason.
 - A refused run counts as a refusal of its first row.

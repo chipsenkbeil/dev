@@ -1080,6 +1080,7 @@ function M.folded(host, guests, expect_fail)
             else
                 result, reason =
                     M.Result.ERROR, "the test log of ci run " .. host.run_id .. " is empty"
+                unread = true
             end
         end
         local code = 1

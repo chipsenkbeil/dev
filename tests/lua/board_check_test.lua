@@ -1253,6 +1253,21 @@ testing.test("a folded row the test log never names runs on its own", function()
     testing.ok(not out:find("no result line names", 1, true), out)
 end)
 
+testing.test("a folded row whose host log is empty runs on its own", function()
+    local out, code, body, log = group_check({
+        jobs = PASSED,
+        run = group_run(0),
+        rows = FOLD_ROWS,
+        logs = "",
+        own = "exit 0",
+    })
+    testing.eq(code, 0, out)
+    testing.ok(log:find("dev --remote test -- tests/x_test.lua", 1, true), log)
+    testing.ok(log:find("dev --remote test -- tests/y_test.lua", 1, true), log)
+    testing.eq(check.parse(body).rows[3].result, "pass")
+    testing.eq(check.parse(body).rows[4].result, "pass")
+end)
+
 testing.test("a folded row that runs on its own records its own failure", function()
     local out, code, body, log = group_check({
         jobs = PASSED,
@@ -1544,10 +1559,11 @@ testing.test("an expect-fail named row that trunk passes still proves nothing", 
     testing.ok(out:find("the passing ones prove nothing", 1, true), out)
 end)
 
-testing.test("an expect-fail named row with an empty test log records error", function()
-    local out, code, body = baseline_check("true")
-    testing.eq(code, 1, out)
-    testing.eq(check.parse(body).rows[2].result, "error", body)
+testing.test("an expect-fail named row with an empty test log runs on its own", function()
+    local out, code, body, log = baseline_check("true")
+    testing.eq(code, 0, out)
+    testing.ok(log:find("dev --remote test -- tests/x_test.lua", 1, true), log)
+    testing.ok(check.parse(body).rows[2].result ~= "error", body)
 end)
 
 testing.test("check --run records a one-row card from a run that has ended", function()
