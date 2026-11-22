@@ -540,6 +540,74 @@ testing.test("resume keeps rows of one shared ci run all or none", function()
     testing.eq(#check.resume({ partial }, string.rep("b", 40), commands, {}), 0)
 end)
 
+testing.test("resume keeps a passed row after a failed one", function()
+    local state = { commit = string.rep("a", 40), change = "-" }
+    local commands = { "false", "true", "echo run 8cb600" }
+    local run = {
+        body = check.record(state, {
+            { run = commands[1], run_id = "-", result = "fail" },
+            { run = commands[2], run_id = "-", result = "pass" },
+            { run = commands[3], run_id = "8cb600", result = "pass" },
+        }, check.Mode.RUN),
+    }
+    local kept = check.resume({ run }, state.commit, commands, {})
+    testing.eq(kept[1], nil)
+    testing.eq(kept[2].result, "pass")
+    testing.eq(kept[3].run_id, "8cb600")
+end)
+
+testing.test("resume drops shared rows unless all passed", function()
+    local state = { commit = string.rep("a", 40), change = "-" }
+    local commands = { "true", "dev --remote lint", "dev --remote test", "true" }
+    local function newest(results)
+        local rows = {}
+        for i, result in ipairs(results) do
+            rows[i] = { run = commands[i], run_id = i == 1 and "-" or "8cb600", result = result }
+        end
+        return { body = check.record(state, rows, check.Mode.RUN) }
+    end
+    local failed = check.resume(
+        { newest({ "pass", "pass", "fail", "pass" }) },
+        state.commit,
+        commands,
+        { 2, 3 }
+    )
+    testing.eq(failed[1].result, "pass")
+    testing.eq(failed[2], nil)
+    testing.eq(failed[3], nil)
+    testing.eq(failed[4].result, "pass")
+    local whole = check.resume(
+        { newest({ "fail", "pass", "pass", "pass" }) },
+        state.commit,
+        commands,
+        { 2, 3 }
+    )
+    testing.eq(whole[1], nil)
+    testing.eq(whole[2].result, "pass")
+    testing.eq(whole[3].result, "pass")
+end)
+
+testing.test("a rerun skips every passed row not only leading ones", function()
+    local root, home, head = git_root()
+    local rows = { "printenv GATE_OPEN", "echo run 8cb600", "echo run 1f2e3d" }
+    local id = card_with(root, home, rows)
+    local _, code = dev(root, home, { "board", "check", id })
+    testing.eq(code, 1)
+    local out
+    out, code = dev(root, home, { "board", "check", id }, nil, { GATE_OPEN = "1" })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("Row 2 of 3 passed in ci run 8cb600 at this commit", 1, true), out)
+    testing.ok(out:find("Row 3 of 3 passed in ci run 1f2e3d at this commit", 1, true), out)
+    testing.ok(out:find("running 1 of 3", 1, true), out)
+    testing.ok(not out:find("running 2 of 3", 1, true), out)
+    testing.ok(not out:find("running 3 of 3", 1, true), out)
+    local held = comments(home)
+    testing.eq(
+        held[#held].body,
+        expected_head(head, "-", "run", rows) .. "\n1 pass -\n2 pass 8cb600\n3 pass 1f2e3d"
+    )
+end)
+
 testing.test("record keeps the suites of a narrowed row", function()
     local state = { commit = string.rep("a", 40), change = "-" }
     local narrowed = { "a_test.lua", "b_test.lua" }
@@ -1108,6 +1176,7 @@ end
 ---@field logs string? the shell the fake `ci logs` runs, which also notes its call in the ci log
 ---@field touch string? a suite the working copy's commit adds alone, which narrows a plain test row
 ---@field own string? the shell a fake `dev` runs for a row that runs on its own, which notes its call in the ci log
+---@field again board_check_test.group_check.Opts? a second check at the same commit, whose result is returned
 
 local function group_check(opts)
     local root, home, head = git_root({
@@ -1128,29 +1197,37 @@ local function group_check(opts)
         head = dev_os.capture({ "git", "-C", root, "rev-parse", "HEAD" }):gsub("\n$", "")
     end
     local id = card_with(root, home, opts.rows or { "dev --remote lint", "dev --remote test" })
-    local env = fake_ci(group_ci(opts, head))
-    if opts.own then
-        local stub = env.PATH:match("^([^:]+)") .. "/dev"
-        assert(fs.write(stub, '#!/bin/sh\necho "dev $*" >> "$CI_LOG"\n' .. opts.own .. "\n"))
-        must(dev_os.run({ "chmod", "755", stub }))
+    local function once(run)
+        local env = fake_ci(group_ci(run, head))
+        if run.own then
+            local stub = env.PATH:match("^([^:]+)") .. "/dev"
+            assert(fs.write(stub, '#!/bin/sh\necho "dev $*" >> "$CI_LOG"\n' .. run.own .. "\n"))
+            must(dev_os.run({ "chmod", "755", stub }))
+        end
+        local log = support.tempdir() .. "/ci.log"
+        env.CI_LOG = log
+        env.DEV_AGENT = ""
+        local args = { "board", "check", id }
+        if run.attach then
+            args[#args + 1] = "--run"
+            args[#args + 1] = run.attach
+        end
+        if run.expect_fail then
+            args[#args + 1] = "--expect-fail"
+        end
+        if run.timeout then
+            args[#args + 1] = "--timeout"
+            args[#args + 1] = run.timeout
+        end
+        local out, status = dev(root, home, args, nil, env)
+        return out, status, log
     end
-    local log = support.tempdir() .. "/ci.log"
-    env.CI_LOG = log
-    env.DEV_AGENT = ""
-    local args = { "board", "check", id }
-    if opts.attach then
-        args[#args + 1] = "--run"
-        args[#args + 1] = opts.attach
+    local out, status, log = once(opts)
+    if opts.again then
+        out, status, log = once(opts.again)
     end
-    if opts.expect_fail then
-        args[#args + 1] = "--expect-fail"
-    end
-    if opts.timeout then
-        args[#args + 1] = "--timeout"
-        args[#args + 1] = opts.timeout
-    end
-    local out, status = dev(root, home, args, nil, env)
-    local first = comments(home)[1]
+    local held = comments(home)
+    local first = held[opts.again and #held or 1]
     local shown = opts.show and (dev(root, home, { "board", "show", id })) or nil
     return out, status, first and first.body, fs.read(log) or "", #start_notes(home), shown
 end
@@ -1291,6 +1368,26 @@ testing.test("a folded row that a log line names starts no run of its own", func
     })
     testing.eq(code, 0, out)
     testing.ok(not log:find("-- tests/y_test.lua", 1, true), log)
+end)
+
+testing.test("a guest beside a kept host runs alone", function()
+    local out, code, body, log = group_check({
+        jobs = PASSED,
+        run = group_run(0),
+        rows = { "printenv GATE_OPEN", unpack(FOLD_ROWS) },
+        logs = FOLD_ONE_FAILED,
+        again = {
+            jobs = PASSED,
+            run = group_run(0),
+            logs = FOLD_PASSED,
+            own = "exit 0",
+        },
+    })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("Row 3 of 5 passed in ci run 8cb600 at this commit", 1, true), out)
+    testing.ok(not log:find("logs 8cb600", 1, true), log)
+    testing.ok(log:find("dev --remote test -- tests/y_test.lua", 1, true), log)
+    testing.eq(check.parse(body).rows[5].result, "pass")
 end)
 
 testing.test("a folded row of a host that timed out records timeout without a log read", function()

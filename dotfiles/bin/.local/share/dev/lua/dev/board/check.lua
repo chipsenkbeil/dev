@@ -1449,16 +1449,17 @@ function M.parse(body)
     return { commit = commit, change = change, mode = mode, sum = sum, rows = rows, proof = proof }
 end
 
----Find the leading rows that already passed at a commit.
+---Find the rows that already passed at a commit.
 ---
 ---The newest partial or run record at the commit whose rows are a prefix of the card's rows
----decides. Its leading run of passed rows is kept, cut back so that the rows of one shared ci run
----are either all kept or all dropped.
+---decides. Every row of it that passed is kept at its own place, except that the rows of one
+---shared ci run are all kept or all dropped.
 ---@param comments {body: string}[] the card's comments, oldest first
 ---@param commit string the full commit id the rows would run on
 ---@param commands string[] the card's checks rows in order
 ---@param shared integer[] the places of the rows that share one ci run, empty when none do
----@return dev.board.check.RecordRow[] rows the passed rows by place, empty when none are kept
+---@return table<integer, dev.board.check.RecordRow> rows the passed rows by place, empty when none
+---   are kept
 function M.resume(comments, commit, commands, shared)
     for i = #comments, 1, -1 do
         local record = M.parse(comments[i].body)
@@ -1470,18 +1471,18 @@ function M.resume(comments, commit, commands, shared)
             and record.sum == M.fingerprint({ unpack(commands, 1, #record.rows) })
         then
             local kept = {}
-            for _, row in ipairs(record.rows) do
-                if row.result ~= M.Result.PASS then
+            for place, row in ipairs(record.rows) do
+                if row.result == M.Result.PASS then
+                    kept[place] = row
+                end
+            end
+            for _, place in ipairs(shared) do
+                if not kept[place] then
+                    for _, other in ipairs(shared) do
+                        kept[other] = nil
+                    end
                     break
                 end
-                kept[#kept + 1] = row
-            end
-            local first, last = math.huge, 0
-            for _, place in ipairs(shared) do
-                first, last = math.min(first, place), math.max(last, place)
-            end
-            if first <= #kept and last > #kept then
-                kept = { unpack(kept, 1, first - 1) }
             end
             return kept
         end

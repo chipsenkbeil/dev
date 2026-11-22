@@ -321,7 +321,7 @@ end
 ---@field commands string[] the rows as the card holds them
 ---@field argvs string[][] the rows' words after narrowing
 ---@field rows dev.board.check.Row[] the finished rows by their place, which the guests join
----@field kept integer how many leading rows an earlier run of this commit passed
+---@field kept table<integer, dev.board.check.RecordRow> rows an earlier run passed, by place
 ---@field env table<string, string> variables set for each row
 
 ---@param settle dev.board.wiring.settle_guests.Opts the rows and where they ran
@@ -359,7 +359,7 @@ local function settle_guests(settle)
         return rows[place].refused ~= nil
     end
 
-    if host.run_id ~= "-" and fold.host > settle.kept then
+    if host.run_id ~= "-" and not settle.kept[fold.host] then
         local asked = {}
         for k, place in ipairs(open) do
             local _, words = check.job_row(argvs[place])
@@ -496,25 +496,32 @@ local function check_rows(opts)
         places[#places + 1] = entry.index
     end
 
-    -- Keep the leading rows that already passed at this commit
+    -- Keep the rows that already passed at this commit
+    local kept = {}
     if not flags.expect_fail and not flags.run then
         local past = backend:comments(card.id)
-        local kept = check.resume(past or {}, before.commit, commands, places)
-        for i, row in ipairs(kept) do
-            rows[i] = { run = commands[i], run_id = row.run_id, result = row.result, ran = row.ran }
-            local where = row.run_id == "-" and "" or " in ci run " .. row.run_id
-            verb.note(
-                string.format(
-                    "Row %d of %d passed%s at this commit, so it is skipped.",
-                    i,
-                    #argvs,
-                    where
+        kept = check.resume(past or {}, before.commit, commands, places)
+        for i = 1, #commands do
+            local row = kept[i]
+            if row then
+                rows[i] =
+                    { run = commands[i], run_id = row.run_id, result = row.result, ran = row.ran }
+                local where = row.run_id == "-" and "" or " in ci run " .. row.run_id
+                verb.note(
+                    string.format(
+                        "Row %d of %d passed%s at this commit, so it is skipped.",
+                        i,
+                        #argvs,
+                        where
+                    )
                 )
-            )
+            end
         end
     end
-    local resumed = #rows
-    local posted = resumed
+    local posted = 0
+    while rows[posted + 1] do
+        posted = posted + 1
+    end
 
     -- Tell a reader of the card that the rows have started
     if not flags.run then
@@ -632,7 +639,7 @@ local function check_rows(opts)
             commands = commands,
             argvs = argvs,
             rows = rows,
-            kept = resumed,
+            kept = kept,
             env = env,
         })
         if refused then
