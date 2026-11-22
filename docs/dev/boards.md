@@ -3022,6 +3022,11 @@ run id, which keeps it under Pomb's 5000-byte comment cap up to about 300
 rows. `show` adds each row's command after the run id when the record's `rows`
 count and `sum` match the card's checks rows. Otherwise it prints the record as
 stored.
+A plain `dev --remote test` row that `check` narrowed to the suites the change
+touches has a fourth field, as in
+`1 pass 8cb600 ran=a_test.lua,b_test.lua`.
+`ran=` lists the suites that ran, appears only on a narrowed row, and `show`
+prints that row's command as `dev --remote test -- SUITE SUITE`.
 `sum` is a hash of the card's checks rows in order, and land refuses a record
 whose `sum` differs from the card's rows with ``The checks rows changed since
 the newest check run at commit <12 characters>. Run `dev board check` again.``

@@ -540,6 +540,19 @@ testing.test("resume keeps rows of one shared ci run all or none", function()
     testing.eq(#check.resume({ partial }, string.rep("b", 40), commands, {}), 0)
 end)
 
+testing.test("record keeps the suites of a narrowed row", function()
+    local state = { commit = string.rep("a", 40), change = "-" }
+    local narrowed = { "a_test.lua", "b_test.lua" }
+    local body = check.record(state, {
+        { run = "dev --remote test", run_id = "8cb600", result = "pass", ran = narrowed },
+        { run = "dev --remote lint", run_id = "8cb600", result = "pass" },
+    }, check.Mode.RUN)
+    testing.ok(body:find("1 pass 8cb600 ran=a_test.lua,b_test.lua", 1, true), body)
+    local record = check.parse(body)
+    testing.eq(record.rows[1].ran, narrowed)
+    testing.eq(record.rows[2].ran, nil)
+end)
+
 testing.test("a partial record never lets a card land or blocks a carry", function()
     local state = { commit = string.rep("a", 40), change = "chg" }
     local rows = { "true", "false" }
@@ -1132,7 +1145,8 @@ local function group_check(opts)
     end
     local out, status = dev(root, home, args, nil, env)
     local first = comments(home)[1]
-    return out, status, first and first.body, fs.read(log) or "", #start_notes(home)
+    local shown = opts.show and (dev(root, home, { "board", "show", id })) or nil
+    return out, status, first and first.body, fs.read(log) or "", #start_notes(home), shown
 end
 
 testing.test("a card with a lint row and a test row makes one ci run", function()
@@ -1277,14 +1291,18 @@ testing.test(
 )
 
 testing.test("a narrowed test run also runs the files of the named rows", function()
-    local out, code, _, log = group_check({
+    local out, code, body, log, _, shown = group_check({
         jobs = PASSED,
         run = group_run(0),
         rows = { "dev --remote lint", "dev --remote test", "dev --remote test -- tests/x_test.lua" },
         logs = 'echo "PASS tests/x_test.lua"; echo "PASS tests/b_test.lua"',
         touch = "tests/b_test.lua",
+        show = true,
     })
     testing.eq(code, 0, out)
+    testing.ok(body:find("2 pass 8cb600 ran=tests/b_test.lua", 1, true), body)
+    testing.eq(check.parse(body).rows[1].ran, nil)
+    testing.ok(shown:find("2 pass 8cb600 dev --remote test -- tests/b_test.lua", 1, true), shown)
     testing.ok(log:find("-- tests/b_test.lua tests/x_test.lua", 1, true), log)
     testing.ok(out:find("3 pass 8cb600 dev --remote test -- tests/x_test.lua", 1, true), out)
 end)

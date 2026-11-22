@@ -399,11 +399,18 @@ local function check_rows(opts)
         local baseline = check.baseline(card.checks, argvs)
         commands, argvs, skipped = baseline.commands, baseline.argvs, baseline.skipped
     end
+    local narrowed = {}
     argvs = board_select.narrow_rows(backend.root, commands, argvs, function()
         return land.card_touched(backend.root)
     end, function(row, count)
+        narrowed[row] = count
         verb.note(string.format("Row %d narrowed to %d suites.", row, count))
     end)
+    ---@type table<integer, string[]> the suites narrowing added to each row, which `record` writes as ran=
+    local ran = {}
+    for row, count in pairs(narrowed) do
+        ran[row] = { unpack(argvs[row], #argvs[row] - count + 1) }
+    end
     local env = {
         [remote.VERB_ENV] = remote.Verb.CHECK,
         [remote.CARD_ENV] = short,
@@ -483,7 +490,7 @@ local function check_rows(opts)
         local past = backend:comments(card.id)
         local kept = check.resume(past or {}, before.commit, commands, places)
         for i, row in ipairs(kept) do
-            rows[i] = { run = commands[i], run_id = row.run_id, result = row.result }
+            rows[i] = { run = commands[i], run_id = row.run_id, result = row.result, ran = row.ran }
             local where = row.run_id == "-" and "" or " in ci run " .. row.run_id
             verb.note(
                 string.format(
@@ -656,6 +663,11 @@ local function check_rows(opts)
     end
     local held = claims.read(card.id)
     local stamped = { commit = before.commit, change = before.change, proof = proof }
+    for i, row in ipairs(rows) do
+        if row.result ~= check.Result.NOT_RUN then
+            row.ran = row.ran or ran[i]
+        end
+    end
     local ok
     ok, message = backend:note(
         card.id,

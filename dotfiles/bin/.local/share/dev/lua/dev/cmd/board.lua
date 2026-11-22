@@ -1051,7 +1051,17 @@ local function named_rows(lines, body, checks)
     local named = {}
     for i, line in ipairs(lines) do
         local index = line:match("^(%d+) ")
-        named[i] = index and line .. " " .. checks[tonumber(index)] or line
+        local row = index and record.rows[tonumber(index)]
+        if row and row.ran then
+            local bare = line:gsub(" ran=%S+$", "")
+            named[i] = bare
+                .. " "
+                .. checks[tonumber(index)]
+                .. " -- "
+                .. table.concat(row.ran, " ")
+        else
+            named[i] = index and line .. " " .. checks[tonumber(index)] or line
+        end
     end
     return named
 end

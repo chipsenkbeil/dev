@@ -155,6 +155,7 @@ M.Mode = { RUN = "run", EXPECT_FAIL = "expect-fail", PARTIAL = "partial" }
 ---@field cases string[]? the `not ok - NAME` names printed under each failing file, or the file's path when it printed none
 ---@field reason string? the last line a failed row printed when it printed no run id
 ---@field refused string? ci's refusal line when the hub refused the run, which no row records
+---@field ran string[]? the suites narrowing added to a test row, which `record` writes as `ran=`
 
 ---Split a row into its words.
 ---@param row string the row without its leading `! `
@@ -1336,6 +1337,9 @@ function M.record(state, rows, mode)
     for i, row in ipairs(rows) do
         commands[i] = row.run
         lines[i] = string.format("%d %s %s", i, row.result, row.run_id)
+        if row.ran and #row.ran > 0 then
+            lines[i] = lines[i] .. " ran=" .. table.concat(row.ran, ",")
+        end
         size = size + #lines[i] + 1
     end
 
@@ -1371,6 +1375,7 @@ end
 ---@field result string how the row ended
 ---@field run_id string the ci run id, `-` when the row printed none
 ---@field reason string? the last line a failed row printed when it printed no run id
+---@field ran string[]? the suites a narrowed test row ran
 
 ---@class dev.board.check.Record
 ---@field commit string the full commit id the rows ran on
@@ -1404,14 +1409,24 @@ function M.parse(body)
             end
             rows[#rows].reason = reason
         else
-            local index, result, run_id = line:match("^(%d+) ([%a-]+) (%S+)$")
+            local index, result, run_id, ran = line:match("^(%d+) ([%a-]+) (%S+) ran=(%S+)$")
+            if not index then
+                index, result, run_id = line:match("^(%d+) ([%a-]+) (%S+)$")
+            end
             if not index or tonumber(index) ~= #rows + 1 then
                 return nil
             end
             if run_id ~= NO_RUN and not run_id:match("^%x+$") then
                 return nil
             end
-            rows[#rows + 1] = { result = result, run_id = run_id }
+            local suites
+            if ran then
+                suites = {}
+                for suite in ran:gmatch("[^,]+") do
+                    suites[#suites + 1] = suite
+                end
+            end
+            rows[#rows + 1] = { result = result, run_id = run_id, ran = suites }
         end
     end
 
