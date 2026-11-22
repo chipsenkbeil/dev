@@ -3822,6 +3822,38 @@ testing.test("outcome appends, rewords, ticks and unticks by number", function()
     testing.eq(backend.calls[5], { "set_outcome", ID_C, "s1", { done = false }, nil })
 end)
 
+testing.test("outcome rename clears its tick", function()
+    local card = colored("green")
+    card.outcomes = outcomes(3, 1)
+    local backend = fake({ card })
+    local result = cmd_board.run(
+        "outcome",
+        { "cccccccc", "--rename", "1", "New words", "--reason", "it was vague" },
+        backend
+    )
+    testing.eq(result.output, "outcome cccccccc 1 reworded, tick cleared")
+    testing.eq(
+        backend.calls[1],
+        { "set_outcome", ID_C, "s1", { name = "New words", done = false }, nil }
+    )
+    testing.eq(backend.calls[2], {
+        "note",
+        ID_C,
+        "Renamed outcome 1 from: "
+            .. outcomes(3, 1)[1].name
+            .. " to: New words"
+            .. " Reason: it was vague The tick was cleared.",
+        { kind = "decision" },
+    })
+    result = cmd_board.run(
+        "outcome",
+        { "cccccccc", "--rename", "2", "Other words", "--reason", "it was vague" },
+        backend
+    )
+    testing.eq(result.output, "outcome cccccccc 2 reworded")
+    testing.eq(backend.calls[3], { "set_outcome", ID_C, "s2", { name = "Other words" }, nil })
+end)
+
 testing.test("outcome refuses more than one text argument", function()
     local card = colored("green")
     card.outcomes = outcomes(3, 1)
@@ -7588,7 +7620,7 @@ testing.test("outcome posts a subtask and patches the Nth by its id", function()
         home,
         { "board", "outcome", "11111111", "--rename", "2", "B holds", "--reason", "clearer" }
     )
-    testing.eq(out, "outcome 11111111 2 reworded\n")
+    testing.eq(out, "outcome 11111111 2 reworded, tick cleared\n")
     out = dev(root, home, { "board", "outcome", "11111111", "--untick", "2" })
     testing.eq(out, "outcome 11111111 2 unticked\n")
     local calls = read(root, "calls")
@@ -7601,7 +7633,7 @@ testing.test("outcome posts a subtask and patches the Nth by its id", function()
     testing.ok(calls:find("/api/tasks/" .. ID_A .. "/subtasks/sub-a", 1, true), calls)
     testing.ok(calls:find('--data-raw {"done":true}', 1, true), calls)
     testing.ok(calls:find("/api/tasks/" .. ID_A .. "/subtasks/sub-b", 1, true), calls)
-    testing.ok(calls:find('--data-raw {"name":"B holds"}', 1, true), calls)
+    testing.ok(calls:find('"name":"B holds"', 1, true), calls)
     testing.ok(calls:find('--data-raw {"done":false}', 1, true), calls)
 end)
 

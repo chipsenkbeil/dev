@@ -1168,7 +1168,9 @@ text.
 The other forms change the Nth outcome:
 
 - `outcome CARD --rename N TEXT --reason TEXT`: rewords it (the first `--reason`
-  ends the new text)
+  ends the new text). A rename of a ticked outcome clears its tick, adds
+  `The tick was cleared.` to the reason note and ends the output with
+  `, tick cleared`
 - `outcome CARD --tick N`: marks it done
 - `outcome CARD --untick N`: clears it
 
@@ -3724,8 +3726,9 @@ The forms:
 - The append sends `POST /api/tasks/{id}/subtasks` with `name` and prints
   `outcome <id prefix> N added`, with N the new outcome's place.
 - `--rename` rewords the Nth and posts one decision note with the old text, the
-  new text and the reason. A missing or empty `--reason` is exit 2 and writes
-  nothing.
+  new text and the reason. On a ticked outcome the same `PATCH` sends
+  `done: false`, so the tick is cleared. A missing or empty `--reason` is
+  exit 2 and writes nothing.
 - `--tick` and `--untick` set it done or clear it (`PATCH` on
   `/api/tasks/{id}/subtasks/{sub_id}` with `name` or `done`).
 - The output is `outcome <id prefix> N reworded`, `ticked by NAME` or

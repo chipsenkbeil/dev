@@ -3122,6 +3122,10 @@ function commands.outcome(backend, args)
         fields = { done = mode == OutcomeMode.TICK }
     end
     local old_text = card.outcomes[number].name
+    local cleared = mode == OutcomeMode.RENAME and card.outcomes[number].done == true
+    if cleared then
+        fields.done = false
+    end
     ok, message = backend:set_outcome(card.id, card.outcomes[number].id, fields, fence)
     if not ok then
         return failure(message)
@@ -3155,6 +3159,9 @@ function commands.outcome(backend, args)
             .. text
             .. " Reason: "
             .. reason
+        if cleared then
+            body = body .. " The tick was cleared."
+        end
         ok, message = backend:note(card.id, body, fence, { kind = board.NoteKind.DECISION })
         if not ok then
             return unqueued(
@@ -3175,6 +3182,9 @@ function commands.outcome(backend, args)
         end
     end
     local result = { output = "outcome " .. prefix .. " " .. number .. " " .. OUTCOME_SAID[mode] }
+    if cleared then
+        result.output = result.output .. ", tick cleared"
+    end
     if mode == OutcomeMode.TICK and ticker then
         result.output = result.output .. " by " .. ticker
     end
