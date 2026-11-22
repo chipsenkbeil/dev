@@ -25,6 +25,11 @@ The luajit modules of `dev`, one per item.
   lines and the summary, then the Gerrit project and remote, the Pomb board
   hint and its note that Pomb refused the token. It seeds `.dev/README.md`
   from the template for every project type and skips a file that exists.
+  The Gerrit step reads `[gerrit] host` (the ssh destination) and `port`
+  from the user config, and with no host it skips the step and leaves a line
+  for the owner. The board hint reads `[board.pomb] url` (after `POMB_URL`)
+  and `token` from the user config and is skipped when either is unset. None
+  of the four keys has a default.
 - `dev.cmd.sync`: the lint-template `sync` with `--check`, `--yes` and `-y`.
   It prints the `missing:` and `differs:` lines, `up to date` and the diffs,
   asks for confirmation through `dev.ui`, and ends with `synced` or `aborted`.

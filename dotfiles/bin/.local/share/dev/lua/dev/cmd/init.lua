@@ -1,4 +1,5 @@
 local pomb = require("dev.board.pomb")
+local config = require("dev.config")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local help = require("dev.help")
@@ -18,10 +19,6 @@ local TYPES = {
     [Kind.GODOT] = true,
     [Kind.NODE] = true,
 }
-local GERRIT = { "ssh", "-p", "29418", "user@gerrit.example.com", "gerrit" }
-local GERRIT_HOST = "ssh -p 29418 user@gerrit.example.com gerrit"
-local BOARD_TOKEN = "pass:secrets/worker/token/pomb.example.com"
-local BOARD_URL = "https://pomb.example.com"
 local BOARD_SECONDS = "5"
 local BOARD_REFUSED = "401"
 local CHILD_UNSET = { "BASH_ENV", "ENV", "PS4", "VERBOSE" }
@@ -325,8 +322,28 @@ local function add_remote(run, name, url)
     run_or_exit(run, argv)
 end
 
-local function init_gerrit(run)
+---Build the ssh command that reaches the Gerrit server.
+---It reads `[gerrit] host` and `port` from the user config.
+---@return string[]? argv the command, nil when no host is set
+local function gerrit_argv()
+    local host = config.user("gerrit.host")
+    if type(host) ~= "string" or host == "" then
+        return nil
+    end
+    local argv = { "ssh" }
+    local port = config.user("gerrit.port")
+    if port ~= nil then
+        argv[#argv + 1] = "-p"
+        argv[#argv + 1] = tostring(port)
+    end
+    argv[#argv + 1] = host
+    argv[#argv + 1] = "gerrit"
+    return argv
+end
+
+local function init_gerrit(run, gerrit)
     local name = run.name
+    local gerrit_host = table.concat(gerrit, " ")
     if run.dry then
         created(
             run,
@@ -337,7 +354,7 @@ local function init_gerrit(run)
         )
         return
     end
-    local list = vcs.with(GERRIT, "ls-projects")
+    local list = vcs.with(gerrit, "ls-projects")
     verb.show(run.ctx, list)
     local out, code = dev_os.capture(list, { stderr = "stdout" })
     if code ~= 0 then
@@ -346,7 +363,7 @@ local function init_gerrit(run)
         leave(
             run,
             "create the Gerrit project and remote: "
-                .. GERRIT_HOST
+                .. gerrit_host
                 .. " create-project "
                 .. name
                 .. ", then "
@@ -363,12 +380,12 @@ local function init_gerrit(run)
     if has(known, name) then
         skipped(run, "gerrit project " .. name .. " exists")
     else
-        local create = vcs.with(GERRIT, "create-project", name)
+        local create = vcs.with(gerrit, "create-project", name)
         verb.show(run.ctx, create)
         if dev_os.run(create) == 0 then
             created(run, "gerrit project " .. name)
         else
-            leave(run, "create the Gerrit project: " .. GERRIT_HOST .. " create-project " .. name)
+            leave(run, "create the Gerrit project: " .. gerrit_host .. " create-project " .. name)
             return
         end
     end
@@ -395,19 +412,32 @@ local function init_remotes(run)
     elseif has(remotes, "gerrit") then
         skipped(run, "remote gerrit exists")
     else
-        init_gerrit(run)
+        local gerrit = gerrit_argv()
+        if gerrit then
+            init_gerrit(run, gerrit)
+        else
+            skipped(run, "gerrit: no [gerrit] host in the user config")
+            leave(
+                run,
+                "set host under [gerrit] in ~/.config/dev/config.toml to set up the Gerrit project and remote"
+            )
+        end
     end
 end
 
 local function init_board_hint(run)
     local url = os.getenv("POMB_URL")
     if not url or url == "" then
-        url = BOARD_URL
+        url = config.user("board.pomb.url")
+    end
+    local ref = config.user("board.pomb.token")
+    if type(url) ~= "string" or url == "" or type(ref) ~= "string" or ref == "" then
+        return
     end
     if not (dev_os.which("pass") and dev_os.which("curl")) then
         return
     end
-    local token = pomb.token(BOARD_TOKEN)
+    local token = pomb.token(ref)
     if not token then
         return
     end

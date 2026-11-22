@@ -1,3 +1,4 @@
+local config = require("dev.config")
 local fs = require("dev.fs")
 local land = require("dev.board.land")
 
@@ -5,8 +6,6 @@ local land = require("dev.board.land")
 ---@class dev.board.suspects
 local M = {}
 
----The roots a required module is searched under
-local SOURCE_ROOTS = { "dotfiles/bin/.local/share/dev/lua/", "tests/lua/", ".dev/lua/" }
 ---The suffixes a module path may carry
 local MODULE_SUFFIXES = { ".lua", "/init.lua" }
 
@@ -15,9 +14,18 @@ local MODULE_SUFFIXES = { ".lua", "/init.lua" }
 ---@field landed string the card's landed commit
 ---@field card dev.board.Card the card
 
-local function module_file(root, name)
+---Read the folder prefixes a required module is searched under.
+---They come from `board.ship.source_roots`.
+---@param root string the project root
+---@return string[] roots the prefixes, empty when the key is unset
+local function source_roots(root)
+    local roots = config.get(root, "board.ship.source_roots")
+    return type(roots) == "table" and roots or {}
+end
+
+local function module_file(root, roots, name)
     local relative = (name:gsub("%.", "/"))
-    for _, base in ipairs(SOURCE_ROOTS) do
+    for _, base in ipairs(roots) do
         for _, suffix in ipairs(MODULE_SUFFIXES) do
             local path = base .. relative .. suffix
             if fs.read(root .. "/" .. path) then
@@ -51,13 +59,14 @@ end
 function M.loaded(root, path)
     local seen, queue = { [path] = true }, { path }
     local quoted = {}
+    local roots = source_roots(root)
     add_quoted(root, fs.read(root .. "/" .. path) or "", quoted)
     local at = 1
     while queue[at] do
         local text = fs.read(root .. "/" .. queue[at]) or ""
         at = at + 1
         for name in text:gmatch('require%("([%w_.%-]+)"%)') do
-            local file = module_file(root, name)
+            local file = module_file(root, roots, name)
             if file and not seen[file] then
                 seen[file] = true
                 queue[#queue + 1] = file

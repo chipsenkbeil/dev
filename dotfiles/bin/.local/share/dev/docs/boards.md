@@ -3898,6 +3898,11 @@ A failed command:
   file the test names in a quoted string. A quoted string counts as the file
   itself, with no further traversal, and a path that does not exist is
   ignored. Only cards that would have shipped are listed.
+- `require` is followed under the folder prefixes of the
+  `board.ship.source_roots` key, a list such as `["lua/", "tests/lua/"]` in
+  the project or user config. The key has no default, so with no key no
+  `require` is followed and only the test file itself and its quoted names
+  count.
 - When no card in the batch touched a failing file, the list says so. When the
   row printed no `FAIL` line, it says that instead.
 - When a batch of two or more cards matches in full, the list says so and names

@@ -14,6 +14,17 @@ local function project()
     return root
 end
 
+local GERRIT_CONFIG = '[gerrit]\nhost = "me@gerrit.example"\nport = 29418\n'
+local BOARD_CONFIG =
+    '[board.pomb]\nurl = "https://pomb.example"\ntoken = "pass:secrets/worker/token/pomb.example"\n'
+
+local function user_env(text)
+    local home = support.tempdir()
+    assert(fs.mkdir(home .. "/.config/dev", { parents = true }), "mkdir failed")
+    assert(fs.write(home .. "/.config/dev/config.toml", text), "write failed")
+    return { env = { HOME = home } }
+end
+
 local function names(dir)
     local out = fs.list(dir) or {}
     table.sort(out)
@@ -77,10 +88,25 @@ end)
 
 testing.test("init names the Gerrit project after the project in a dry run", function()
     local root = project()
-    local out = support.dev(root, { "init", "--type", "lua", "--dry-run", "--name", "zz" })
+    local out = support.dev(
+        root,
+        { "init", "--type", "lua", "--dry-run", "--name", "zz" },
+        user_env(GERRIT_CONFIG)
+    )
     local want =
         "would create: gerrit project zz (create-project when absent) and remote gerrit gr:zz"
     testing.ok(out:find(want, 1, true), out)
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("init skips the Gerrit step with no gerrit host", function()
+    local root = project()
+    local out, code =
+        support.dev(root, { "init", "--type", "lua", "--dry-run", "--name", "zz" }, user_env(""))
+    testing.eq(code, 0, out)
+    testing.ok(out:find("skipped: gerrit: no [gerrit] host in the user config", 1, true), out)
+    testing.ok(out:find("set host under [gerrit]", 1, true), out)
+    testing.ok(not out:find("gerrit project", 1, true), out)
     fs.remove(root, { recursive = true })
 end)
 
@@ -187,12 +213,13 @@ testing.test("init creates the Gerrit project and its remote when the server lac
         "ssh",
         '#!/bin/sh\necho "$*" >>' .. log .. '\n[ "$5" = ls-projects ] && echo other\nexit 0\n'
     )
-    local out, code = support.dev(root, { "init", "--type", "lua", "--name", "zz" })
+    local user = user_env(GERRIT_CONFIG)
+    local out, code = support.dev(root, { "init", "--type", "lua", "--name", "zz" }, user)
     testing.eq(code, 0)
     testing.ok(out:find("created: gerrit project zz\n", 1, true), out)
     testing.ok(out:find("created: remote gerrit gr:zz\n", 1, true), out)
     testing.ok((fs.read(log) or ""):find("create-project zz", 1, true), out)
-    local again = support.dev(root, { "init", "--type", "lua", "--name", "zz" })
+    local again = support.dev(root, { "init", "--type", "lua", "--name", "zz" }, user)
     testing.ok(again:find("skipped: remote gerrit exists", 1, true), again)
     fs.remove(root, { recursive = true })
 end)
@@ -200,13 +227,18 @@ end)
 testing.test("init leaves the Gerrit step to the owner when ls-projects fails", function()
     local root = project()
     stub(root, "ssh", "#!/bin/sh\necho denied\nexit 255\n")
-    local out, code = support.dev(root, { "init", "--type", "lua", "--dry-run", "--name", "zz" })
+    local user = user_env(GERRIT_CONFIG)
+    local out, code =
+        support.dev(root, { "init", "--type", "lua", "--dry-run", "--name", "zz" }, user)
     testing.eq(code, 0)
     testing.ok(not out:find("Left for you:.*create%-project"), out)
-    out, code = support.dev(root, { "init", "--type", "lua", "--name", "zz" })
+    out, code = support.dev(root, { "init", "--type", "lua", "--name", "zz" }, user)
     testing.eq(code, 0)
     testing.ok(out:find("Gerrit ls-projects failed.\ndenied\n", 1, true), out)
-    testing.ok(out:find("create the Gerrit project and remote: ssh -p 29418", 1, true), out)
+    testing.ok(
+        out:find("create the Gerrit project and remote: ssh -p 29418 me@gerrit.example", 1, true),
+        out
+    )
     fs.remove(root, { recursive = true })
 end)
 
@@ -215,6 +247,7 @@ testing.test(
     function()
         local root = project()
         local log = root .. "/curl.log"
+        local user = user_env(BOARD_CONFIG)
         stub(root, "pass", "#!/bin/sh\necho secret-token\n")
         stub(
             root,
@@ -225,7 +258,8 @@ testing.test(
         )
         local out = support.dev(
             root,
-            { "init", "--type", "lua", "--dry-run", "--no-gerrit", "--name", "zz" }
+            { "init", "--type", "lua", "--dry-run", "--no-gerrit", "--name", "zz" },
+            user
         )
         testing.ok(out:find("No Pomb board for zz", 1, true), out)
         testing.ok(not out:find("General", 1, true), out)
@@ -235,20 +269,23 @@ testing.test(
         stub(root, "curl", "#!/bin/sh\ncat >/dev/null\nprintf 'not json\\n200'\n")
         out = support.dev(
             root,
-            { "init", "--type", "lua", "--dry-run", "--no-gerrit", "--name", "zz" }
+            { "init", "--type", "lua", "--dry-run", "--no-gerrit", "--name", "zz" },
+            user
         )
         testing.ok(not out:find("No Pomb board", 1, true), out)
         stub(root, "curl", "#!/bin/sh\ncat >/dev/null\nprintf '\\n401'\nexit 22\n")
         out = support.dev(
             root,
-            { "init", "--type", "lua", "--dry-run", "--no-gerrit", "--name", "zz" }
+            { "init", "--type", "lua", "--dry-run", "--no-gerrit", "--name", "zz" },
+            user
         )
         testing.ok(out:find("Pomb refused the worker token", 1, true), out)
         testing.ok(not out:find("No Pomb board", 1, true), out)
         stub(root, "curl", "#!/bin/sh\ncat >/dev/null\nprintf '\\n000'\nexit 7\n")
         out = support.dev(
             root,
-            { "init", "--type", "lua", "--dry-run", "--no-gerrit", "--name", "zz" }
+            { "init", "--type", "lua", "--dry-run", "--no-gerrit", "--name", "zz" },
+            user
         )
         testing.ok(not out:find("Pomb refused", 1, true), out)
         testing.ok(not out:find("No Pomb board", 1, true), out)

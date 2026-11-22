@@ -395,8 +395,10 @@ if dev_os.which("jj") then
         testing.eq(#done_notes(select(2, state(home, id))), 0)
     end)
 
-    local function red_ship(failing, landed)
-        local root, home = project()
+    local SHIP_ROOTS = '\n[board.ship]\nsource_roots = ["dotfiles/bin/.local/share/dev/lua/"]\n'
+
+    local function red_ship(failing, landed, extra)
+        local root, home = project(extra or SHIP_ROOTS)
         must(dev(root, home, { "board", "init" }))
         local pushed = {}
         for _, card in ipairs(landed) do
@@ -508,6 +510,17 @@ if dev_os.which("jj") then
         })
         testing.ok(out:find("Leafy", 1, true), out)
         testing.eq(out:find("Bystander", 1, true), nil)
+    end)
+
+    testing.test("ship.suspects.follow.no.require.without.source_roots", function()
+        local lua = "dotfiles/bin/.local/share/dev/lua/dev/"
+        local out = red_ship("tests/lua/n_test.lua", {
+            { path = "tests/lua/n_test.lua", text = 'require("dev.zmod")\n' },
+            { name = "Loaded", path = lua .. "zmod.lua" },
+            { name = "Bystander", path = "docs/other.md" },
+        }, "")
+        testing.ok(out:find("tests/lua/n_test.lua: no landed card in this batch", 1, true), out)
+        testing.eq(out:find("Loaded", 1, true), nil)
     end)
 
     testing.test("ship.says.a.row.with.no.fail.line.names.no.suspect", function()
