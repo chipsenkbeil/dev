@@ -1,5 +1,8 @@
+local ffi = require("ffi")
+
 local testing = require("dev.testing")
 local board = require("dev.board")
+local tokenfile = require("dev.board.tokenfile")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local json = require("dev.json")
@@ -727,6 +730,45 @@ testing.test("a review reports a seat that Pomb refused", function()
     testing.ok(result.warnings[1]:find("owner_seat", 1, true), result.warnings[1])
     testing.ok(result.warnings[1]:find("seat of card", 1, true), result.warnings[1])
     testing.eq(#backend.notes, 1)
+end)
+
+local OWNER_SEAT = "pomb answered 409: the task's owner cannot take a seat on it (owner_seat)"
+local MINT_HINT = "dev board token mint --role reviewer --as r"
+
+local function owner_seat_warning(with_token)
+    local previous_state = os.getenv("XDG_STATE_HOME") or ""
+    local previous_runtime = os.getenv("XDG_RUNTIME_DIR") or ""
+    ffi.C.setenv("XDG_RUNTIME_DIR", "", 1)
+    ffi.C.setenv("XDG_STATE_HOME", support.tempdir(), 1)
+    local written = true
+    if with_token then
+        written = tokenfile.write("r", "pomb_token0123456789", 0)
+    end
+    local root = git_root()
+    local backend = seat_backend(root, OWNER_SEAT)
+    local ran, result = pcall(review_as, backend, "code", "clean")
+    ffi.C.setenv("XDG_STATE_HOME", previous_state, 1)
+    ffi.C.setenv("XDG_RUNTIME_DIR", previous_runtime, 1)
+    assert(written, "token file was not written")
+    assert(ran, result)
+    testing.eq(result.code, nil, result.message)
+    testing.eq(#backend.notes, 1)
+    testing.eq(#result.warnings, 1)
+    return result.warnings[1]
+end
+
+testing.test("review names the missing reviewer token on an owner_seat refusal", function()
+    local warning = owner_seat_warning(false)
+    testing.ok(warning:find("No minted reviewer token file was found for r.", 1, true), warning)
+    testing.ok(warning:find(MINT_HINT, 1, true), warning)
+    testing.ok(warning:find("reviewer_token", 1, true), warning)
+end)
+
+testing.test("review with a live token file adds no missing token sentence", function()
+    local warning = owner_seat_warning(true)
+    testing.ok(warning:find("owner_seat", 1, true), warning)
+    testing.eq(warning:find("No minted reviewer token", 1, true), nil)
+    testing.eq(warning:find(MINT_HINT, 1, true), nil)
 end)
 
 local function recheck_of(backend, of)

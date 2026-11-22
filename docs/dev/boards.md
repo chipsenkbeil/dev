@@ -3085,8 +3085,12 @@ is the full commit id. Pomb refuses a seat to the card's live owner
 holder (`seat_held`), so a reviewer on the runner's token is refused while the
 claim lives. A refused seat call prints one warning to standard error that names
 Pomb's code and says the seat was not set, and the review is still recorded and
-the command exits 0. A second recheck, which Pomb refuses with `seat_held`
-(the one recheck seat is taken), prints no warning and ends its output with
+the command exits 0. An `owner_seat` refusal for a name with no token file adds
+that no minted reviewer token file was found for the name, and that the lead
+mints one with `dev board token mint --role reviewer --as NAME` or sets
+`reviewer_token` in `[board.pomb]`. A second recheck, which Pomb refuses with
+`seat_held` (the one recheck seat is taken), prints no warning and ends its
+output with
 `The recheck seat is already held, so only the card records this review.`
 The first recheck's seat verdict stands, and land reads only the review
 comments. The local board has no seats and keeps only the comment.

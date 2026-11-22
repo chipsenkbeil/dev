@@ -93,6 +93,7 @@ local CLIENT_CHARS = 80
 local STAMP_CHARS = 16
 local COMMIT_CHARS = 12
 local SEAT_HELD_CODE = "seat_held"
+local OWNER_SEAT_CODE = "owner_seat"
 local WAIT_FLAG = "--wait"
 local FROM_FLAG = "--from"
 local IGNORE_CHANGE_RUN_FLAG = "--ignore-change-run"
@@ -3568,6 +3569,14 @@ function commands.review(backend, args)
             seat_note = "\nThe recheck seat is already held, so only the card records this review."
         elseif not ok then
             local detail = board.seat_refusal(refusal, message, kind)
+            if (message or ""):find(OWNER_SEAT_CODE, 1, true) and not tokenfile.read(by) then
+                detail = string.format(
+                    "%s No minted reviewer token file was found for %s. The lead mints one with `dev board token mint --role reviewer --as %s`, or sets `reviewer_token` in `[board.pomb]`.",
+                    detail,
+                    by,
+                    by
+                )
+            end
             warnings = {
                 string.format(
                     "The %s seat of card %s was NOT set, so Pomb holds no seat verdict for this review. %s The review is still recorded on the card.",
