@@ -5,6 +5,7 @@ local cmd_board = require("dev.cmd.board")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local json = require("dev.json")
+local land = require("dev.board.land")
 local support = require("support")
 
 local has_jj = dev_os.which("jj") ~= nil
@@ -540,7 +541,6 @@ testing.test("resume keeps rows of one shared ci run all or none", function()
 end)
 
 testing.test("a partial record never lets a card land or blocks a carry", function()
-    local land = require("dev.board.land")
     local state = { commit = string.rep("a", 40), change = "chg" }
     local rows = { "true", "false" }
     local first = { run = rows[1], run_id = "-", result = check.Result.PASS }
@@ -1821,6 +1821,25 @@ if has_jj then
         jj(root, "workspace", "add", "--name", "w2", "-r", "@-", ws)
         return root, home, ws
     end
+
+    testing.test("a parent behind the trunk tip is on trunk for the stack note", function()
+        local root = setup()
+        local bare = support.tempdir()
+        local quiet = { stdout = "null", stderr = "null", env = IDENT }
+        must(dev_os.run({ "git", "init", "--bare", "-q", "-b", "master", bare }, quiet))
+        must(dev_os.run({ "jj", "git", "init", root }, quiet))
+        jj(root, "git", "remote", "add", "origin", bare)
+        jj(root, "commit", "-m", "base")
+        jj(root, "commit", "-m", "tip")
+        jj(root, "bookmark", "create", "master", "-r", "@-")
+        jj(root, "git", "push", "--remote", "origin", "--bookmark", "master")
+        jj(root, "new", "-m", "work", "@--")
+        testing.eq(land.stack_note(root), nil)
+        jj(root, "new", "-m", "unlanded", "@")
+        jj(root, "new", "-m", "work")
+        local note = land.stack_note(root)
+        testing.ok(note and note:find("not on trunk", 1, true), note)
+    end)
 
     testing.test("check refuses outside the workspace named for the card", function()
         local root, home, ws = workspace()

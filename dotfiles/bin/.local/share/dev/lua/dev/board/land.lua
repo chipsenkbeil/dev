@@ -455,13 +455,14 @@ local function fetch(root, remote)
     return out, code
 end
 
-local function parent_on_trunk(root)
+local function parent_on_trunk(root, opts)
     local parents =
         dev_os.capture(jj(root, "log", "-r", "@-", "--no-graph", "-T", COMMIT_TEMPLATE), {
             stderr = "null",
         })
+    local revset = opts and opts.behind_tip and "@- & ::trunk()" or "@- & trunk()"
     local on_trunk = dev_os.capture(
-        jj(root, "log", "-r", "@- & trunk()", "--no-graph", "-T", COMMIT_TEMPLATE),
+        jj(root, "log", "-r", revset, "--no-graph", "-T", COMMIT_TEMPLATE),
         { stderr = "null" }
     )
     return count_lines(parents) == 1 and on_trunk == parents
@@ -471,13 +472,13 @@ end
 ---@param root string the project root
 ---@return string? note a sentence when the parent is off trunk, else nil
 function M.stack_note(root)
-    if vcs.backend(root) ~= vcs.JJ or parent_on_trunk(root) then
+    if vcs.backend(root) ~= vcs.JJ or parent_on_trunk(root, { behind_tip = true }) then
         return nil
     end
     local found = forge.resolve(root)
     if found then
         local _, code = fetch(root, found.remote)
-        if code == 0 and parent_on_trunk(root) then
+        if code == 0 and parent_on_trunk(root, { behind_tip = true }) then
             return nil
         end
     end
