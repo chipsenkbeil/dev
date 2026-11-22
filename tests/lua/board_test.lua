@@ -3464,6 +3464,24 @@ testing.test("move to Ready refuses a card missing a required row", function()
     testing.eq(result.code, 1)
 end)
 
+testing.test("move to Ready accepts a no-change card without a required row", function()
+    local function ready_with_labels(labels)
+        local card = colored("green")
+        card.checks = { "dev --remote lint" }
+        card.labels = labels
+        local backend = fake({ card })
+        backend.root = support.sandbox({ [".dev/config.toml"] = REQUIRED_CONFIG }, {})
+        return cmd_board.run("move", { "cccccccc", support.Column.READY }, backend)
+    end
+    testing.eq(ready_with_labels({ board.NO_CHANGE }).code, nil)
+    local result = ready_with_labels({})
+    testing.eq(result.code, 1)
+    testing.ok(
+        result.message:find("lacks the required row dev --remote test", 1, true),
+        result.message
+    )
+end)
+
 testing.test("a repo with no required list keeps today's behaviour", function()
     local result = ready_with("[board.lint]\nstrict = true\n", support.READY_CHECKS)
     testing.eq(result.code, nil)

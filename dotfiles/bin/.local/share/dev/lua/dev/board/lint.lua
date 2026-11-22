@@ -218,6 +218,7 @@ function M.card(card, opts)
             and #card.checks > 0
             and #(opts.required or {}) > 0
             and card.kind ~= board.Kind.EPIC
+            and not board.labelled(card, board.NO_CHANGE)
         local lacks_bare = worked
             and #card.checks > 0
             and #(opts.bare or {}) > 0

@@ -331,6 +331,24 @@ testing.test("lint reports an open card missing a required row", function()
     testing.eq(result.code, 1)
 end)
 
+testing.test("lint skips a no-change card and still flags an unlabelled one", function()
+    local cards = required_cards()
+    cards[#cards + 1] = card(6, NAME.READY, {
+        outcomes = outcomes(3),
+        checks = { "dev --remote lint" },
+        labels = { board.NO_CHANGE },
+    })
+    cards[#cards + 1] =
+        card(7, NAME.READY, { outcomes = outcomes(3), checks = { "dev --remote lint" } })
+    local result = cmd_board.run("lint", {}, required_board(cards, REQUIRED_CONFIG))
+    testing.eq(findings(result.output), {
+        "00000001 Ready checks lack the required row: dev --remote test",
+        "00000005 Review checks lack the required row: dev --remote lint",
+        "00000005 Review checks lack the required row: dev --remote test",
+        "00000007 Ready checks lack the required row: dev --remote test",
+    })
+end)
+
 testing.test("lint without a required list keeps today's findings", function()
     local result = cmd_board.run("lint", {}, required_board(required_cards(), ""))
     testing.eq(result.output, "No findings.")

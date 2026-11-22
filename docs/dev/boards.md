@@ -1526,9 +1526,10 @@ setting is a list of commands, and a card row satisfies one when it equals it
 or starts with it and a space, so `dev --remote test -- tests/lua/x_test.lua`
 counts as `dev --remote test`. `dev board lint` reports an open card in Ready,
 In Progress or Review that lacks a listed row, and `dev board move CARD ready`
-refuses it. An epic and a card with children are skipped. A `required` that is
-not a list of commands makes both exit 1 and name the setting. A project with
-no list keeps the rules above:
+refuses it. An epic, a card with children and a card labelled `no-change` are
+skipped, because a no-change card ships no change to test. A `required` that is
+not a list of commands makes both exit 1 and name the setting. A project with no
+list keeps the rules above:
 
 ```toml
 [board.lint]

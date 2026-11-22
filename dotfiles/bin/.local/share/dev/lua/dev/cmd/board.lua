@@ -1666,8 +1666,11 @@ end
 ---Refuse a card whose checks lack a row the project requires.
 ---@param backend dev.board.Backend the board
 ---@param card dev.board.Card the card
----@return dev.cmd.board.Result? refused the failure, nil when the card holds every required row
+---@return dev.cmd.board.Result? refused the failure, nil when the card holds every required row or is no-change
 local function required_refusal(backend, card)
+    if board.labelled(card, board.NO_CHANGE) then
+        return nil
+    end
     local required, err = lint_rows(backend, "required")
     if err then
         return err
