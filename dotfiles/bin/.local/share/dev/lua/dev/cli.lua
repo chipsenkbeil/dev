@@ -278,11 +278,12 @@ local function refuse_agent_primary(project_root, words)
     local here = fs.realpath(project_root)
     local main = fs.realpath(vcs.main_root(project_root, backend))
     if here and here == main then
+        local who = guarded == LEAD_GUARDED and "lead role" or ("workspace role " .. role)
         stderr:write(
             "dev ",
             command,
-            ": DEV_AGENT is the workspace role ",
-            role,
+            ": DEV_AGENT is the ",
+            who,
             ", which never runs it in the primary checkout. Use `dev -C WS ",
             command,
             "` from your own workspace.\n"

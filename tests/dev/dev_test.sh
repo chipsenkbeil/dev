@@ -1116,7 +1116,8 @@ for role in planner reviewer verifier; do
 done
 out="$(DEV_AGENT=repo/lead/c cirun "$prim" land 2>&1)"
 assert_eq "the lead role land in the primary checkout exits 2" "$?" "2"
-assert_contains "the lead role land refusal names the lead role" "$out" "dev land: DEV_AGENT is the workspace role lead, which never runs it in the primary checkout. Use \`dev -C WS land\` from your own workspace."
+assert_contains "the lead role land refusal says the lead role" "$out" "dev land: DEV_AGENT is the lead role, which never runs it in the primary checkout. Use \`dev -C WS land\` from your own workspace."
+assert_not_contains "the lead role land refusal does not call lead a workspace role" "$out" "workspace role lead"
 out="$(DEV_AGENT=repo/lead/c cirun "$prim" clean 2>&1)"
 assert_eq "the lead role clean in the primary checkout exits 2" "$?" "2"
 out="$(DEV_AGENT=repo/lead/c cirun "$prim" fmt 2>&1)"
