@@ -3510,12 +3510,34 @@ testing.test("move to Ready refuses a card with no bare row", function()
     testing.eq(result.code, nil)
 end)
 
+testing.test("an epic with open children is refused a move into Ready", function()
+    local function epic_to_ready(kids)
+        local card = colored("green")
+        card.epic = kids
+        local backend = fake({ card })
+        backend.kin = { children = kids }
+        return cmd_board.run("move", { "cccccccc", support.Column.READY }, backend), backend
+    end
+    local result, backend = epic_to_ready({ done = 1, total = 3 })
+    testing.eq(result.code, 1)
+    testing.eq(result.unqueued, true)
+    testing.eq(
+        result.message,
+        "Card cccccccc is an epic and cannot enter Ready. 2 of 3 children are open."
+    )
+    for _, call in ipairs(backend.calls) do
+        testing.ok(call[1] ~= "move", "the refused move was sent")
+    end
+    testing.eq(epic_to_ready({ done = 0, total = 0 }).code, nil)
+    testing.eq(epic_to_ready({ done = 3, total = 3 }).code, nil)
+end)
+
 testing.test("unchanged without bare rows, for an epic and for a card with children", function()
     local result = ready_with("[board.lint]\nstrict = true\n", support.READY_CHECKS)
     testing.eq(result.code, nil)
     local card = planned()
     card.checks = { "dev --remote lint" }
-    card.epic = { done = 0, total = 2 }
+    card.epic = { done = 2, total = 2 }
     card.outcomes = { { id = "s1", name = "a", done = false } }
     local backend = fake({ card })
     backend.kin = { children = card.epic }
@@ -3568,7 +3590,7 @@ end)
 testing.test("move to Ready lets a card with children in without a checks row", function()
     local card = planned()
     card.checks = {}
-    card.epic = { done = 0, total = 2 }
+    card.epic = { done = 2, total = 2 }
     card.outcomes = { { id = "s1", name = "a", done = false } }
     local backend = fake({ card })
     backend.kin = { children = card.epic }

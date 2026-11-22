@@ -851,6 +851,9 @@ existing card into one, and a `parent` link needs one.
   or a local board.
 - It needs 1 to 3 outcomes as its final check to enter Ready, where any other
   card needs 3 to 7.
+- While a child is open, `move` refuses it Ready, a WIP-limited column and Done.
+  The Ready refusal reads:
+  `Card X is an epic and cannot enter Ready. N of M children are open.`
 - Once every child is Done it enters Ready and takes a claim like any card.
 - `move CARD done` closes it once every child is Done and refuses it while a
   child is open.

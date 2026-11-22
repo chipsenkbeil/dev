@@ -235,7 +235,7 @@ local function foreign_refusal(word, verb)
     )
 end
 
----Refuse a move of an epic with an open child into a WIP-limited or done column.
+---Refuse a move of an epic with an open child into Ready, a WIP-limited column or a done column.
 ---@param backend dev.board.Backend the board
 ---@param card dev.board.Card the card
 ---@param column string the column it moves to
@@ -245,6 +245,20 @@ local function children_refusal(backend, card, column, kids)
     local unfinished = board.open_children(kids)
     if unfinished == 0 or card.column == column then
         return nil
+    end
+    local stages = backend.stages or board.stages()
+    if column == stages.ready then
+        return unqueued(
+            failure(
+                string.format(
+                    "Card %s is an epic and cannot enter %s. %d of %d children are open.",
+                    card.id:sub(1, board.MIN_PREFIX),
+                    column,
+                    unfinished,
+                    kids.total
+                )
+            )
+        )
     end
     local rows, why = backend:columns()
     if not rows then
