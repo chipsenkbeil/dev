@@ -848,6 +848,25 @@ local function credential_problems(comments, state)
     return problems
 end
 
+---List the card's seats that do not approve the commit to land.
+---
+---A backend with no `seats` method adds nothing.
+---@param backend dev.board.Backend the board backend
+---@param card dev.board.Card the card
+---@param state dev.board.check.State the commit that would land
+---@param carried string|false|nil an earlier commit whose reviews carry over
+---@return string[] problems one line per seat, or one naming a failed read
+local function seat_problems(backend, card, state, carried)
+    if type(backend.seats) ~= "function" then
+        return {}
+    end
+    local seats, message = backend:seats(card.id)
+    if not seats then
+        return { "The card's seats could not be read: " .. tostring(message) }
+    end
+    return land.seats_problem(seats, state.commit, carried or nil)
+end
+
 ---List what keeps the card from landing, from its column to the trunk and the reviews.
 ---@param backend dev.board.Backend the board backend
 ---@param card dev.board.Card the card
@@ -921,6 +940,9 @@ local function land_problems(backend, card, who)
         problems[#problems + 1] = line
     end
     for _, line in ipairs(credential_problems(who.comments, state)) do
+        problems[#problems + 1] = line
+    end
+    for _, line in ipairs(seat_problems(backend, card, state, not check_only and carried)) do
         problems[#problems + 1] = line
     end
     if unproven then
@@ -1582,6 +1604,7 @@ M.renew_claim = renew_claim
 M.card_problems = card_problems
 M.land_problems = land_problems
 M.credential_problems = credential_problems
+M.seat_problems = seat_problems
 M.await_turn = await_turn
 M.land_prepare = land_prepare
 M.land_held = land_held

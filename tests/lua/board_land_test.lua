@@ -387,6 +387,72 @@ testing.test("land skips the credential check when no reviewer token is set", fu
     end)
 end)
 
+local function seat(name, verdict, revision, idle)
+    return { name = name, role = "reviewer", verdict = verdict, revision = revision, idle = idle }
+end
+
+local function with_seats(seats)
+    return {
+        seats = function()
+            return seats
+        end,
+    }
+end
+
+testing.test("land.refuses.a.seat.still.waiting", function()
+    local problems = land.seats_problem({ seat("code", nil, nil, false) }, COMMIT)
+    testing.eq(problems, { "The reviewer seat code has not answered." })
+    testing.eq(wiring.seat_problems(with_seats({ seat("style") }), { id = "c" }, STATE), {
+        "The reviewer seat style has not answered.",
+    })
+end)
+
+testing.test("land.refuses.a.seat.that.asks.for.changes", function()
+    local problems =
+        land.seats_problem({ seat("code", review.SeatVerdict.CHANGES_NEEDED, COMMIT) }, COMMIT)
+    testing.eq(problems, { "The reviewer seat code asks for changes." })
+end)
+
+testing.test("land.refuses.an.approval.of.an.older.revision", function()
+    local problems =
+        land.seats_problem({ seat("code", review.SeatVerdict.APPROVED, OTHER) }, COMMIT)
+    testing.eq(problems, {
+        "The reviewer seat code approved commit "
+            .. land.short(OTHER)
+            .. ", not the commit "
+            .. land.short(COMMIT)
+            .. " that would land.",
+    })
+    testing.eq(#land.seats_problem({ seat("code", review.SeatVerdict.APPROVED) }, COMMIT), 1)
+end)
+
+testing.test("land.lands.when.every.seat.approved.the.revision", function()
+    local seats = {
+        seat("code", review.SeatVerdict.APPROVED, COMMIT),
+        seat("style", review.SeatVerdict.APPROVED, OTHER),
+        seat("recheck", nil, nil, true),
+    }
+    testing.eq(land.seats_problem(seats, COMMIT, OTHER), {})
+    testing.eq(wiring.seat_problems(with_seats(seats), { id = "c" }, STATE, OTHER), {})
+end)
+
+testing.test("land.asks.nothing.of.a.card.without.seats", function()
+    testing.eq(land.seats_problem({}, COMMIT), {})
+    testing.eq(wiring.seat_problems(with_seats({}), { id = "c" }, STATE), {})
+    testing.eq(wiring.seat_problems({}, { id = "c" }, STATE), {})
+end)
+
+testing.test("land.names.a.failed.seat.read", function()
+    local backend = {
+        seats = function()
+            return nil, "pomb answered 500"
+        end,
+    }
+    testing.eq(wiring.seat_problems(backend, { id = "c" }, STATE), {
+        "The card's seats could not be read: pomb answered 500",
+    })
+end)
+
 testing.test("checks_problem counts only the newest passing run at the commit", function()
     local rows = { "dev lint", "dev test" }
     local pass = checked(COMMIT, check.Mode.RUN, { "pass - dev lint", "pass - dev test" })

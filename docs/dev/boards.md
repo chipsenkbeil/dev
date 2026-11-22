@@ -3356,6 +3356,12 @@ lists each one that fails. A refusal can leave the change rebased onto trunk.
   refuses a review recorded on the credential that wrote the claim comment. The
   refusal names the reviewer and the claimant. With no `reviewer_token` the
   check is skipped.
+- On a Pomb board every seat must be approved at the landing commit. Land reads
+  the seats with the seat read, and a seat that asks for changes, has not
+  answered or approved another commit refuses and is named. A seat nobody took
+  and that never answered is skipped, and so is a card with no seats, which a
+  backend without the seat read always is. An approval of the commit the
+  carried reviews were recorded at counts. A failed read refuses and names why.
 - The newest `dev-check:` record with `mode=run` at the landing commit has a
   `pass` for every checks row, in the card's row order. A `mode=expect-fail`
   record never counts, even when it does not parse, and neither does a

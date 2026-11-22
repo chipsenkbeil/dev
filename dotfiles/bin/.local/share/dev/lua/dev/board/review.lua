@@ -28,11 +28,15 @@ M.VERDICT_FLAG = "--verdict"
 ---The verdicts in the order help lists them.
 M.VERDICTS = { M.Verdict.CLEAN, M.Verdict.MINOR, M.Verdict.NEEDS_WORK }
 
+---The verdicts a Pomb seat holds.
+---@enum dev.board.review.SeatVerdict
+M.SeatVerdict = { APPROVED = "approved", CHANGES_NEEDED = "changes_needed" }
+
 ---The seat verdict each review verdict records.
 M.SEAT_VERDICTS = {
-    [M.Verdict.CLEAN] = "approved",
-    [M.Verdict.MINOR] = "approved",
-    [M.Verdict.NEEDS_WORK] = "changes_needed",
+    [M.Verdict.CLEAN] = M.SeatVerdict.APPROVED,
+    [M.Verdict.MINOR] = M.SeatVerdict.APPROVED,
+    [M.Verdict.NEEDS_WORK] = M.SeatVerdict.CHANGES_NEEDED,
 }
 
 local JJ_TEMPLATE = 'commit_id ++ " " ++ change_id ++ "\\n"'

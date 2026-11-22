@@ -378,6 +378,43 @@ function M.shared_credentials(comments, state)
     return shared
 end
 
+---@class dev.board.land.Seat
+---@field name string? the seat's name
+---@field role string? the seat's role
+---@field verdict string? the answer, nil before one
+---@field revision string? the commit the answer is about
+---@field idle boolean? true when nobody took the seat
+
+---List the seats that do not approve the commit that would land.
+---@param seats dev.board.land.Seat[] the card's seats
+---@param commit string the full commit id that would land
+---@param carried string? an earlier commit whose reviews carry over to the commit
+---@return string[] problems one reason per seat, empty when every seat approved
+function M.seats_problem(seats, commit, carried)
+    local problems = {}
+    for _, seat in ipairs(seats) do
+        local label = "reviewer seat " .. (seat.name or "?")
+        local revision = seat.revision
+        local reason
+        if seat.verdict == review.SeatVerdict.CHANGES_NEEDED then
+            reason = string.format("The %s asks for changes.", label)
+        elseif seat.verdict ~= review.SeatVerdict.APPROVED then
+            if seat.verdict ~= nil or not seat.idle then
+                reason = string.format("The %s has not answered.", label)
+            end
+        elseif revision == nil or (revision ~= commit and revision ~= carried) then
+            reason = string.format(
+                "The %s approved commit %s, not the commit %s that would land.",
+                label,
+                seat.revision and M.short(seat.revision) or "none",
+                M.short(commit)
+            )
+        end
+        problems[#problems + 1] = reason
+    end
+    return problems
+end
+
 ---Say whether the newest run of the checks at a commit passed every row.
 ---
 ---A record made with `--expect-fail` never counts.
