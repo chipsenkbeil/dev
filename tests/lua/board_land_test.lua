@@ -1040,6 +1040,22 @@ esac
         end)
     end)
 
+    testing.test("dev land prints the no change run line once", function()
+        local project, id = gerrit_project()
+        local stubs = project.env.PATH:match("^([^:]+)")
+        assert(fs.write(stubs .. "/runs.json", '{"runs":[]}'), "write failed")
+        local out, code = dev(
+            project,
+            { "land", "--card", id },
+            { LAND_TRUNK = LAND_TRUNK_KEEP, FETCH_SKIP = "1", PATH = project.env.PATH }
+        )
+        testing.eq(code, 0, out)
+        local line = "No change run of commit"
+        local first = out:find(line, 1, true)
+        testing.ok(first, out)
+        testing.eq(out:find(line, first + 1, true), nil, out)
+    end)
+
     local function second_card(project)
         local args = {
             "board",
