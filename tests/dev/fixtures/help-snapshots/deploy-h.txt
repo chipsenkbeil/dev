@@ -1,8 +1,0 @@
-dev deploy
-  Deploy the project (needs .dev/deploy.sh)
-
-usage
-  dev deploy
-
-Run `dev deploy --help` for the script header and the command it runs.
-exit 0

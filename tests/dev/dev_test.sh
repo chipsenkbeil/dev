@@ -323,12 +323,10 @@ for flag in --type --name --dry-run --no-gerrit; do
 done
 help_out="$(run_dev "$rust" help -a)"
 verbs_out="$(run_dev "$rust" __verbs)"
-for verb in lint fmt test build run deploy push pull sync init help; do
+for verb in lint fmt test build run push pull sync init help; do
     assert_contains "help lists built-in $verb" "$help_out" "  $verb "
     assert_contains "__verbs lists built-in $verb" "$verbs_out" "$verb	"
 done
-out="$(run_dev "$rust" help deploy)"
-assert_contains "help deploy shows the table's usage line" "$out" "Add .dev/deploy.sh."
 out="$(run_dev "$rust" __flags install)"
 assert_eq "__flags reads the flags line of a script and adds the global flags" "$out" "--now
 --later

@@ -47,13 +47,6 @@ return {
         group = "Check your work",
     },
     {
-        words = { "deploy" },
-        handler = "lua",
-        usage = "Add .dev/deploy.sh.",
-        desc = "Deploy the project (needs .dev/deploy.sh)",
-        group = "Share it",
-    },
-    {
         words = { "push" },
         handler = "lua",
         flags = "--tag",

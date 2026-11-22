@@ -13,14 +13,6 @@ local function exec(argv, opts)
     return dev_os.EXEC_FAILED
 end
 
----Say the project has no deploy of its own.
----@param _ dev.Ctx the verb's context
----@return integer code 1
-function M.deploy(_)
-    verb.note("Deploy has no built-in. Add `.dev/deploy.sh`.")
-    return 1
-end
-
 ---Show the overview, or ask `guide` a question about this repo's commands and topics.
 ---
 ---With no question it shows the `overview` topic when there is one, a blank line, then the curated

@@ -9,7 +9,6 @@ Check your work
   fetch                 Download the crates and advisory data for offline lint and test
 
 Share it
-  deploy                Deploy the project (needs .dev/deploy.sh)
   push                  Push the trunk or current branch to the remote of record
   abandon               Abandon an open Gerrit change by its number or Change-Id
   pull                  Fetch the remote and rebase local work onto it

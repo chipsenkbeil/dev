@@ -11,7 +11,7 @@ The luajit modules of `dev`, one per item.
   `say`, `relay`, `note`, `die`, `show`, `need`).
 - `dev.cmd.types`: the project type's built-ins and the command lines
   `dev help <verb>` prints for them.
-- `dev.cmd.misc`: `deploy`, `guide` and `bootstrap`.
+- `dev.cmd.misc`: `guide` and `bootstrap`.
 - `dev.cmd.tools`: `tools install` and `tools check`.
 - `dev.cmd.land`: `land`, which reads the card from the workspace name through
   `dev.scm` and `dev.board`, refuses it through the card's `land_problem`,
