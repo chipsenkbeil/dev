@@ -3818,9 +3818,11 @@ A failed command:
 - `ship` moves no card and prints the last lines of the failing row, then a
   suspect list. The list names the landed cards that touched each failing test
   file, which are the files on the row's `FAIL PATH` lines.
-- A card counts when its landed commit touched the test file or a Lua file the
-  test loads through `require`, directly or through another file. Only cards
-  that would have shipped are listed.
+- A card counts when its landed commit touched the test file, a Lua file the
+  test loads through `require`, directly or through another file, or a repo
+  file the test names in a quoted string. A quoted string counts as the file
+  itself, with no further traversal, and a path that does not exist is
+  ignored. Only cards that would have shipped are listed.
 - When no card in the batch touched a failing file, the list says so. When the
   row printed no `FAIL` line, it says that instead.
 - When a batch of two or more cards matches in full, the list says so and names

@@ -27,12 +27,31 @@ local function module_file(root, name)
     end
 end
 
----List a file and every Lua file it loads, directly or through another, with `require`.
+---Add each existing repo file that the text names in a quoted string.
+---@param root string the project root
+---@param text string the text to scan
+---@param found table<string, boolean> the paths found so far, updated in place
+local function add_quoted(root, text, found)
+    for _, pattern in ipairs({ '"([^"\n]+)"', "'([^'\n]+)'" }) do
+        for name in text:gmatch(pattern) do
+            if fs.read(root .. "/" .. name) then
+                found[name] = true
+            end
+        end
+    end
+end
+
+---List a file, the Lua files it loads with `require`, directly or through another, and the repo
+---files it names in a quoted string.
+---A quoted file counts as itself. Only the first file is scanned for quoted names, and a quoted
+---file is not traversed.
 ---@param root string the project root
 ---@param path string the file, relative to the root
 ---@return table<string, boolean> loaded the paths, the file itself included
 function M.loaded(root, path)
     local seen, queue = { [path] = true }, { path }
+    local quoted = {}
+    add_quoted(root, fs.read(root .. "/" .. path) or "", quoted)
     local at = 1
     while queue[at] do
         local text = fs.read(root .. "/" .. queue[at]) or ""
@@ -44,6 +63,9 @@ function M.loaded(root, path)
                 queue[#queue + 1] = file
             end
         end
+    end
+    for name in pairs(quoted) do
+        seen[name] = true
     end
     return seen
 end

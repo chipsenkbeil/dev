@@ -474,6 +474,42 @@ if dev_os.which("jj") then
         end
     )
 
+    testing.test("ship.names.the.card.that.touched.a.file.the.failing.test.names", function()
+        local out = red_ship("tests/lua/q_test.lua", {
+            {
+                path = "tests/lua/q_test.lua",
+                text = table.concat(
+                    { 'local a = "agents/q.md"', 'local b = "agents/missing.md"', "" },
+                    "\n"
+                ),
+            },
+            { name = "Quoted", path = "agents/q.md" },
+            { name = "Bystander", path = "docs/other.md" },
+        })
+        testing.ok(out:find("tests/lua/q_test.lua:\n", 1, true), out)
+        testing.ok(out:find("Quoted", 1, true), out)
+        testing.eq(out:find("Bystander", 1, true), nil)
+        testing.eq(out:find("missing", 1, true), nil)
+    end)
+
+    testing.test("ship.still.follows.requires.of.a.lua.file.the.failing.test.quotes", function()
+        local lua = "dotfiles/bin/.local/share/dev/lua/dev/"
+        local out = red_ship("tests/lua/r_test.lua", {
+            {
+                path = "tests/lua/r_test.lua",
+                text = table.concat(
+                    { 'local a = "' .. lua .. 'mid.lua"', 'require("dev.mid")', "" },
+                    "\n"
+                ),
+            },
+            { path = lua .. "mid.lua", text = 'require("dev.leaf")\n' },
+            { name = "Leafy", path = lua .. "leaf.lua" },
+            { name = "Bystander", path = "docs/other.md" },
+        })
+        testing.ok(out:find("Leafy", 1, true), out)
+        testing.eq(out:find("Bystander", 1, true), nil)
+    end)
+
     testing.test("ship.says.a.row.with.no.fail.line.names.no.suspect", function()
         local out = red_ship(nil, { { name = "Bystander", path = "docs/other.md" } })
         testing.ok(out:find("printed no FAIL line, so no suspect is named", 1, true), out)
