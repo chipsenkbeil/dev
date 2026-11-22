@@ -479,6 +479,21 @@ local function is_lead(name, interactive)
     return role_of(name) == "lead"
 end
 
+---The roles that review a card
+local REVIEWER_ROLES = {
+    ["code-examiner"] = true,
+    ["style-examiner"] = true,
+    ["recheck-examiner"] = true,
+    verifier = true,
+}
+
+---Check whether a name has a reviewing role.
+---@param name string the agent name
+---@return boolean reviewer true for the code, style and recheck reviewers and the verifier
+local function is_reviewer(name)
+    return REVIEWER_ROLES[role_of(name) or ""] == true
+end
+
 ---Check whether a name has a role that edits a card without building it.
 ---@param name string the agent name
 ---@return boolean edits true for the lead and planner roles
@@ -597,6 +612,7 @@ M.proof_refusal = proof_refusal
 M.tick_refused = tick_refused
 M.claimant_refused = claimant_refused
 M.is_lead = is_lead
+M.is_reviewer = is_reviewer
 M.delete_refusal = delete_refusal
 M.Refusal = Refusal
 

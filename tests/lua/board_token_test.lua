@@ -11,6 +11,7 @@ local support = require("support")
 local LEAD = "pomb_LEADtoken0123456789"
 local WORKER = "pomb_WORKERtoken0123456789"
 local RAW = "pomb_ROLEtoken0123456789"
+local STANDING = "pomb_STANDINGtoken0123456789"
 local ENV_TOKEN = "pomb_ENVtoken0123456789"
 local NAME = "dotfiles/implementer/72f0e012/1"
 local EXPIRES = 4102444800
@@ -87,6 +88,8 @@ local function sandbox()
         '#!/bin/sh\nprintf "pass %s\\n" "$*" >>"$ROOT/calls"\n'
             .. 'case "$*" in *Lead*) echo "'
             .. LEAD
+            .. '" ;; *Reviewer*) echo "'
+            .. STANDING
             .. '" ;; *) echo "'
             .. WORKER
             .. '" ;; esac\n'
@@ -808,4 +811,87 @@ testing.test("token mint without renew still refuses a live name and deletes not
     testing.ok(out:find("Another token already has the name " .. NAME, 1, true), out)
     testing.eq(read(root, "calls"):find("-X DELETE", 1, true), nil, read(root, "calls"))
     testing.eq(fs.read(path), RAW .. "\n" .. EXPIRES .. "\n")
+end)
+
+local REVIEWERS = {
+    "dotfiles/code-examiner/bff0e010",
+    "dotfiles/style-examiner/bff0e010",
+    "dotfiles/recheck-examiner/bff0e010",
+    "dotfiles/verifier/bff0e010",
+}
+
+local function standing(home)
+    assert(
+        fs.write(
+            home .. "/.config/dev/config.toml",
+            USER .. 'reviewer_token = "pass:secrets/reviewer/token/pomb"\n'
+        )
+    )
+end
+
+local function filed_as(root, home, name)
+    local out, code =
+        dev(root, home, { "board", "token", "mint", "--role", "reviewer", "--as", name })
+    testing.ok(code == 0, out)
+    assert(fs.write(root .. "/calls", ""))
+    assert(fs.write(root .. "/stdin", ""))
+end
+
+testing.test("a reviewer name sends the standing reviewer token", function()
+    for _, name in ipairs(REVIEWERS) do
+        local root, home = sandbox()
+        filed_as(root, home, name)
+        standing(home)
+        local out, code = dev(root, home, { "board", "boards" }, {
+            agent = name,
+            env = { DEV_BOARD_TOKEN = ENV_TOKEN },
+        })
+        testing.ok(code == 0, out)
+        local sent = read(root, "stdin")
+        testing.ok(sent:find("Bearer " .. STANDING, 1, true), name .. "\n" .. sent)
+        testing.eq(sent:find(RAW, 1, true), nil, sent)
+        testing.eq(sent:find(ENV_TOKEN, 1, true), nil, sent)
+        testing.eq(sent:find(WORKER, 1, true), nil, sent)
+        testing.eq(read(root, "calls"):find(STANDING, 1, true), nil)
+    end
+end)
+
+testing.test("a reviewer name with no standing token reads its own file", function()
+    for _, name in ipairs(REVIEWERS) do
+        local root, home = sandbox()
+        filed_as(root, home, name)
+        local out, code = dev(root, home, { "board", "boards" }, { agent = name })
+        testing.ok(code == 0, out)
+        local sent = read(root, "stdin")
+        testing.ok(sent:find("Bearer " .. RAW, 1, true), name .. "\n" .. sent)
+        testing.eq(sent:find(STANDING, 1, true), nil, sent)
+        testing.eq(occurrences(read(root, "calls"), "Reviewer"), 0)
+    end
+
+    local root, home = sandbox()
+    local out, code = dev(root, home, { "board", "boards" }, { agent = REVIEWERS[1] })
+    testing.ok(code == 0, out)
+    testing.ok(read(root, "stdin"):find("Bearer " .. WORKER, 1, true), read(root, "stdin"))
+    testing.eq(read(root, "stdin"):find(STANDING, 1, true), nil)
+    testing.eq(occurrences(read(root, "calls"), "Reviewer"), 0)
+end)
+
+testing.test("a runner name never sends the standing reviewer token", function()
+    local names = {
+        NAME,
+        "dotfiles/implementer/other/1",
+        "dotfiles/runner/bff0e010",
+        "dotfiles/lead/1",
+        "dotfiles/planner/1",
+        "dotfiles/reviewer/bff0e010",
+    }
+    for _, name in ipairs(names) do
+        local root, home = minted()
+        standing(home)
+        local out, code = dev(root, home, { "board", "boards" }, { agent = name })
+        testing.ok(code == 0, name .. "\n" .. out)
+        local sent = read(root, "stdin")
+        testing.eq(sent:find(STANDING, 1, true), nil, name .. "\n" .. sent)
+        testing.eq(occurrences(read(root, "calls"), "Reviewer"), 0, name)
+    end
 end)

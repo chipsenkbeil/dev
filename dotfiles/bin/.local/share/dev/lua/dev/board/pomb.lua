@@ -114,6 +114,7 @@ M.Reason = { BAD_URL = "bad_url" }
 ---@field token string? `pass:<entry>`, where the token is kept, unneeded when `authorize` gives one
 ---@field name string the board's name
 ---@field lead boolean? true to send the configured token and never the issued or filed one
+---@field standing boolean? true when `token` is the standing reviewer token, sent in place of the issued or filed one
 
 ---@class dev.board.pomb.Detail
 ---@field id string the board's id
@@ -354,14 +355,15 @@ function Backend:__request(method, path, body, fence, seconds, file, save)
     end
     if not self.__secret then
         local token, message, why
-        if not self.__opts.lead then
+        local configured = self.__opts.lead or self.__opts.standing
+        if not configured then
             token, message = issued()
         end
         if message then
             return nil, message
         end
         self.__issued = token and ISSUED_REFUSED or nil
-        if not token and not self.__opts.lead then
+        if not token and not configured then
             token, message = filed()
             if message then
                 return nil, message

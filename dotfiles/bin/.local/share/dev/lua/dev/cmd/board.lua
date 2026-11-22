@@ -5166,6 +5166,7 @@ function M.run(sub, args, backend, now, screen)
 end
 
 local LEAD_TOKEN_KEY = "lead_token"
+local REVIEWER_TOKEN_KEY = "reviewer_token"
 
 local function open_backend(settings, token_key)
     if settings.backend == board.Backend.LOCAL then
@@ -5185,11 +5186,15 @@ local function open_backend(settings, token_key)
             private = true,
         })
     end
+    local standing = token_key ~= LEAD_TOKEN_KEY
+        and guards.is_reviewer(os.getenv("DEV_AGENT") or "")
+        and config.user("board.pomb." .. REVIEWER_TOKEN_KEY) ~= nil
     local backend, reason = pomb.new({
         url = config.user("board.pomb.url"),
-        token = config.user("board.pomb." .. token_key),
+        token = config.user("board.pomb." .. (standing and REVIEWER_TOKEN_KEY or token_key)),
         name = settings.name,
         lead = token_key == LEAD_TOKEN_KEY,
+        standing = standing,
     })
     if not backend then
         return nil, POMB_REFUSALS[reason]

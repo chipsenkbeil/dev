@@ -93,6 +93,7 @@ The server and the token live once in the user file
 url = "https://pomb.example.com"
 token = "pass:secrets/worker/token/pomb.example.com"
 lead_token = "pass:secrets/lead/token/pomb.example.com"
+reviewer_token = "pass:secrets/reviewer/token/pomb.example.com"
 ```
 
 dev reads `[board.pomb]` from the user file alone, so a repository cannot send
@@ -281,11 +282,19 @@ owner's, and it compares tokens, never names. A reviewer on the shared agents
 token would hold the implementer's credential, so each reviewer holds a role
 token of its own.
 
+- The standing token: `reviewer_token` in `[board.pomb]` is a `pass:<entry>`
+  reference, as `lead_token` is. When the role segment of `DEV_AGENT` is
+  `code-examiner`, `style-examiner`, `recheck-examiner` or `verifier`, dev
+  sends that token in place of the `DEV_BOARD_TOKEN`, the token file and the
+  shared `token`. A runner, an implementer or any other name never sends it.
+- With `reviewer_token` unset nothing changes: dev reads the token file of the
+  name, then the shared token, and the lead mints per name as below.
 - The lead mints one per reviewer name with `dev board token mint --role ROLE
   --as NAME`, for the code reviewer, the style reviewer, the recheck reviewer
   and the verifier, for example `dotfiles/code-examiner/f5f0e007`.
 - The runner messages the lead with the role and name pairs before it
-  dispatches. It never mints, reads or prints a token.
+  dispatches only when no standing token exists. It never mints, reads or
+  prints a token.
 - A reviewer runs `dev board review` under `DEV_AGENT=NAME`, and dev reads
   the token file that the hash of NAME names. The runner passes NAME in the
   prompt, and no token reaches a prompt, an argument list or a log.
