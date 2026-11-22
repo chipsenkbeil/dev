@@ -470,7 +470,10 @@ EOF
     printf 'local a = UNFORMATTED\n' >"$lua/.dev/x.lua"
     printf 'local a = UNFORMATTED\n' >"$lua/.ci/y.lua"
     printf 'local a = UNFORMATTED\n' >"$lua/src/other.lua"
+    : >"$stylua_log"
     (cd "$lua" && env PATH="$stylua_path" DEV_REMOTE=0 STYLUA_LOG="$stylua_log" bash "$DEV" fmt >/dev/null 2>&1)
+    assert_contains "the lua fmt sends the .dev Lua to stylua" "$(cat "$stylua_log")" ".dev/x.lua"
+    assert_not_contains "the lua fmt passes stylua no stylua.toml argument" "$(cat "$stylua_log")" "stylua.toml"
     assert_eq "dev fmt formats the .dev Lua of a lua project" "$(cat "$lua/.dev/x.lua")" "local a = formatted"
     assert_eq "dev fmt formats the .ci Lua of a lua project" "$(cat "$lua/.ci/y.lua")" "local a = formatted"
     assert_eq "dev fmt formats the visible Lua of a lua project" "$(cat "$lua/src/other.lua")" "local a = formatted"
