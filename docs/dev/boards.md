@@ -1316,7 +1316,9 @@ a link that would make a cycle, and a local board refuses them too, naming the
 two cards the link joins. Epics count their direct children.
 
 A local board stores the links on its own cards, links only its own cards, and
-its `next` skips a card that a card outside Done blocks.
+its `next` skips a card that a card outside Release and Done blocks. A card in
+Release is already on trunk, so a card it blocks can build on it before the
+ship moves it to Done.
 
 `links CARD` lists a card's links, one line each:
 
@@ -1970,10 +1972,11 @@ prints the top Ready card that is unclaimed, not blocked and not labelled
 - `--column blocked` takes the top unclaimed card labelled `needs:lead`, or
   with `--for planner` `needs:planner`. It never takes one labelled
   `needs:human`.
-- Like every `next`, it never takes a card that a card outside Done blocks, nor
-  an epic with a child that is not Done.
-- A blocker on another board counts only while it is outside Done, and a card
-  on that board that cannot be read counts as open.
+- Like every `next`, it never takes a card that a card outside Release and Done
+  blocks, nor an epic with a child that is not Done.
+- A blocker on another board counts only while it is outside Release and Done
+  (a Release card is already on trunk), and a card on that board that cannot
+  be read counts as open.
 - The Ready column also sends Pomb's `ready=true` filter.
 - Any other column is exit 2.
 - `--max-size N` (1, 2 or 3, else exit 2), or `DEV_MAX_SIZE` when the flag is
@@ -2387,11 +2390,12 @@ session responsible for a card.
 - A local board refuses a self link and a cycle itself, and links only its own
   cards (`BOARD:` is exit 1).
 - A local board's `next` skips a card with a `blocked_by` target outside a Done
-  column.
+  or Release column.
 - `take` and `move CARD progress` refuse a card in Icebox, Backlog or Ready
-  while a `blocked_by` card is outside Done, and name that open blocker. A board
-  that cannot be read refuses with the reason. A planner or scoper taking a card
-  to plan it, and a card in any later column, are not refused.
+  while a `blocked_by` card is outside Release and Done, and name that open
+  blocker. A Release card is already on trunk, so it no longer holds the card.
+  A board that cannot be read refuses with the reason. A planner or scoper
+  taking a card to plan it, and a card in any later column, are not refused.
 
 ### links
 

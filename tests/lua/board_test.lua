@@ -10331,6 +10331,61 @@ testing.test("move to In Progress takes a card from Review past an open blocker"
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
+local RELEASE_DETAIL = DETAIL:gsub(
+    '{"id":"col%-done"',
+    '{"id":"col-verify","name":"Verify"},{"id":"col-release","name":"Release"},{"id":"col-done"'
+)
+
+local function blocker_sandbox(blocker_column)
+    local export = '{"tasks":['
+        .. support.pomb_export_task({
+            id = ID_A,
+            name = "First",
+            column_id = READY_COLUMN,
+            color_id = "yellow-id",
+            description = PLANNED_TEXT,
+            subtasks = SUBTASKS,
+            fields = READY_FIELDS,
+        })
+        .. ","
+        .. support.pomb_export_task({
+            id = ID_B,
+            name = "Second",
+            column_id = support.column_id(blocker_column),
+            position = 2,
+            color_id = false,
+        })
+        .. "]}"
+    return sandbox({
+        export = export,
+        detail = RELEASE_DETAIL,
+        links = '[{"kind":"blocked_by","target_id":"' .. ID_B .. '"}]',
+    })
+end
+
+testing.test("a blocker in Release does not hold a card", function()
+    local root, home = blocker_sandbox(support.Column.RELEASE)
+    local out, code = dev(root, home, { "board", "next" })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("^11111111", 1), out)
+    out, code = dev(root, home, { "board", "take", "11111111-a" })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("^took 11111111"), out)
+    dev(root, home, { "board", "release", "11111111-a" })
+end)
+
+testing.test("a blocker in Verify or Ready still holds a card", function()
+    for _, column in ipairs({ support.Column.VERIFY, support.Column.READY }) do
+        local root, home = blocker_sandbox(column)
+        local out, code = dev(root, home, { "board", "next" })
+        testing.eq(code, 0, out)
+        testing.eq(out, "No ready cards.\n")
+        out, code = dev(root, home, { "board", "take", "11111111-a" })
+        testing.eq(code, 1, out)
+        testing.ok(out:find("blocked by open card", 1, true), out)
+    end
+end)
+
 testing.test("take of a card in Verify is not held to the Ready requirements", function()
     local export = export_with_first_card({
         column_id = support.column_id(support.Column.VERIFY),

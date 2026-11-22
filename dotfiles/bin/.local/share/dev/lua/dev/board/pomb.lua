@@ -1255,16 +1255,19 @@ function Backend:blocked(id)
     return self:__blocked(links)
 end
 
----Report whether `blocked_by` links hold a card: a linked card holds it unless it is in Done, and
----a card that cannot be read holds it too.
+---Report whether `blocked_by` links hold a card: a linked card holds it unless it is in Done or
+---Release, where it is already on trunk, and a card that cannot be read holds it too.
 ---@param links dev.board.Link[] the links the card holds
 ---@return boolean? blocked, string? blocker the open blocker's id, or with nil the message
 function Backend:__blocked(links)
     for _, link in ipairs(links) do
         if link.kind == "blocked_by" then
             local target
+            local stages = self:__stages()
             if link.board then
-                target = self:other_board(link.board):card(link.id)
+                local home = self:other_board(link.board)
+                target = home:card(link.id)
+                stages = board.stages(self.column_map, home:done_columns() or {})
             else
                 local cards, message = self:cards()
                 if not cards then
@@ -1276,7 +1279,7 @@ function Backend:__blocked(links)
                     end
                 end
             end
-            if not target or not target.done then
+            if not target or not (target.done or target.column == stages.release) then
                 return true, link.board and (link.board .. ":" .. link.id) or link.id
             end
         end

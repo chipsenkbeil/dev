@@ -1092,6 +1092,53 @@ testing.test(
     end
 )
 
+testing.test("a blocker in Release does not hold a card on a local board", function()
+    local root, home = local_board()
+    local function add(name)
+        return prefix_of((dev(root, home, {
+            "board",
+            "add",
+            name,
+            "--column",
+            Column.READY,
+            "--size",
+            "1",
+            "--description",
+            PLANNED,
+            "--done-when",
+            JUDGED,
+            "--done-when",
+            JUDGED,
+            "--done-when",
+            JUDGED,
+            "--checks",
+            "dev test",
+        })))
+    end
+    local blocked, blocker = add("Blocked"), add("Blocker")
+    dev(root, home, { "board", "link", blocked, "blocked_by", blocker })
+    local function place(name)
+        local doc = document(file_of(home))
+        local column_id
+        for _, column in ipairs(doc.columns) do
+            if column.name == name then
+                column_id = column.id
+            end
+        end
+        for _, card in ipairs(doc.cards) do
+            if card.id:sub(1, #blocker) == blocker then
+                card.column_id = column_id
+            end
+        end
+        assert(fs.write(file_of(home), assert(json.encode(doc))))
+    end
+    place(support.COLUMN_NAME.VERIFY)
+    testing.eq(dev(root, home, { "board", "next" }), "No ready cards.\n")
+    place(support.COLUMN_NAME.RELEASE)
+    local out = dev(root, home, { "board", "next" })
+    testing.ok(out:find("^" .. blocked), out)
+end)
+
 testing.test("next returns a card whose blocker the board no longer holds", function()
     local root, home = local_board()
     local function add(name)

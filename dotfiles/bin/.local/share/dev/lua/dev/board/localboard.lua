@@ -372,11 +372,11 @@ local function depends_on(doc, from, goal, seen)
     return false
 end
 
-local function is_blocked(doc, card)
+local function is_blocked(doc, card, release_column)
     for _, blocker in ipairs(blockers(card)) do
         local held = find_by_id(doc.cards, blocker)
         local column = held and find_by_id(doc.columns, held.column_id)
-        if held and not (column and column.is_done) then
+        if held and not (column and (column.is_done or column.name == release_column)) then
             return true, blocker
         end
     end
@@ -397,7 +397,7 @@ function Backend:blocked(id)
     if not card then
         return nil, message
     end
-    return is_blocked(doc, card)
+    return is_blocked(doc, card, (self.stages or board.stages()).release)
 end
 
 function Backend:link(id, kind, other)
@@ -692,7 +692,7 @@ function Backend:next(column, opts)
         if
             card.column_id == target.id
             and not live(card.claim)
-            and not is_blocked(doc, card)
+            and not is_blocked(doc, card, (self.stages or board.stages()).release)
             and not board.labelled(card, board.NEEDS_HUMAN)
             and not board.labelled(card, board.RUN)
             and not board.is_turn_card(card)
