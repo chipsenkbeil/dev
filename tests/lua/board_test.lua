@@ -3804,12 +3804,12 @@ testing.test("outcome appends, rewords, ticks and unticks by number", function()
     local card = colored("green")
     card.outcomes = outcomes(3, 1)
     local backend = fake({ card })
-    local result = cmd_board.run("outcome", { "cccccccc", "Fourth", "works" }, backend)
+    local result = cmd_board.run("outcome", { "cccccccc", "Fourth works" }, backend)
     testing.eq(result.output, "outcome cccccccc 4 added")
     testing.eq(backend.calls[1], { "add_outcome", ID_C, "Fourth works", nil })
     result = cmd_board.run(
         "outcome",
-        { "cccccccc", "--rename", "2", "New", "words", "--reason", "it was vague" },
+        { "cccccccc", "--rename", "2", "New words", "--reason", "it was vague" },
         backend
     )
     testing.eq(result.output, "outcome cccccccc 2 reworded")
@@ -3820,6 +3820,23 @@ testing.test("outcome appends, rewords, ticks and unticks by number", function()
     result = cmd_board.run("outcome", { "cccccccc", "--untick", "1" }, backend)
     testing.eq(result.output, "outcome cccccccc 1 unticked")
     testing.eq(backend.calls[5], { "set_outcome", ID_C, "s1", { done = false }, nil })
+end)
+
+testing.test("outcome refuses more than one text argument", function()
+    local card = colored("green")
+    card.outcomes = outcomes(3, 1)
+    local backend = fake({ card })
+    local result = cmd_board.run("outcome", { "cccccccc", "Fourth", "works" }, backend)
+    testing.eq(result.code, 2)
+    testing.ok(result.message:find("run outcome once per outcome", 1, true), result.message)
+    result = cmd_board.run(
+        "outcome",
+        { "cccccccc", "--rename", "2", "New", "words", "--reason", "it was vague" },
+        backend
+    )
+    testing.eq(result.code, 2)
+    testing.ok(result.message:find("run outcome once per outcome", 1, true), result.message)
+    testing.eq(#backend.calls, 0)
 end)
 
 testing.test("a plain move from Review to Verify is refused", function()
@@ -3956,8 +3973,7 @@ testing.test("outcome appends text that holds -- after its first word", function
     local card = colored("green")
     card.outcomes = outcomes(3)
     local backend = fake({ card })
-    local result =
-        cmd_board.run("outcome", { "cccccccc", "Pass", "--", "as", "a", "word" }, backend)
+    local result = cmd_board.run("outcome", { "cccccccc", "Pass -- as a word" }, backend)
     testing.eq(result.output, "outcome cccccccc 4 added")
     testing.eq(backend.calls[1], { "add_outcome", ID_C, "Pass -- as a word", nil })
 end)
@@ -4135,7 +4151,7 @@ testing.test(
         local backend = fake({ card })
         local result = cmd_board.run(
             "outcome",
-            { "cccccccc", "--rename", "2", "New", "words", "--reason", "it", "was", "vague" },
+            { "cccccccc", "--rename", "2", "New words", "--reason", "it", "was", "vague" },
             backend
         )
         testing.eq(result.output, "outcome cccccccc 2 reworded")
@@ -4363,7 +4379,7 @@ do
     testing.test("an outcome add in a locked column is refused with the column named", function()
         for _, column in ipairs(LOCKED_COLUMNS) do
             local backend = locked_fake(column)
-            refused_in_locked(outcome_run(backend, { "cccccccc", "A", "new", "outcome" }), column)
+            refused_in_locked(outcome_run(backend, { "cccccccc", "A new outcome" }), column)
             testing.eq(#writes(backend), 0)
             backend = locked_fake(column)
             refused_in_locked(outcome_run(backend, { "cccccccc", "--convert" }), column)
@@ -4392,7 +4408,7 @@ do
         }) do
             local backend = locked_fake(column)
             testing.eq(
-                outcome_run(backend, { "cccccccc", "A", "new", "outcome" }).output,
+                outcome_run(backend, { "cccccccc", "A new outcome" }).output,
                 "outcome cccccccc 3 added"
             )
             testing.eq(
@@ -4438,7 +4454,7 @@ do
         function backend:columns()
             return nil, "pomb is down"
         end
-        local result = outcome_run(backend, { "cccccccc", "A", "new", "outcome" })
+        local result = outcome_run(backend, { "cccccccc", "A new outcome" })
         testing.eq(result.code, 1)
         testing.ok(result.message:find("pomb is down", 1, true), result.message)
         testing.eq(#writes(backend), 0)
@@ -4665,7 +4681,7 @@ do
         local backend = backend_with_released_claim(released)
         as_agent(released, function()
             local runs = {
-                { "outcome", { "cccccccc", "A", "new", "outcome" } },
+                { "outcome", { "cccccccc", "A new outcome" } },
                 { "outcome", { "cccccccc", "--rename", "1", "New", "--reason", "x" } },
                 { "checks", { "cccccccc", "dev test" } },
                 { "outcome", { "cccccccc", "--convert" } },
@@ -4859,7 +4875,7 @@ testing.test("--as in any position leaves the text and the reason alone", functi
     card.claimant = nil
     result = cmd_board.run(
         "outcome",
-        { "cccccccc", "--rename", "2", "New", "words", "--as", "project-run/b", "--reason", "why" },
+        { "cccccccc", "--rename", "2", "New words", "--as", "project-run/b", "--reason", "why" },
         backend
     )
     testing.eq(result.output, "outcome cccccccc 2 reworded")
@@ -4873,7 +4889,7 @@ testing.test("a reason that starts with --as stays text", function()
     local backend = fake({ card })
     local result = cmd_board.run(
         "outcome",
-        { "cccccccc", "--rename", "2", "New", "words", "--reason", "--as", "is", "a", "flag" },
+        { "cccccccc", "--rename", "2", "New words", "--reason", "--as", "is", "a", "flag" },
         backend
     )
     testing.eq(result.output, "outcome cccccccc 2 reworded")
@@ -4890,7 +4906,7 @@ testing.test("--as names one word and is text in an added outcome", function()
         2
     )
     testing.eq(#backend.calls, 0)
-    local result = cmd_board.run("outcome", { "cccccccc", "Text", "--as", "x" }, backend)
+    local result = cmd_board.run("outcome", { "cccccccc", "Text --as x" }, backend)
     testing.eq(result.output, "outcome cccccccc 3 added")
     testing.eq(backend.calls[1], { "add_outcome", ID_C, "Text --as x", nil })
 end)

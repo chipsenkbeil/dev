@@ -51,6 +51,10 @@ dev board sync
 dev board wait --for ready
 ```
 
+`dev board outcome` takes the outcome text, and the text after `--rename`, as
+one quoted argument. It refuses a second text argument and says to run
+`outcome` once per outcome.
+
 A project's `.dev/standalone/` is reserved for shell that must run where dev
 cannot, such as a production server. Line 2 of each script there reads
 `# standalone: runs on <where>, where dev is absent`. `dev lint` fails on any

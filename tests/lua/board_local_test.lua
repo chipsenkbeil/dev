@@ -2477,7 +2477,7 @@ testing.test("on a local board an early tick keeps a Review card in Review", fun
     local out, code = dev(
         root,
         home,
-        { "board", "outcome", a, "Second", "works" },
+        { "board", "outcome", a, "Second works" },
         { DEV_AGENT = "dotfiles/planner" }
     )
     testing.eq(code, 0, out)

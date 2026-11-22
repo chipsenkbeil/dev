@@ -160,6 +160,8 @@ local OUTCOME_FLAGS = {
     [DELETE_FLAG] = OutcomeMode.DELETE,
 }
 local CONVERT_FLAG = "--convert"
+local MULTI_TEXT_USAGE = "The outcome text is more than one argument. "
+    .. "Quote the outcome as one argument and run outcome once per outcome."
 
 ---Find the word that names an outcome form, which may follow a leading `--as NAME`.
 ---@param args string[] the card and the form's words
@@ -2980,7 +2982,10 @@ function commands.outcome(backend, args)
         if misplaced then
             return usage(misplaced)
         end
-        mode, text = OutcomeMode.ADD, table.concat(args, " ", 2)
+        if #args > 2 then
+            return usage(MULTI_TEXT_USAGE)
+        end
+        mode, text = OutcomeMode.ADD, args[2]
     elseif mode == OutcomeMode.RENAME then
         if #args < 4 then
             return usage("The --rename flag needs an outcome number and the new text.")
@@ -2995,7 +3000,10 @@ function commands.outcome(backend, args)
         if not at then
             return usage("The --rename flag needs " .. REASON_FLAG .. " TEXT.")
         end
-        word, text = args[3], table.concat(args, " ", 4, at - 1)
+        if at - 1 > 4 then
+            return usage(MULTI_TEXT_USAGE)
+        end
+        word, text = args[3], args[4]
         reason = table.concat(args, " ", at + 1)
         if not reason:find("%S") then
             return usage("The " .. REASON_FLAG .. " flag needs the reason.")
