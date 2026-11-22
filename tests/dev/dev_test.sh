@@ -1094,6 +1094,44 @@ assert_contains "an agent's default run of a # local verb under remote default l
 out="$(HOME="$TMP/agent-home" DEV_REMOTE='' cirun "$agentlocal" check 2>&1)"
 assert_contains "DEV_AGENT unset runs a default run here under remote default local" "$out" "check ran"
 
+prim="$(project prim)"
+mkdir -p "$prim/.dev"
+git -C "$prim" init -q
+printf '#!/usr/bin/env bash\necho install ran\n' >"$prim/.dev/install.sh"
+printf '#!/usr/bin/env bash\necho notes ran\n' >"$prim/.dev/notes.sh"
+chmod +x "$prim/.dev/install.sh" "$prim/.dev/notes.sh"
+git -C "$prim" add -A
+git -C "$prim" -c user.name=t -c user.email=t@t commit -q -m init
+git -C "$prim" worktree add -q "$TMP/primwt" 2>/dev/null
+out="$(DEV_AGENT=repo/implementer/c cirun "$prim" install 2>&1)"
+assert_eq "workspace role install in the primary checkout exits 2" "$?" "2"
+assert_contains "workspace role refusal names the verb and dev -C WS" "$out" "dev install: DEV_AGENT is the workspace role implementer, which never runs it in the primary checkout. Use \`dev -C WS install\` from your own workspace."
+assert_not_contains "workspace role install in the primary checkout runs nothing" "$out" "install ran"
+for role in planner reviewer verifier; do
+    out="$(DEV_AGENT=repo/$role/c cirun "$prim" install 2>&1)"
+    assert_eq "the $role role is refused in the primary checkout" "$?" "2"
+done
+out="$(DEV_AGENT=repo/implementer/c cirun "$prim" tools install 2>&1)"
+assert_eq "workspace role tools install in the primary checkout exits 2" "$?" "2"
+assert_contains "workspace role tools install refusal names both words" "$out" "dev tools install: DEV_AGENT is the workspace role"
+out="$(DEV_AGENT=repo/implementer/c cirun "$prim" board land 2>&1)"
+assert_eq "workspace role board land in the primary checkout exits 2" "$?" "2"
+assert_contains "workspace role board land refusal names both words" "$out" "dev board land: DEV_AGENT is the workspace role"
+out="$(DEV_AGENT=repo/implementer/c cirun "$prim" notes 2>&1)"
+assert_contains "workspace role read only verb in the primary checkout runs" "$out" "notes ran"
+out="$(DEV_AGENT=repo/lead cirun "$prim" install 2>&1)"
+assert_contains "lead and human install in the primary checkout run for the lead" "$out" "install ran"
+out="$(cirun "$prim" install 2>&1)"
+assert_contains "lead and human install in the primary checkout run for a human" "$out" "install ran"
+out="$(DEV_AGENT=repo/implementer/c cirun "$TMP/primwt" install 2>&1)"
+assert_contains "workspace role install in a git worktree runs" "$out" "install ran"
+out="$(DEV_AGENT=repo/implementer/c cirun "$TMP" -C "$TMP/primwt" install 2>&1)"
+assert_contains "workspace role install with C on a worktree runs" "$out" "install ran"
+out="$(DEV_AGENT=repo/implementer/c cirun "$TMP" -C "$prim" install 2>&1)"
+assert_eq "workspace role install with -C on the primary checkout exits 2" "$?" "2"
+out="$(DEV_AGENT=repo/implementer/c DEV_BOX_MARKER="$TMP/ci-box" cirun "$prim" install 2>&1)"
+assert_contains "the box marker runs a workspace role install in the primary checkout" "$out" "install ran"
+
 if [ "$fails" -gt 0 ]; then
     printf '\n%d failure(s)\n' "$fails"
     exit 1

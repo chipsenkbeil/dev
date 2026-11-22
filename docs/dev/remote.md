@@ -190,6 +190,23 @@ inside a ci job or dev box (`CI=true` or the box marker). An unset or empty
 When ci cannot be asked, the refusal fails with ci's error and the hint
 `An agent runs it on ci, so fix ci and rerun.`
 
+### The primary checkout refusal
+
+A `DEV_AGENT` whose role, the second part of its name, is `implementer`,
+`planner`, `reviewer` or `verifier` is a workspace role. Such an agent is
+refused when a mutating verb runs with its root in the primary checkout, the
+folder a workspace or worktree belongs to.
+
+The mutating verbs are `install`, `uninstall`, `restow`, `stow`, `sync`,
+`setup`, `fmt`, `init`, `push`, `pull`, `follow`, `land`, `abandon`, `clean`,
+`purge`, `skills`, `tools install` and `board land`. Every other verb passes,
+`ws` and the rest of `board` included.
+
+The refusal exits 2, prints a line that names the verb and `dev -C WS`, and
+runs nothing. A workspace or worktree root passes, whether dev started there or
+`-C` points at it. The lead role, an unset or empty `DEV_AGENT` and a run inside
+a ci job or dev box are not refused.
+
 ### The run label
 
 A run dev starts on ci carries a `DEV_AGENT` label, which `ci ps -o run,by`

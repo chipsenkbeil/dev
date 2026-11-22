@@ -272,6 +272,11 @@ A run under `DEV_AGENT` of a verb with a ci job that stays here is refused,
 whatever chose it. The exceptions are a verb with a `# local` header and a run
 inside a ci job or a dev box. See the `remote` topic.
 
+A `DEV_AGENT` with a workspace role, `implementer`, `planner`, `reviewer` or
+`verifier`, is also refused with exit 2 when a mutating verb runs in the
+primary checkout, so `-C WS` must name a workspace or worktree. The `remote`
+topic lists the verbs.
+
 A command line with both `--local` and `--remote` exits 2 with this message:
 
 ```

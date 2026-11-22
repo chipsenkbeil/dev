@@ -23,6 +23,7 @@ local project = require("dev.project")
 local registry = require("dev.registry")
 local remote = require("dev.remote")
 local root = require("dev.root")
+local vcs = require("dev.vcs")
 local verb = require("dev.verb")
 
 local stderr = io.stderr
@@ -209,6 +210,63 @@ local function refuse_agent_local(project_root, words)
             ": DEV_AGENT is set. Use `dev --remote ",
             command,
             "` instead, which runs it on ci.\n"
+        )
+        os.exit(2)
+    end
+end
+
+---Agent roles that work in a workspace, never the primary checkout
+local WORKSPACE_ROLES = { implementer = true, planner = true, reviewer = true, verifier = true }
+
+---Mutating verbs refused in the primary checkout, by verb name
+local PRIMARY_GUARDED = {}
+for _, name in ipairs({
+    "install",
+    "uninstall",
+    "restow",
+    "stow",
+    "sync",
+    "setup",
+    "fmt",
+    "init",
+    "push",
+    "pull",
+    "follow",
+    "land",
+    "abandon",
+    "clean",
+    "purge",
+    "skills",
+    "tools install",
+    "board land",
+}) do
+    PRIMARY_GUARDED[name] = true
+end
+
+local function refuse_agent_primary(project_root, words)
+    local role = (os.getenv("DEV_AGENT") or ""):match("^[^/]*/([^/]*)")
+    if not (role and WORKSPACE_ROLES[role]) then
+        return
+    end
+    local command = table.concat(words, " ")
+    if not (PRIMARY_GUARDED[words[1]] or PRIMARY_GUARDED[command]) then
+        return
+    end
+    local backend = vcs.backend(project_root)
+    if not backend then
+        return
+    end
+    local here = fs.realpath(project_root)
+    local main = fs.realpath(vcs.main_root(project_root, backend))
+    if here and here == main then
+        stderr:write(
+            "dev ",
+            command,
+            ": DEV_AGENT is the workspace role ",
+            role,
+            ", which never runs it in the primary checkout. Use `dev -C WS ",
+            command,
+            "` from your own workspace.\n"
         )
         os.exit(2)
     end
@@ -521,6 +579,9 @@ function M.main(argv)
     end
     if not on_remote_host and not runs_local(reg, row) then
         refuse_agent_local(project_root, words)
+    end
+    if not on_remote_host then
+        refuse_agent_primary(project_root, words)
     end
     if row and row.script then
         refuse_undeclared(reg, ctx, rest, parsed.after)
