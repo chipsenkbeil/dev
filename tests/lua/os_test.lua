@@ -813,6 +813,13 @@ testing.test("a verb killed by SIGTERM runs its cleanup once and exits 143", fun
     fs.remove(root, { recursive = true })
 end)
 
+testing.test("a verb killed by SIGHUP runs its cleanup once and exits 129", function()
+    local root = cleanup_project(WAIT_VERB)
+    testing.eq(kill_child(root, "HUP"), 129)
+    testing.eq(ran(root), "cleanup\n")
+    fs.remove(root, { recursive = true })
+end)
+
 testing.test("a verb interrupted by SIGINT runs its cleanup once and exits 130", function()
     local root = cleanup_project(WAIT_VERB)
     testing.eq(kill_child(root, "INT"), 130)

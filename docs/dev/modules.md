@@ -760,18 +760,19 @@ early, scribe exiting unread) fail instead of killing the process.
 
 `dev.os.on_exit(fn)` registers a cleanup, the Lua match for a bash `trap` on
 `EXIT`. Each cleanup runs once, newest first, when the verb returns, when it
-raises and when `SIGTERM` or `SIGINT` ends it. A cleanup that raises is
-reported on standard error and the rest still run, and the first registration
-wraps `os.exit` to run the cleanups before the process leaves.
+raises and when `SIGTERM`, `SIGHUP` or `SIGINT` ends it. A cleanup that
+raises is reported on standard error and the rest still run, and the first
+registration wraps `os.exit` to run the cleanups before the process leaves.
 
-`main.lua` calls `dev.os.catch_term()`, which hands `SIGTERM` the handler
-that LuaJIT's own launcher installs for `SIGINT`. That handler runs no Lua.
-It only asks the VM to raise the interrupt error at its next instruction, so
-`SIGTERM` takes the same path as `Ctrl-C`.
+`main.lua` calls `dev.os.catch_term()`, which hands `SIGTERM` and `SIGHUP`
+the handler that LuaJIT's own launcher installs for `SIGINT`. That handler
+runs no Lua. It only asks the VM to raise the interrupt error at its next
+instruction, so `SIGTERM` and `SIGHUP` take the same path as `Ctrl-C`, and a
+closed terminal runs the cleanups.
 
-`dev.os.interrupt_code()` reports 143 for `SIGTERM` and 130 for `SIGINT`. A
-signal that arrives while `os.execute` waits on a child takes effect when the
-child returns. `SIGKILL` runs nothing.
+`dev.os.interrupt_code()` reports 143 for `SIGTERM`, 129 for `SIGHUP` and 130
+for `SIGINT`. A signal that arrives while `os.execute` waits on a child takes
+effect when the child returns. `SIGKILL` runs nothing.
 
 `dev.os.capture_timed(argv, secs, opts)` is the timed call. It uses no
 `timeout` command and no `sleep` in the loop, to keep `os.execute` from

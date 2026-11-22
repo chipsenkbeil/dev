@@ -76,6 +76,7 @@ local READ_CHUNK_BYTES = 65536
 local SIGPIPE = 13
 local SIGINT = 2
 local SIGTERM = 15
+local SIGHUP = 1
 local SIG_DFL = 0
 local SIG_IGN = 1
 local WAIT_SIGNAL_MASK = 0x7f
@@ -351,25 +352,28 @@ local function peek_handler(signum)
     return ffi.C.signal(signum, ffi.cast("void (*)(int)", SIG_DFL))
 end
 
----Make SIGTERM raise the same interrupt error as SIGINT.
+---Make SIGTERM and SIGHUP raise the same interrupt error as SIGINT.
 function M.catch_term()
     local handler = peek_handler(SIGINT)
     ffi.C.signal(SIGINT, handler)
     if address(handler) > SIG_IGN then
         ffi.C.signal(SIGTERM, handler)
+        ffi.C.signal(SIGHUP, handler)
         state.term_installed = true
     end
 end
 
 ---Name the exit status of an interrupt error that was just caught.
----@return integer code 128 plus SIGTERM when `catch_term` caught SIGTERM, 128 plus SIGINT otherwise
+---@return integer code 128 plus the caught signal (SIGTERM or SIGHUP), else 128 plus SIGINT
 function M.interrupt_code()
     if state.term_installed then
-        local current = peek_handler(SIGTERM)
-        if address(current) == SIG_DFL then
-            return M.SIGNAL_EXIT_BASE + SIGTERM
+        for _, signum in ipairs({ SIGTERM, SIGHUP }) do
+            local current = peek_handler(signum)
+            if address(current) == SIG_DFL then
+                return M.SIGNAL_EXIT_BASE + signum
+            end
+            ffi.C.signal(signum, current)
         end
-        ffi.C.signal(SIGTERM, current)
     end
     return M.SIGNAL_EXIT_BASE + SIGINT
 end
@@ -390,7 +394,7 @@ end
 
 ---Register `fn` to run when the process exits, however it ends.
 ---
----That covers a return, an error and a kill by SIGTERM or SIGINT.
+---That covers a return, an error and a kill by SIGTERM, SIGHUP or SIGINT.
 ---
 ---`os.exit` runs the cleanups first from the first registration on.
 ---@param fn fun() cleanup to run

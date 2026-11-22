@@ -62,9 +62,9 @@ another code, return it, or call `os.exit`.
 
 Register `dev.os.on_exit(fn)` where a bash verb would write `trap fn EXIT`.
 Each cleanup runs once, newest first, on a return, on an error and when
-`SIGTERM` or `SIGINT` ends the verb, which then exits with 143 or 130. A
-signal that arrives while the verb waits on a child process takes effect once
-the child returns, and `SIGKILL` runs no cleanup.
+`SIGTERM`, `SIGHUP` or `SIGINT` ends the verb, which then exits with 143, 129
+or 130. A signal that arrives while the verb waits on a child process takes
+effect once the child returns, and `SIGKILL` runs no cleanup.
 
 ## Header lines
 
