@@ -2923,6 +2923,9 @@ Rows that share one ci run:
 - The run starts when dev reaches the first of the rows, and each row keeps
   its place in the card's order. A row that is not a ci row runs on its own as
   before.
+- A `dev --remote test -- NAME` row starts no run of its own when the card
+  also has a plain `dev --remote test` row. It takes that row's run id and
+  reads its result from the run's test log.
 - `--timeout` bounds the one run. A run that outlasts it records each of its
   rows as `timeout` with the state reason.
 - A refused run counts as a refusal of its first row.

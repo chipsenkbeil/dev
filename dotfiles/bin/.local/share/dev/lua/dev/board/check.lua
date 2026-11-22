@@ -981,6 +981,105 @@ function M.plan(commands, argvs, list_jobs)
     return { rows = rows, args = args or {} }
 end
 
+---@class dev.board.check.Fold
+---@field host integer the place of the plain `dev --remote test` row whose run holds every guest
+---@field guests integer[] the places of the named test rows that start no run of their own
+---@field argv string[] the host's words with the guests' words joined in
+
+---Choose the named test rows that ride on the plain test row's ci run.
+---
+---The host is the one row that is exactly `dev --remote test`. A guest is a row of the form
+---`dev --remote test -- WORDS` whose words are all names, files or directories, with none starting
+---with a dash. A host that carries words, after narrowing, gains each guest word it lacks.
+---@param commands string[] the card's checks rows as it holds them
+---@param argvs string[][] the rows' words after narrowing, without a leading `! `
+---@param apart table<integer, boolean>? the places that run another way and never join
+---@return dev.board.check.Fold? fold nil with no host, more than one, or no guest
+function M.fold(commands, argvs, apart)
+    local host, guests = nil, {}
+    for i, argv in ipairs(argvs) do
+        local command = commands[i]
+        if not command:match(NEGATED) and not (apart and apart[i]) then
+            local job, words = M.job_row(argv)
+            if job == STANDARD_TEST and STANDARD_ROWS[command:match("^%s*(.-)%s*$")] then
+                if host then
+                    return nil
+                end
+                host = i
+            elseif job == STANDARD_TEST and #words > 0 then
+                local named = true
+                for _, word in ipairs(words) do
+                    named = named and word:sub(1, 1) ~= "-"
+                end
+                if named then
+                    guests[#guests + 1] = i
+                end
+            end
+        end
+    end
+    if not host or #guests == 0 then
+        return nil
+    end
+    local merged = { unpack(argvs[host]) }
+    local _, held = M.job_row(merged)
+    if #held > 0 then
+        local have = {}
+        for _, word in ipairs(held) do
+            have[word] = true
+        end
+        for _, place in ipairs(guests) do
+            local _, words = M.job_row(argvs[place])
+            for _, word in ipairs(words) do
+                if not have[word] then
+                    have[word] = true
+                    merged[#merged + 1] = word
+                end
+            end
+        end
+    end
+    return { host = host, guests = guests, argv = merged }
+end
+
+---Record the named test rows that rode on a plain test row's ci run, from that run's test log.
+---@param host dev.board.check.Row the plain test row, which holds the ci run id
+---@param guests {run: string, words: string[]}[] the rows to record, each with a non-empty word list
+---@return dev.board.check.Row[] rows one row for each guest, in the order given
+function M.folded(host, guests)
+    local timed_out = host.result == M.Result.TIMEOUT
+    local log = ""
+    if not timed_out then
+        local argv = { CI_COMMAND, "logs", host.run_id, "--job", STANDARD_TEST }
+        log = dev_os.capture_timed(argv, LOGS_SECONDS, { merge = true })
+    end
+    local rows = {}
+    for k, guest in ipairs(guests) do
+        local result, reason = M.Result.TIMEOUT, nil
+        if not timed_out then
+            local words = {}
+            for i, word in ipairs(guest.words) do
+                local plain = word:gsub("^%./+", ""):gsub("/+$", "")
+                words[i] = plain ~= "" and plain or word
+            end
+            result, reason = M.named_result(log, words)
+        end
+        local code = 1
+        if result == M.Result.PASS then
+            code = 0
+        elseif timed_out then
+            code = TIMEOUT_EXIT
+        end
+        rows[k] = {
+            run = guest.run,
+            run_id = host.run_id,
+            result = result,
+            code = code,
+            tail = "",
+            reason = reason,
+        }
+    end
+    return rows
+end
+
 ---Choose the one row of a one-row card as a plan, to record a run that already started.
 ---@param commands string[] the card's checks rows as it holds them
 ---@param argvs string[][] the rows' words, without a leading `! `

@@ -1047,11 +1047,12 @@ local function group_ci(opts, head)
         esac ;;
     esac ;;
 ps) %s ;;
-logs) echo "output of $4" ;;
+logs) %s ;;
 esac]],
         opts.watch or "exit 0",
         opts.run or "exit 9",
-        ps
+        ps,
+        opts.logs and 'echo "logs $*" >> "$CI_LOG"; ' .. opts.logs or 'echo "output of $4"'
     )
 end
 
@@ -1065,9 +1066,27 @@ end
 ---@field expect_fail boolean? whether the check passes `--expect-fail`
 ---@field source string? the commit the fake run reports, the working copy's commit when nil
 ---@field watch string? the shell the fake `ci ps --watch` runs
+---@field logs string? the shell the fake `ci logs` runs, which also notes its call in the ci log
+---@field touch string? a suite the working copy's commit adds alone, which narrows a plain test row
 
 local function group_check(opts)
-    local root, home, head = git_root({ ["tests/a_test.lua"] = "x\n" })
+    local root, home, head = git_root({
+        ["tests/a_test.lua"] = "x\n",
+        ["tests/x_test.lua"] = "x\n",
+        ["tests/y_test.lua"] = "x\n",
+    })
+    if opts.touch then
+        assert(fs.write(root .. "/" .. opts.touch, "x\n"), "write failed")
+        local identity = { "-c", "user.name=t", "-c", "user.email=t@example.com" }
+        for _, step in ipairs({ { "add", "-A" }, { "commit", "-q", "-m", "touch" } }) do
+            local argv = { "git", "-C", root, unpack(identity) }
+            for _, word in ipairs(step) do
+                argv[#argv + 1] = word
+            end
+            must(dev_os.run(argv, { stdout = "null" }))
+        end
+        head = dev_os.capture({ "git", "-C", root, "rev-parse", "HEAD" }):gsub("\n$", "")
+    end
     local id = card_with(root, home, opts.rows or { "dev --remote lint", "dev --remote test" })
     local env = fake_ci(group_ci(opts, head))
     local log = support.tempdir() .. "/ci.log"
@@ -1122,6 +1141,126 @@ testing.test("the words after the double dash of a test row reach the one ci run
     })
     testing.eq(code, 0, out)
     testing.ok(log:find("-- tests/a_test.lua", 1, true), log)
+end)
+
+local FOLD_ROWS = {
+    "dev --remote lint",
+    "dev --remote test",
+    "dev --remote test -- tests/x_test.lua",
+    "dev --remote test -- tests/y_test.lua",
+}
+local FOLD_PASSED = 'echo "PASS tests/x_test.lua"; echo "PASS tests/y_test.lua"'
+local FOLD_ONE_FAILED = 'echo "PASS tests/x_test.lua"; echo "FAIL tests/y_test.lua"'
+
+testing.test("a named test row starts no ci run of its own beside a plain test row", function()
+    local out, code, body, log = group_check({
+        jobs = PASSED,
+        run = group_run(0),
+        rows = FOLD_ROWS,
+        logs = FOLD_PASSED,
+    })
+    testing.eq(code, 0, out)
+    testing.eq(select(2, log:gsub("mine/check/", "")), 1, log)
+    testing.ok(not log:find("-- tests/x_test.lua", 1, true), log)
+    testing.ok(log:find("logs 8cb600 --job test", 1, true), log)
+    testing.eq(check.parse(body).rows, {
+        { result = "pass", run_id = "8cb600" },
+        { result = "pass", run_id = "8cb600" },
+        { result = "pass", run_id = "8cb600" },
+        { result = "pass", run_id = "8cb600" },
+    })
+end)
+
+testing.test("a folded row records its own result from the test log", function()
+    local out, code, body = group_check({
+        jobs = PASSED,
+        run = group_run(0),
+        rows = FOLD_ROWS,
+        logs = FOLD_ONE_FAILED,
+    })
+    testing.eq(code, 1, out)
+    testing.eq(check.parse(body).rows, {
+        { result = "pass", run_id = "8cb600" },
+        { result = "pass", run_id = "8cb600" },
+        { result = "pass", run_id = "8cb600" },
+        { result = "fail", run_id = "8cb600", reason = "FAIL tests/y_test.lua" },
+    })
+    testing.ok(out:find("3 pass 8cb600 dev --remote test -- tests/x_test.lua", 1, true), out)
+    testing.ok(out:find("4 fail 8cb600 dev --remote test -- tests/y_test.lua", 1, true), out)
+end)
+
+testing.test("a folded row the test log never names records error", function()
+    local out, code, body = group_check({
+        jobs = PASSED,
+        run = group_run(0),
+        rows = FOLD_ROWS,
+        logs = 'echo "PASS tests/x_test.lua"',
+    })
+    testing.eq(code, 1, out)
+    testing.eq(check.parse(body).rows[4], {
+        result = "error",
+        run_id = "8cb600",
+        reason = "no result line names tests/y_test.lua",
+    })
+end)
+
+testing.test("a folded row of a host that timed out records timeout without a log read", function()
+    local out, code, body, log = group_check({
+        jobs = PASSED,
+        rows = FOLD_ROWS,
+        logs = FOLD_PASSED,
+        timeout = "2",
+        run = 'echo "run 8cb600"; sleep 30',
+        watch = "sleep 30",
+    })
+    testing.eq(code, 1, out)
+    local rows = check.parse(body).rows
+    testing.eq(rows[3], { result = "timeout", run_id = "8cb600" })
+    testing.eq(rows[4], { result = "timeout", run_id = "8cb600" })
+    testing.ok(not log:find("logs 8cb600", 1, true), log)
+end)
+
+testing.test("a named row between the shared rows keeps its place in the record", function()
+    local out, code, body, log = group_check({
+        jobs = PASSED,
+        run = group_run(0),
+        rows = { "dev --remote lint", "dev --remote test -- tests/x_test.lua", "dev --remote test" },
+        logs = FOLD_PASSED,
+    })
+    testing.eq(code, 0, out)
+    testing.eq(select(2, log:gsub("mine/check/", "")), 1, log)
+    testing.eq(check.parse(body).rows, {
+        { result = "pass", run_id = "8cb600" },
+        { result = "pass", run_id = "8cb600" },
+        { result = "pass", run_id = "8cb600" },
+    })
+end)
+
+testing.test(
+    "a folded directory row with a trailing slash reads the log by its plain name",
+    function()
+        local out, code, body = group_check({
+            jobs = PASSED,
+            run = group_run(0),
+            rows = { "dev --remote lint", "dev --remote test", "dev --remote test -- tests/" },
+            logs = FOLD_PASSED,
+        })
+        testing.eq(code, 0, out)
+        testing.eq(check.parse(body).rows[3], { result = "pass", run_id = "8cb600" })
+    end
+)
+
+testing.test("a narrowed test run also runs the files of the named rows", function()
+    local out, code, _, log = group_check({
+        jobs = PASSED,
+        run = group_run(0),
+        rows = { "dev --remote lint", "dev --remote test", "dev --remote test -- tests/x_test.lua" },
+        logs = 'echo "PASS tests/x_test.lua"; echo "PASS tests/b_test.lua"',
+        touch = "tests/b_test.lua",
+    })
+    testing.eq(code, 0, out)
+    testing.ok(log:find("-- tests/b_test.lua tests/x_test.lua", 1, true), log)
+    testing.ok(out:find("3 pass 8cb600 dev --remote test -- tests/x_test.lua", 1, true), out)
 end)
 
 testing.test("a zero-exit shared run records error for a row whose job is unfinished", function()
@@ -1680,6 +1819,7 @@ local DETACH_ROWS = { "dev --remote lint", "true", "dev --remote test" }
 ---@field timeout string? the `--timeout` seconds
 ---@field expect_fail boolean? whether the check passes `--expect-fail`
 ---@field lint_start string? the shell the fake `dev --remote --detach lint` runs, printing the id when nil
+---@field test_start string? the shell the fake `dev --remote --detach test` runs, printing the id when nil
 
 local function detach_check(opts)
     local root, home = git_root({ ["tests/a_test.lua"] = "x\n" })
@@ -1700,7 +1840,7 @@ ps)
     8cb600) echo '{"jobs":[{"name":"lint","state":"passed","exit_code":0}]}' ;;
     1f2e3d) echo '{"jobs":[{"name":"test","state":"]] .. state .. [[","exit_code":]] .. code .. [[}]}' ;;
     esac ;;
-logs) echo "output of $4" ;;
+logs) echo "logs $*" >> "$CI_LOG"; echo "output of $4" ;;
 esac
 ]]),
         "write failed"
@@ -1711,7 +1851,7 @@ case "$2" in
 *detach*)
     case "$3" in
     lint) ]] .. (opts.lint_start or "echo 8cb600") .. [[ ;;
-    test) echo 1f2e3d ;;
+    test) ]] .. (opts.test_start or "echo 1f2e3d") .. [[ ;;
     esac ;;
 esac
 ]]),
@@ -1803,6 +1943,43 @@ testing.test("a start that exits 0 with no run id records the row as pass", func
     local out, code, body = detach_check({ lint_start = "true" })
     testing.eq(code, 0, out)
     testing.eq(check.parse(body).rows[1], { result = "pass", run_id = "-" })
+end)
+
+testing.test("a named row runs on its own without a plain test row", function()
+    local out, code, body, log = detach_check({
+        rows = { "dev --remote lint", "dev --remote test -- tests/a_test.lua" },
+    })
+    testing.eq(code, 0, out)
+    testing.ok(log:find("dev --remote --detach test -- tests/a_test.lua", 1, true), log)
+    testing.ok(not log:find("logs ", 1, true), log)
+    testing.eq(#check.parse(body).rows, 2)
+end)
+
+testing.test("a named row runs on its own when the plain test row has no ci run id", function()
+    local out, code, body, log = detach_check({
+        rows = { "dev --remote test", "dev --remote test -- tests/a_test.lua" },
+        test_start = "true",
+    })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("running 2 of 2: dev --remote test -- tests/a_test.lua", 1, true), out)
+    testing.ok(log:find("dev --remote test -- tests/a_test.lua", 1, true), log)
+    testing.ok(not log:find("logs ", 1, true), log)
+    testing.eq(check.parse(body).rows, {
+        { result = "pass", run_id = "-" },
+        { result = "pass", run_id = "-" },
+    })
+end)
+
+testing.test("a named row with a dashed word runs on its own beside a plain test row", function()
+    local out, code, body, log = detach_check({
+        rows = { "dev --remote test", "dev --remote test -- --verbose tests/a_test.lua" },
+    })
+    testing.eq(code, 0, out)
+    testing.eq(select(2, log:gsub("dev %-%-remote %-%-detach test", "")), 2, log)
+    testing.eq(check.parse(body).rows, {
+        { result = "pass", run_id = "1f2e3d" },
+        { result = "pass", run_id = "1f2e3d" },
+    })
 end)
 
 local function baseline_of(rows)

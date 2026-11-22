@@ -309,6 +309,74 @@ local function start_rows(opts)
     return pending
 end
 
+---Record the named test rows that rode on the plain test row's ci run.
+---
+---A host with no ci run id, as on a ci box, left nothing to read, so each guest runs on its own.
+---So does a guest beside a host that an earlier run of this commit kept, since that run's log
+---may not hold the guest's files.
+---@class dev.board.wiring.settle_guests.Opts
+---@field check dev.board.wiring.check_rows.Opts the card, its commit and the flags
+---@field fold dev.board.check.Fold the host and its guests
+---@field commands string[] the rows as the card holds them
+---@field argvs string[][] the rows' words after narrowing
+---@field rows dev.board.check.Row[] the finished rows by their place, which the guests join
+---@field kept integer how many leading rows an earlier run of this commit passed
+---@field env table<string, string> variables set for each row
+
+---@param settle dev.board.wiring.settle_guests.Opts the rows and where they ran
+---@return integer? refused the place of a guest the ci hub refused, nil when none was
+local function settle_guests(settle)
+    local opts, fold, commands, argvs, rows =
+        settle.check, settle.fold, settle.commands, settle.argvs, settle.rows
+    local backend, flags = opts.backend, opts.options
+    local host = rows[fold.host]
+    local open = {}
+    for _, place in ipairs(fold.guests) do
+        if not rows[place] then
+            open[#open + 1] = place
+        end
+    end
+    if not host or #open == 0 then
+        return nil
+    end
+    if host.run_id ~= "-" and fold.host > settle.kept then
+        local asked = {}
+        for k, place in ipairs(open) do
+            local _, words = check.job_row(argvs[place])
+            asked[k] = { run = commands[place], words = words }
+        end
+        verb.note(
+            string.format(
+                "reading rows %s from the test log of ci run %s",
+                table.concat(open, ", "),
+                host.run_id
+            )
+        )
+        for k, row in ipairs(check.folded(host, asked)) do
+            rows[open[k]] = row
+        end
+        return nil
+    end
+    for _, place in ipairs(open) do
+        renew_claim(backend, opts.card, opts.name, flags.seconds)
+        verb.note(string.format("running %d of %d: %s", place, #argvs, commands[place]))
+        rows[place] = check.run({
+            root = backend.root,
+            run = commands[place],
+            argv = argvs[place],
+            seconds = flags.seconds,
+            env = settle.env,
+            on_run_id = function(run_id)
+                verb.note(string.format("row %d run %s", place, run_id))
+            end,
+        })
+        if rows[place].refused then
+            return place
+        end
+    end
+    return nil
+end
+
 ---Run the card's rows and record the result.
 ---
 ---Each row that passes in a row from the first is saved in a partial record, and a rerun at the
@@ -339,11 +407,44 @@ local function check_rows(opts)
         [remote.VERB_ENV] = remote.Verb.CHECK,
         [remote.CARD_ENV] = short,
     }
+    local listed = mac_only_files(backend.root)
+    local mac = {}
+    for i, argv in ipairs(argvs) do
+        if not flags.run and check.mac_only(argv, listed) then
+            mac[i] = true
+        end
+    end
+
+    -- Take the named test rows out, to read their results from the plain test row's run
+    local fold = not flags.expect_fail and not flags.run and check.fold(commands, argvs, mac) or nil
+    local guest = {}
+    local planned, planned_argvs, origin = commands, argvs, nil
+    if fold then
+        argvs = { unpack(argvs) }
+        argvs[fold.host] = fold.argv
+        planned, planned_argvs, origin = {}, {}, {}
+        for _, place in ipairs(fold.guests) do
+            guest[place] = true
+        end
+        for i, argv in ipairs(argvs) do
+            if not guest[i] then
+                planned[#planned + 1] = commands[i]
+                planned_argvs[#planned_argvs + 1] = argv
+                origin[#origin + 1] = i
+            end
+        end
+    end
     local plan
     if not flags.expect_fail or flags.run then
-        plan = check.plan(commands, argvs, function()
+        plan = check.plan(planned, planned_argvs, function()
             return remote.default_jobs(backend.root)
         end)
+        for _, entry in ipairs(plan and origin and plan.rows or {}) do
+            entry.index = origin[entry.index]
+        end
+    end
+    if next(mac) then
+        plan = nil
     end
     if flags.run then
         plan = plan or check.single_plan(commands, argvs)
@@ -370,14 +471,6 @@ local function check_rows(opts)
             )
         end
     end
-    local listed = mac_only_files(backend.root)
-    local mac = {}
-    for i, argv in ipairs(argvs) do
-        if not flags.run and check.mac_only(argv, listed) then
-            mac[i] = true
-            plan = nil
-        end
-    end
     local shared, places = {}, {}
     for _, entry in ipairs(plan and plan.rows or {}) do
         shared[entry.index] = true
@@ -401,7 +494,8 @@ local function check_rows(opts)
             )
         end
     end
-    local posted = #rows
+    local resumed = #rows
+    local posted = resumed
 
     -- Tell a reader of the card that the rows have started
     if not flags.run then
@@ -426,7 +520,7 @@ local function check_rows(opts)
         commands = commands,
         argvs = argvs,
         rows = rows,
-        skip = { mac, shared },
+        skip = { mac, shared, guest },
         env = env,
     })
     for i, argv in ipairs(argvs) do
@@ -440,6 +534,17 @@ local function check_rows(opts)
                 )
             )
             rows[i] = check.not_run(commands[i])
+        elseif guest[i] then
+            if not rows[i] then
+                verb.note(
+                    string.format(
+                        "Row %d of %d waits for the test log of row %d.",
+                        i,
+                        #argvs,
+                        fold.host
+                    )
+                )
+            end
         elseif plan and shared[i] then
             if not rows[i] then
                 renew_claim(backend, card, opts.name, flags.seconds)
@@ -499,6 +604,28 @@ local function check_rows(opts)
         verb.note(string.format("row %d of %d ended: %s", i, #argvs, rows[i].result))
         if k < #waiting then
             posted = post_partial(opts, rows, posted)
+        end
+    end
+    if fold then
+        local refused = settle_guests({
+            check = opts,
+            fold = fold,
+            commands = commands,
+            argvs = argvs,
+            rows = rows,
+            kept = resumed,
+            env = env,
+        })
+        if refused then
+            return failure(
+                string.format(
+                    "The ci hub refused row %d (%s). Nothing was recorded on card %s. The hub said: %s",
+                    refused,
+                    commands[refused],
+                    short,
+                    rows[refused].refused
+                )
+            )
         end
     end
     local lines = check_lines(rows)
