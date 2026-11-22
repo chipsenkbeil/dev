@@ -560,6 +560,82 @@ local function failed_cases(output, files)
     return cases
 end
 
+---Log words that mark a passed result
+local PASSED_WORDS = { PASS = true, SKIP = true }
+---Log words that mark a failed result
+local FAILED_WORDS = { FAIL = true, TIMEOUT = true }
+---The prefix of a log word that marks a result killed by a signal
+local SIGNAL_PREFIX = "SIG"
+
+---Say whether a log word is a word the row names.
+---@param line_word string a word of a result line
+---@param word string a word of the row
+---@return boolean named true when it equals the word, sits under it as a directory or holds it as whole `::` segments
+local function word_names(line_word, word)
+    return line_word == word
+        or line_word:sub(1, #word + 1) == word .. "/"
+        or ("::" .. line_word .. "::"):find("::" .. word .. "::", 1, true) ~= nil
+end
+
+---Say whether a result line names a word.
+---@param line string a result line
+---@param word string a word of the row
+---@return boolean named true when one of the line's words names it
+local function line_names(line, word)
+    for line_word in line:gmatch("%S+") do
+        if word_names(line_word, word) then
+            return true
+        end
+    end
+    return false
+end
+
+---Read what a test log says of the tests a row names.
+---@param log string the test job's log
+---@param words string[] the test names, suite files or directories the row names
+---@param expect_fail boolean? whether the run is meant to show the row failing
+---@return string result one of `Result`
+---@return string? reason what the log lacked or the first line that failed
+function M.named_result(log, words, expect_fail)
+    -- Keep only the lines that carry a test result
+    local results = {}
+    for line in log:gmatch("[^\n]+") do
+        local first = line:match("^%s*(%S+)")
+        local passed = PASSED_WORDS[first] == true
+        if
+            passed
+            or FAILED_WORDS[first]
+            or (first and first:sub(1, #SIGNAL_PREFIX) == SIGNAL_PREFIX)
+        then
+            results[#results + 1] = { passed = passed, line = line }
+        end
+    end
+
+    -- Find every result line that names each word
+    local absent, failure
+    for _, word in ipairs(words) do
+        local found = false
+        for _, entry in ipairs(results) do
+            if line_names(entry.line, word) then
+                found = true
+                if not entry.passed then
+                    failure = failure or entry.line:match("^%s*(.-)%s*$")
+                end
+            end
+        end
+        absent = absent or (not found and word or nil)
+    end
+
+    -- Report a failed line before a word the log never names
+    if failure then
+        return M.Result.FAIL, failure
+    end
+    if absent then
+        return expect_fail and M.Result.FAIL or M.Result.ERROR, "no result line names " .. absent
+    end
+    return M.Result.PASS
+end
+
 ---@class dev.board.check.run.Opts
 ---@field root string the project root the row runs in
 ---@field run string the row

@@ -1927,3 +1927,77 @@ testing.test("board.worked finds a note after a claim record and stops at the ne
     )
     testing.eq(worked(claim, note("agents", "built it"), claim), true)
 end)
+
+local DEV_LOG = table.concat({
+    "running tests",
+    "PASS tests/lua/a_test.lua",
+    "SKIP tests/lua/b_test.lua (every case skipped)",
+    "FAIL tests/lua/c_test.lua",
+    "TIMEOUT tests/lua/d_test.lua",
+    "SIGSEGV tests/lua/e_test.lua",
+    "> tests/lua/a_test.lua",
+}, "\n")
+
+local NEXTEST_LOG = table.concat({
+    "        PASS [   0.016s] (1/2) ci agent::tests::step_title::should_x",
+    "        FAIL [   0.020s] (2/2) ci agent::tests::step_title::should_y",
+    "        PASS [   0.011s] (3/3) ci other::tests::ok",
+}, "\n")
+
+testing.test("a named test passes on a PASS or SKIP line", function()
+    local PASS, FAIL = check.Result.PASS, check.Result.FAIL
+    testing.eq((check.named_result(DEV_LOG, { "tests/lua/a_test.lua" })), PASS)
+    testing.eq((check.named_result(DEV_LOG, { "tests/lua/b_test.lua" })), PASS)
+    testing.eq(
+        (check.named_result(DEV_LOG, { "tests/lua/a_test.lua", "tests/lua/b_test.lua" })),
+        PASS
+    )
+    testing.eq((check.named_result(DEV_LOG, { "tests/lua/c_test.lua" })), FAIL)
+    testing.eq((check.named_result(DEV_LOG, { "tests/lua/d_test.lua" })), FAIL)
+    testing.eq((check.named_result(DEV_LOG, { "tests/lua/e_test.lua" })), FAIL)
+    local result, reason =
+        check.named_result(DEV_LOG, { "tests/lua/a_test.lua", "tests/lua/c_test.lua" })
+    testing.eq(result, FAIL)
+    testing.eq(reason, "FAIL tests/lua/c_test.lua")
+end)
+
+testing.test("a named test matches whole nextest path segments", function()
+    local PASS, FAIL, ERROR = check.Result.PASS, check.Result.FAIL, check.Result.ERROR
+    testing.eq((check.named_result(NEXTEST_LOG, { "other::tests::ok" })), PASS)
+    testing.eq((check.named_result(NEXTEST_LOG, { "other" })), PASS)
+    testing.eq((check.named_result(NEXTEST_LOG, { "tests::ok" })), PASS)
+    testing.eq((check.named_result(NEXTEST_LOG, { "step_title::should_y" })), FAIL)
+    testing.eq((check.named_result(NEXTEST_LOG, { "step_title" })), FAIL)
+    testing.eq((check.named_result(NEXTEST_LOG, { "should" })), ERROR)
+    testing.eq((check.named_result(NEXTEST_LOG, { "tests::o" })), ERROR)
+    testing.eq((check.named_result(NEXTEST_LOG, { "gent::tests" })), ERROR)
+end)
+
+testing.test("a named test missing from the log is an error", function()
+    local missing = { "tests/lua/a_test.lua", "tests/lua/zzz_test.lua" }
+    local result, reason = check.named_result(DEV_LOG, missing)
+    testing.eq(result, check.Result.ERROR)
+    testing.eq(reason:find("tests/lua/zzz_test.lua", 1, true) ~= nil, true)
+    result, reason = check.named_result(DEV_LOG, missing, true)
+    testing.eq(result, check.Result.FAIL)
+    testing.eq(reason:find("tests/lua/zzz_test.lua", 1, true) ~= nil, true)
+    testing.eq((check.named_result("", { "x" })), check.Result.ERROR)
+    local both = { "tests/lua/c_test.lua", "tests/lua/zzz_test.lua" }
+    testing.eq((check.named_result(DEV_LOG, both)), check.Result.FAIL)
+    local header = table.concat({ "running tests", "> tests/lua/a_test.lua" }, "\n")
+    testing.eq((check.named_result(header, { "tests/lua/a_test.lua" })), check.Result.ERROR)
+end)
+
+testing.test("a named directory reads every suite under it", function()
+    local PASS, FAIL = check.Result.PASS, check.Result.FAIL
+    local lines =
+        { "PASS tests/lua/a_test.lua", "SKIP tests/lua/b_test.lua", "PASS tests/bats/x.bats" }
+    local passing = table.concat(lines, "\n")
+    testing.eq((check.named_result(passing, { "tests/lua" })), PASS)
+    testing.eq((check.named_result(passing, { "tests" })), PASS)
+    testing.eq((check.named_result(DEV_LOG, { "tests/lua" })), FAIL)
+    local failing = table.concat({ passing, "FAIL tests/lua/z_test.lua" }, "\n")
+    testing.eq((check.named_result(failing, { "tests/lua" })), FAIL)
+    testing.eq((check.named_result(passing, { "tests/lu" })), check.Result.ERROR)
+    testing.eq((check.named_result(passing, { "tests/bats" })), PASS)
+end)
