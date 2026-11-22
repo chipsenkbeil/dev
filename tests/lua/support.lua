@@ -1,3 +1,5 @@
+local ffi = require("ffi")
+
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local json = require("dev.json")
@@ -103,6 +105,20 @@ end
 ---@return string dir the new directory
 function M.tempdir()
     return assert(fs.mktemp({ prefix = "test", dir = true }))
+end
+
+---Run `run` with HOME pointing at a temporary home whose user config holds `text`.
+---@param text string the content of `~/.config/dev/config.toml`
+---@param run fun() the body to run
+function M.with_user_config(text, run)
+    local home = M.tempdir()
+    assert(fs.mkdir(home .. "/.config/dev", { parents = true }), "mkdir failed")
+    assert(fs.write(home .. "/.config/dev/config.toml", text), "write failed")
+    local previous = os.getenv("HOME")
+    ffi.C.setenv("HOME", home, 1)
+    local ok, err = pcall(run)
+    ffi.C.setenv("HOME", previous, 1)
+    assert(ok, err)
 end
 
 ---Read everything a temporary file holds.

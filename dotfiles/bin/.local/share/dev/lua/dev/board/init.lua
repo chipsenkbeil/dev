@@ -290,7 +290,7 @@ local function checks_step(layout, state, say)
     if not ok then
         return nil, message
     end
-    say("added the checks field " .. board.CHECKS_FIELD)
+    say("added the checks field " .. board.field_key(board.CHECKS_FIELD))
     state.changes = state.changes + 1
     return true
 end

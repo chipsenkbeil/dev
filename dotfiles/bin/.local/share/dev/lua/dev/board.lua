@@ -1,3 +1,4 @@
+local config = require("dev.config")
 local text = require("dev.text")
 
 ---The board seam: the column names, the card helpers and the one interface the
@@ -445,17 +446,31 @@ end
 ---@field has_checks boolean whether the board has the checks field
 ---@field lanes string[]? the names of the board's lanes in board order
 
----The key of the custom field that holds a card's checks.
-M.CHECKS_FIELD = "dev.checks"
+---The name of the custom field that holds a card's checks.
+M.CHECKS_FIELD = "checks"
 
----The key of the custom field that holds the guard rails a card lifts.
-M.ALLOW_FIELD = "dev.allow"
+---The name of the custom field that holds the guard rails a card lifts.
+M.ALLOW_FIELD = "allow"
 
----The key of the custom field that holds the tests a tests card names.
-M.TESTS_FIELD = "dev.tests"
+---The name of the custom field that holds the tests a tests card names.
+M.TESTS_FIELD = "tests"
 
----The key of the custom field that holds the files a card names.
-M.FILES_FIELD = "dev.files"
+---The name of the custom field that holds the files a card names.
+M.FILES_FIELD = "files"
+
+---Return the key a Pomb board gives the custom field `name`.
+---
+---The key is the `[board.pomb] field_prefix` of the user config, a dot and the name, or the bare
+---name when the key is unset.
+---@param name string one of the four field names
+---@return string key the key on the wire
+function M.field_key(name)
+    local prefix = config.user("board.pomb.field_prefix")
+    if type(prefix) == "string" and prefix ~= "" then
+        return prefix .. "." .. name
+    end
+    return name
+end
 
 ---The words the allow field holds, in the order dev sends them.
 M.ALLOW_WORDS = { "test-edits", "ci-edits" }

@@ -272,7 +272,9 @@ local function named_field_problem(backend, key)
     end
     if not has then
         return FIELD_REFUSALS[key]
-            or "The board has no " .. key .. " field. Define it on the board first."
+            or "The board has no "
+                .. board.field_key(key)
+                .. " field. Define it on the board first."
     end
 end
 

@@ -80,16 +80,24 @@ local ALL_BOARDS = "all"
 local NEEDS_LEAD_LANE = "Making a lane needs swimlanes.create, which only the lead token holds. "
     .. "Set [board.pomb] lead_token in ~/.config/dev/config.toml, "
     .. "then run `dev board init` without `--admin`."
-local CHECKS_DEFINITION = {
-    key = board.CHECKS_FIELD,
-    label = "Checks",
-    kind = "table",
-    required = true,
-    columns = {
-        { key = board.CHECKS_RUN, label = "Run", kind = "text", options = {}, required = true },
-        { key = "on", label = "On", kind = "multiselect", options = { "local" }, required = false },
-    },
-}
+local function checks_definition()
+    return {
+        key = board.field_key(board.CHECKS_FIELD),
+        label = "Checks",
+        kind = "table",
+        required = true,
+        columns = {
+            { key = board.CHECKS_RUN, label = "Run", kind = "text", options = {}, required = true },
+            {
+                key = "on",
+                label = "On",
+                kind = "multiselect",
+                options = { "local" },
+                required = false,
+            },
+        },
+    }
+end
 
 ---Pomb over its HTTP API, through curl.
 ---
@@ -861,7 +869,7 @@ local function holder(task)
 end
 
 local function runs_of(task)
-    local rows = type(task.fields) == "table" and task.fields[board.CHECKS_FIELD]
+    local rows = type(task.fields) == "table" and task.fields[board.field_key(board.CHECKS_FIELD)]
     local runs = {}
     if type(rows) == "table" then
         for _, row in ipairs(rows) do
@@ -875,7 +883,7 @@ local function runs_of(task)
 end
 
 local function field_names(task, key)
-    return board.names(type(task.fields) == "table" and task.fields[key])
+    return board.names(type(task.fields) == "table" and task.fields[board.field_key(key)])
 end
 
 local function table_rows(runs)
@@ -911,7 +919,7 @@ function Backend:has_field(key)
         end
         self.__field_keys = keys
     end
-    return self.__field_keys[key] == true
+    return self.__field_keys[board.field_key(key)] == true
 end
 
 ---Read the outcomes of a task row.
@@ -1365,7 +1373,7 @@ function Backend:add(name, column, opts)
         body.labels = opts.labels
     end
     if opts and opts.checks and #opts.checks > 0 then
-        body.fields = { [board.CHECKS_FIELD] = table_rows(opts.checks) }
+        body.fields = { [board.field_key(board.CHECKS_FIELD)] = table_rows(opts.checks) }
     end
     local task
     task, message = self:__request("POST", "/api/tasks", body)
@@ -1884,8 +1892,12 @@ function Backend:set_field(id, key, value, fence)
         return nil, message
     end
     local done
-    done, message =
-        self:__request("PATCH", "/api/tasks/" .. id, { fields = { [key] = value } }, fence)
+    done, message = self:__request(
+        "PATCH",
+        "/api/tasks/" .. id,
+        { fields = { [board.field_key(key)] = value } },
+        fence
+    )
     if not done then
         return nil, message
     end
@@ -2966,7 +2978,7 @@ function Backend:read()
     end
     local has_checks = false
     for _, field in ipairs(fields) do
-        has_checks = has_checks or field.key == board.CHECKS_FIELD
+        has_checks = has_checks or field.key == board.field_key(board.CHECKS_FIELD)
     end
     local columns, colors, cards = {}, {}, {}
     for _, column in ipairs(detail.columns) do
@@ -3044,7 +3056,7 @@ function Backend:add_checks_field()
         return nil, message
     end
     local made
-    made, message = self:__request("POST", "/api/boards/" .. id .. "/fields", CHECKS_DEFINITION)
+    made, message = self:__request("POST", "/api/boards/" .. id .. "/fields", checks_definition())
     if not made then
         return nil, message
     end

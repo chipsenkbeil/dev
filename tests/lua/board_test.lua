@@ -43,7 +43,7 @@ local V1 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone\n\n## Don
 local SCAFFOLD = "## Problem\nx\n\n## Change\n\n## Out of scope\n"
 local COMPOSED = "## Problem\nx\n\n## Change\n- x\n\n## Out of scope\ny\n"
 local V2 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone"
-local LEAD_USER = '[board.pomb]\nurl = "https://pomb.example"\ntoken = "pass:secrets/worker/token/pomb"\n'
+local LEAD_USER = '[board.pomb]\nurl = "https://pomb.example"\nfield_prefix = "dev"\ntoken = "pass:secrets/worker/token/pomb"\n'
     .. 'lead_token = "pass:secrets/lead/token/pomb"\n'
 
 local function executable(path, body)
@@ -2080,13 +2080,10 @@ testing.test("allow replaces the field with the words once each, and none sends 
     local result =
         cmd_board.run("allow", { "11111111-a", "ci-edits", "test-edits", "ci-edits" }, backend)
     testing.eq(result.output, "set allow 11111111, ci-edits test-edits")
-    testing.eq(
-        backend.calls[1],
-        { "set_field", ID_A, "dev.allow", { "ci-edits", "test-edits" }, nil }
-    )
+    testing.eq(backend.calls[1], { "set_field", ID_A, "allow", { "ci-edits", "test-edits" }, nil })
     result = cmd_board.run("allow", { "11111111-a", "none" }, backend)
     testing.eq(result.output, "cleared allow 11111111")
-    testing.eq(backend.calls[2], { "set_field", ID_A, "dev.allow", json.null, nil })
+    testing.eq(backend.calls[2], { "set_field", ID_A, "allow", json.null, nil })
 end)
 
 testing.test(
@@ -2099,9 +2096,15 @@ testing.test(
         testing.eq(cmd_board.run("allow", { "11111111-a", "test-edits", "none" }, backend).code, 2)
         testing.eq(cmd_board.run("allow", { "deadbeef", "none" }, backend).code, 1)
         backend.nofield = true
-        local result = cmd_board.run("allow", { "11111111-a", "test-edits" }, backend)
-        testing.eq(result.code, 1)
-        testing.ok(result.message:find("no dev.allow field", 1, true), result.message)
+        support.with_user_config('[board.pomb]\nfield_prefix = "dev"\n', function()
+            local result = cmd_board.run("allow", { "11111111-a", "test-edits" }, backend)
+            testing.eq(result.code, 1)
+            testing.ok(result.message:find("no dev.allow field", 1, true), result.message)
+        end)
+        support.with_user_config("", function()
+            local result = cmd_board.run("allow", { "11111111-a", "test-edits" }, backend)
+            testing.ok(result.message:find("no allow field", 1, true), result.message)
+        end)
         testing.eq(#backend.calls, 0)
     end
 )
@@ -2113,11 +2116,11 @@ testing.test("tests and files replace the field with one name per line", functio
     testing.eq(result.output, "set tests 11111111, 2 names")
     testing.eq(
         backend.calls[1],
-        { "set_field", ID_A, "dev.tests", "one_should_be_one\ntests::two", nil }
+        { "set_field", ID_A, "tests", "one_should_be_one\ntests::two", nil }
     )
     result = cmd_board.run("files", { "11111111-a", "src/a.rs" }, backend)
     testing.eq(result.output, "set files 11111111, 1 name")
-    testing.eq(backend.calls[2], { "set_field", ID_A, "dev.files", "src/a.rs", nil })
+    testing.eq(backend.calls[2], { "set_field", ID_A, "files", "src/a.rs", nil })
 end)
 
 testing.test(
@@ -2132,11 +2135,13 @@ testing.test(
             testing.eq(cmd_board.run(sub, { "deadbeef", "a" }, backend).code, 1)
         end
         backend.nofield = true
-        local result = cmd_board.run("files", { "11111111-a", "a" }, backend)
-        testing.eq(result.code, 1)
-        testing.ok(result.message:find("no dev.files field", 1, true), result.message)
-        result = cmd_board.run("tests", { "11111111-a", "a" }, backend)
-        testing.ok(result.message:find("no dev.tests field", 1, true), result.message)
+        support.with_user_config("", function()
+            local result = cmd_board.run("files", { "11111111-a", "a" }, backend)
+            testing.eq(result.code, 1)
+            testing.ok(result.message:find("no files field", 1, true), result.message)
+            result = cmd_board.run("tests", { "11111111-a", "a" }, backend)
+            testing.ok(result.message:find("no tests field", 1, true), result.message)
+        end)
         testing.eq(#backend.calls, 0)
     end
 )
@@ -6930,7 +6935,7 @@ local function sandbox(opts)
         fs.write(
             home .. "/.config/dev/config.toml",
             opts.user
-                or '[board.pomb]\nurl = "https://pomb.example"\ntoken = "pass:secrets/worker/token/pomb"\n'
+                or '[board.pomb]\nurl = "https://pomb.example"\nfield_prefix = "dev"\ntoken = "pass:secrets/worker/token/pomb"\n'
         )
     )
     local export = opts.export or EXPORT
@@ -9073,6 +9078,26 @@ testing.test("checks patches the task's checks field whole, with the claim's fen
     )
     local patched = calls:match("%-X PATCH.-/api/tasks/")
     testing.ok(patched and patched:find("If-Owner-Fence: 7", 1, true), patched)
+    dev(root, home, { "board", "release", "11111111-a" })
+end)
+
+testing.test("with no field_prefix the checks field key is checks", function()
+    local root, home = sandbox({
+        export = PLANNED_EXPORT,
+        user = '[board.pomb]\nurl = "https://pomb.example"\ntoken = "pass:secrets/worker/token/pomb"\n',
+        fields = '[{"id":"f1","key":"checks","label":"Checks","kind":"table",'
+            .. '"options":[],"columns":[],"required":true}]',
+    })
+    dev(root, home, { "board", "take", "11111111-a" })
+    local out, code = dev(
+        root,
+        home,
+        { "board", "checks", "11111111-a", "dev lint" },
+        { agent = LEAD }
+    )
+    testing.eq(code, 0, out)
+    local calls = read(root, "calls")
+    testing.ok(calls:find('--data-raw {"fields":{"checks":[{"run":"dev lint"}]}}', 1, true), calls)
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 

@@ -95,10 +95,18 @@ token = "pass:secrets/worker/token/pomb.example.com"
 lead_token = "pass:secrets/lead/token/pomb.example.com"
 reviewer_token = "pass:secrets/reviewer/token/pomb.example.com"
 verifier_token = "pass:secrets/verifier/token/pomb.example.com"
+field_prefix = "dev"
 ```
 
 dev reads `[board.pomb]` from the user file alone, so a repository cannot send
 the token to another server.
+
+`field_prefix` names the four custom fields dev reads and writes on a Pomb
+board: `checks`, `allow`, `tests` and `files`. It has no default. With it set,
+the key of a field on the wire is the prefix, a dot and the name, so
+`field_prefix = "dev"` gives `dev.checks`, `dev.allow`,
+`dev.tests` and `dev.files`. With it unset the keys are the bare
+names. A local board keeps the bare names whatever the key says.
 
 ## The token
 

@@ -93,7 +93,7 @@ local function sandbox(files)
     assert(
         fs.write(
             home .. "/.config/dev/config.toml",
-            '[board.pomb]\nurl = "https://pomb.example"\ntoken = "pass:secrets/worker/token/pomb"\n'
+            '[board.pomb]\nurl = "https://pomb.example"\nfield_prefix = "dev"\ntoken = "pass:secrets/worker/token/pomb"\n'
         )
     )
     local all = {

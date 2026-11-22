@@ -1087,20 +1087,13 @@ function Backend:set_checks(id, runs, fence)
     return self:set_field(id, board.CHECKS_FIELD, runs, fence)
 end
 
-local FIELD_KEYS = {
-    [board.CHECKS_FIELD] = "checks",
-    [board.ALLOW_FIELD] = "allow",
-    [board.TESTS_FIELD] = "tests",
-    [board.FILES_FIELD] = "files",
-}
-
 function Backend:set_field(id, key, value, fence)
     return self:__update(function(doc)
         local card, message = card_of(doc, id, fence)
         if not card then
             return nil, message
         end
-        card[assert(FIELD_KEYS[key], key)] = value ~= json.null and value or nil
+        card[key] = value ~= json.null and value or nil
         return true
     end)
 end

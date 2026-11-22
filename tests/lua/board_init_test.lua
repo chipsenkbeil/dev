@@ -359,12 +359,15 @@ end)
 
 testing.test("a board without the checks field gains it once and keeps it", function()
     local layout = fake_layout({ has_checks = false, columns = template_columns() })
-    local changes, message, lines = run(layout)
+    local changes, message, lines
+    support.with_user_config("", function()
+        changes, message, lines = run(layout)
+    end)
     testing.eq(message, nil)
     testing.ok(changes >= 1)
     local said = 0
     for _, line in ipairs(lines) do
-        said = said + (line == "added the checks field dev.checks" and 1 or 0)
+        said = said + (line == "added the checks field checks" and 1 or 0)
     end
     testing.eq(said, 1)
     local added = 0
@@ -841,7 +844,7 @@ local function sandbox(opts)
         fs.write(
             home .. "/.config/dev/config.toml",
             opts.user
-                or '[board.pomb]\nurl = "https://pomb.example"\n'
+                or '[board.pomb]\nurl = "https://pomb.example"\nfield_prefix = "dev"\n'
                     .. 'lead_token = "pass:secrets/lead/token/pomb"\n'
         )
     )
