@@ -30,8 +30,16 @@ local MACHINE_VERBS = {
     skills = true,
     stow = true,
 }
-local MACHINE_NOUNS =
-    { tools = true, box = true, ci = true, board = true, ws = true, pi = true, antinote = true }
+local MACHINE_NOUNS = {
+    tools = true,
+    box = true,
+    ci = true,
+    board = true,
+    ws = true,
+    pi = true,
+    antinote = true,
+    zen = true,
+}
 local JOB_NAME = "^[A-Za-z0-9-]+$"
 local LOCAL_HINT = "Rerun it, or pass `--local` to run it here."
 local AGENT_HINT = "An agent runs it on ci, so fix ci and rerun."

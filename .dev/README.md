@@ -340,6 +340,7 @@ These are the project verbs in `.dev/`. Each lists the flags and
   into the app. Flag: `--skip-if-running`.
 - `dev antinote diff`: show how the live Antinote settings differ from the
   repo.
+- `dev zen link`: link the repo's `user.js` into Zen's default profile.
 
 ### Hidden
 

@@ -321,7 +321,7 @@ only, so --remote does not apply`, whatever the runner.
 
 - install, uninstall, restow, sync, setup, fmt, fetch, help, init, push, pull,
   follow, land, guide, connect, clean, purge, list, skills and stow
-- every subcommand of tools, box, board, ws, pi and antinote
+- every subcommand of tools, box, board, ws, pi, antinote and zen
 
 A machine-local verb whose script has a `# patch JOB FILE` line runs its job on
 ci and applies the patch here instead of exiting 2.

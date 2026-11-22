@@ -524,12 +524,13 @@ There is one script per verb (`install.lua`, `uninstall.lua`, `restow.lua`,
 `purge.lua`, `clean.lua`, `list.lua`, `stow.lua`, `sync.lua`, `setup.lua`,
 `skills.lua`, ...), run through `dev <verb>`.
 
-The subdirectories hold the Lua subcommands of two nouns:
+The subdirectories hold the Lua subcommands of three nouns:
 
 - `pi/`: `dev pi` with `install`, `save`, `diff` and `check`, over
   `.dev/lua/dotfiles/pi.lua`.
 - `antinote/`: `dev antinote` with `export`, `import` and `diff`, over
   `.dev/lua/dotfiles/antinote.lua`.
+- `zen/`: `dev zen` with `link`, over `.dev/lua/dotfiles/zen.lua`.
 
 `lint.lua`, `fmt.lua`, `test.lua`, `soak.lua` and `skills.lua` are Lua verbs
 that run in the dev process (see the `dev.*` items above).

@@ -321,9 +321,9 @@ Every other command goes to `dev.remote.ci_runner`. The topic is
 
 `--remote` refuses the machine-local verbs `install`, `uninstall`, `restow`,
 `sync`, `setup`, `fmt`, `fetch`, `help`, `init`, `push`, `pull`, `follow`,
-`land`, `guide` and `connect`, and every `tools`, `box`, `board`, `ws`, `pi` and
-`antinote` subcommand. The refusal exits 2 whatever the runner, with this
-message:
+`land`, `guide` and `connect`, and every `tools`, `box`, `board`, `ws`, `pi`,
+`antinote` and `zen` subcommand. The refusal exits 2 whatever the runner, with
+this message:
 
 ```
 dev <verb>: runs on this machine only, so --remote does not apply
