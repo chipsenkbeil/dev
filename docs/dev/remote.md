@@ -206,6 +206,14 @@ The lead role is refused only for `land`, `board land`, `abandon`, `clean`,
 `purge` and `fmt`, the verbs a lead never runs in the primary checkout. It still
 runs `install`, `push`, `pull` and the rest there.
 
+A repo adds verbs to that refusal with `agent.primary_guarded` in its
+`.dev/config.toml`, a list of verb names or verb phrases such as
+`["bump", "board land"]`. A listed verb is refused for any set `DEV_AGENT`, the
+lead role included, with the same exit 2 and the same primary checkout test. Its
+line says the repo's `agent.primary_guarded` lists it. A verb the list leaves
+out runs as before, and a value that is not a list of names ends dev with
+exit 1.
+
 The refusal exits 2, prints a line that names the verb and `dev -C WS`, and
 runs nothing. A workspace or worktree root passes, whether dev started there or
 `-C` points at it. An unset or empty `DEV_AGENT` and a run inside a ci job or

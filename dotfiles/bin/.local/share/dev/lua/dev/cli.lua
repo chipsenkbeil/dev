@@ -257,18 +257,43 @@ for _, name in ipairs({
     LEAD_GUARDED[name] = true
 end
 
+local function repo_guarded(project_root)
+    local names = config.get(project_root, "agent.primary_guarded")
+    local listed = {}
+    if names == nil then
+        return listed
+    end
+    local malformed = "The `agent.primary_guarded` setting in "
+        .. project_root
+        .. "/.dev/config.toml must be a list of verb names."
+    if type(names) ~= "table" then
+        verb.die(malformed)
+    end
+    for _, name in ipairs(names) do
+        if type(name) ~= "string" then
+            verb.die(malformed)
+        end
+        listed[name] = true
+    end
+    return listed
+end
+
 local function refuse_agent_primary(project_root, words)
-    local role = (os.getenv("DEV_AGENT") or ""):match("^[^/]*/([^/]*)")
-    local guarded
-    if role == "lead" then
-        guarded = LEAD_GUARDED
-    elseif role and WORKSPACE_ROLES[role] then
-        guarded = PRIMARY_GUARDED
-    else
+    local agent = os.getenv("DEV_AGENT") or ""
+    if agent == "" then
         return
     end
+    local role = agent:match("^[^/]*/([^/]*)")
     local command = table.concat(words, " ")
-    if not (guarded[words[1]] or guarded[command]) then
+    local guarded, who
+    if role == "lead" then
+        guarded, who = LEAD_GUARDED, "lead role"
+    elseif role and WORKSPACE_ROLES[role] then
+        guarded, who = PRIMARY_GUARDED, "workspace role " .. role
+    end
+    local builtin = guarded ~= nil and (guarded[words[1]] or guarded[command])
+    local listed = repo_guarded(project_root)
+    if not (builtin or listed[words[1]] or listed[command]) then
         return
     end
     local backend = vcs.backend(project_root)
@@ -277,19 +302,26 @@ local function refuse_agent_primary(project_root, words)
     end
     local here = fs.realpath(project_root)
     local main = fs.realpath(vcs.main_root(project_root, backend))
-    if here and here == main then
-        local who = guarded == LEAD_GUARDED and "lead role" or ("workspace role " .. role)
-        stderr:write(
-            "dev ",
-            command,
-            ": DEV_AGENT is the ",
-            who,
-            ", which never runs it in the primary checkout. Use `dev -C WS ",
-            command,
-            "` from your own workspace.\n"
-        )
-        os.exit(2)
+    if not (here and here == main) then
+        return
     end
+    local reason
+    if builtin then
+        reason = "DEV_AGENT is the " .. who .. ", which never runs it in the primary checkout."
+    else
+        reason = "the repo's `agent.primary_guarded` lists it, and DEV_AGENT never runs "
+            .. "it in the primary checkout."
+    end
+    stderr:write(
+        "dev ",
+        command,
+        ": ",
+        reason,
+        " Use `dev -C WS ",
+        command,
+        "` from your own workspace.\n"
+    )
+    os.exit(2)
 end
 
 local function root_gate(args)
