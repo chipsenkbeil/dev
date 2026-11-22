@@ -156,6 +156,7 @@ M.Mode = { RUN = "run", EXPECT_FAIL = "expect-fail", PARTIAL = "partial" }
 ---@field reason string? the last line a failed row printed when it printed no run id
 ---@field refused string? ci's refusal line when the hub refused the run, which no row records
 ---@field ran string[]? the suites narrowing added to a test row, which `record` writes as `ran=`
+---@field unread boolean? whether a folded row's words named no line of the test log, so the row still needs its own run
 
 ---Split a row into its words.
 ---@param row string the row without its leading `! `
@@ -599,6 +600,7 @@ end
 ---@param expect_fail boolean? whether the run is meant to show the row failing
 ---@return string result one of `Result`
 ---@return string? reason what the log lacked or the first line that failed
+---@return boolean? unread true when no result line names a word and none failed
 function M.named_result(log, words, expect_fail)
     -- Keep only the lines that carry a test result
     local results = {}
@@ -635,7 +637,8 @@ function M.named_result(log, words, expect_fail)
         return M.Result.FAIL, failure
     end
     if absent then
-        return expect_fail and M.Result.FAIL or M.Result.ERROR, "no result line names " .. absent
+        local result = expect_fail and M.Result.FAIL or M.Result.ERROR
+        return result, "no result line names " .. absent, true
     end
     return M.Result.PASS
 end
@@ -1048,7 +1051,7 @@ end
 ---@param host dev.board.check.Row the plain test row, which holds the ci run id
 ---@param guests {run: string, words: string[]}[] the rows to record, each with a non-empty word list
 ---@param expect_fail boolean? whether the run is meant to show the guests failing
----@return dev.board.check.Row[] rows one row for each guest, in the order given
+---@return dev.board.check.Row[] rows one row for each guest, in the order given, with `unread` set on a guest no log line names
 function M.folded(host, guests, expect_fail)
     local timed_out = host.result == M.Result.TIMEOUT
     local log = ""
@@ -1058,7 +1061,7 @@ function M.folded(host, guests, expect_fail)
     end
     local rows = {}
     for k, guest in ipairs(guests) do
-        local result, reason = M.Result.TIMEOUT, nil
+        local result, reason, unread = M.Result.TIMEOUT, nil, nil
         if not timed_out then
             local words = {}
             for i, word in ipairs(guest.words) do
@@ -1066,7 +1069,7 @@ function M.folded(host, guests, expect_fail)
                 words[i] = plain ~= "" and plain or word
             end
             if log:match("%S") then
-                result, reason = M.named_result(log, words, expect_fail)
+                result, reason, unread = M.named_result(log, words, expect_fail)
             else
                 result, reason =
                     M.Result.ERROR, "the test log of ci run " .. host.run_id .. " is empty"
@@ -1085,6 +1088,7 @@ function M.folded(host, guests, expect_fail)
             code = code,
             tail = "",
             reason = reason,
+            unread = unread,
         }
     end
     return rows

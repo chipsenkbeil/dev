@@ -1107,6 +1107,7 @@ end
 ---@field watch string? the shell the fake `ci ps --watch` runs
 ---@field logs string? the shell the fake `ci logs` runs, which also notes its call in the ci log
 ---@field touch string? a suite the working copy's commit adds alone, which narrows a plain test row
+---@field own string? the shell a fake `dev` runs for a row that runs on its own, which notes its call in the ci log
 
 local function group_check(opts)
     local root, home, head = git_root({
@@ -1128,6 +1129,11 @@ local function group_check(opts)
     end
     local id = card_with(root, home, opts.rows or { "dev --remote lint", "dev --remote test" })
     local env = fake_ci(group_ci(opts, head))
+    if opts.own then
+        local stub = env.PATH:match("^([^:]+)") .. "/dev"
+        assert(fs.write(stub, '#!/bin/sh\necho "dev $*" >> "$CI_LOG"\n' .. opts.own .. "\n"))
+        must(dev_os.run({ "chmod", "755", stub }))
+    end
     local log = support.tempdir() .. "/ci.log"
     env.CI_LOG = log
     env.DEV_AGENT = ""
@@ -1229,19 +1235,47 @@ testing.test("a folded row records its own result from the test log", function()
     testing.ok(out:find("4 fail 8cb600 dev --remote test -- tests/y_test.lua", 1, true), out)
 end)
 
-testing.test("a folded row the test log never names records error", function()
-    local out, code, body = group_check({
+local FOLD_ONE_NAMED = 'echo "PASS tests/x_test.lua"'
+
+testing.test("a folded row the test log never names runs on its own", function()
+    local out, code, body, log = group_check({
         jobs = PASSED,
         run = group_run(0),
         rows = FOLD_ROWS,
-        logs = 'echo "PASS tests/x_test.lua"',
+        logs = FOLD_ONE_NAMED,
+        own = "exit 0",
+    })
+    testing.eq(code, 0, out)
+    testing.eq(select(2, log:gsub("mine/check/", "")), 1, log)
+    testing.ok(log:find("dev --remote test -- tests/y_test.lua", 1, true), log)
+    testing.eq(check.parse(body).rows[3].result, "pass")
+    testing.eq(check.parse(body).rows[4].result, "pass")
+    testing.ok(not out:find("no result line names", 1, true), out)
+end)
+
+testing.test("a folded row that runs on its own records its own failure", function()
+    local out, code, body, log = group_check({
+        jobs = PASSED,
+        run = group_run(0),
+        rows = FOLD_ROWS,
+        logs = FOLD_ONE_NAMED,
+        own = "exit 1",
     })
     testing.eq(code, 1, out)
-    testing.eq(check.parse(body).rows[4], {
-        result = "error",
-        run_id = "8cb600",
-        reason = "no result line names tests/y_test.lua",
+    testing.ok(log:find("dev --remote test -- tests/y_test.lua", 1, true), log)
+    testing.eq(check.parse(body).rows[3].result, "pass")
+    testing.eq(check.parse(body).rows[4].result, "fail")
+end)
+
+testing.test("a folded row that a log line names starts no run of its own", function()
+    local out, code, _, log = group_check({
+        jobs = PASSED,
+        run = group_run(0),
+        rows = FOLD_ROWS,
+        logs = FOLD_PASSED,
     })
+    testing.eq(code, 0, out)
+    testing.ok(not log:find("-- tests/y_test.lua", 1, true), log)
 end)
 
 testing.test("a folded row of a host that timed out records timeout without a log read", function()
@@ -1487,7 +1521,8 @@ logs) echo "logs $*" >> "$CI_LOG"; ]] .. logs .. "\nesac\n"),
 end
 
 testing.test("an expect-fail named row starts no ci run of its own", function()
-    local out, _, body, log = baseline_check('echo "PASS tests/a_test.lua"')
+    local out, _, body, log =
+        baseline_check('echo "PASS tests/x_test.lua"; echo "PASS tests/y_test.lua"')
     testing.eq(select(2, log:gsub("dev %-%-remote test", "")), 1, out .. log)
     testing.ok(log:find("logs 8cb600 --job test", 1, true), log)
     testing.eq(#check.parse(body).rows, 3, body)

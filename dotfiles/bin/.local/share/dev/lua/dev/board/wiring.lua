@@ -339,25 +339,9 @@ local function settle_guests(settle)
     if not host or #open == 0 then
         return nil
     end
-    if host.run_id ~= "-" and fold.host > settle.kept then
-        local asked = {}
-        for k, place in ipairs(open) do
-            local _, words = check.job_row(argvs[place])
-            asked[k] = { run = commands[place], words = words }
-        end
-        verb.note(
-            string.format(
-                "reading rows %s from the test log of ci run %s",
-                table.concat(open, ", "),
-                host.run_id
-            )
-        )
-        for k, row in ipairs(check.folded(host, asked, flags.expect_fail)) do
-            rows[open[k]] = row
-        end
-        return nil
-    end
-    for _, place in ipairs(open) do
+
+    -- Run a guest on its own and say whether the hub refused it
+    local function run_alone(place)
         renew_claim(backend, opts.card, opts.name, flags.seconds)
         verb.note(string.format("running %d of %d: %s", place, #argvs, commands[place]))
         rows[place] = check.run({
@@ -371,7 +355,33 @@ local function settle_guests(settle)
                 verb.note(string.format("row %d run %s", place, run_id))
             end,
         })
-        if rows[place].refused then
+        return rows[place].refused ~= nil
+    end
+
+    if host.run_id ~= "-" and fold.host > settle.kept then
+        local asked = {}
+        for k, place in ipairs(open) do
+            local _, words = check.job_row(argvs[place])
+            asked[k] = { run = commands[place], words = words }
+        end
+        verb.note(
+            string.format(
+                "reading rows %s from the test log of ci run %s",
+                table.concat(open, ", "),
+                host.run_id
+            )
+        )
+        local unread = {}
+        for k, row in ipairs(check.folded(host, asked, flags.expect_fail)) do
+            rows[open[k]] = row
+            if row.unread then
+                unread[#unread + 1] = open[k]
+            end
+        end
+        open = unread
+    end
+    for _, place in ipairs(open) do
+        if run_alone(place) then
             return place
         end
     end
