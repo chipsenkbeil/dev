@@ -133,6 +133,13 @@ local function jj_follow(main, rev)
     local target = rev or trunk
     local parent
     parent, code = read("log", "-r", "@-", "--no-graph", "-T", "commit_id")
+    if rev and code == 0 then
+        local older, found =
+            read("log", "-r", rev .. " & ::@- ~ @-", "--no-graph", "-T", "commit_id")
+        if found == 0 and older ~= "" then
+            return main .. " stays on the newer commit " .. short(parent) .. ".", 0
+        end
+    end
     if code == 0 and parent ~= target then
         out, code = jj("new", rev or "trunk()")
         if code ~= 0 then
@@ -182,6 +189,15 @@ local function git_follow(main, rev)
         end
     end
     if rev then
+        local head
+        head, code = read("rev-parse", "HEAD")
+        if code ~= 0 then
+            return failed(main, "git rev-parse")
+        end
+        local _, older = read("merge-base", "--is-ancestor", rev, "HEAD")
+        if head ~= rev and older == 0 then
+            return main .. " stays on the newer commit " .. short(head) .. ".", 0
+        end
         out, code = git("checkout", "--quiet", "--detach", rev)
         if code ~= 0 then
             return failed(main, "git checkout", out)

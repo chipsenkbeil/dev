@@ -360,13 +360,17 @@ sets it to the commit it tested, and a value that is not hex exits 2.
 - For jj, an empty `@` whose parent is not on trunk stays as it is too, to keep
   the verb from moving a checkout off unlanded changes. A set `DEV_FOLLOW_REV`
   is subject to the same rule.
+- A set `DEV_FOLLOW_REV` never moves a checkout back to an older commit. A
+  checkout on a commit newer than the rev stays as it is, and the line reads
+  `FOLDER stays on the newer commit COMMIT.` A rev ahead of the checkout still
+  moves it.
 - The verb prints one sentence with a final period. It reads
   `FOLDER is on trunk COMMIT.`,
-  `FOLDER was left alone: it has uncommitted changes.` or
-  `FOLDER was left alone: it sits on changes that are not on trunk.`, and the
-  exit code is 0 for all three. A failed jj or git command exits 1 with a
-  sentence that names it,
-  such as `The git fetch command failed in FOLDER: OUTPUT.`
+  `FOLDER was left alone: it has uncommitted changes.`,
+  `FOLDER was left alone: it sits on changes that are not on trunk.` or
+  `FOLDER stays on the newer commit COMMIT.`, and the exit code is 0 for all
+  four. A failed jj or git command exits 1 with a sentence that names it, such
+  as `The git fetch command failed in FOLDER: OUTPUT.`
 - A project `.dev/follow.sh` or `.dev/follow.lua` replaces the built-in.
   `dev board land` on a board with no `deploys = true` under `[board.land]`
   and `dev board ship` run it through the launcher, and the script runs in

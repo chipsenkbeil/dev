@@ -176,6 +176,60 @@ testing.test("follow.git.moves.onto.the.commit.in.DEV_FOLLOW_REV.not.trunk", fun
     cleanup(root, remote)
 end)
 
+testing.test("follow.git.moves.onto.a.DEV_FOLLOW_REV.ahead.of.the.checkout", function()
+    local root, remote = git_main()
+    local head = advance(remote)
+    local out, code = support.dev(root, { "follow" }, { env = { DEV_FOLLOW_REV = head } })
+    testing.eq(code, 0, out)
+    testing.ok(out:find(root .. " is on " .. head:sub(1, 12), 1, true), out)
+    testing.eq(git(root, "rev-parse", "HEAD"), head)
+    cleanup(root, remote)
+end)
+
+testing.test("follow.git.leaves.a.checkout.on.a.newer.commit", function()
+    local root, remote = git_main()
+    local old = git(root, "rev-parse", "HEAD")
+    local head = advance(remote)
+    local out, code = follow(root)
+    testing.eq(code, 0, out)
+    testing.eq(git(root, "rev-parse", "HEAD"), head)
+    out, code = support.dev(root, { "follow" }, { env = { DEV_FOLLOW_REV = old } })
+    testing.eq(code, 0, out)
+    testing.ok(
+        out:find(root .. " stays on the newer commit " .. head:sub(1, 12) .. ".", 1, true),
+        out
+    )
+    testing.eq(git(root, "rev-parse", "HEAD"), head)
+    cleanup(root, remote)
+end)
+
+testing.test("follow.jj.moves.onto.a.DEV_FOLLOW_REV.ahead.of.the.checkout", function()
+    local root, remote = jj_main()
+    local head = advance(remote)
+    local out, code = support.dev(root, { "follow" }, { env = { DEV_FOLLOW_REV = head } })
+    testing.eq(code, 0, out)
+    testing.ok(out:find(root .. " is on trunk " .. head:sub(1, 12), 1, true), out)
+    testing.eq(jj(root, "log", "-r", "@-", "--no-graph", "-T", "commit_id"), head)
+    cleanup(root, remote)
+end)
+
+testing.test("follow.jj.leaves.a.checkout.on.a.newer.commit", function()
+    local root, remote = jj_main()
+    local old = jj(root, "log", "-r", "@-", "--no-graph", "-T", "commit_id")
+    local head = advance(remote)
+    local out, code = follow(root)
+    testing.eq(code, 0, out)
+    testing.eq(jj(root, "log", "-r", "@-", "--no-graph", "-T", "commit_id"), head)
+    out, code = support.dev(root, { "follow" }, { env = { DEV_FOLLOW_REV = old } })
+    testing.eq(code, 0, out)
+    testing.ok(
+        out:find(root .. " stays on the newer commit " .. head:sub(1, 12) .. ".", 1, true),
+        out
+    )
+    testing.eq(jj(root, "log", "-r", "@-", "--no-graph", "-T", "commit_id"), head)
+    cleanup(root, remote)
+end)
+
 testing.test("follow.refuses.a.DEV_FOLLOW_REV.that.is.not.a.commit.id", function()
     local root, remote = git_main()
     local out, code = support.dev(root, { "follow" }, { env = { DEV_FOLLOW_REV = "master" } })
