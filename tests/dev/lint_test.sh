@@ -464,6 +464,19 @@ EOF
     assert_contains "the lua set fails a shell comment after deeper code" "$out" "arms.sh:4: full-line comment directly after code"
     rm "$lua/arms.sh"
 
+    mkdir -p "$lua/.ci"
+    cp "$STYLE/lua/fmt.lua" "$lua/.dev/fmt.lua"
+    cp "$STYLE/lua/stylua.toml" "$lua/stylua.toml"
+    printf 'local a = UNFORMATTED\n' >"$lua/.dev/x.lua"
+    printf 'local a = UNFORMATTED\n' >"$lua/.ci/y.lua"
+    printf 'local a = UNFORMATTED\n' >"$lua/src/other.lua"
+    (cd "$lua" && env PATH="$stylua_path" DEV_REMOTE=0 STYLUA_LOG="$stylua_log" bash "$DEV" fmt >/dev/null 2>&1)
+    assert_eq "dev fmt formats the .dev Lua of a lua project" "$(cat "$lua/.dev/x.lua")" "local a = formatted"
+    assert_eq "dev fmt formats the .ci Lua of a lua project" "$(cat "$lua/.ci/y.lua")" "local a = formatted"
+    assert_eq "dev fmt formats the visible Lua of a lua project" "$(cat "$lua/src/other.lua")" "local a = formatted"
+    rm "$lua/.dev/x.lua" "$lua/.dev/fmt.lua" "$lua/.ci/y.lua" "$lua/src/other.lua" "$lua/stylua.toml"
+    rmdir "$lua/.ci"
+
     out="$(style_lint "$lua" "$bare_path")"
     assert_contains "the lua note names the check a missing tool skips" "$out" "Tool stylua not found. The stylua check is skipped."
     out="$(style_lint "$lua" "$bare_path" CI=1)"
