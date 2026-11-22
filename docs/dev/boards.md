@@ -3347,6 +3347,10 @@ lists each one that fails. A refusal can leave the change rebased onto trunk.
   as its latest verdict. The refusal names the kind and the reviewer, and a
   later `clean` or `minor` review of that kind at the commit lifts it. A record
   with no verdict never refuses.
+- When `[board.pomb] reviewer_token` is set on the landing machine, land
+  refuses a review recorded on the credential that wrote the claim comment. The
+  refusal names the reviewer and the claimant. With no `reviewer_token` the
+  check is skipped.
 - The newest `dev-check:` record with `mode=run` at the landing commit has a
   `pass` for every checks row, in the card's row order. A `mode=expect-fail`
   record never counts, even when it does not parse, and neither does a

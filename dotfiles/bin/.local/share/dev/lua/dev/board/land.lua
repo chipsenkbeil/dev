@@ -1,4 +1,5 @@
 local abandon = require("dev.cmd.abandon")
+local board = require("dev.board")
 local check = require("dev.board.check")
 local dev_os = require("dev.os")
 local forge = require("dev.forge")
@@ -347,6 +348,34 @@ function M.refused_reviews(comments, state, root)
         end
     end
     return refused
+end
+
+---@class dev.board.land.SharedReview
+---@field kind string the review's kind
+---@field by string the reviewer's name
+---@field claimant string the name in the claim comment that shares the credential
+
+---List the reviews of the change recorded on the credential that wrote a claim comment.
+---@param comments {body: string, who: string?}[] the card's comments, oldest first
+---@param state dev.board.check.State the commit that would land
+---@return dev.board.land.SharedReview[] shared one per review, in comment order
+function M.shared_credentials(comments, state)
+    local claimed = {}
+    for _, comment in ipairs(comments) do
+        local claimant = board.last_claimant({ comment })
+        if claimant and comment.who then
+            claimed[comment.who] = claimant
+        end
+    end
+    local shared = {}
+    for _, comment in ipairs(comments) do
+        local record = review.parse(comment.body)
+        local claimant = record and comment.who and claimed[comment.who]
+        if claimant and record.change == state.change then
+            shared[#shared + 1] = { kind = record.kind, by = record.by, claimant = claimant }
+        end
+    end
+    return shared
 end
 
 ---Say whether the newest run of the checks at a commit passed every row.

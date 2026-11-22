@@ -324,6 +324,69 @@ testing.test("missing_reviews counts a recheck only for the kind it names", func
     testing.ok(refused[1]:find("recheck review by r", 1, true), refused[1])
 end)
 
+local function on_credential(who, comment)
+    comment.who = who
+    return comment
+end
+
+local function claimed_by(who, name)
+    return { who = who, body = "dev-claim: by=" .. name }
+end
+
+local function with_reviewer_token(set, run)
+    local home = support.tempdir()
+    assert(fs.mkdir(home .. "/.config/dev", { parents = true }), "mkdir failed")
+    local text = set and '[board.pomb]\nreviewer_token = "t"\n' or ""
+    assert(fs.write(home .. "/.config/dev/config.toml", text), "write failed")
+    local previous = os.getenv("HOME")
+    ffi.C.setenv("HOME", home, 1)
+    local ok, err = pcall(run)
+    ffi.C.setenv("HOME", previous, 1)
+    assert(ok, err)
+end
+
+testing.test("land refuses a review recorded on the claimant's credential", function()
+    local comments = {
+        claimed_by("runner-token", "dotfiles/implementer/c1"),
+        on_credential("runner-token", reviewed("code", COMMIT)),
+    }
+    testing.eq(
+        land.shared_credentials(comments, STATE),
+        { { kind = "code", by = "r", claimant = "dotfiles/implementer/c1" } }
+    )
+    with_reviewer_token(true, function()
+        local problems = wiring.credential_problems(comments, STATE)
+        testing.eq(#problems, 1)
+        testing.eq(
+            problems[1],
+            "The code review by r was recorded on the credential of dotfiles/implementer/c1, "
+                .. "which claimed the card."
+        )
+    end)
+end)
+
+testing.test("land accepts a review recorded on another credential", function()
+    local comments = {
+        claimed_by("runner-token", "dotfiles/implementer/c1"),
+        on_credential("reviewer-token", reviewed("code", COMMIT)),
+        reviewed("style", COMMIT),
+    }
+    testing.eq(land.shared_credentials(comments, STATE), {})
+    with_reviewer_token(true, function()
+        testing.eq(wiring.credential_problems(comments, STATE), {})
+    end)
+end)
+
+testing.test("land skips the credential check when no reviewer token is set", function()
+    local comments = {
+        claimed_by("runner-token", "dotfiles/implementer/c1"),
+        on_credential("runner-token", reviewed("code", COMMIT)),
+    }
+    with_reviewer_token(false, function()
+        testing.eq(wiring.credential_problems(comments, STATE), {})
+    end)
+end)
+
 testing.test("checks_problem counts only the newest passing run at the commit", function()
     local rows = { "dev lint", "dev test" }
     local pass = checked(COMMIT, check.Mode.RUN, { "pass - dev lint", "pass - dev test" })

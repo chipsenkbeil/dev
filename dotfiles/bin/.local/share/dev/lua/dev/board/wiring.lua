@@ -27,6 +27,7 @@ local TIMEOUT_FLAG = "--timeout"
 local RUN_FLAG = "--run"
 local MIN_RUN_COMMIT = 7
 local REQUIRE_CHANGE_RUN = "board.land.require_change_run"
+local REVIEWER_TOKEN_SETTING = "board.pomb.reviewer_token"
 
 ---Parse the flags and the card word of `board check`.
 ---@param root string the project root, whose config sets the default row wait
@@ -807,6 +808,28 @@ local function card_problems(backend, card, who)
     return problems
 end
 
+---Name each review recorded on the credential that claimed the card.
+---
+---Nothing is checked unless `[board.pomb] reviewer_token` is set on this machine.
+---@param comments {body: string, who: string?}[] the card's comments, oldest first
+---@param state dev.board.check.State the commit that would land
+---@return string[] problems one line per review
+local function credential_problems(comments, state)
+    if config.user(REVIEWER_TOKEN_SETTING) == nil then
+        return {}
+    end
+    local problems = {}
+    for _, shared in ipairs(land.shared_credentials(comments, state)) do
+        problems[#problems + 1] = string.format(
+            "The %s review by %s was recorded on the credential of %s, which claimed the card.",
+            shared.kind,
+            shared.by,
+            shared.claimant
+        )
+    end
+    return problems
+end
+
 ---List what keeps the card from landing, from its column to the trunk and the reviews.
 ---@param backend dev.board.Backend the board backend
 ---@param card dev.board.Card the card
@@ -877,6 +900,9 @@ local function land_problems(backend, card, who)
         end
     end
     for _, line in ipairs(refused) do
+        problems[#problems + 1] = line
+    end
+    for _, line in ipairs(credential_problems(who.comments, state)) do
         problems[#problems + 1] = line
     end
     if unproven then
@@ -1537,6 +1563,7 @@ M.check_rows = check_rows
 M.renew_claim = renew_claim
 M.card_problems = card_problems
 M.land_problems = land_problems
+M.credential_problems = credential_problems
 M.await_turn = await_turn
 M.land_prepare = land_prepare
 M.land_held = land_held
