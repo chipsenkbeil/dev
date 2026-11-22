@@ -3071,6 +3071,8 @@ Which rows an `--expect-fail` baseline runs:
   out. It keeps the standard test row only when a new row is a test, a
   `dev --remote test` row with words after the double dash.
 - A card whose rows are all standard runs every row.
+- The kept test row carries the named test rows in its one run, and a named
+  test its log does not list counts as failed.
 - The baseline leaves rows out only on a commit that has a trunk proof. The
   proof is a card in Release whose `Landed commit` note names the commit the
   working copy sits on. `land` passed that card's checks before it landed.

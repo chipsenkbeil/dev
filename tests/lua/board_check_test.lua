@@ -1431,6 +1431,72 @@ testing.test("check --run --expect-fail exits 1 when the run rows passed", funct
     testing.ok(body:find("mode=expect-fail", 1, true), body)
 end)
 
+local BASELINE_ROWS = {
+    "dev --remote test",
+    "dev --remote test -- tests/x_test.lua",
+    "dev --remote test -- tests/y_test.lua",
+}
+
+local function baseline_check(logs)
+    local root, home = git_root({
+        ["tests/a_test.lua"] = "x\n",
+        ["tests/x_test.lua"] = "x\n",
+        ["tests/y_test.lua"] = "x\n",
+    })
+    local id = card_with(root, home, BASELINE_ROWS)
+    local bin = support.tempdir() .. "/bin"
+    assert(fs.mkdir(bin, { parents = true }), "mkdir failed")
+    assert(
+        fs.write(bin .. "/ci", "#!/bin/sh\n" .. [[case "$1" in
+-C) echo '{"jobs":[{"name":"lint"},{"name":"test"}]}' ;;
+ps) echo '{"status":"failed"}' ;;
+logs) echo "logs $*" >> "$CI_LOG"; ]] .. logs .. "\nesac\n"),
+        "write failed"
+    )
+    assert(
+        fs.write(
+            bin .. "/dev",
+            '#!/bin/sh\necho "dev $*" >> "$CI_LOG"\necho "run 8cb600"\nexit 1\n'
+        ),
+        "write failed"
+    )
+    must(dev_os.run({ "chmod", "755", bin .. "/ci", bin .. "/dev" }))
+    local log = support.tempdir() .. "/ci.log"
+    local env = { PATH = bin .. ":" .. os.getenv("PATH"), CI_LOG = log, DEV_AGENT = "" }
+    local out, status = dev(root, home, { "board", "check", id, "--expect-fail" }, nil, env)
+    local held = comments(home)
+    return out, status, held[#held] and held[#held].body, fs.read(log) or ""
+end
+
+testing.test("an expect-fail named row starts no ci run of its own", function()
+    local out, _, body, log = baseline_check('echo "PASS tests/a_test.lua"')
+    testing.eq(select(2, log:gsub("dev %-%-remote test", "")), 1, out .. log)
+    testing.ok(log:find("logs 8cb600 --job test", 1, true), log)
+    testing.eq(#check.parse(body).rows, 3, body)
+end)
+
+testing.test("an expect-fail named row missing from the log records fail", function()
+    local out, code, body = baseline_check('echo "PASS tests/a_test.lua"')
+    testing.eq(code, 0, out)
+    local rows = check.parse(body).rows
+    testing.eq(rows[2].result, "fail", body)
+    testing.eq(rows[3].result, "fail", body)
+    testing.eq(rows[3].run_id, "8cb600", body)
+end)
+
+testing.test("an expect-fail named row that trunk passes still proves nothing", function()
+    local out, code, body = baseline_check('echo "PASS tests/x_test.lua"')
+    testing.eq(code, 1, out)
+    testing.eq(check.parse(body).rows[2].result, "pass", body)
+    testing.ok(out:find("the passing ones prove nothing", 1, true), out)
+end)
+
+testing.test("an expect-fail named row with an empty test log records error", function()
+    local out, code, body = baseline_check("true")
+    testing.eq(code, 1, out)
+    testing.eq(check.parse(body).rows[2].result, "error", body)
+end)
+
 testing.test("check --run records a one-row card from a run that has ended", function()
     local out, code, body, log = group_check({
         jobs = PASSED,

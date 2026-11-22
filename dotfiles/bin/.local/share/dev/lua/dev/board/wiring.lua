@@ -352,7 +352,7 @@ local function settle_guests(settle)
                 host.run_id
             )
         )
-        for k, row in ipairs(check.folded(host, asked)) do
+        for k, row in ipairs(check.folded(host, asked, flags.expect_fail)) do
             rows[open[k]] = row
         end
         return nil
@@ -365,6 +365,7 @@ local function settle_guests(settle)
             run = commands[place],
             argv = argvs[place],
             seconds = flags.seconds,
+            expect_fail = flags.expect_fail,
             env = settle.env,
             on_run_id = function(run_id)
                 verb.note(string.format("row %d run %s", place, run_id))
@@ -416,7 +417,7 @@ local function check_rows(opts)
     end
 
     -- Take the named test rows out, to read their results from the plain test row's run
-    local fold = not flags.expect_fail and not flags.run and check.fold(commands, argvs, mac) or nil
+    local fold = not flags.run and check.fold(commands, argvs, mac) or nil
     local guest = {}
     local planned, planned_argvs, origin = commands, argvs, nil
     if fold then

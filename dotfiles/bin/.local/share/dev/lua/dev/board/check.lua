@@ -1043,8 +1043,9 @@ end
 ---Record the named test rows that rode on a plain test row's ci run, from that run's test log.
 ---@param host dev.board.check.Row the plain test row, which holds the ci run id
 ---@param guests {run: string, words: string[]}[] the rows to record, each with a non-empty word list
+---@param expect_fail boolean? whether the run is meant to show the guests failing
 ---@return dev.board.check.Row[] rows one row for each guest, in the order given
-function M.folded(host, guests)
+function M.folded(host, guests, expect_fail)
     local timed_out = host.result == M.Result.TIMEOUT
     local log = ""
     if not timed_out then
@@ -1060,7 +1061,12 @@ function M.folded(host, guests)
                 local plain = word:gsub("^%./+", ""):gsub("/+$", "")
                 words[i] = plain ~= "" and plain or word
             end
-            result, reason = M.named_result(log, words)
+            if log:match("%S") then
+                result, reason = M.named_result(log, words, expect_fail)
+            else
+                result, reason =
+                    M.Result.ERROR, "the test log of ci run " .. host.run_id .. " is empty"
+            end
         end
         local code = 1
         if result == M.Result.PASS then
