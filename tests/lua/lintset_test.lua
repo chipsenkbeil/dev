@@ -385,3 +385,11 @@ testing.test("standalone writes each problem line to standard error", function()
     testing.eq(assert(fs.read(stderr_path)), ".dev/x.sh: " .. reason .. ".dev/y.sh: " .. reason)
     fs.remove(root, { recursive = true })
 end)
+
+testing.test("with_files joins two file lists in order without changing either", function()
+    local lua_files = { "a.lua", "b.lua" }
+    local dev_files = { ".dev/c.lua" }
+    testing.eq(lintset.with_files(lua_files, dev_files), { "a.lua", "b.lua", ".dev/c.lua" })
+    testing.eq(lua_files, { "a.lua", "b.lua" })
+    testing.eq(dev_files, { ".dev/c.lua" })
+end)
