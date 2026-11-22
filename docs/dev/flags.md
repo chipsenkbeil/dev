@@ -275,7 +275,8 @@ inside a ci job or a dev box. See the `remote` topic.
 A `DEV_AGENT` with a workspace role, `runner`, `implementer`, `planner`,
 `reviewer` or `verifier`, is also refused with exit 2 when a mutating verb
 runs in the primary checkout, so `-C WS` must name a workspace or worktree.
-The `remote` topic lists the verbs.
+The lead role is refused the same way for `land`, `board land`, `abandon`,
+`clean`, `purge` and `fmt` only. The `remote` topic lists the verbs.
 
 A command line with both `--local` and `--remote` exits 2 with this message:
 

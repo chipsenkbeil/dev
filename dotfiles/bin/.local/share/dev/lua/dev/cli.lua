@@ -244,13 +244,31 @@ for _, name in ipairs({
     PRIMARY_GUARDED[name] = true
 end
 
+---Mutating verbs the lead role never runs in the primary checkout, by verb name
+local LEAD_GUARDED = {}
+for _, name in ipairs({
+    "land",
+    "board land",
+    "abandon",
+    "clean",
+    "purge",
+    "fmt",
+}) do
+    LEAD_GUARDED[name] = true
+end
+
 local function refuse_agent_primary(project_root, words)
     local role = (os.getenv("DEV_AGENT") or ""):match("^[^/]*/([^/]*)")
-    if not (role and WORKSPACE_ROLES[role]) then
+    local guarded
+    if role == "lead" then
+        guarded = LEAD_GUARDED
+    elseif role and WORKSPACE_ROLES[role] then
+        guarded = PRIMARY_GUARDED
+    else
         return
     end
     local command = table.concat(words, " ")
-    if not (PRIMARY_GUARDED[words[1]] or PRIMARY_GUARDED[command]) then
+    if not (guarded[words[1]] or guarded[command]) then
         return
     end
     local backend = vcs.backend(project_root)

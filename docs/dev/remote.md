@@ -202,10 +202,14 @@ The mutating verbs are `install`, `uninstall`, `restow`, `stow`, `sync`,
 `purge`, `skills`, `tools install` and `board land`. Every other verb passes,
 `ws` and the rest of `board` included.
 
+The lead role is refused only for `land`, `board land`, `abandon`, `clean`,
+`purge` and `fmt`, the verbs a lead never runs in the primary checkout. It still
+runs `install`, `push`, `pull` and the rest there.
+
 The refusal exits 2, prints a line that names the verb and `dev -C WS`, and
 runs nothing. A workspace or worktree root passes, whether dev started there or
-`-C` points at it. The lead role, an unset or empty `DEV_AGENT` and a run inside
-a ci job or dev box are not refused.
+`-C` points at it. An unset or empty `DEV_AGENT` and a run inside a ci job or
+dev box are not refused.
 
 ### The run label
 
