@@ -587,7 +587,7 @@ function M.stale(backend, args, now)
     table.sort(umbrellas, oldest)
     if #umbrellas > 0 then
         lines[#lines + 1] = ""
-        lines[#lines + 1] = "umbrella in Backlog, a child started:"
+        lines[#lines + 1] = "umbrella waiting in Backlog for its children:"
         append(lines, stale_rows(umbrellas))
     end
     if #umbrella_warnings > 0 then

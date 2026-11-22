@@ -5984,7 +5984,7 @@ testing.test("stale leaves a card whose cross-board blocker has not started", fu
 end)
 
 do
-    local UMBRELLA_HEADING = "umbrella in Backlog, a child started:"
+    local UMBRELLA_HEADING = "umbrella waiting in Backlog for its children:"
 
     local function umbrella_board(umbrella_column, child_column)
         local cards, times = aged({ umbrella_column, child_column }, { 1, 1 })
