@@ -355,10 +355,17 @@ end
 ---@field by string the reviewer's name
 ---@field claimant string the name in the claim comment that shares the credential
 
----List the reviews of the change recorded on the credential that wrote a claim comment.
+---Build the key that a newer review of the same kind, recheck kind and reviewer replaces.
+---@param record dev.board.review.Record a parsed review
+---@return string key
+local function review_key(record)
+    return slot_key(record.kind, record.of) .. " " .. record.by
+end
+
+---List the newest review of each kind and reviewer that a claimant's credential recorded.
 ---@param comments {body: string, who: string?}[] the card's comments, oldest first
 ---@param state dev.board.check.State the commit that would land
----@return dev.board.land.SharedReview[] shared one per review, in comment order
+---@return dev.board.land.SharedReview[] shared one per newest review, in comment order
 function M.shared_credentials(comments, state)
     local claimed = {}
     for _, comment in ipairs(comments) do
@@ -367,11 +374,18 @@ function M.shared_credentials(comments, state)
             claimed[comment.who] = claimant
         end
     end
+    local newest = {}
+    for index, comment in ipairs(comments) do
+        local record = review.parse(comment.body)
+        if record and record.change == state.change then
+            newest[review_key(record)] = index
+        end
+    end
     local shared = {}
-    for _, comment in ipairs(comments) do
+    for index, comment in ipairs(comments) do
         local record = review.parse(comment.body)
         local claimant = record and comment.who and claimed[comment.who]
-        if claimant and record.change == state.change then
+        if claimant and record.change == state.change and newest[review_key(record)] == index then
             shared[#shared + 1] = { kind = record.kind, by = record.by, claimant = claimant }
         end
     end

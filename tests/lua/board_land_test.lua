@@ -377,6 +377,50 @@ testing.test("land accepts a review recorded on another credential", function()
     end)
 end)
 
+testing.test(
+    "an older shared review clears once a fresh review lands on another credential",
+    function()
+        local comments = {
+            claimed_by("runner-token", "dotfiles/implementer/c1"),
+            on_credential("runner-token", reviewed("code", COMMIT)),
+            on_credential("reviewer-token", reviewed("code", COMMIT)),
+            reviewed("style", COMMIT),
+        }
+        testing.eq(land.shared_credentials(comments, STATE), {})
+        with_reviewer_token(true, function()
+            testing.eq(wiring.credential_problems(comments, STATE), {})
+        end)
+    end
+)
+
+testing.test("land refuses when the newest review shares the claimant credential", function()
+    local comments = {
+        claimed_by("runner-token", "dotfiles/implementer/c1"),
+        on_credential("reviewer-token", reviewed("code", COMMIT)),
+        on_credential("runner-token", reviewed("code", COMMIT)),
+        reviewed("style", COMMIT),
+    }
+    testing.eq(
+        land.shared_credentials(comments, STATE),
+        { { kind = "code", by = "r", claimant = "dotfiles/implementer/c1" } }
+    )
+    with_reviewer_token(true, function()
+        testing.eq(#wiring.credential_problems(comments, STATE), 1)
+    end)
+end)
+
+testing.test("a fresh recheck of one kind does not clear a shared recheck of the other", function()
+    local comments = {
+        claimed_by("runner-token", "dotfiles/implementer/c1"),
+        on_credential("runner-token", reviewed("recheck", COMMIT, "style")),
+        on_credential("reviewer-token", reviewed("recheck", COMMIT, "code")),
+    }
+    testing.eq(
+        land.shared_credentials(comments, STATE),
+        { { kind = "recheck", by = "r", claimant = "dotfiles/implementer/c1" } }
+    )
+end)
+
 testing.test("land skips the credential check when no reviewer token is set", function()
     local comments = {
         claimed_by("runner-token", "dotfiles/implementer/c1"),
