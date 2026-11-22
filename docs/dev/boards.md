@@ -2951,9 +2951,13 @@ Rows that share one ci run:
   before.
 - A `dev --remote test -- NAME` row starts no run of its own when the card
   also has a plain `dev --remote test` row. It takes that row's run id and
-  reads its result from the run's test log. A row whose words no result line of
-  that log names, as a bats log that names test cases and never files, runs on
-  its own and records that run's result.
+  reads its result from the run's test log. A result line is a `PASS`, `SKIP`,
+  `FAIL`, `TIMEOUT` or `SIG` line, a TAP `ok` or `not ok` line, or a libtest
+  `test NAME ... ok`, `... ignored` or `... FAILED` line. A libtest line passes
+  or fails the test name it holds, and a `test result:` summary line is not a
+  result line. A row whose words no result line of that log names, as a bats
+  log that names test cases and never files, runs on its own and records that
+  run's result.
 - `--timeout` bounds the one run. A run that outlasts it records each of its
   rows as `timeout` with the state reason.
 - A refused run counts as a refusal of its first row.

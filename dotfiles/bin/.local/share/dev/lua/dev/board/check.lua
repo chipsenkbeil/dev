@@ -570,6 +570,10 @@ local FAILED_WORDS = { FAIL = true, TIMEOUT = true }
 local SIGNAL_PREFIX = "SIG"
 ---The first word of a TAP line that marks a passed result
 local TAP_OK = "ok"
+---The shape of a libtest result line, captured as its test name and verdict
+local LIBTEST_LINE = "^%s*test%s+(.-)%s+%.%.%.%s+(%S+)%s*$"
+---The verdicts a libtest result line ends with, mapped to whether they pass
+local LIBTEST_VERDICTS = { ok = true, ignored = true, FAILED = false }
 
 ---Say whether a log word is a word the row names.
 ---@param line_word string a word of a result line
@@ -606,14 +610,17 @@ function M.named_result(log, words, expect_fail)
     local results = {}
     for line in log:gmatch("[^\n]+") do
         local first = line:match("^%s*(%S+)")
-        local passed = PASSED_WORDS[first] == true or first == TAP_OK
+        local name, verdict = line:match(LIBTEST_LINE)
+        local libtest = LIBTEST_VERDICTS[verdict]
+        local passed = PASSED_WORDS[first] == true or first == TAP_OK or libtest == true
         if
             passed
+            or libtest ~= nil
             or FAILED_WORDS[first]
             or line:match("^%s*not%s+ok%s")
             or (first and first:sub(1, #SIGNAL_PREFIX) == SIGNAL_PREFIX)
         then
-            results[#results + 1] = { passed = passed, line = line }
+            results[#results + 1] = { passed = passed, line = line, names = name or line }
         end
     end
 
@@ -622,7 +629,7 @@ function M.named_result(log, words, expect_fail)
     for _, word in ipairs(words) do
         local found = false
         for _, entry in ipairs(results) do
-            if line_names(entry.line, word) then
+            if line_names(entry.names, word) then
                 found = true
                 if not entry.passed then
                     failure = failure or entry.line:match("^%s*(.-)%s*$")

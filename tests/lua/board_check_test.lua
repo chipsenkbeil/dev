@@ -2285,6 +2285,14 @@ local NEXTEST_LOG = table.concat({
     "        PASS [   0.011s] (3/3) ci other::tests::ok",
 }, "\n")
 
+local LIBTEST_LOG = table.concat({
+    "running 3 tests",
+    "test tests::box_vs_box_stacks_should_hold_lua_numbers ... ok",
+    "test tests::step_title::should_y ... FAILED",
+    "test tests::slow_path ... ignored",
+    "test result: FAILED. 1 passed; 1 failed; 1 ignored; finished in 0.01s",
+}, "\n")
+
 testing.test("a named test passes on a PASS or SKIP line", function()
     local PASS, FAIL = check.Result.PASS, check.Result.FAIL
     testing.eq((check.named_result(DEV_LOG, { "tests/lua/a_test.lua" })), PASS)
@@ -2332,6 +2340,36 @@ testing.test("a named test matches whole nextest path segments", function()
     testing.eq((check.named_result(NEXTEST_LOG, { "should" })), ERROR)
     testing.eq((check.named_result(NEXTEST_LOG, { "tests::o" })), ERROR)
     testing.eq((check.named_result(NEXTEST_LOG, { "gent::tests" })), ERROR)
+end)
+
+testing.test("a libtest ok line passes the name it holds", function()
+    local PASS, ERROR = check.Result.PASS, check.Result.ERROR
+    local box = "box_vs_box_stacks_should_hold_lua_numbers"
+    testing.eq((check.named_result(LIBTEST_LOG, { box })), PASS)
+    testing.eq((check.named_result(LIBTEST_LOG, { "tests::" .. box })), PASS)
+    testing.eq((check.named_result(LIBTEST_LOG, { "test" })), ERROR)
+    testing.eq((check.named_result(LIBTEST_LOG, { "ok" })), ERROR)
+end)
+
+testing.test("a libtest FAILED line fails the name it holds", function()
+    local FAIL = check.Result.FAIL
+    local result, reason = check.named_result(LIBTEST_LOG, { "step_title::should_y" })
+    testing.eq(result, FAIL)
+    testing.eq(reason, "test tests::step_title::should_y ... FAILED")
+    local both = { "box_vs_box_stacks_should_hold_lua_numbers", "step_title" }
+    testing.eq((check.named_result(LIBTEST_LOG, both)), FAIL)
+end)
+
+testing.test("a libtest ignored line passes the name it holds", function()
+    testing.eq((check.named_result(LIBTEST_LOG, { "slow_path" })), check.Result.PASS)
+end)
+
+testing.test("a libtest summary line names no test", function()
+    local summary = "test result: ok. 3 passed; 0 failed; finished in 0.01s"
+    local result, reason = check.named_result(summary, { "test" })
+    testing.eq(result, check.Result.ERROR)
+    testing.eq(reason, "no result line names test")
+    testing.eq((check.named_result(summary, { "ok." })), check.Result.ERROR)
 end)
 
 testing.test("a named test missing from the log is an error", function()
