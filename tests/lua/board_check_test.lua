@@ -2249,6 +2249,26 @@ testing.test("a named test passes on a PASS or SKIP line", function()
     testing.eq(reason, "FAIL tests/lua/c_test.lua")
 end)
 
+testing.test("a TAP ok line passes a named row", function()
+    local log = table.concat({
+        "1..3",
+        "ok 240 volume-restart-vm",
+        "ok 241 volume-skip # skip no vm",
+        "not ok 242 volume-broken",
+    }, "\n")
+    testing.eq((check.named_result(log, { "volume-restart-vm" })), check.Result.PASS)
+    testing.eq((check.named_result(log, { "volume-skip" })), check.Result.PASS)
+    testing.eq((check.named_result(DEV_LOG, { "tests/lua/a_test.lua" })), check.Result.PASS)
+end)
+
+testing.test("a TAP not ok line fails a named row", function()
+    local log = table.concat({ "ok 1 fine", "not ok 2 volume-broken" }, "\n")
+    local result, reason = check.named_result(log, { "volume-broken" })
+    testing.eq(result, check.Result.FAIL)
+    testing.eq(reason, "not ok 2 volume-broken")
+    testing.eq((check.named_result(log, { "fine", "volume-broken" })), check.Result.FAIL)
+end)
+
 testing.test("a named test matches whole nextest path segments", function()
     local PASS, FAIL, ERROR = check.Result.PASS, check.Result.FAIL, check.Result.ERROR
     testing.eq((check.named_result(NEXTEST_LOG, { "other::tests::ok" })), PASS)

@@ -566,6 +566,8 @@ local PASSED_WORDS = { PASS = true, SKIP = true }
 local FAILED_WORDS = { FAIL = true, TIMEOUT = true }
 ---The prefix of a log word that marks a result killed by a signal
 local SIGNAL_PREFIX = "SIG"
+---The first word of a TAP line that marks a passed result
+local TAP_OK = "ok"
 
 ---Say whether a log word is a word the row names.
 ---@param line_word string a word of a result line
@@ -601,10 +603,11 @@ function M.named_result(log, words, expect_fail)
     local results = {}
     for line in log:gmatch("[^\n]+") do
         local first = line:match("^%s*(%S+)")
-        local passed = PASSED_WORDS[first] == true
+        local passed = PASSED_WORDS[first] == true or first == TAP_OK
         if
             passed
             or FAILED_WORDS[first]
+            or line:match("^%s*not%s+ok%s")
             or (first and first:sub(1, #SIGNAL_PREFIX) == SIGNAL_PREFIX)
         then
             results[#results + 1] = { passed = passed, line = line }
