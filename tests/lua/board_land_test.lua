@@ -2243,6 +2243,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         -- Move trunk over an unrelated file and rebase the reviewed change onto it
         local project = jj_project()
         local id = review_ready(project)
+        local before = head(project.root)
         trunk_moves(project, { ["docs.txt"] = "docs\n" })
         rebase_onto_trunk(project.root)
 
@@ -2257,7 +2258,7 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
 
         -- Check the carried check note and the four reads
         local list = comments(project.home)
-        testing.ok(list[#list].body:find("carried over", 1, true), list[#list].body)
+        carried_note(list[#list].body, before)
         testing.eq(fs.read(reads), "fetch\nfetch\nfetch\nfetch\n")
     end)
 
