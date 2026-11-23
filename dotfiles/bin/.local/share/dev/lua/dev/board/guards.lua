@@ -1,4 +1,5 @@
 local board = require("dev.board")
+local board_init = require("dev.board.init")
 local check = require("dev.board.check")
 local land = require("dev.board.land")
 local dev_os = require("dev.os")
@@ -493,18 +494,17 @@ local function is_lead(name, interactive)
     return role_of(name) == "lead"
 end
 
----The roles that review a card
-local REVIEWER_ROLES = {
-    ["code-examiner"] = true,
-    ["style-examiner"] = true,
-    ["recheck-examiner"] = true,
-}
-
----Check whether a name has a reviewing role.
+---Check whether a name has a reviewing role, which is a board seat name followed by `-reviewer`.
 ---@param name string the agent name
----@return boolean reviewer true for the code, style and recheck reviewers
+---@return boolean reviewer true for the reviewer of one of the board's seats
 local function is_reviewer(name)
-    return REVIEWER_ROLES[role_of(name) or ""] == true
+    local role = role_of(name)
+    for _, seat in ipairs(board_init.SEATS) do
+        if role == seat .. "-reviewer" then
+            return true
+        end
+    end
+    return false
 end
 
 ---Check whether a name has the verifier role.

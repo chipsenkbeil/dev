@@ -3,6 +3,7 @@ local ffi = require("ffi")
 
 local testing = require("dev.testing")
 local board = require("dev.board")
+local board_init = require("dev.board.init")
 local tokenfile = require("dev.board.tokenfile")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
@@ -912,6 +913,30 @@ testing.test("a reviewer name with no standing token reads its own file", functi
     testing.ok(read(root, "stdin"):find("Bearer " .. WORKER, 1, true), read(root, "stdin"))
     testing.eq(read(root, "stdin"):find(STANDING, 1, true), nil)
     testing.eq(occurrences(read(root, "calls"), "Reviewer"), 0)
+end)
+
+testing.test("reviewer roles follow the board seats", function()
+    for _, seat in ipairs(board_init.SEATS) do
+        local name = "dotfiles/" .. seat .. "-reviewer/bff0e010"
+        local root, home = sandbox()
+        filed_as(root, home, name)
+        standing(home)
+        local out, code = dev(root, home, { "board", "boards" }, { agent = name })
+        testing.ok(code == 0, name .. "\n" .. out)
+        testing.ok(read(root, "stdin"):find("Bearer " .. STANDING, 1, true), name)
+    end
+end)
+
+testing.test("a role outside the seats sends no standing token", function()
+    for _, name in ipairs({ "dotfiles/lint-reviewer/bff0e010", "dotfiles/code/bff0e010" }) do
+        local root, home = minted()
+        standing(home)
+        local out, code = dev(root, home, { "board", "boards" }, { agent = name })
+        testing.ok(code == 0, name .. "\n" .. out)
+        local sent = read(root, "stdin")
+        testing.eq(sent:find(STANDING, 1, true), nil, name .. "\n" .. sent)
+        testing.eq(occurrences(read(root, "calls"), "Reviewer"), 0, name)
+    end
 end)
 
 testing.test("a runner name never sends the standing reviewer token", function()

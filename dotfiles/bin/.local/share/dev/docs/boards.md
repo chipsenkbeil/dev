@@ -293,18 +293,19 @@ token of its own.
 
 - The standing tokens: `reviewer_token` and `verifier_token` in `[board.pomb]`
   are `pass:<entry>` references, as `lead_token` is. When the role segment of
-  `DEV_AGENT` is `code-examiner`, `style-examiner` or `recheck-examiner`, dev
-  sends `reviewer_token` in place of the `DEV_BOARD_TOKEN`, the token file and
-  the shared `token`. When it is `verifier`, dev sends `verifier_token` in the
-  same place and never `reviewer_token`. A runner, an implementer or any other
-  name never sends either.
+  `DEV_AGENT` is a board seat name followed by `-reviewer` (the seats are
+  `code`, `style` and `recheck`), dev sends `reviewer_token` in place of the
+  `DEV_BOARD_TOKEN`, the token file and the shared `token`. When it is
+  `verifier`, dev sends `verifier_token` in the same place and never
+  `reviewer_token`. A runner, an implementer or any other name never sends
+  either.
 - With a standing token unset nothing changes: dev reads the token file of the
   name, then the shared token, and the lead mints per name as below. A verifier
   name with `verifier_token` unset reads its own token file, never
   `reviewer_token`.
 - The lead mints one per reviewer name with `dev board token mint --role ROLE
   --as NAME`, for the code reviewer, the style reviewer, the recheck reviewer
-  and the verifier, for example `dotfiles/code-examiner/f5f0e007`.
+  and the verifier, for example `dotfiles/<seat>-reviewer/f5f0e007`.
 - The runner messages the lead with the role and name pairs before it
   dispatches only when no standing token exists. It never mints, reads or
   prints a token.
@@ -1806,8 +1807,9 @@ it as the holder.
 Agents name themselves `<repo>/<role>[/<card>]`: the board name, any role word
 and an optional card id, as in `dotfiles/lead` and
 `dotfiles/implementer/f5f0e007`. Each part is letters, digits, `.`, `_` and `-`.
-The usual roles are `lead`, `runner`, `planner`, `implementer`, `code-examiner`,
-`style-examiner`, `recheck-examiner`, `verifier`, `land`, `release` and `check`.
+The usual roles are `lead`, `runner`, `planner`, `implementer`, one
+`<seat>-reviewer` for each board seat, `verifier`, `land`, `release` and
+`check`.
 
 A grab on a Pomb card sends the role part of that name as the owner's `role`,
 so `dotfiles/implementer/f5f0e007` sends `implementer`.
