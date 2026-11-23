@@ -217,16 +217,16 @@ end
 
 ---Refuse a card given as BOARD:PREFIX to a command that only works on this board.
 ---@param word string? the card word
----@param verb string the command's name
+---@param command string the command's name
 ---@return dev.cmd.board.Result? refused the failure naming the board, nil when the card is on this board
-local function foreign_refusal(word, verb)
+local function foreign_refusal(word, command)
     local named = split_board(word)
     if not named then
         return nil
     end
     return failure(
         "The command "
-            .. verb
+            .. command
             .. " works only on this board's cards, and "
             .. word
             .. " is on the board "

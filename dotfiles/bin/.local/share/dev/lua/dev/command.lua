@@ -4,7 +4,7 @@ local stderr = io.stderr
 local stdout = io.stdout
 
 ---@class dev.Ctx
----@field name string the command as typed, a noun and its subcommand joined by a space
+---@field name string the command as typed, a parent command and its subcommand joined by a space
 ---@field words string[] the command words
 ---@field root string absolute path of the project root
 ---@field args string[] positional arguments, minus `KEY=value` words unless `positional`

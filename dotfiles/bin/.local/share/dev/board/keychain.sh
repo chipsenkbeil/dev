@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -u
 
-verb=${1:-}
+subcommand=${1:-}
 entry=${2:-}
 timeout_secs=3
 not_found=44
@@ -14,7 +14,7 @@ esac
 service="dev-pomb-token:$entry"
 account=${USER:-$(id -un)}
 
-case $verb in
+case $subcommand in
 get)
     timeout "$timeout_secs" security find-generic-password -a "$account" -s "$service" -w </dev/null 2>/dev/null
     ;;

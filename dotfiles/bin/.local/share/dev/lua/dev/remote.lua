@@ -13,7 +13,7 @@ local LOCAL_HINT = "Rerun it, or pass `--local` to run it here."
 local AGENT_HINT = "An agent runs it on ci, so fix ci and rerun."
 
 ---@class dev.remote.Run
----@field words string[] the command words, a noun and its subcommand as two
+---@field words string[] the command words, a parent command and its subcommand as two
 ---@field args string[] the arguments for the job, untouched
 ---@field detach boolean whether `--detach` was given
 ---@field priority boolean whether `--priority` was given
