@@ -25,7 +25,7 @@ end
 ---@param reg dev.Registry the project's registry
 ---@return integer code 0, with no output for a word that is no command with subcommands
 function M.subs(ctx, reg)
-    if reg:is_noun(ctx.args) then
+    if reg:is_parent(ctx.args) then
         for _, row in ipairs(reg:subs(ctx.args)) do
             io.write(row.words[#row.words], "\t", row.kind, "\t", row.desc, "\n")
         end

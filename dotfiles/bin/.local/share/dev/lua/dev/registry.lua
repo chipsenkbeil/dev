@@ -36,21 +36,23 @@ end
 ---@field replaces dev.Source? `global` when a project script has a global script of its name
 
 ---@class dev.Row
----@field words string[] the command words, with a noun first in a subcommand's
+---@field words string[] the command words, with the parent command first in a subcommand's
 ---@field name string the words joined by a space
 ---@field kind "builtin"|"override"|"local" where the row comes from, `override` for a project
 ---   script that replaces a built-in command
 ---@field source dev.Source which layer answers, a global or project script beating a built-in
 ---   row
 ---@field replaces dev.Source? the source a script row replaces, `builtin` or `global`
----@field noun boolean whether the row is a noun
----@field handler string? the built-in handler, nil for a noun, a local command or the project type's
+---@field parent boolean whether the row is a command with subcommands
+---@field handler string? the built-in handler, nil for a parent command, a local command or the
+---   project type's
 ---   builtin
 ---@field flags string? flags a built-in row takes, space separated
 ---@field usage string? usage line of a built-in row
 ---@field desc string description shown in `dev help`
----@field group string? heading in `dev help`, set on a command and a noun
----@field hidden boolean? whether `dev help` keeps the row to `-a`, set on a command and a noun
+---@field group string? heading in `dev help`, set on a command and a parent command
+---@field hidden boolean? whether `dev help` keeps the row to `-a`, set on a command and a parent
+---   command
 ---@field remote false? false when the command never runs on a remote runner
 ---@field requires string[]? the preconditions the command declares, `workspace` the only one known
 ---@field script string? path of the project script behind the row
@@ -67,9 +69,9 @@ end
 ---@field warn fun(message: string) receives each warning about a script's header
 ---@field private builtin table<string, dev.Builtin> built-in rows by name
 ---@field private builtin_subs table<string, dev.Builtin[]> built-in rows by the name of their
----   parent noun
+---   parent command
 ---@field private dirs table<string, dev.Dir|false> the directories read so far by the space-joined
----   words of the noun, `""` for `.dev`
+---   words of the parent command, `""` for `.dev`
 ---@field private headers table<string, dev.Header> parsed headers by script path
 ---@field private rows table<string, dev.Row|false> resolved command rows by name
 ---@field private only dev.Source? the one source a view answers from, nil for the whole registry
@@ -205,7 +207,7 @@ end
 ---Nothing is wired to dispatch yet, so the registry only answers questions.
 ---`.lua` scripts need no exec bit, `.sh` scripts do, and `.lua` beats `.sh`
 ---for one name. The `lua` and `topics` directories hold helpers and topics,
----never nouns.
+---never parent commands.
 ---@param root string project root
 ---@param opts {warn: fun(message: string)?}? `warn` receives header warnings and writes to standard
 ---   error by default
@@ -329,12 +331,12 @@ function Registry:__has_subs(name)
     return false
 end
 
-function Registry:__noun_desc(noun)
-    local builtin = self.builtin[noun]
+function Registry:__parent_desc(parent)
+    local builtin = self.builtin[parent]
     if builtin and builtin.desc ~= "" then
         return builtin.desc
     end
-    local rel = noun:gsub(" ", "/")
+    local rel = parent:gsub(" ", "/")
     for _, base in ipairs({ fs.join(self.root, ".dev"), self.global }) do
         local first = fs.read(fs.join(base, rel, "DESCRIPTION"))
         local line = first and first:match("^[^\n]*") or ""
@@ -342,17 +344,17 @@ function Registry:__noun_desc(noun)
             return line
         end
     end
-    return table.concat(self:__sub_names(noun), ", ")
+    return table.concat(self:__sub_names(parent), ", ")
 end
 
-function Registry:__sub_names(noun)
+function Registry:__sub_names(parent)
     local names, seen = {}, {}
-    for _, builtin in ipairs(self.builtin_subs[noun] or {}) do
+    for _, builtin in ipairs(self.builtin_subs[parent] or {}) do
         local word = builtin.words[#builtin.words]
         seen[word] = true
         names[#names + 1] = word
     end
-    local dir = self:__dir(noun)
+    local dir = self:__dir(parent)
     if dir then
         for _, sub in ipairs(dir.order) do
             if sub:sub(1, 2) ~= "__" and not seen[sub] then
@@ -361,7 +363,11 @@ function Registry:__sub_names(noun)
             end
         end
         for _, sub in ipairs(dir.subs) do
-            if sub:sub(1, 2) ~= "__" and not seen[sub] and self:__has_subs(noun .. " " .. sub) then
+            if
+                sub:sub(1, 2) ~= "__"
+                and not seen[sub]
+                and self:__has_subs(parent .. " " .. sub)
+            then
                 seen[sub] = true
                 names[#names + 1] = sub
             end
@@ -396,7 +402,7 @@ function Registry:__place(row)
         if row.script then
             local h = self:__header(row.script, row.lang)
             group, hidden = h.group or "", h.hidden
-        elseif row.noun then
+        elseif row.parent then
             local found, found_hidden = self:__first_group(row.name)
             if found then
                 group, hidden = found, found_hidden
@@ -413,7 +419,7 @@ function Registry:__place(row)
     row.group, row.hidden = group, hidden
 end
 
-function Registry:__verb(name)
+function Registry:__command(name)
     local cached = self.rows[name]
     if cached ~= nil then
         return cached or nil
@@ -423,7 +429,7 @@ function Registry:__verb(name)
     if builtin then
         row = copy(builtin)
         row.kind, row.source = "builtin", Source.BUILTIN
-        if script and not builtin.noun then
+        if script and not builtin.parent then
             row.kind, row.script, row.lang = "override", script.path, script.lang
             row.source, row.replaces = script.source, script.replaces or Source.BUILTIN
             local h = self:__header(script.path, script.lang)
@@ -456,33 +462,33 @@ function Registry:__verb(name)
             )
         end
     elseif self:__has_subs(name) then
-        row = { words = { name }, kind = "local", noun = true, source = self:__dir(name).source }
-        row.desc = self:__noun_desc(name)
+        row = { words = { name }, kind = "local", parent = true, source = self:__dir(name).source }
+        row.desc = self:__parent_desc(name)
     end
     if row then
         row.name = name
-        row.noun = row.noun or false
+        row.parent = row.parent or false
         self:__place(row)
     end
     self.rows[name] = row or false
     return row
 end
 
-function Registry:__sub(noun, sub)
-    local name = noun.name .. " " .. sub
+function Registry:__sub(parent, sub)
+    local name = parent.name .. " " .. sub
     local words = {}
-    for i, word in ipairs(noun.words) do
+    for i, word in ipairs(parent.words) do
         words[i] = word
     end
     words[#words + 1] = sub
     local builtin = self.builtin[name]
-    local dir = self:__dir(noun.name)
+    local dir = self:__dir(parent.name)
     local script = dir and dir.scripts[sub]
     if builtin then
         local row = copy(builtin)
-        row.name, row.kind, row.noun = name, "builtin", builtin.noun or false
-        row.source, row.group, row.hidden = Source.BUILTIN, noun.group, false
-        if script and not builtin.noun then
+        row.name, row.kind, row.parent = name, "builtin", builtin.parent or false
+        row.source, row.group, row.hidden = Source.BUILTIN, parent.group, false
+        if script and not builtin.parent then
             row.kind, row.script, row.lang = "override", script.path, script.lang
             row.source, row.replaces = script.source, script.replaces or Source.BUILTIN
             local h = self:__header(script.path, script.lang)
@@ -499,11 +505,11 @@ function Registry:__sub(noun, sub)
             kind = "local",
             source = script.source,
             replaces = script.replaces,
-            noun = false,
+            parent = false,
             script = script.path,
             lang = script.lang,
             desc = h.desc,
-            group = noun.group,
+            group = parent.group,
             hidden = false,
         }
         declare(row, h)
@@ -515,9 +521,9 @@ function Registry:__sub(noun, sub)
             name = name,
             kind = "local",
             source = self:__dir(name).source,
-            noun = true,
-            desc = self:__noun_desc(name),
-            group = noun.group,
+            parent = true,
+            desc = self:__parent_desc(name),
+            group = parent.group,
             hidden = false,
         }
     end
@@ -600,14 +606,14 @@ end
 ---Find the row for a command.
 ---
 ---A project script beats a global script, which beats a built-in command or
----subcommand, though no script replaces a built-in noun. A script
+---subcommand, though no script replaces a built-in parent command. A script
 ---`.dev/<command>.<ext>` beats a directory of the same name, but a project
 ---directory beats a global script of that name. A `__` script is found here
 ---though `commands` and `subs` list it.
 ---
 ---A first word `builtin:WORD` or `global:WORD` answers from that source alone, and the row's
 ---words are the bare ones.
----@param words string[] one word for a command or noun, then one for each level of subcommand
+---@param words string[] one word for a command, then one for each level of subcommand
 ---@return dev.Row? row nil when nothing answers to the words
 ---@return string? reason `unknown source NAME`, `no builtin command WORDS` or `no global command
 ---   WORDS` for a prefixed word the registry cannot answer
@@ -628,9 +634,9 @@ function Registry:find(words)
             return nil
         end
     end
-    local row = words[1] and self:__verb(words[1])
+    local row = words[1] and self:__command(words[1])
     for i = 2, #words do
-        if not (row and row.noun) then
+        if not (row and row.parent) then
             return nil
         end
         row = self:__sub(row, words[i])
@@ -640,10 +646,11 @@ end
 
 ---Collect what a command and the commands above it declare.
 ---
----A `remote: false` or a `requires` word on a noun covers its subcommands.
+---A `remote: false` or a `requires` word on a parent command covers its subcommands.
 ---@param words string[] the command words
----@return false? remote false when the command or a noun above it never runs on a remote runner
----@return string[] requires the preconditions the command and the nouns above it declare
+---@return false? remote false when the command or a parent command above it never runs on a remote
+---   runner
+---@return string[] requires the preconditions the command and the parent commands above it declare
 function Registry:declared(words)
     local remote, requires, seen = nil, {}, {}
     for count = 1, #words do
@@ -670,18 +677,18 @@ function Registry:commands()
     local rows = {}
     for _, builtin in ipairs(builtins) do
         if #builtin.words == 1 then
-            rows[#rows + 1] = self:__verb(builtin.words[1])
+            rows[#rows + 1] = self:__command(builtin.words[1])
         end
     end
     local top = self:__dir("")
     for _, name in ipairs(top.order) do
         if name:sub(1, 2) ~= "__" and not self.builtin[name] then
-            rows[#rows + 1] = self:__verb(name)
+            rows[#rows + 1] = self:__command(name)
         end
     end
     for _, name in ipairs(top.subs) do
-        local row = name:sub(1, 2) ~= "__" and not self.builtin[name] and self:__verb(name)
-        if row and row.noun then
+        local row = name:sub(1, 2) ~= "__" and not self.builtin[name] and self:__command(name)
+        if row and row.parent then
             rows[#rows + 1] = row
         end
     end
@@ -689,11 +696,11 @@ function Registry:commands()
 end
 
 ---List the subcommands of a command.
----@param noun string|string[] the noun's words, or its name when it is one word
+---@param path string|string[] the parent command's words, or its name when it is one word
 ---@return dev.Row[] rows the built-in subcommands, then the project's, none for words that are not
----   a noun
-function Registry:subs(noun)
-    local words = type(noun) == "string" and { noun } or noun
+---   a parent command
+function Registry:subs(path)
+    local words = type(path) == "string" and { path } or path
     local view, bare = scope(self, words)
     if not view then
         return {}
@@ -701,13 +708,13 @@ function Registry:subs(noun)
     if view ~= self then
         return view:subs(bare)
     end
-    local parent = self:find(words)
+    local found = self:find(words)
     local rows = {}
-    if not (parent and parent.noun) then
+    if not (found and found.parent) then
         return rows
     end
-    for _, sub in ipairs(self:__sub_names(parent.name)) do
-        rows[#rows + 1] = self:__sub(parent, sub)
+    for _, sub in ipairs(self:__sub_names(found.name)) do
+        rows[#rows + 1] = self:__sub(found, sub)
     end
     return rows
 end
@@ -726,7 +733,7 @@ local function collect(self, name, out, seen)
     end
 end
 
----List every script in `.dev` and in its noun directories, `__` helpers included.
+---List every script in `.dev` and in its parent command directories, `__` helpers included.
 ---@return dev.Script[] scripts the scripts, each directory's own before the ones inside it
 function Registry:scripts()
     local out = {}
@@ -741,13 +748,13 @@ function Registry:header(row)
     return row.script and self:__header(row.script, row.lang) or nil
 end
 
----Check whether a word is a noun.
+---Check whether a word is a parent command, one that has subcommands.
 ---@param word string|string[] the words to check, or the name when it is one word
----@return boolean noun true for a built-in noun or a directory of scripts no script of the same
----   name shadows
-function Registry:is_noun(word)
+---@return boolean parent true for a built-in parent command or a directory of scripts no script of
+---   the same name shadows
+function Registry:is_parent(word)
     local row = self:find(type(word) == "string" and { word } or word)
-    return row ~= nil and row.noun
+    return row ~= nil and row.parent
 end
 
 ---List the flags a command takes.

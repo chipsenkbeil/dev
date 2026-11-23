@@ -6,8 +6,8 @@ local dev_command = require("dev.command")
 
 local Kind = project.Kind
 
----@enum dev.cmd.types.Verb
-local Verb = {
+---@enum dev.cmd.types.Command
+local Command = {
     LINT = "lint",
     FMT = "fmt",
     TEST = "test",
@@ -28,11 +28,11 @@ local Verb = {
 ---   is printed
 
 ---@class dev.cmd.types
----@field Verb table<string, dev.cmd.types.Verb> the commands the project type decides
+---@field Command table<string, dev.cmd.types.Command> the commands the project type decides
 ---@field COMMANDS table<string, boolean> the same commands as a set of names
 ---@field handlers table<string, fun(ctx: dev.Ctx): integer> one handler per command, for the
 ---   registry's rows
-local M = { Verb = Verb, COMMANDS = {}, handlers = {} }
+local M = { Command = Command, COMMANDS = {}, handlers = {} }
 
 local CARGO = { "cargo", "brew install rustup" }
 local MAKE = { "make", "xcode-select --install" }
@@ -79,11 +79,11 @@ local function node_script(root, name)
     return value ~= nil and value ~= false and value ~= json.null
 end
 
-local function make_steps(root, verb_name, args)
-    if not has_make_target(root, verb_name) then
-        return nil, "The Makefile has no " .. verb_name .. " target."
+local function make_steps(root, command_name, args)
+    if not has_make_target(root, command_name) then
+        return nil, "The Makefile has no " .. command_name .. " target."
     end
-    local argv = concat({ "make", "-C", root, verb_name }, args)
+    local argv = concat({ "make", "-C", root, command_name }, args)
     return { { argv = argv, needs = { MAKE } } }
 end
 
@@ -160,9 +160,9 @@ local function stylua_steps(root, args)
     return { { argv = argv, needs = { { "stylua", "brew install stylua" } } } }
 end
 
-local function rust_steps(root, verb_name, args)
+local function rust_steps(root, command_name, args)
     local steps
-    if verb_name == Verb.LINT then
+    if command_name == Command.LINT then
         steps = {
             {
                 argv = { "cargo", "+nightly", "fmt", "--check" },
@@ -190,9 +190,9 @@ local function rust_steps(root, verb_name, args)
                 needs = { { "ast-grep", "brew install ast-grep" } },
             }
         end
-    elseif verb_name == Verb.FMT then
+    elseif command_name == Command.FMT then
         steps = { { argv = concat({ "cargo", "+nightly", "fmt" }, args) } }
-    elseif verb_name == Verb.TEST then
+    elseif command_name == Command.TEST then
         steps = {
             {
                 argv = concat({ "cargo", "nextest", "run", "--all-features" }, args),
@@ -203,11 +203,11 @@ local function rust_steps(root, verb_name, args)
             },
             { argv = concat({ "cargo", "test", "--doc", "--all-features" }, args) },
         }
-    elseif verb_name == Verb.BUILD then
+    elseif command_name == Command.BUILD then
         steps = { { argv = concat({ "cargo", "build", "--release" }, args) } }
-    elseif verb_name == Verb.RUN then
+    elseif command_name == Command.RUN then
         steps = { { argv = concat({ "cargo", "run", "--" }, args) } }
-    elseif verb_name == Verb.FETCH then
+    elseif command_name == Command.FETCH then
         local offline = { "env", "CARGO_NET_OFFLINE=false", "cargo" }
         steps = { { argv = concat(offline, { "fetch", "--locked" }), cwd = root } }
         if fs.is_file(root .. "/deny.toml") then
@@ -225,36 +225,36 @@ local function rust_steps(root, verb_name, args)
     return steps
 end
 
-local function love2d_steps(root, verb_name, args)
-    if verb_name == Verb.RUN then
+local function love2d_steps(root, command_name, args)
+    if command_name == Command.RUN then
         local argv = concat({ "love", root }, args)
         return { { argv = argv, needs = { { "love", "brew install --cask love" } } } }
-    elseif verb_name == Verb.TEST or verb_name == Verb.LINT then
-        return make_steps(root, verb_name, args)
-    elseif verb_name == Verb.FMT then
+    elseif command_name == Command.TEST or command_name == Command.LINT then
+        return make_steps(root, command_name, args)
+    elseif command_name == Command.FMT then
         return stylua_steps(root, args)
     end
 end
 
-local function lua_steps(root, verb_name, args)
-    if verb_name == Verb.FMT then
+local function lua_steps(root, command_name, args)
+    if command_name == Command.FMT then
         return stylua_steps(root, args)
     end
-    return make_steps(root, verb_name, args)
+    return make_steps(root, command_name, args)
 end
 
-local function godot_steps(root, verb_name, args)
-    if verb_name == Verb.RUN then
+local function godot_steps(root, command_name, args)
+    if command_name == Command.RUN then
         local argv = concat({ "godot", "--path", root }, args)
         return { { argv = argv, needs = { { "godot", "brew install --cask godot" } } } }
     end
 end
 
-local function node_steps(root, verb_name, args)
-    if not node_script(root, verb_name) then
-        return nil, "The package.json has no " .. verb_name .. " script."
+local function node_steps(root, command_name, args)
+    if not node_script(root, command_name) then
+        return nil, "The package.json has no " .. command_name .. " script."
     end
-    local argv = { "npm", "--prefix", root, "run", verb_name }
+    local argv = { "npm", "--prefix", root, "run", command_name }
     if #args > 0 then
         argv[#argv + 1] = "--"
     end
@@ -270,27 +270,27 @@ local PLANS = {
     [Kind.MAKE] = make_steps,
 }
 
-local function no_built_in(verb_name, kind)
+local function no_built_in(command_name, kind)
     local subject = kind == Kind.NONE and "an undetected project" or kind .. " projects"
-    return "There is no built-in " .. verb_name .. " for " .. subject .. "."
+    return "There is no built-in " .. command_name .. " for " .. subject .. "."
 end
 
-local function plan(root, kind, verb_name, args)
+local function plan(root, kind, command_name, args)
     local build = PLANS[kind]
     local steps, none_line
     if build then
-        steps, none_line = build(root, verb_name, args)
+        steps, none_line = build(root, command_name, args)
     end
-    return steps, none_line or no_built_in(verb_name, kind)
+    return steps, none_line or no_built_in(command_name, kind)
 end
 
 ---List the command lines a built-in runs, as `dev help <command>` prints them.
 ---@param root string the project root
 ---@param kind string the project type, `project.Kind.NONE` for an undetected one
----@param verb_name dev.cmd.types.Verb the command
+---@param command_name dev.cmd.types.Command the command
 ---@return string[] lines one command per line, or a single sentence that says why there is none
-function M.commands(root, kind, verb_name)
-    local steps, none_line = plan(root, kind, verb_name, {})
+function M.commands(root, kind, command_name)
+    local steps, none_line = plan(root, kind, command_name, {})
     if not steps or #steps == 0 then
         return { none_line }
     end
@@ -305,8 +305,8 @@ function M.commands(root, kind, verb_name)
     return lines
 end
 
-local function unsupported(verb_name, kind)
-    dev_command.note(no_built_in(verb_name, kind))
+local function unsupported(command_name, kind)
+    dev_command.note(no_built_in(command_name, kind))
     return 1
 end
 
@@ -325,16 +325,16 @@ end
 ---2. A command the type has no built-in for prints the usual message and returns 1.
 ---3. A fmt with no .lua file to format prints why and returns 0.
 ---@param ctx dev.Ctx the command's context, whose `args` reach the last step verbatim
----@param verb_name dev.cmd.types.Verb the command
+---@param command_name dev.cmd.types.Command the command
 ---@return integer code 0 when every command passed
-function M.run(ctx, verb_name)
+function M.run(ctx, command_name)
     local kind = project.detect_type(ctx.root)
     if not kind then
-        return unsupported(verb_name, Kind.NONE)
+        return unsupported(command_name, Kind.NONE)
     end
-    local steps, reason = plan(ctx.root, kind, verb_name, ctx.args)
+    local steps, reason = plan(ctx.root, kind, command_name, ctx.args)
     if not steps then
-        return unsupported(verb_name, kind)
+        return unsupported(command_name, kind)
     end
     if #steps == 0 then
         dev_command.note(reason)
@@ -356,7 +356,7 @@ function M.run(ctx, verb_name)
     return 0
 end
 
-for _, name in pairs(Verb) do
+for _, name in pairs(Command) do
     M.COMMANDS[name] = true
     M.handlers[name] = function(ctx)
         return M.run(ctx, name)

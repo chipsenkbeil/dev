@@ -6,7 +6,7 @@ flags: --runs
 Each run starts two busy loops per core, runs one case, prints the load it ran under and stops the
 loops. The cases are the pkg_script TERM test, the confirm and spin ctrl-c tests and the guide
 interrupt tests. A case that fails keeps its output in the report, and a case that ran no test
-fails. The verb exits 1 when any run failed. N is 50 by default.
+fails. The command exits 1 when any run failed. N is 50 by default.
 ]]
 local dev_os = require("dev.os")
 local remote = require("dev.remote")

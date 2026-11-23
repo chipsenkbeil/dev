@@ -411,7 +411,7 @@ local function run_script(row, ctx, rest)
 end
 
 local function builtin_handler(row)
-    if row and row.kind == "builtin" and not row.noun and row.handler == "lua" then
+    if row and row.kind == "builtin" and not row.parent and row.handler == "lua" then
         return types.handlers[row.name]
             or VCS_HANDLERS[row.name]
             or tools.handlers[row.name]
@@ -449,9 +449,9 @@ local function help_flag(rest, after)
     end
 end
 
-local function noun_usage_error(reg, words, message)
+local function parent_usage_error(reg, words, message)
     stderr:write("dev ", table.concat(words, " "), ": ", message, "\n\n")
-    help.noun(reg, words, { stderr = true })
+    help.parent(reg, words, { stderr = true })
     os.exit(2)
 end
 
@@ -590,7 +590,7 @@ function M.main(argv)
     end
     local words, rest = { name }, tail(args, 2)
     local row = reg:find(words)
-    while row and row.noun do
+    while row and row.parent do
         local first = rest[1]
         local sub
         if first and first ~= "help" and not first:find("^__") and not is_help(first) then
@@ -600,12 +600,12 @@ function M.main(argv)
         end
         if not sub then
             if not first then
-                noun_usage_error(reg, words, "needs a subcommand")
+                parent_usage_error(reg, words, "needs a subcommand")
             end
             if first == "help" or help_flag(rest, parsed.after) then
-                os.exit(help.noun(reg, words))
+                os.exit(help.parent(reg, words))
             end
-            noun_usage_error(reg, words, "unknown subcommand " .. first)
+            parent_usage_error(reg, words, "unknown subcommand " .. first)
         end
         words[#words + 1] = first
         row, rest = sub, tail(rest, 2)
@@ -626,7 +626,7 @@ function M.main(argv)
     local fetch_job = fetch_spec(reg, row)
     local patch_job = patch_spec(reg, row)
     if flag and (not parsed.remote or patch_job) then
-        os.exit(help.verb(ctx, reg, { words = words, short = flag == "-h" }))
+        os.exit(help.command(ctx, reg, { words = words, short = flag == "-h" }))
     end
     if name == "help" and not parsed.remote and not (row and row.script) then
         os.exit(help.run(ctx, reg))

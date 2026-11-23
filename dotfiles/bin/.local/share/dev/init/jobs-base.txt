@@ -1,4 +1,4 @@
--- Lint and test on a linux container with dev lint and dev test when the Lua verbs are present
+-- Lint and test on a linux container with dev lint and dev test when the Lua commands are present
 --
 --   ci run --local
 --   ci run --local --job test

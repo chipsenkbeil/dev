@@ -1,7 +1,7 @@
 ---@class dev.Builtin
 ---@field words string[] the command words, a command and a subcommand for a subcommand row
 ---@field handler string? "lua" for a Lua handler, nil for a command with subcommands
----@field noun boolean? whether the row is a command with subcommands
+---@field parent boolean? whether the row is a command with subcommands
 ---@field flags string? the flags the command takes, space separated
 ---@field usage string? the usage line `dev help <command>` shows
 ---@field desc string description shown in `dev help`
@@ -118,7 +118,7 @@ return {
     {
         words = { "tools" },
         remote = false,
-        noun = true,
+        parent = true,
         desc = "Install and check the tools in .dev/tools.tsv",
         group = "Set up a machine or project",
     },
@@ -140,7 +140,7 @@ return {
     {
         words = { "ws" },
         remote = false,
-        noun = true,
+        parent = true,
         desc = "Make, list and remove workspaces under one central root",
         group = "Set up a machine or project",
     },
@@ -188,7 +188,7 @@ return {
     {
         words = { "box" },
         remote = false,
-        noun = true,
+        parent = true,
         desc = "Create, show, stop, resume, extend, retag and delete dev boxes",
         group = "Boxes",
     },
@@ -249,7 +249,7 @@ return {
     },
     {
         words = { "box", "tools" },
-        noun = true,
+        parent = true,
         desc = "Work with a running box's tools",
     },
     {
@@ -275,7 +275,7 @@ return {
     {
         words = { "ci" },
         remote = false,
-        noun = true,
+        parent = true,
         desc = "Read what ci recorded",
         group = "Boxes",
     },
@@ -289,7 +289,7 @@ return {
     {
         words = { "board" },
         remote = false,
-        noun = true,
+        parent = true,
         desc = "Read and update the project's board",
         group = "Share it",
     },
@@ -445,7 +445,7 @@ return {
     },
     {
         words = { "board", "token" },
-        noun = true,
+        parent = true,
         desc = "Give a runner a Pomb role token: mint, and end it with revoke",
     },
     {
@@ -464,7 +464,7 @@ return {
     },
     {
         words = { "board", "seat" },
-        noun = true,
+        parent = true,
         desc = "Free a reviewer seat that a credential holds: reset",
     },
     {

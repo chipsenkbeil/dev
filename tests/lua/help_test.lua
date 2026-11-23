@@ -217,7 +217,7 @@ testing.test("the hint is for less only", function()
     testing.ok(not help.uses_less("/usr/bin/lessfilter"))
 end)
 
-local function noun_fixture()
+local function parent_fixture()
     return project({
         ["n/DESCRIPTION"] = "The n noun\n",
         ["n/a.sh"] = "#!/usr/bin/env bash\n# Run a with a description that is far too long for one line of a narrow screen.\n",
@@ -227,9 +227,9 @@ end
 
 testing.test("noun help wraps a long subcommand description under its column", function()
     local text = require("dev.text")
-    local reg = require("dev.registry").load(noun_fixture())
+    local reg = require("dev.registry").load(parent_fixture())
     local c = ui.context({ color = true, interactive = false, width = 40 })
-    local plain = help.noun_text(reg, c, { "n" }):gsub("\27%[[%d;]*m", "")
+    local plain = help.parent_text(reg, c, { "n" }):gsub("\27%[[%d;]*m", "")
     testing.ok(
         plain:find(
             "\n  a   Run a with a description that is\n      far too long for one line of a\n      narrow screen.\n",
@@ -244,12 +244,12 @@ testing.test("noun help wraps a long subcommand description under its column", f
 end)
 
 testing.test("noun help keeps a short subcommand description on one line", function()
-    local reg = require("dev.registry").load(noun_fixture())
+    local reg = require("dev.registry").load(parent_fixture())
     local c = ui.context({ color = true, interactive = false, width = 40 })
-    local plain = help.noun_text(reg, c, { "n" }):gsub("\27%[[%d;]*m", "")
+    local plain = help.parent_text(reg, c, { "n" }):gsub("\27%[[%d;]*m", "")
     testing.ok(plain:find("\n  bb  Short.\n", 1, true), plain)
     local bare = ui.context({ color = false, interactive = false, width = 40 })
-    local out = help.noun_text(reg, bare, { "n" })
+    local out = help.parent_text(reg, bare, { "n" })
     testing.ok(
         out:find(
             "\n  a   Run a with a description that is far too long for one line of a narrow screen.\n",
@@ -275,7 +275,7 @@ end
 testing.test("dev help board names every board verb of the builtins table", function()
     local reg = registry.load(project({}))
     local c = ui.context({ color = false, interactive = false, width = 100 })
-    local out = help.noun_text(reg, c, { "board" })
+    local out = help.parent_text(reg, c, { "board" })
     local rows = board_rows()
     testing.ok(#rows > 0, "no board rows")
     for _, row in ipairs(rows) do

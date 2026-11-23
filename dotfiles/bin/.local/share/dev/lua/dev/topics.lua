@@ -57,8 +57,8 @@ local function is_placeholder(word)
     return word == "" or word:find("^[<%[-]") ~= nil
 end
 
-local function has_sub(reg, noun, sub)
-    for _, row in ipairs(reg:subs(noun)) do
+local function has_sub(reg, parent, sub)
+    for _, row in ipairs(reg:subs(parent)) do
         if row.words[#row.words] == sub then
             return true
         end
@@ -84,7 +84,7 @@ local function command_error(reg, line)
     if not reg:find(path) then
         return "no command " .. name
     end
-    while reg:is_noun(path) do
+    while reg:is_parent(path) do
         local next_word = words[i + 1] or ""
         if is_placeholder(next_word) then
             break

@@ -35,11 +35,11 @@ local HELPERS = {
     },
 }
 
----@class dev.help.verb.Opts
+---@class dev.help.command.Opts
 ---@field words string[] one word for a command, two for a subcommand
 ---@field short boolean? true for the usage and flags `dev <command> -h` shows
 
----@class dev.help.noun.Opts
+---@class dev.help.parent.Opts
 ---@field stderr boolean? print on standard error, for a usage error
 
 ---@class dev.help
@@ -190,7 +190,7 @@ end
 ---@class dev.help.command_rows.Opts
 ---@field all boolean? whether the hidden commands and dev's helpers are listed too
 
-local function verb_rows(reg, opts)
+local function command_rows(reg, opts)
     local all = opts.all
     local rows = {}
     for _, row in ipairs(reg:commands()) do
@@ -238,7 +238,7 @@ end
 local function overview(ctx, reg, c, opts)
     local all = opts.all
     local out = {}
-    local rows, listed = verb_rows(reg, opts), topic_rows(ctx)
+    local rows, listed = command_rows(reg, opts), topic_rows(ctx)
     local width, markw = widths(rows)
     width = math.max(width, (widths(listed)))
     local kind = project_type(ctx)
@@ -288,11 +288,11 @@ end
 ---@param c dev.ui.Context the drawing settings
 ---@param words string[] the command's words
 ---@return string text the command's help
-function M.noun_text(reg, c, words)
+function M.parent_text(reg, c, words)
     local out = {}
-    local noun = table.concat(words, " ")
+    local name = table.concat(words, " ")
     local row = reg:find(words)
-    out[#out + 1] = ui.paint(c, "dev " .. noun, Style.BOLD) .. "\n  " .. row.desc .. "\n"
+    out[#out + 1] = ui.paint(c, "dev " .. name, Style.BOLD) .. "\n  " .. row.desc .. "\n"
     local subs = {}
     for _, sub in ipairs(reg:subs(words)) do
         subs[#subs + 1] = {
@@ -302,7 +302,7 @@ function M.noun_text(reg, c, words)
         }
     end
     section(c, out, { title = "subcommands", rows = subs })
-    out[#out + 1] = "\nRun `dev help " .. noun .. " <sub>` for a subcommand's flags and header.\n"
+    out[#out + 1] = "\nRun `dev help " .. name .. " <sub>` for a subcommand's flags and header.\n"
     return table.concat(out)
 end
 
@@ -319,7 +319,7 @@ local function builtin_commands(ctx, row)
     return { "There is no built-in " .. row.name .. "." }
 end
 
-local function verb_text(ctx, reg, c, opts)
+local function command_text(ctx, reg, c, opts)
     ---Global flags with their descriptions
     local GLOBAL_FLAG_HELP = {
         { "-v", "print each command before it runs" },
@@ -339,7 +339,7 @@ local function verb_text(ctx, reg, c, opts)
     local words, short = opts.words, opts.short
     local name = table.concat(words, " ")
     local row = reg:find(words)
-    if not row or row.noun then
+    if not row or row.parent then
         fail("unknown command " .. name)
     end
     local out = {}
@@ -403,10 +403,10 @@ end
 ---An unknown name is a usage error of `dev help`, exit 2.
 ---@param ctx dev.Ctx the context of the command
 ---@param reg dev.Registry the project's registry
----@param opts dev.help.verb.Opts which command, and whether to print the short form
+---@param opts dev.help.command.Opts which command, and whether to print the short form
 ---@return integer code 0
-function M.verb(ctx, reg, opts)
-    io.write(verb_text(ctx, reg, screen(), opts))
+function M.command(ctx, reg, opts)
+    io.write(command_text(ctx, reg, screen(), opts))
     return 0
 end
 
@@ -525,16 +525,16 @@ end
 
 ---Print a command's description and its subcommands.
 ---@param reg dev.Registry the project's registry
----@param noun string|string[] the command's words, or its name when it is one word
----@param opts dev.help.noun.Opts? where to print
+---@param name string|string[] the command's words, or its name when it is one word
+---@param opts dev.help.parent.Opts? where to print
 ---@return integer code 0
-function M.noun(reg, noun, opts)
+function M.parent(reg, name, opts)
     local c = screen()
-    local words = type(noun) == "string" and { noun } or noun
+    local words = type(name) == "string" and { name } or name
     if opts and opts.stderr then
-        stderr:write(M.noun_text(reg, c:stderr(), words))
+        stderr:write(M.parent_text(reg, c:stderr(), words))
     else
-        io.write(M.noun_text(reg, c, words))
+        io.write(M.parent_text(reg, c, words))
     end
     return 0
 end
@@ -561,9 +561,9 @@ function M.run(ctx, reg)
     end
     local first = args[1]
     if first == "-h" then
-        return M.verb(ctx, reg, { words = { "help" }, short = true })
+        return M.command(ctx, reg, { words = { "help" }, short = true })
     elseif first == "--help" then
-        return M.verb(ctx, reg, { words = { "help" } })
+        return M.command(ctx, reg, { words = { "help" } })
     elseif first == "-a" then
         if #args ~= 1 then
             fail("-a takes no arguments, got " .. args[2])
@@ -591,10 +591,10 @@ function M.run(ctx, reg)
         return M.overview(ctx, reg, { no_pager = no_pager })
     elseif #args == 1 then
         local row, reason = reg:find({ first })
-        if row and row.noun then
-            return M.noun(reg, first)
+        if row and row.parent then
+            return M.parent(reg, first)
         elseif row then
-            return M.verb(ctx, reg, { words = { first } })
+            return M.command(ctx, reg, { words = { first } })
         elseif reason then
             fail(registry.sentence(reason))
         elseif topic_path(ctx, first) then
@@ -609,7 +609,7 @@ function M.run(ctx, reg)
         end
         local parent = { first }
         for i = 2, #args do
-            if not reg:is_noun(parent) then
+            if not reg:is_parent(parent) then
                 fail(table.concat(parent, " ") .. " has no subcommands")
             end
             parent[#parent + 1] = args[i]
@@ -618,10 +618,10 @@ function M.run(ctx, reg)
                 fail("unknown subcommand " .. args[i] .. " of " .. table.concat(parent, " "))
             end
         end
-        if reg:is_noun(args) then
-            return M.noun(reg, args)
+        if reg:is_parent(args) then
+            return M.parent(reg, args)
         end
-        return M.verb(ctx, reg, { words = args })
+        return M.command(ctx, reg, { words = args })
     end
     return 0
 end
