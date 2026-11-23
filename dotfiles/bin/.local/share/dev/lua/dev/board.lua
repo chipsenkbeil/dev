@@ -457,7 +457,8 @@ end
 ---@field colors dev.board.LayoutColor[] the palette
 ---@field cards {id: string, name: string, color_id: string?}[] every card
 ---@field has_checks boolean whether the board has the checks field
----@field card_fields table<string, boolean> the allow, tests and files fields the board has, by name
+---@field card_fields table<string, boolean> the allow, tests and files fields the board has,
+---   by name
 ---@field lanes string[]? the names of the board's lanes in board order
 
 ---The name of the custom field that holds a card's checks.
