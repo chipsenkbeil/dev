@@ -3361,11 +3361,12 @@ lists each one that fails. A refusal can leave the change rebased onto trunk.
   later `clean` or `minor` review of that kind at the commit lifts it. A record
   with no verdict never refuses.
 - When `[board.pomb] reviewer_token` is set on the landing machine, land
-  refuses the newest review of each kind and reviewer, a recheck counted by its
-  `--of` kind, when that newest review is recorded on the credential that wrote
-  the claim comment. An older review on that credential does not refuse once a
-  newer one from another credential is recorded. The refusal names the reviewer
-  and the claimant. With no `reviewer_token` the check is skipped.
+  refuses the newest review of each kind, a recheck counted by its `--of` kind,
+  when that newest review is recorded on the credential that wrote the claim
+  comment. The newest review of each kind counts, whoever recorded it, so an
+  older review on that credential does not refuse once a newer one of the same
+  kind is recorded under any reviewer name, on any credential. The refusal names
+  the reviewer and the claimant. With no `reviewer_token` the check is skipped.
 - On a Pomb board every seat must be approved at the landing commit. Land reads
   the seats with the seat read, and a seat that asks for changes, has not
   answered or approved another commit refuses and is named. A seat nobody took

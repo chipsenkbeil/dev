@@ -393,6 +393,19 @@ testing.test(
     end
 )
 
+testing.test("a.newer.review.under.another.name.clears.a.shared.one", function()
+    local comments = {
+        claimed_by("runner-token", "dotfiles/implementer/c1"),
+        on_credential("runner-token", judged("code", COMMIT, { by = "old", verdict = "clean" })),
+        on_credential("reviewer-token", judged("code", COMMIT, { by = "new", verdict = "clean" })),
+        reviewed("style", COMMIT),
+    }
+    testing.eq(land.shared_credentials(comments, STATE), {})
+    with_reviewer_token(true, function()
+        testing.eq(wiring.credential_problems(comments, STATE), {})
+    end)
+end)
+
 testing.test("land refuses when the newest review shares the claimant credential", function()
     local comments = {
         claimed_by("runner-token", "dotfiles/implementer/c1"),
