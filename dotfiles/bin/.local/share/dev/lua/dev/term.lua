@@ -166,6 +166,34 @@ function M.raw(fd)
     end
 end
 
+---Turn off the echo of typed characters on `fd`, keeping line editing and signals.
+---
+---The echo also comes back when the process exits or is interrupted. Calling the
+---returned function more than once restores only the first time. When `fd`
+---is not a terminal there is nothing to turn off and the returned function does nothing.
+---@param fd integer terminal file descriptor
+---@return fun() restore puts the echo back as it was
+function M.silent(fd)
+    local saved = ffi.new("struct termios[1]")
+    if ffi.C.tcgetattr(fd, saved) ~= 0 then
+        return function() end
+    end
+    local quiet = ffi.new("struct termios[1]")
+    ffi.copy(quiet, saved, ffi.sizeof("struct termios"))
+    quiet[0].c_lflag = bit.band(quiet[0].c_lflag, bit.bnot(ECHO))
+    set_attr(fd, quiet)
+    local restored = false
+    local function restore()
+        if restored then
+            return
+        end
+        restored = true
+        set_attr(fd, saved)
+    end
+    dev_os.on_exit(restore)
+    return restore
+end
+
 ---Open the controlling terminal for reading and writing.
 ---
 ---The descriptor is not inherited by child processes.

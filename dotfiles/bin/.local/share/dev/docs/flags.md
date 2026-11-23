@@ -400,6 +400,35 @@ sets it to the commit it tested, and a value that is not hex exits 2.
   and `dev board ship` run it through the launcher, and the script runs in
   the main checkout.
 
+## The config command
+
+`dev config` is the first-run wizard for the user config,
+`~/.config/dev/config.toml`. It takes no argument and works in any folder. It
+asks for the keys that file does not set. It looks at that file alone, so a
+value in a project's `.dev/config.toml` leaves a key unset to the wizard.
+
+| Key | Needed | Answer |
+|---|---|---|
+| `board.pomb.url` | required | the Pomb URL |
+| `board.pomb.token` | required | a `pass:<entry>` reference, never the token |
+| `gerrit.host` | required | the Gerrit host name |
+| `board.pomb.field_prefix` | optional | the prefix of the board's custom field keys |
+| `gerrit.port` | optional | the Gerrit SSH port, a whole number from 1 to 65535 |
+| `board.ship.source_roots` | optional | a comma separated list of source folders |
+
+- On a terminal it prints the keys that are set, then asks for each unset one as
+  a line on standard input. A blank answer skips an optional key and asks a
+  required one again. It appends the answers to the file, in the section of each
+  key, and keeps every other line as it is. It makes the file and its folder
+  when they are missing, and prints `Wrote KEY to PATH.` for each key it wrote.
+  It exits 1 when a required key is still unset at the end, and 0 otherwise.
+- With no terminal it asks nothing and writes nothing. It prints each key with
+  `set`, `unset` or `unset, required`, and exits 1 when a required key is unset.
+- The token key holds only a `pass:<entry>` reference. The terminal does not
+  echo what is typed for it, and any other answer is refused with a sentence
+  that does not repeat the answer, and nothing is written for that key. The
+  wizard never runs `pass`, never reads a token and never prints one.
+
 ## The launcher
 
 `dotfiles/bin/.local/bin/dev` is a small launcher. `bootstrap.sh` and the zsh
@@ -506,6 +535,7 @@ Other modules serve these commands.
   `board ship` make.
 - `dev.cmd.tools` and, as root, `dev.root`: `tools install` and `tools check`.
 - `dev.cmd.init`: `init`.
+- `dev.cmd.config`: `config`, which writes through `dev.toml`'s `set`.
 
 A test seam (`tests/lua/fake_env.lua` through `LUA_INIT`) can fake the uid and
 system name and hide named tools from `which` (`FAKE_HIDE`) for a user. It

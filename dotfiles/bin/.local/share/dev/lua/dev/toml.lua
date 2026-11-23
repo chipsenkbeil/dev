@@ -7,7 +7,18 @@ local ESCAPES = { b = "\b", t = "\t", n = "\n", f = "\f", r = "\r", ['"'] = '"',
 ---that may span lines, and comments. Anything else is an error that names its
 ---line.
 ---@class dev.toml
+---@field SetRefusal table<string, dev.toml.SetRefusal> the reasons `set` refuses a key
 local M = {}
+
+---Why `set` writes nothing
+---@enum dev.toml.SetRefusal
+M.SetRefusal = {
+    BAD_KEY = "bad_key",
+    BAD_VALUE = "bad_value",
+    ALREADY_SET = "already_set",
+    UNPARSEABLE = "unparseable",
+    RESULT_INVALID = "result_invalid",
+}
 
 local FAILURE = "toml\0"
 local arrays = setmetatable({}, { __mode = "k" })
@@ -226,6 +237,132 @@ function M.parse(text)
         end
     end
     return root
+end
+
+---The escape sequence for each control character, quote and backslash a string value holds.
+local UNESCAPES = {
+    ["\b"] = "\\b",
+    ["\t"] = "\\t",
+    ["\n"] = "\\n",
+    ["\f"] = "\\f",
+    ["\r"] = "\\r",
+    ['"'] = '\\"',
+    ["\\"] = "\\\\",
+}
+
+local function render_string(value)
+    return '"' .. value:gsub('[%c"\\]', UNESCAPES) .. '"'
+end
+
+local function render(value)
+    if type(value) == "string" then
+        return render_string(value)
+    elseif type(value) == "number" and value == math.floor(value) then
+        return string.format("%d", value)
+    elseif type(value) == "table" and #value > 0 then
+        local items = {}
+        for i, item in ipairs(value) do
+            if type(item) ~= "string" then
+                return nil
+            end
+            items[i] = render_string(item)
+        end
+        return "[" .. table.concat(items, ", ") .. "]"
+    end
+    return nil
+end
+
+local function header_of(line)
+    local inner = line:match("^%s*%[([^%[%]]*)%]")
+    return inner and (inner:gsub("%s*%.%s*", "."):match("^%s*(.-)%s*$"))
+end
+
+local function is_content(line)
+    return line:find("%S") ~= nil and not line:find("^%s*#")
+end
+
+local function split_lines(text)
+    local lines = {}
+    for line in (text .. "\n"):gmatch("([^\n]*)\n") do
+        lines[#lines + 1] = line
+    end
+    if text == "" or text:sub(-1) == "\n" then
+        lines[#lines] = nil
+    end
+    return lines
+end
+
+local function insertion_point(lines, section)
+    local at
+    local inside = section == ""
+    for i, line in ipairs(lines) do
+        if line:find("^%s*%[") then
+            if section == "" then
+                break
+            end
+            inside = header_of(line) == section
+            if inside then
+                at = i
+            end
+        elseif inside and is_content(line) then
+            at = i
+        end
+    end
+    return at
+end
+
+---Add a key to a TOML document, under its section.
+---
+---The key is dotted: everything before the last dot names the section, which
+---the writer makes at the end of the text when it is absent. The rest of the
+---text stays as it is, line for line.
+---@param text string the document
+---@param key string the dotted key, such as `board.pomb.url`
+---@param value string|integer|string[] the value to write
+---@return string? text the document with the key added, nil when it cannot be
+---@return dev.toml.SetRefusal? reason why it cannot
+---@return string? detail the parser's `<line>: <reason>`, set for the two parse reasons
+function M.set(text, key, value)
+    local bare = key:find("^[%w_-]+$") or key:find("^[%w_-]+%.[%w_.-]*[%w_-]$")
+    if not bare or key:find("..", 1, true) then
+        return nil, M.SetRefusal.BAD_KEY
+    end
+    local tree, message = M.parse(text)
+    if not tree then
+        return nil, M.SetRefusal.UNPARSEABLE, message
+    end
+    local node = tree
+    for part in key:gmatch("[^.]+") do
+        node = type(node) == "table" and node[part] or nil
+    end
+    if node ~= nil then
+        return nil, M.SetRefusal.ALREADY_SET
+    end
+    local rendered = render(value)
+    if not rendered then
+        return nil, M.SetRefusal.BAD_VALUE
+    end
+    local section, leaf = key:match("^(.-)%.?([^.]+)$")
+    local entry = leaf .. " = " .. rendered
+    local lines = split_lines(text)
+    local at = insertion_point(lines, section)
+    if at then
+        table.insert(lines, at + 1, entry)
+    elseif section == "" then
+        table.insert(lines, 1, entry)
+    else
+        if #lines > 0 and lines[#lines]:find("%S") then
+            lines[#lines + 1] = ""
+        end
+        lines[#lines + 1] = "[" .. section .. "]"
+        lines[#lines + 1] = entry
+    end
+    local result = table.concat(lines, "\n") .. "\n"
+    local parsed, parse_message = M.parse(result)
+    if not parsed then
+        return nil, M.SetRefusal.RESULT_INVALID, parse_message
+    end
+    return result
 end
 
 return M

@@ -108,6 +108,14 @@ return {
         group = "Set up a machine or project",
     },
     {
+        words = { "config" },
+        remote = false,
+        handler = "lua",
+        usage = "dev config",
+        desc = "Ask for the user config keys that are unset and write them",
+        group = "Set up a machine or project",
+    },
+    {
         words = { "tools" },
         remote = false,
         noun = true,

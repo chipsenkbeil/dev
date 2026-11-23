@@ -98,7 +98,7 @@ functions in its doc comments.
   `write`, `mkdir`, `remove`, `move`, `list`, `stat`, `realpath`,
   `readlink`, `mktemp`, `symlink`, `join`, `dirname`, `basename`
 - `dev.json`: `decode` and `encode`
-- `dev.toml`: `parse`
+- `dev.toml`: `parse` and `set`
 - `dev.config`: `get(root, "a.b")` reads `~/.config/dev/config.toml` and then
   `<root>/.dev/config.toml` over it, `prefer_user(root, "a.b")` lets the user
   file win, and `user("a.b")` reads the user file alone

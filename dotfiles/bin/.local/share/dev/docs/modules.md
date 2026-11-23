@@ -18,6 +18,8 @@ The luajit modules of `dev`, one per item.
   project has no board.
 - `dev.cmd.box`: the `box` subcommands, the time-left text and the `ci box`
   call.
+- `dev.cmd.config`: `config`, the first-run wizard for the user config. See
+  `dev help flags`, the config command section.
 - `dev.cmd.connect`: `connect` and `box connect`.
 - `dev.cmd.init`: `init` with `--name` and `--dry-run`. It sets up version
   control, the `[board]` section of `.dev/config.toml` named for the project
@@ -255,7 +257,10 @@ card's bookmark.
 
 - `dev.toml`: a small TOML reader. It takes tables and dotted tables, basic
   strings, integers, booleans, arrays of scalars that may span lines and
-  comments, and names the line of an error for anything else.
+  comments, and names the line of an error for anything else. `toml.set` adds a
+  string, integer or list of strings under its section by a dotted key and makes
+  the section when absent. It returns a `toml.SetRefusal` reason when the key is
+  set, is not a plain dotted key, or would leave a file that does not parse.
 - `dev.config`: `config.get(root, "a.b")` reads `~/.config/dev/config.toml`
   and then `<root>/.dev/config.toml` over it. `config.user("a.b")` reads the
   user file alone. `config.prefer_user(root, key)` reads the user file first

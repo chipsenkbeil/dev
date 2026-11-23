@@ -18,6 +18,7 @@ Share it
 
 Set up a machine or project
   init            builtin               Set up a project's version control and remotes
+  config          builtin               Ask for the user config keys that are unset and write them
   tools           builtin               Install and check the tools in .dev/tools.tsv
   ws              builtin               Make, list and remove workspaces under one central root
 

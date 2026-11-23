@@ -2,6 +2,7 @@ local testing = require("dev.testing")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local support = require("support")
+local toml = require("dev.toml")
 
 local function tree(project, user)
     local root = support.tempdir()
@@ -69,6 +70,142 @@ testing.test("get ends with the path, line and exit 1 for a malformed project fi
     local out, code = get(root, home, "a")
     testing.eq(code, 1)
     testing.ok(out:find(root .. "/.dev/config.toml:2: inline tables", 1, true), out)
+end)
+
+local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
+
+local function lines(list)
+    return table.concat(list, "\n")
+end
+
+local REQUIRED_SET = lines({
+    "[board.pomb]",
+    'url = "u"',
+    'token = "pass:a"',
+    "[gerrit]",
+    'host = "h"',
+    "",
+})
+
+local HOST_ONLY = lines({ "[gerrit]", 'host = "h"', "" })
+
+local function wizard(user, terminal, input)
+    local root = support.sandbox({}, {})
+    local home = support.tempdir()
+    local path = home .. "/.config/dev/config.toml"
+    if user then
+        assert(fs.mkdir(home .. "/.config/dev", { parents = true }))
+        assert(fs.write(path, user))
+    end
+    local out, code = support.dev(root, { "config" }, {
+        input = input,
+        env = {
+            HOME = home,
+            NO_COLOR = "1",
+            FAKE_TTY = terminal and "1" or "0",
+            LUA_INIT = "@" .. REPO .. "/tests/lua/fake_env.lua",
+        },
+    })
+    return out, code, fs.read(path)
+end
+
+testing.test(
+    "dev config asks for each missing key on a terminal and appends the answers",
+    function()
+        local out, code, body = wizard(
+            lines({ "# mine", "[gerrit]", 'host = "h"', "" }),
+            true,
+            lines({ "https://pomb.example", "pass:dev/pomb", "", "29418", "src/, lib/", "" })
+        )
+        testing.eq(code, 0)
+        testing.ok(out:find("gerrit.host: set", 1, true), out)
+        testing.ok(out:find("Wrote board.pomb.url to ", 1, true), out)
+        testing.ok(body:find("# mine\n", 1, true), body)
+        testing.eq(assert(toml.parse(body)), {
+            gerrit = { host = "h", port = 29418 },
+            board = {
+                pomb = { url = "https://pomb.example", token = "pass:dev/pomb" },
+                ship = { source_roots = { "src/", "lib/" } },
+            },
+        })
+    end
+)
+
+testing.test("dev config asks a required key again after a blank answer", function()
+    local input = lines({ "", "https://u", "pass:a/b", "host.example", "", "", "", "" })
+    local _, code, body = wizard(nil, true, input)
+    testing.eq(code, 0)
+    testing.eq(assert(toml.parse(body)).gerrit, { host = "host.example" })
+end)
+
+testing.test(
+    "dev config lists each key without a terminal and exits 1 for a required one",
+    function()
+        local out, code, body = wizard(HOST_ONLY, false)
+        testing.eq(code, 1)
+        testing.eq(
+            out,
+            table.concat({
+                "board.pomb.url: unset, required",
+                "board.pomb.token: unset, required",
+                "gerrit.host: set",
+                "board.pomb.field_prefix: unset",
+                "gerrit.port: unset",
+                "board.ship.source_roots: unset",
+                "",
+            }, "\n")
+        )
+        testing.eq(body, HOST_ONLY)
+    end
+)
+
+testing.test(
+    "dev config lists each key without a terminal and exits 0 when the required are set",
+    function()
+        local out, code = wizard(REQUIRED_SET, false)
+        testing.eq(code, 0)
+        testing.ok(out:find("board.pomb.token: set\n", 1, true), out)
+    end
+)
+
+testing.test(
+    "dev config refuses a token that is not a pass reference and writes nothing for it",
+    function()
+        local out, code, body = wizard(nil, true, lines({ "https://u", "raw-made-up-value", "" }))
+        testing.eq(code, 1)
+        testing.ok(out:find("takes only a pass:<entry> reference", 1, true), out)
+        testing.eq(out:find("raw-made-up-value", 1, true), nil)
+        testing.eq(assert(toml.parse(body)), { board = { pomb = { url = "https://u" } } })
+        testing.eq(body:find("token", 1, true), nil)
+    end
+)
+
+testing.test("dev config takes a pass reference after it refused another answer", function()
+    local input = lines({ "https://u", "pass:", "pass:../x", "pass:ok/ref", "h", "", "", "", "" })
+    local out, code, body = wizard(nil, true, input)
+    testing.eq(code, 0)
+    testing.eq(out:find("pass:ok/ref", 1, true), nil)
+    testing.eq(assert(toml.parse(body)).board.pomb.token, "pass:ok/ref")
+end)
+
+testing.test("dev config refuses a port that is not in range", function()
+    local input = lines({ "", "abc", "1000000000000000000", "70000", "22", "", "" })
+    local out, _, body = wizard(REQUIRED_SET, true, input)
+    testing.ok(out:find("gerrit.port takes a whole number from 1 to 65535.", 1, true), out)
+    testing.eq(assert(toml.parse(body)).gerrit, { host = "h", port = 22 })
+end)
+
+testing.test("dev config stops with a sentence when the key cannot be added to the file", function()
+    local user = lines({ '[board."pomb"]', 'url = "u"', "" })
+    local out, code = wizard(user, true, lines({ "pass:a", "h", "", "", "" }))
+    testing.eq(code, 1)
+    testing.ok(out:find("config.toml: board.pomb.token: The file would not parse", 1, true), out)
+end)
+
+testing.test("dev config refuses an argument", function()
+    local root = support.sandbox({}, {})
+    local _, code = support.dev(root, { "config", "extra" }, { env = { HOME = support.tempdir() } })
+    testing.eq(code, 2)
 end)
 
 testing.test("get validates the user file even when the project sets the key", function()

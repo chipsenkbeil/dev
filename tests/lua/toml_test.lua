@@ -205,3 +205,84 @@ testing.test("parse names the line of each unsupported form", function()
         testing.ok(err and err:find(case[2]), case[1] .. " gave " .. tostring(err))
     end
 end)
+
+testing.test("set adds a key under an existing section and keeps the rest of the file", function()
+    local input = table.concat({
+        "# mine",
+        "[board.pomb]",
+        'url = "u"  # keep',
+        "",
+        "[gerrit]",
+        'host = "h"',
+        "",
+    }, "\n")
+    local out = assert(toml.set(input, "board.pomb.token", "pass:x"))
+    testing.eq(
+        out,
+        table.concat({
+            "# mine",
+            "[board.pomb]",
+            'url = "u"  # keep',
+            'token = "pass:x"',
+            "",
+            "[gerrit]",
+            'host = "h"',
+            "",
+        }, "\n")
+    )
+    testing.eq(toml.parse(out).board.pomb, { url = "u", token = "pass:x" })
+end)
+
+testing.test("set makes the section when it is absent", function()
+    local out = assert(toml.set(table.concat({ "[a]", "x = 1", "" }, "\n"), "gerrit.host", "h"))
+    testing.eq(out, table.concat({ "[a]", "x = 1", "", "[gerrit]", 'host = "h"', "" }, "\n"))
+    local port = assert(toml.set("", "gerrit.port", 29418))
+    testing.eq(port, table.concat({ "[gerrit]", "port = 29418", "" }, "\n"))
+end)
+
+testing.test("set writes a list of strings, an integer and an escaped string", function()
+    local out = assert(toml.set("", "board.ship.source_roots", { "a/", "b c/" }))
+    testing.eq(toml.parse(out).board.ship.source_roots, { "a/", "b c/" })
+    out = assert(toml.set(out, "board.ship.n", 3))
+    testing.eq(toml.parse(out).board.ship.n, 3)
+    out = assert(toml.set(out, "board.ship.s", 'q"\\t'))
+    testing.eq(toml.parse(out).board.ship.s, 'q"\\t')
+end)
+
+testing.test("set puts a root key before the first table", function()
+    local out = assert(toml.set(table.concat({ "# c", "[a]", "x = 1", "" }, "\n"), "top", "v"))
+    testing.eq(out, table.concat({ 'top = "v"', "# c", "[a]", "x = 1", "" }, "\n"))
+    testing.eq(toml.parse(out), { top = "v", a = { x = 1 } })
+end)
+
+testing.test("set returns a reason for a key already set, a bad key and a bad value", function()
+    local set = table.concat({ "[a]", "x = 1", "" }, "\n")
+    local Refusal = toml.SetRefusal
+    local cases = {
+        { set, "a.x", "v", Refusal.ALREADY_SET },
+        { "", "a..b", "v", Refusal.BAD_KEY },
+        { "", "a b", "v", Refusal.BAD_KEY },
+        { "", "a.b", {}, Refusal.BAD_VALUE },
+        { "", "a.b", { 1 }, Refusal.BAD_VALUE },
+    }
+    for _, case in ipairs(cases) do
+        local out, reason = toml.set(case[1], case[2], case[3])
+        testing.eq(out, nil)
+        testing.eq(reason, case[4])
+    end
+end)
+
+testing.test("set names the line of a file that does not parse", function()
+    local out, reason, detail = toml.set("[a\n", "a.b", "v")
+    testing.eq(out, nil)
+    testing.eq(reason, toml.SetRefusal.UNPARSEABLE)
+    testing.ok(detail and detail:find("^1:"), tostring(detail))
+end)
+
+testing.test("set refuses to write a file that would not parse", function()
+    local input = table.concat({ '[board."pomb"]', 'url = "u"', "" }, "\n")
+    local out, reason, detail = toml.set(input, "board.pomb.token", "pass:x")
+    testing.eq(out, nil)
+    testing.eq(reason, toml.SetRefusal.RESULT_INVALID)
+    testing.ok(detail and detail:find("table defined twice", 1, true), tostring(detail))
+end)
