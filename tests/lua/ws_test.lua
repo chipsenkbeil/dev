@@ -2366,7 +2366,8 @@ if dev_os.which("jj") then
         testing.eq(code, 0)
         local tip = real_jj(root, "log", "-r", "tip", "--no-graph", "-T", "commit_id")
 
-        -- Adopt the workspace folder
+        -- Adopt the workspace folder, with dev reading the config folder jj wrote the alias to
+        env.env.XDG_CONFIG_HOME = os.getenv("XDG_CONFIG_HOME")
         local out, adopt_code = support.dev(root, { "ws", "adopt", old }, env)
 
         -- Expect the new workspace on the trunk commit with the file checked out
