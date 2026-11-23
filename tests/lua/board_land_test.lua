@@ -2109,10 +2109,16 @@ esac
 
     local CALLS_EXISTS = 'local fs = require("dev.fs")\nreturn fs.exists("x")\n'
 
+    local function template_project()
+        return jj_project(
+            '\n[sync]\ntemplates = ["' .. TEMPLATE_DIR .. '"]\nbaked = ".dev/baked.txt"\n'
+        )
+    end
+
     testing.test(
         "land refuses a template change that calls a dev function the baked list lacks",
         function()
-            local project = jj_project()
+            local project = template_project()
             local id = template_ready(project, { template = CALLS_EXISTS, baked = "dev.fs\n" })
             refused(project, id, {
                 "The lint-set template calls dev.fs.exists, which .dev/baked.txt",
@@ -2122,7 +2128,7 @@ esac
     )
 
     testing.test("land refuses a template change from a subdirectory", function()
-        local project = jj_project()
+        local project = template_project()
         local id = template_ready(project, { template = CALLS_EXISTS, baked = "dev.fs\n" })
         local subdirectory = project.root .. "/" .. TEMPLATE_DIR
         refused(project, id, {
@@ -2134,7 +2140,7 @@ esac
     testing.test(
         "land refuses a template change when the dev change is already on trunk",
         function()
-            local project = jj_project()
+            local project = template_project()
             trunk_moves(project, {
                 ["dotfiles/bin/.local/share/dev/lua/dev/fs.lua"] = "return {}\n",
                 [".dev/baked.txt"] = "dev.fs\n",
@@ -2147,14 +2153,14 @@ esac
     testing.test(
         "land refuses a template change that requires a module the baked list lacks",
         function()
-            local project = jj_project()
+            local project = template_project()
             local id = template_ready(project, { template = CALLS_EXISTS })
             refused(project, id, { "The lint-set template calls dev.fs, dev.fs.exists," })
         end
     )
 
     testing.test("land lands a template change whose dev calls the baked list holds", function()
-        local project = jj_project()
+        local project = template_project()
         local id = template_ready(project, {
             template = CALLS_EXISTS,
             baked = "dev.fs\ndev.fs.exists\n",
@@ -2165,11 +2171,53 @@ esac
     end)
 
     testing.test("land lands a template change that calls no dev function", function()
-        local project = jj_project()
+        local project = template_project()
         local id = template_ready(project, { template = "return 1\n" })
         local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
         testing.eq(code, 0, out)
         testing.eq(column_of(project.home), board.DEFAULT_NAMES.done)
+    end)
+
+    testing.test("the template guard stays quiet without sync.templates", function()
+        local project = jj_project()
+        local id = template_ready(project, { template = CALLS_EXISTS })
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
+        testing.eq(code, 0, out)
+        testing.eq(column_of(project.home), board.DEFAULT_NAMES.done)
+    end)
+
+    testing.test("dev_calls lists the modules and functions a template takes from dev", function()
+        local text = table.concat({
+            'local fs = require("dev.fs")',
+            'local dev_os = require("dev.os")',
+            'local standalone = require("dev.standalone")',
+            'local x = require("dev.command").say',
+            "return fs.exists(a) and dev_os.run(b) and self.fs.read(c) and other.run(d)",
+            "",
+        }, "\n")
+        testing.eq(land.dev_calls(text), {
+            "dev.command",
+            "dev.command.say",
+            "dev.fs",
+            "dev.fs.exists",
+            "dev.os",
+            "dev.os.run",
+            "dev.standalone",
+        })
+    end)
+
+    testing.test("dev_calls ignores a call named only in a comment", function()
+        local text = table.concat({
+            'local ui = require("dev.ui")',
+            "-- see ui.confirm",
+            "    --- also ui.ask",
+            "",
+        }, "\n")
+        testing.eq(land.dev_calls(text), { "dev.ui" })
+    end)
+
+    testing.test("dev_calls lists nothing for a file that requires no dev module", function()
+        testing.eq(land.dev_calls('local fs = require("lfs")\nreturn fs.exists(a)\n'), {})
     end)
 
     testing.test(

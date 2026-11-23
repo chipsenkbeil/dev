@@ -5,7 +5,6 @@ local follow = require("dev.cmd.follow")
 local guards = require("dev.board.guards")
 local land = require("dev.board.land")
 local revert = require("dev.board.revert")
-local templates = require("dev.templates")
 local dev_command = require("dev.command")
 local wiring = require("dev.board.wiring")
 
@@ -201,7 +200,17 @@ local function ship_templates(root, landed)
     for path in pairs(set) do
         paths[#paths + 1] = path
     end
-    local synced = templates.changed(paths)
+    local prefixes = land.sync_templates(root)
+    if not prefixes then
+        return {}
+    end
+    local synced = {}
+    for _, path in ipairs(paths) do
+        if land.is_synced_template(prefixes, path) then
+            synced[#synced + 1] = path
+        end
+    end
+    table.sort(synced)
     if #synced == 0 then
         return {}
     end

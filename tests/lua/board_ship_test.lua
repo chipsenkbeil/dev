@@ -244,8 +244,17 @@ if dev_os.which("jj") then
         return trunk_commit(root)
     end
 
-    local function ship_template_run(path)
-        local root, home = project('\n[board.release]\nchecks = ["true"]\n')
+    local SYNC_TEMPLATES = table.concat({
+        "\n[sync]\ntemplates = [",
+        '"dotfiles/claude/.claude/skills/style/lint",',
+        '"dotfiles/claude/.claude/skills/style/lintset.lua",',
+        '"dotfiles/bin/.local/share/dev/init/README.md"]\n',
+    }, " ")
+
+    local function ship_template_run(path, sync)
+        local root, home = project(
+            '\n[board.release]\nchecks = ["true"]\n' .. (sync == nil and SYNC_TEMPLATES or sync)
+        )
         must(dev(root, home, { "board", "init" }))
         local id = release_card(root, home, "First", { "It works" }, push_file(root, path))
         tick(root, home, id)
@@ -269,6 +278,20 @@ if dev_os.which("jj") then
         local out = ship_template_run(path)
         testing.ok(out:find("The dev sync templates changed.", 1, true), out)
         testing.ok(out:find(path, 1, true), out)
+    end)
+
+    testing.test("ship lists the templates sync.templates names", function()
+        local sync = '\n[sync]\ntemplates = ["docs/other.md"]\n'
+        local out = ship_template_run("docs/other.md", sync)
+        testing.ok(out:find("The dev sync templates changed.", 1, true), out)
+        testing.ok(out:find("  docs/other.md", 1, true), out)
+    end)
+
+    testing.test("ship says nothing about templates without sync.templates", function()
+        local out = ship_template_run("docs/other.md", "")
+        testing.ok(not out:find("The dev sync templates changed.", 1, true), out)
+        local lint = "dotfiles/claude/.claude/skills/style/lint/lua/stylua.toml"
+        testing.ok(not ship_template_run(lint, ""):find("sync templates changed", 1, true))
     end)
 
     testing.test("ship.prints.no.template.line.when.none.changed", function()

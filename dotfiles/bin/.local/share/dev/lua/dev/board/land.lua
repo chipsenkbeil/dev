@@ -1,6 +1,7 @@
 local abandon = require("dev.cmd.abandon")
 local board = require("dev.board")
 local check = require("dev.board.check")
+local config = require("dev.config")
 local dev_os = require("dev.os")
 local forge = require("dev.forge")
 local fs = require("dev.fs")
@@ -9,7 +10,6 @@ local dev_remote = require("dev.remote")
 local push = require("dev.cmd.push")
 local review = require("dev.board.review")
 local board_select = require("dev.board.select")
-local templates = require("dev.templates")
 local vcs = require("dev.vcs")
 
 ---@class dev.board.land
@@ -1300,15 +1300,89 @@ function M.deploys(touched, globs)
     return false
 end
 
----Name why a lint-set template file may not call a dev function the baked dev lacks.
+---List the dev modules and functions a template file takes, skipping full-line comments.
+---@param text string the template file's text
+---@return string[] calls the sorted entries, each a module or a function
+function M.dev_calls(text)
+    local kept = {}
+    for line in (text .. "\n"):gmatch("([^\n]*)\n") do
+        if not line:find("^%s*%-%-") then
+            kept[#kept + 1] = line
+        end
+    end
+    text = table.concat(kept, "\n")
+    local found = {}
+    local alias = {}
+    for name, module in text:gmatch('local ([%a_][%w_]*) = require%("(dev%.[%w_.]+)"%)') do
+        alias[name] = module
+        found[module] = true
+    end
+    for module, fn in text:gmatch('require%("(dev%.[%w_.]+)"%)%.([%a_][%w_]*)') do
+        found[module] = true
+        found[module .. "." .. fn] = true
+    end
+    local at = 1
+    while true do
+        local first, last, name, fn = text:find("([%a_][%w_]*)%.([%a_][%w_]*)", at)
+        if not first then
+            break
+        end
+        local before = first > 1 and text:sub(first - 1, first - 1) or ""
+        if alias[name] and before ~= "." then
+            found[alias[name] .. "." .. fn] = true
+        end
+        at = last + 1
+    end
+    local out = {}
+    for entry in pairs(found) do
+        out[#out + 1] = entry
+    end
+    table.sort(out)
+    return out
+end
+
+---Read the path prefixes the project's `sync.templates` setting names.
+---@param root string the project root
+---@return string[]? prefixes the prefixes, nil when the setting is unset or malformed
+function M.sync_templates(root)
+    local value = config.get(root, "sync.templates")
+    if type(value) ~= "table" or #value == 0 then
+        return nil
+    end
+    for _, prefix in ipairs(value) do
+        if type(prefix) ~= "string" then
+            return nil
+        end
+    end
+    return value
+end
+
+---Tell whether a path starts with one of the synced template prefixes.
+---@param prefixes string[] the `sync.templates` prefixes
+---@param path string the repo-relative path
+---@return boolean synced true when a prefix starts the path
+function M.is_synced_template(prefixes, path)
+    for _, prefix in ipairs(prefixes) do
+        if path:sub(1, #prefix) == prefix then
+            return true
+        end
+    end
+    return false
+end
+
+---Name why a synced Lua template file may not call a dev function the baked dev lacks.
 ---@param root string the project root, a jj project
 ---@param touched string[] the paths the landing commit touches
 ---@return string? problem the refusal, nil when the landing may go ahead
 function M.template_problem(root, touched)
-    local base = templates.BASE .. "/"
+    local prefixes = M.sync_templates(root)
+    local baked_file = config.get(root, "sync.baked")
+    if not prefixes or type(baked_file) ~= "string" then
+        return nil
+    end
     local changed_template = false
     for _, path in ipairs(touched) do
-        if path:sub(1, #base) == base then
+        if path:find("%.lua$") and M.is_synced_template(prefixes, path) then
             changed_template = true
         end
     end
@@ -1316,34 +1390,40 @@ function M.template_problem(root, touched)
         return nil
     end
     local backend = vcs.backend(root) or vcs.JJ
-    local listed
-    if backend == vcs.GIT then
-        listed = git_out(root, "ls-tree", "-r", "-z", "--name-only", "HEAD", "--", templates.BASE)
-        listed = listed and listed:gsub("%z", "\n")
-    else
-        listed = jj_out(
-            root,
-            "file",
-            "list",
-            "-r",
-            "@",
-            "-T",
-            'path ++ "\\n"',
-            'root:"' .. templates.BASE .. '"'
-        )
-    end
-    if not listed then
-        return tool_name(root) .. " could not list the lint-set template files."
+    local listed = ""
+    for _, prefix in ipairs(prefixes) do
+        local part
+        if backend == vcs.GIT then
+            part = git_out(root, "ls-tree", "-r", "-z", "--name-only", "HEAD", "--", prefix)
+            part = part and part:gsub("%z", "\n")
+        else
+            part = jj_out(
+                root,
+                "file",
+                "list",
+                "-r",
+                "@",
+                "-T",
+                'path ++ "\\n"',
+                'root:"' .. prefix .. '"'
+            )
+        end
+        if not part then
+            return tool_name(root) .. " could not list the lint-set template files."
+        end
+        listed = listed .. part .. "\n"
     end
     local baked = {}
-    for entry in (fs.read(root .. "/" .. templates.BAKED) or ""):gmatch("[^\n]+") do
+    for entry in (fs.read(root .. "/" .. baked_file) or ""):gmatch("[^\n]+") do
         baked[entry] = true
     end
     local lacking = {}
     for path in listed:gmatch("[^\n]+") do
-        for _, call in ipairs(templates.dev_calls(fs.read(root .. "/" .. path) or "")) do
-            if not baked[call] then
-                lacking[call] = true
+        if path:find("%.lua$") then
+            for _, call in ipairs(M.dev_calls(fs.read(root .. "/" .. path) or "")) do
+                if not baked[call] then
+                    lacking[call] = true
+                end
             end
         end
     end
@@ -1358,11 +1438,11 @@ function M.template_problem(root, touched)
     return "The lint-set template calls "
         .. table.concat(names, ", ")
         .. ", which "
-        .. templates.BAKED
+        .. baked_file
         .. " does not list as baked into ci's images. Land the dev change first,"
         .. " rebuild the ci images,"
         .. " then land the template change with the entries added to "
-        .. templates.BAKED
+        .. baked_file
         .. "."
 end
 

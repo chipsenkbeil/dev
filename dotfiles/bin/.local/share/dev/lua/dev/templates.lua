@@ -18,7 +18,6 @@ local TEST_RETURN = "return code"
 local LINTS_TABLE = "^%[workspace%.lints"
 local LINT_RETURN = "return lint:finish()"
 local LIB_DEST = ".dev/lua/lintset.lua"
-local LIB_SRC = "dotfiles/claude/.claude/skills/style/lintset.lua"
 local README_SRC = "dotfiles/bin/.local/share/dev/init/README.md"
 
 ---The marker line that ends the guide part of a project's `docs/STYLE.md`.
@@ -802,65 +801,6 @@ end
 ---@return string path the template's path below the dotfiles clone
 function M.readme_template()
     return project.dotfiles_root() .. "/" .. README_SRC
-end
-
----The file that records which dev modules and functions the dev baked into ci's images provides.
-M.BAKED = ".dev/baked.txt"
-
----List the dev modules and functions a template file takes, skipping full-line comments.
----@param text string the template file's text
----@return string[] calls the sorted entries, each a module or a function
-function M.dev_calls(text)
-    local kept = {}
-    for line in (text .. "\n"):gmatch("([^\n]*)\n") do
-        if not line:find("^%s*%-%-") then
-            kept[#kept + 1] = line
-        end
-    end
-    text = table.concat(kept, "\n")
-    local found = {}
-    local alias = {}
-    for name, module in text:gmatch('local ([%a_][%w_]*) = require%("(dev%.[%w_.]+)"%)') do
-        alias[name] = module
-        found[module] = true
-    end
-    for module, fn in text:gmatch('require%("(dev%.[%w_.]+)"%)%.([%a_][%w_]*)') do
-        found[module] = true
-        found[module .. "." .. fn] = true
-    end
-    local at = 1
-    while true do
-        local first, last, name, fn = text:find("([%a_][%w_]*)%.([%a_][%w_]*)", at)
-        if not first then
-            break
-        end
-        local before = first > 1 and text:sub(first - 1, first - 1) or ""
-        if alias[name] and before ~= "." then
-            found[alias[name] .. "." .. fn] = true
-        end
-        at = last + 1
-    end
-    local out = {}
-    for entry in pairs(found) do
-        out[#out + 1] = entry
-    end
-    table.sort(out)
-    return out
-end
-
----Pick the paths that dev sync copies into other projects.
----@param paths string[] repo-relative paths, such as the files a commit touches
----@return string[] changed the sorted lint set files, lintset.lua and the README guide template among them
-function M.changed(paths)
-    local base = BASE .. "/"
-    local found = {}
-    for _, path in ipairs(paths) do
-        if path:sub(1, #base) == base or path == LIB_SRC or path == README_SRC then
-            found[#found + 1] = path
-        end
-    end
-    table.sort(found)
-    return found
 end
 
 ---Join the template above its marker and the project's own section of `.dev/README.md`.

@@ -516,12 +516,14 @@ the ci images are rebuilt from a rev that holds it.
 
 `.dev/baked.txt` lists the dev modules (`dev.fs`) and functions
 (`dev.fs.exists`) the dev baked into ci's images provides, and
-`dev.templates.dev_calls` reads the same entries from a template file's
-`require("dev.x")` locals, skipping full-line comments. `dev board land`
-refuses a commit that changes a template file calling an entry the list lacks,
-with the dev change in the same commit or an earlier one, so the dev change
-lands first and the template commit adds the entries after the rebuild. The
-runner blocks the template card on the card for that rebuild.
+`dev.board.land.dev_calls` reads the same entries from a template file's
+`require("dev.x")` locals, skipping full-line comments. The `sync.templates`
+and `sync.baked` keys of `.dev/config.toml` name the template path prefixes
+and the list file. `dev board land` refuses a commit that changes a Lua
+template file calling an entry the list lacks, with the dev change in the same
+commit or an earlier one, so the dev change lands first and the template
+commit adds the entries after the rebuild. The runner blocks the template card
+on the card for that rebuild.
 
 ## .dev scripts
 

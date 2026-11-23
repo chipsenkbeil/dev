@@ -3339,10 +3339,12 @@ lists each one that fails. A refusal can leave the change rebased onto trunk.
 - The working-copy commit is non-empty, has a description and has no conflicts.
 - The commit adds no file under `.dev/standalone/` unless the card carries the
   `standalone-ok` label.
-- A commit that changes a lint-set template file calls only the dev modules and
-  functions that `.dev/baked.txt` lists. The refusal says to land the dev change
-  first, rebuild the ci images, then land the template change with
-  the entries added.
+- A commit that changes a synced Lua template file calls only the dev modules
+  and functions that the baked list lists. `sync.templates` in
+  `.dev/config.toml` is a list of path prefixes, the synced templates, and
+  `sync.baked` is the baked list file, `.dev/baked.txt` here. With either key
+  unset the guard stays quiet. The refusal says to land the dev change first,
+  rebuild the ci images, then land the template change with the entries added.
 - In a Gerrit project the ci change run of the landing commit has not failed.
   `land` reads `ci ps -a --json --repo PROJECT`, with PROJECT the name in the
   remote's `ssh://host/project` URL, and takes the newest run whose source
@@ -3996,14 +3998,15 @@ Following the shipped commit:
 
 Changed templates:
 
-- Repos that run `dev sync` copy the lint set files, `lintset.lua` and the
-  `.dev/README.md` guide template from dotfiles, so a change to one
-  makes the sync check fail in each of them until they sync.
+- Repos that run `dev sync` copy templates from dotfiles, so a change to one
+  makes the sync check fail in each of them until they sync. The
+  `sync.templates` setting in `.dev/config.toml` lists their path prefixes.
 - After the moves, `ship` reads the files the landed commits of the shipped
-  cards touched. When any is one of those templates, it prints
+  cards touched. When any starts with a `sync.templates` prefix, it prints
   `The dev sync templates changed. Synced repos run dev sync:` and one indented
   path per template.
-- A batch that changed no template prints no such line.
+- A batch that changed no template prints no such line, and a project with no
+  `sync.templates` setting never does.
 
 ### size
 

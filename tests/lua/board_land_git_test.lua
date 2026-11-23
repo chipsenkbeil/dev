@@ -6,7 +6,6 @@ local fs = require("dev.fs")
 local check = require("dev.board.check")
 local land = require("dev.board.land")
 local support = require("support")
-local templates = require("dev.templates")
 local vcs = require("dev.vcs")
 
 local function git(root, ...)
@@ -190,13 +189,26 @@ testing.test("git reviews do not carry across a conflicting trunk edit", functio
 end)
 
 testing.test("git template problem reads the template listing", function()
-    local root = repo({})
-    write(root, templates.BASE .. "/lint.lua", 'local fs = require("dev.fs")\n')
+    local root = repo({
+        [".dev/config.toml"] = '[sync]\ntemplates = ["tpl"]\nbaked = ".dev/baked.txt"\n',
+    })
+    write(root, "tpl/lint.lua", 'local fs = require("dev.fs")\n')
     git(root, "add", "-A")
     git(root, "commit", "-q", "-m", "feat: template")
     local touched = assert(land.touched(root, head(root)))
     local problem = land.template_problem(root, touched)
     testing.ok(problem and problem:find("calls dev.fs", 1, true), tostring(problem))
+end)
+
+testing.test("git template problem skips a synced file that is not Lua", function()
+    local root = repo({
+        [".dev/config.toml"] = '[sync]\ntemplates = ["tpl"]\nbaked = ".dev/baked.txt"\n',
+    })
+    write(root, "tpl/README.md", 'local ui = require("dev.ui")\n')
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "docs: template")
+    local touched = assert(land.touched(root, head(root)))
+    testing.eq(land.template_problem(root, touched), nil)
 end)
 
 local NUMBERED = {}
