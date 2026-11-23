@@ -1,3 +1,4 @@
+local config = require("dev.config")
 local dev_os = require("dev.os")
 local forge = require("dev.forge")
 local fs = require("dev.fs")
@@ -11,7 +12,7 @@ local REMOTE_NAMES = { "origin", "gerrit" }
 ---@field backend dev.vcs.Backend the project's backend
 ---@field ref string the trunk bookmark (jj) or the current branch (git)
 ---@field sha string? the commit a git push sends
----@field guard string? the `commit-guard` path a git push goes through
+---@field command string? the program a git push runs
 ---@field remotes string[] the default target, the remote of record
 ---@field named string[] every remote `dev push` accepts by name
 ---@field forge dev.forge.Forge the forge and remote of record
@@ -19,35 +20,38 @@ local REMOTE_NAMES = { "origin", "gerrit" }
 ---@class dev.cmd.push
 local M = {}
 
-local function guard_path()
-    local self = os.getenv("DEV_SELF") or ""
-    if self:sub(1, 1) ~= "/" then
-        return nil,
-            "DEV_SELF is not an absolute path. Dev refuses to push without the attribution check."
+---The program a git push runs.
+---
+---It is the program named by `push.guard` in the user config, or `git` when that is unset. Only
+---the user file sets it.
+---@return string? command the program to run, nil when the guard cannot be used
+---@return string? reason why the configured guard cannot be used
+function M.command()
+    local guard = config.user("push.guard")
+    if guard == nil then
+        return "git"
     end
-    local guard = fs.dirname(self) .. "/commit-guard"
-    if not fs.is_exec(guard) then
-        return nil,
-            "The guard commit-guard is missing at "
-                .. guard
-                .. ". Dev refuses to push without the attribution check."
+    if type(guard) ~= "string" or guard == "" then
+        return nil, "The `push.guard` setting must be a program name or path."
     end
-    return guard
+    local found = guard:find("/", 1, true) and fs.is_exec(guard) and guard or dev_os.which(guard)
+    if not found then
+        return nil, "The push guard " .. guard .. " from `push.guard` is not an executable."
+    end
+    return found
 end
 
-M.guard_path = guard_path
-
 ---@class dev.cmd.push.Opts
----@field guard string the `commit-guard` path
+---@field command string the program that runs the push, `git` or the configured guard
 ---@field remote string the remote to push to
 ---@field sha string the commit to send
 ---@field ref string the branch to move
 
----Build the guarded git push of one commit to a branch on a remote.
----@param opts dev.cmd.push.Opts the guard, remote, commit and branch
+---Build the git push of one commit to a branch on a remote.
+---@param opts dev.cmd.push.Opts the command, remote, commit and branch
 ---@return string[] argv the command line
 function M.git_argv(opts)
-    return { opts.guard, "push", "--", opts.remote, opts.sha .. ":refs/heads/" .. opts.ref }
+    return { opts.command, "push", "--", opts.remote, opts.sha .. ":refs/heads/" .. opts.ref }
 end
 
 local function resolve(root, tags_only)
@@ -69,8 +73,8 @@ local function resolve(root, tags_only)
         end
         plan.ref = text.trim(branch)
         plan.sha = text.trim(dev_os.capture({ "git", "-C", root, "rev-parse", "HEAD" }))
-        plan.guard, err = guard_path()
-        if not plan.guard then
+        plan.command, err = M.command()
+        if not plan.command then
             return nil, err
         end
     end
@@ -108,7 +112,7 @@ local function argv_for(root, plan, remote)
             plan.ref
         )
     end
-    return M.git_argv({ guard = plan.guard, remote = remote, sha = plan.sha, ref = plan.ref })
+    return M.git_argv({ command = plan.command, remote = remote, sha = plan.sha, ref = plan.ref })
 end
 
 local function store_dir(root, plan)
@@ -181,8 +185,8 @@ local function check_tags(git, tags, remotes)
 end
 
 local function push_tags(ctx, plan, tags, remotes)
-    local guard, err = guard_path()
-    if not guard then
+    local command, err = M.command()
+    if not command then
         dev_command.die(text.sentence(err))
     end
     local dir = store_dir(ctx.root, plan)
@@ -196,7 +200,7 @@ local function push_tags(ctx, plan, tags, remotes)
             end
         end
         if #todo[remote] > 0 then
-            local argv = { guard }
+            local argv = { command }
             if dir then
                 argv = vcs.with(argv, "--git-dir", dir)
             end

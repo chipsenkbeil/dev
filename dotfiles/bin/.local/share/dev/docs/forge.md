@@ -18,8 +18,8 @@ holds at another commit. It never forces, and it reports and skips a tag the
 remote holds at the same commit.
 
 A tag push needs no trunk bookmark or branch, so a detached HEAD is fine. It
-goes through `commit-guard`, which checks the tagged commit for an attribution
-line like any other push. dev only sends tags and never creates or signs one.
+goes through the push guard like any other git push, which can check the
+tagged commit first. dev only sends tags and never creates or signs one.
 
 ```
 dev push
@@ -82,7 +82,7 @@ content nor held by an archive ref of `NAME` on every remote, at that commit or
 a descendant of it. It refuses the trunk. It reads a remote branch from the
 last fetch, so fetch first.
 
-Pushes go through `commit-guard` and never carry a plus or `--force`, so a
+Pushes go through the push guard and never carry a plus or `--force`, so a
 remote that denies creating or deleting a ref, as Gerrit does without those
 permissions, makes the command fail and say which remote refused.
 
@@ -114,8 +114,29 @@ A repo with `.jj` uses jj, and a repo with only `.git` uses git.
 
 On jj, `dev push` sends the trunk bookmark to the remote through jj's own
 push, where trunk is the `master` or `main` bookmark. The git push goes
-through `commit-guard`, beside dev, which checks commit messages for
-attribution. `dev push` refuses a detached HEAD on git.
+through the push guard. `dev push` refuses a detached HEAD on git.
+
+## The push guard
+
+Every push that dev makes with git runs through one program, `git push` by
+default. `dev push` on a git repo, `dev push --tag`, `dev branch archive`,
+`dev branch prune` and the push of `dev land` all use it.
+
+To put a check in front of them, set `guard` in the `[push]` table of the user
+file `~/.config/dev/config.toml` to a program name on PATH or a path. dev runs
+it in place of git with the same arguments, `GUARD push -- REMOTE REFSPEC`
+(with `--git-dir DIR` ahead of `push` on jj), so the guard is a wrapper that
+ends up calling git. Only the user file sets it, so a checked-in project file
+cannot choose a program for dev to run.
+
+```
+[push]
+guard = "my-push-check"
+```
+
+When `guard` names a program that is not found or not executable, the push
+refuses before it sends anything and the message names the setting. A guard
+that exits non-zero stops the push, and dev reports that push as failed.
 
 ## dev pull
 

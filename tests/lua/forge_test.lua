@@ -149,31 +149,6 @@ if has_jj then
     end)
 end
 
-testing.test("the guard path is refused when DEV_SELF is not absolute", function()
-    local root = repo({ { "origin", LOCAL } })
-    git(
-        root,
-        "-c",
-        "user.name=t",
-        "-c",
-        "user.email=t@t",
-        "commit",
-        "-q",
-        "--allow-empty",
-        "-m",
-        "x"
-    )
-    for _, self in ipairs({ "", "dev" }) do
-        local out, code = support.dev(root, { "push" }, { env = { DEV_SELF = self } })
-        testing.eq(code, 1)
-        testing.eq(
-            out,
-            "DEV_SELF is not an absolute path. Dev refuses to push without the attribution check.\n"
-        )
-    end
-    fs.remove(root, { recursive = true })
-end)
-
 testing.test("trunk prefers master over main and is nil without either", function()
     testing.eq(vcs.trunk({ "main", "master" }), "master")
     testing.eq(vcs.trunk({ "dev", "main" }), "main")

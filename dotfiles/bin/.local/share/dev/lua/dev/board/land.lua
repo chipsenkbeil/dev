@@ -1944,9 +1944,9 @@ local function git_run(root)
     if not ref then
         return false, "The remote " .. read_why .. "."
     end
-    local guard, guard_why = push.guard_path()
-    if not guard then
-        return false, guard_why
+    local command, command_why = push.command()
+    if not command then
+        return false, command_why
     end
     local head = git_out(root, "rev-parse", "HEAD")
     if not head then
@@ -1954,7 +1954,7 @@ local function git_run(root)
     end
     local branch = ref:sub(#found.remote + 2)
     local argv = push.git_argv({
-        guard = guard,
+        command = command,
         remote = found.remote,
         sha = head:match("^%x+"),
         ref = branch,

@@ -195,8 +195,8 @@ local function one_argument(ctx, usage)
     return ctx.args[1]
 end
 
-local function guarded(repo, guard, ...)
-    local argv = { guard }
+local function pushing(repo, command, ...)
+    local argv = { command }
     if repo.dir then
         argv = vcs.with(argv, "--git-dir", repo.dir)
     end
@@ -366,15 +366,15 @@ M.handlers["branch archive"] = function(ctx)
         end
         remotes = { only }
     end
-    local guard, err = push.guard_path()
-    if not guard then
+    local command, err = push.command()
+    if not command then
         dev_command.die(text.sentence(err))
     end
     local sha, name = resolve(repo, rev)
     local ref = ARCHIVE .. os.date("%Y-%m-%d") .. "/" .. name
     local status = 0
     for _, remote in ipairs(remotes) do
-        local argv = guarded(repo, guard, remote, sha .. ":" .. ref)
+        local argv = pushing(repo, command, remote, sha .. ":" .. ref)
         dev_command.show(ctx, argv)
         local out, code = dev_os.capture(argv, { cwd = ctx.root, stderr = "stdout" })
         if code ~= 0 then
@@ -445,14 +445,14 @@ M.handlers["branch prune"] = function(ctx)
                 .. " first. Nothing was deleted."
         )
     end
-    local guard, err = push.guard_path()
-    if not guard then
+    local command, err = push.command()
+    if not command then
         dev_command.die(text.sentence(err))
     end
     local status = 0
     for _, tip in ipairs(tips) do
         if tip.remote then
-            local argv = guarded(repo, guard, tip.remote, ":refs/heads/" .. name)
+            local argv = pushing(repo, command, tip.remote, ":refs/heads/" .. name)
             dev_command.show(ctx, argv)
             local out, code = dev_os.capture(argv, { cwd = ctx.root, stderr = "stdout" })
             if code == 0 then
