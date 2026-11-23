@@ -118,7 +118,8 @@ assert_eq "help widget save equals widget save --help" "$(fixture_dev help widge
 assert_eq "dev equals dev help" "$(fixture_dev)" "$(fixture_dev help)"
 assert_eq "--topics prints name and summary separated by a tab" \
     "$(cd "$PROJ" && DOTFILES="$FIXDOT" "$FIXDEV" help --topics)" \
-    "$(printf 'flags\tThe global flags of the fixture\nnouns\tHow the fixture nouns work\noverview\tWhat the fixture project is for and where to start')"
+    "$(printf 'commands\tHow the fixture commands work\nflags\tThe global flags of the fixture\noverview\tWhat the fixture project is for and where to start')"
+assert_contains "help commands prints the commands topic" "$(fixture_dev help commands)" "A directory of scripts is a command with subcommands"
 
 # Every non-hidden verb sits in exactly one group
 for root in "$PROJ" "$REPO"; do

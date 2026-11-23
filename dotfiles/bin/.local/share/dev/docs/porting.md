@@ -82,7 +82,7 @@ The first line inside it that is not a `group:`, `hidden`, `local`,
 - `flags: --a --b`: the flags `dev help <verb>` and completion offer, and the
   only flags dev lets through to the script before a `--`
 
-`dev help nouns` and `dev help flags` have the rules. `-h` and `--help` stay
+`dev help commands` and `dev help flags` have the rules. `-h` and `--help` stay
 reserved, so a `flags:` line cannot declare them.
 
 ## Modules

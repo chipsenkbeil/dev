@@ -38,8 +38,8 @@ Widgets
   widget                Manage the widget.
 
 Topics
+  commands              How the fixture commands work
   flags                 The global flags of the fixture
-  nouns                 How the fixture nouns work
   overview              What the fixture project is for and where to start
 
 Run `dev help -a` for all, `dev help <verb>` for one, `dev help <topic>` for a topic.
