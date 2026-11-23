@@ -43,7 +43,10 @@ testing.test("no_args refuses a stray argument with one message", function()
     )
     local out, code = dev_os.capture({ "luajit", "-e", script }, { stderr = "stdout" })
     testing.eq(code, 2)
-    testing.eq(out, "dev lint: Unknown argument extra. This verb takes no positional arguments.\n")
+    testing.eq(
+        out,
+        "dev lint: Unknown argument extra. This command takes no positional arguments.\n"
+    )
 end)
 
 testing.test("say writes the message and a newline to standard output", function()

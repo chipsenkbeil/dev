@@ -3,7 +3,7 @@ local fs = require("dev.fs")
 local land = require("dev.board.land")
 local vcs = require("dev.vcs")
 
----The source control API of dev: a workspace and what a verb does to it.
+---The source control API of dev: a workspace and what a command does to it.
 ---@class dev.scm
 local M = {}
 
@@ -13,7 +13,7 @@ local M = {}
 local Workspace = {}
 Workspace.__index = Workspace
 
----Open the checkout a verb works in.
+---Open the checkout a command works in.
 ---@param root string the checkout's absolute path
 ---@return dev.scm.Workspace workspace the checkout
 function M.workspace(root)

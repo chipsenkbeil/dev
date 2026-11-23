@@ -12,7 +12,7 @@ local usage = guards.usage
 local failure = guards.failure
 local index_of = require("dev.text").index_of
 
----The ship verb, which moves every Release card a tested revision holds to Done.
+---The ship command, which moves every Release card a tested revision holds to Done.
 ---@class dev.board.ship
 local M = {}
 
@@ -20,11 +20,11 @@ local M = {}
 ---@field argv string[] the command's words
 ---@field run string the command as one line
 
----@alias dev.board.ship.Verb fun(backend: dev.board.Backend, args: string[]): dev.cmd.board.Result
+---@alias dev.board.ship.Handler fun(backend: dev.board.Backend, args: string[]): dev.cmd.board.Result
 
 ---@class dev.board.ship.Deps
----@field move_card dev.board.ship.Verb moves a card
----@field outcome dev.board.ship.Verb edits outcomes
+---@field move_card dev.board.ship.Handler moves a card
+---@field outcome dev.board.ship.Handler edits outcomes
 ---@field count_text fun(count: integer, noun: string): string counts a noun
 
 ---Read the commands a ship runs: the words after `--`, else the `[board.release]` checks rows.
@@ -85,7 +85,7 @@ local function ship_ran(backend, runs, name_suspects)
             run = one.run,
             argv = one.argv,
             seconds = check.row_seconds(backend.root),
-            env = { [remote.VERB_ENV] = remote.Verb.RELEASE, [remote.PRIORITY_ENV] = "1" },
+            env = { [remote.COMMAND_ENV] = remote.Verb.RELEASE, [remote.PRIORITY_ENV] = "1" },
         })
         if rows[i].result ~= check.Result.PASS then
             local lines = wiring.check_lines(rows)
@@ -162,7 +162,7 @@ end
 ---Untick a reverted card's outcomes and send it back to Ready, once its revert is on trunk.
 ---@param backend dev.board.Backend the board
 ---@param card dev.board.Card the Release card
----@param deps dev.board.ship.Deps the board verbs the move calls
+---@param deps dev.board.ship.Deps the board commands the move calls
 ---@return string? refusal why the card stays in Release, nil when it moved
 function Ship.reopen(backend, card, deps)
     for number, outcome in ipairs(card.outcomes) do
@@ -226,7 +226,7 @@ end
 ---@param cards dev.board.Card[] the Release cards
 ---@param rev string the revset the ship covers
 ---@param commit string the full commit the revset names
----@param deps dev.board.ship.Deps the board verbs the batch calls
+---@param deps dev.board.ship.Deps the board commands the batch calls
 ---@return string[] lines what moved and what stayed
 ---@return boolean ok false when a note or a move failed
 local function ship_batch(backend, cards, rev, commit, deps)
@@ -414,7 +414,7 @@ end
 ---Ship the Release cards a tested revision holds.
 ---@param backend dev.board.Backend the board
 ---@param args string[] the ship arguments
----@param deps dev.board.ship.Deps the board verbs the ship calls
+---@param deps dev.board.ship.Deps the board commands the ship calls
 ---@return dev.cmd.board.Result result the ship's outcome
 function M.ship(backend, args, deps)
     local rev, rest = Ship.rev(args)

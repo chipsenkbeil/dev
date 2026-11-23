@@ -9,7 +9,7 @@ local agent_name = guards.agent_name
 local claimant = runner.claimant
 local claim_card = runner.claim_card
 
----The run verb, which keeps a session's orders and resume steps on one run card.
+---The run command, which keeps a session's orders and resume steps on one run card.
 ---@class dev.board.runcard
 local M = { END_FLAG = "--end", ORDERS_FLAG = "--orders" }
 
@@ -218,7 +218,7 @@ end
 ---Start, resume or end the session's run card.
 ---@param backend dev.board.Backend the board
 ---@param args string[] the run arguments
----@param deps dev.board.runcard.Deps the board verbs and helpers the run calls
+---@param deps dev.board.runcard.Deps the board commands and helpers the run calls
 ---@return dev.cmd.board.Result result the run's outcome
 function M.run(backend, args, deps)
     local RUN_USAGE = "Start one with `dev board run --orders TEXT`."

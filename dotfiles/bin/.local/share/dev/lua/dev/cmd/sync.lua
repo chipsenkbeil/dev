@@ -184,7 +184,7 @@ end
 ---It checks the manifest's files, the `[workspace.lints]` block of `Cargo.toml`, the
 ---library-register attribute of each library crate, the guide part of `docs/STYLE.md` and the
 ---head of `.dev/README.md`, which every project type has. A run with drift and `--check` exits 1.
----@param ctx dev.Ctx the verb's context, whose `args` are `--check`, `--yes` or `-y`
+---@param ctx dev.Ctx the command's context, whose `args` are `--check`, `--yes` or `-y`
 ---@return integer code the exit code
 function M.run(ctx)
     local root = ctx.root

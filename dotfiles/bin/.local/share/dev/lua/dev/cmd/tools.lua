@@ -184,7 +184,7 @@ local function parse_install(ctx, reg)
 end
 
 ---Install the manifest's tools, through the package driver.
----@param ctx dev.Ctx the verb's context
+---@param ctx dev.Ctx the command's context
 ---@param reg dev.Registry? the project's registry, nil as root
 ---@return integer code the driver's exit code, or 0 with no manifest
 M.handlers["tools install"] = function(ctx, reg)
@@ -215,7 +215,7 @@ M.handlers["tools install"] = function(ctx, reg)
 end
 
 ---Report which of the manifest's tools are on PATH.
----@param ctx dev.Ctx the verb's context
+---@param ctx dev.Ctx the command's context
 ---@param reg dev.Registry? the project's registry, nil as root
 ---@return integer code the driver's exit code, or 0 with no manifest
 M.handlers["tools check"] = function(ctx, reg)

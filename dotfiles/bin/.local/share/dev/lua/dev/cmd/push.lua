@@ -243,7 +243,7 @@ end
 ---
 ---It prints the forge, the remote and why, then one line per remote with the
 ---command's output indented under it. Any other flag is refused before this runs.
----@param ctx dev.Ctx the verb's context, whose `args` are remote names and `--tag NAME` pairs
+---@param ctx dev.Ctx the command's context, whose `args` are remote names and `--tag NAME` pairs
 ---@return integer code 0, or 1 when a push fails
 function M.run(ctx)
     local tags, names = {}, {}

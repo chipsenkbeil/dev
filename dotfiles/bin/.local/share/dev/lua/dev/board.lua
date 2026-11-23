@@ -1009,7 +1009,7 @@ function M.last_claimant(comments)
     return last
 end
 
----Say whether a comment body begins with a prefix only a dev verb writes.
+---Say whether a comment body begins with a prefix only a dev command writes.
 ---@param body string the comment body
 ---@return boolean reserved true when a note may not hold it
 function M.reserved(body)
@@ -1893,7 +1893,7 @@ function M.table_lines(rows)
     return lines
 end
 
----A project's board, which a verb finds from a workspace.
+---A project's board, which a command finds from a workspace.
 ---@class dev.board.Board
 ---@field backend dev.board.Backend the backend behind it
 local Board = {}
@@ -1907,7 +1907,7 @@ local CardHandle = {}
 CardHandle.__index = CardHandle
 
 ---Find the board a workspace's project configures.
----@param workspace dev.scm.Workspace the checkout a verb works in
+---@param workspace dev.scm.Workspace the checkout a command works in
 ---@return dev.board.Board? found the board
 ---@return string? message why the project has none
 function M.find(workspace)

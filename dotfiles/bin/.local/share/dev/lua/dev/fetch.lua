@@ -7,7 +7,7 @@ local dev_command = require("dev.command")
 ---@class dev.fetch
 local M = {}
 
----The environment variable that holds the path of the file a verb's `fetch` header pulled.
+---The environment variable that holds the path of the file a command's `fetch` header pulled.
 M.ENV = "DEV_FETCHED"
 
 ---@class dev.fetch.Opts
@@ -78,7 +78,7 @@ end
 local function ci_env(root)
     local name = remote.run_label(root, {
         DEV_AGENT = os.getenv("DEV_AGENT"),
-        DEV_CI_VERB = os.getenv(remote.VERB_ENV),
+        DEV_CI_COMMAND = os.getenv(remote.COMMAND_ENV),
         DEV_CI_CARD = os.getenv(remote.CARD_ENV),
     }, { tty = dev_os.isatty(0) })
     return name and { DEV_AGENT = name } or nil
@@ -89,7 +89,7 @@ end
 ---A fetch job runs on the first target that matches this host's OS and at its architecture. A
 ---patch job runs on its first listed target with no architecture.
 ---@param root string the project root
----@param spec dev.header.Fetch the job and file the verb's header names
+---@param spec dev.header.Fetch the job and file the command's header names
 ---@param opts dev.fetch.Opts which kind of job it is
 ---@return string run the ci run id
 ---@return string target the target the job runs on
@@ -157,7 +157,7 @@ end
 
 ---Wait for a run and return the matrix index of its passed job.
 ---@param root string the project root
----@param spec dev.header.Fetch the job and file the verb's header names
+---@param spec dev.header.Fetch the job and file the command's header names
 ---@param run string the ci run id
 ---@param target string the target the job runs on
 ---@return integer index the job's matrix index, which names its artifact directory
@@ -182,7 +182,7 @@ local function await(root, spec, run, target)
 end
 
 ---@param root string the project root
----@param spec dev.header.Fetch the job and file the verb's header names
+---@param spec dev.header.Fetch the job and file the command's header names
 ---@param opts dev.fetch.Opts which kind of job it is
 ---@return string path the pulled file, in a new temporary directory
 ---@return string run the ci run id
@@ -203,26 +203,26 @@ local function download(root, spec, opts)
     return dest .. "/" .. fs.basename(spec.file), run
 end
 
----Run a verb's `fetch` job on ci for this host's platform and pull the file it keeps.
+---Run a command's `fetch` job on ci for this host's platform and pull the file it keeps.
 ---
 ---The job runs on the first target of its pipeline whose OS matches this host and at this host's
 ---architecture. It ends the process when ci cannot run it, when the run fails or when no
----target matches. The pulled file stays in a new temporary directory that the verb owns.
+---target matches. The pulled file stays in a new temporary directory that the command owns.
 ---@param root string the project root
----@param spec dev.header.Fetch the job and file the verb's header names
+---@param spec dev.header.Fetch the job and file the command's header names
 ---@return string path the pulled file
 function M.pull(root, spec)
     return (download(root, spec, {}))
 end
 
----Run a verb's `patch` job on ci and apply the patch it keeps to the project root.
+---Run a command's `patch` job on ci and apply the patch it keeps to the project root.
 ---
 ---The job runs on its first listed target with no architecture. An empty patch changes nothing.
 ---A patch that does not apply changes nothing either, because `git apply` is all or nothing. The
 ---process then ends naming the run and the kept patch. The temporary directory of a patch that
 ---applied or was empty is removed.
 ---@param root string the project root
----@param spec dev.header.Fetch the job and file the verb's header names
+---@param spec dev.header.Fetch the job and file the command's header names
 ---@return integer code the exit code, 0 once the patch applied or was empty
 function M.apply(root, spec)
     local path, run = download(root, spec, { patch = true })

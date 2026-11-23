@@ -267,8 +267,8 @@ end
 
 ---Move the repository's main checkout onto trunk.
 ---
----The folder the verb runs in may be the main checkout, a jj workspace or a git worktree.
----@param ctx dev.Ctx the verb's context
+---The folder the command runs in may be the main checkout, a jj workspace or a git worktree.
+---@param ctx dev.Ctx the command's context
 ---@return integer code the exit code
 function M.run(ctx)
     local main, err = M.main(ctx.root)

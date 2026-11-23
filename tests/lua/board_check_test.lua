@@ -973,7 +973,7 @@ end)
 
 testing.test("check labels the ci run of a row as repo/check/card", function()
     local root, home = git_root()
-    local id = card_with(root, home, { "! printenv DEV_CI_VERB DEV_CI_CARD" })
+    local id = card_with(root, home, { "! printenv DEV_CI_COMMAND DEV_CI_CARD" })
     local out = dev(root, home, { "board", "check", id })
     testing.ok(out:find("    check\n    " .. id, 1, true), out)
 end)

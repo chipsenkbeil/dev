@@ -188,7 +188,7 @@ local function source_label(row)
     return row.replaces and row.source .. " over " .. row.replaces or row.source
 end
 
----@class dev.help.verb_rows.Opts
+---@class dev.help.command_rows.Opts
 ---@field all boolean? whether the hidden commands and dev's helpers are listed too
 
 local function verb_rows(reg, opts)
@@ -311,7 +311,7 @@ local function builtin_commands(ctx, row)
     if row.usage and row.usage ~= "" then
         return { row.usage }
     end
-    if types.VERBS[row.name] then
+    if types.COMMANDS[row.name] then
         return types.commands(ctx.root, project_type(ctx), row.name)
     end
     if LISTED[row.name] then
@@ -382,7 +382,7 @@ local function verb_text(ctx, reg, c, opts)
         end
     end
     if row.kind ~= "local" then
-        local scope = types.VERBS[row.name] and " (" .. project_type(ctx) .. " project)" or ""
+        local scope = types.COMMANDS[row.name] and " (" .. project_type(ctx) .. " project)" or ""
         out[#out + 1] = "\n" .. ui.paint(c, "the built-in runs", Style.BOLD) .. scope .. "\n"
         for _, line in ipairs(builtin_commands(ctx, row)) do
             out[#out + 1] = "  " .. line .. "\n"

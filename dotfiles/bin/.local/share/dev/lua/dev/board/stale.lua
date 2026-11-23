@@ -12,7 +12,7 @@ local failure = guards.failure
 local parse = guards.parse
 local index_of = require("dev.text").index_of
 
----The stale verb, which lists the cards that sat too long where they are.
+---The stale command, which lists the cards that sat too long where they are.
 ---@class dev.board.stale
 local M = {}
 

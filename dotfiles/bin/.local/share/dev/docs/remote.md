@@ -222,24 +222,24 @@ dev box are not refused.
 
 A run dev starts on ci carries a `DEV_AGENT` label, which `ci ps -o run,by`
 shows in the BY column. The one exception is a terminal run with no
-`DEV_CI_VERB`.
+`DEV_CI_COMMAND`.
 
 A check run carries the check label even when DEV_AGENT is set. For any
-other verb a caller's non-empty `DEV_AGENT` is kept. Otherwise the label is
-`<repo>/<verb>`, or `<repo>/<verb>/<card>` when `DEV_CI_CARD` is set.
+other command a caller's non-empty `DEV_AGENT` is kept. Otherwise the label is
+`<repo>/<command>`, or `<repo>/<command>/<card>` when `DEV_CI_CARD` is set.
 
-The verb is `DEV_CI_VERB` and defaults to `remote`. The repo is `[board] name`
-or the project directory name.
+The command is `DEV_CI_COMMAND` and defaults to `remote`.
+The repo is `[board] name` or the project directory name.
 
 `dev board check` sets both variables, so its runs read `<repo>/check/<card>`
 whatever `DEV_AGENT` holds. `dev board land` requires `DEV_AGENT` and sets no
-land verb, so it never reads `<repo>/land/<card>`. Its recheck rows run as
+land command, so it never reads `<repo>/land/<card>`. Its recheck rows run as
 check runs and carry the check label.
 
-A repo's own release verb exports `DEV_CI_VERB=release` and `DEV_CI_CARD`
+A repo's own release command exports `DEV_CI_COMMAND=release` and `DEV_CI_CARD`
 before it calls `dev --remote`.
 
-A `dev --remote` run from a terminal with no `DEV_CI_VERB`, and with `stdin`
+A `dev --remote` run from a terminal with no `DEV_CI_COMMAND`, and with `stdin`
 attached to that terminal, carries no label at all. ci shows the person who
 started it. The same run with `stdin` off a terminal stays `<repo>/remote`.
 

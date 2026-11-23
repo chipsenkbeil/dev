@@ -168,7 +168,7 @@ local function lua_block(text)
     return converted
 end
 
----Parse the header of a verb script.
+---Parse the header of a command script.
 ---
 ---A shell header is the comment block after the shebang. A Lua header is one
 ---leading `--[[ ... ]]` block holding the same lines. The first comment line

@@ -1752,7 +1752,7 @@ function M.recheck_problem(opts)
             argv = narrowed,
             seconds = check.row_seconds(opts.root),
             env = {
-                [dev_remote.VERB_ENV] = dev_remote.Verb.CHECK,
+                [dev_remote.COMMAND_ENV] = dev_remote.Verb.CHECK,
                 [dev_remote.CARD_ENV] = opts.card,
                 [dev_remote.PRIORITY_ENV] = "1",
             },

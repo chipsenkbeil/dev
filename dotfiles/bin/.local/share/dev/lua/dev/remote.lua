@@ -144,8 +144,8 @@ local function trace(argv, verbosity)
     end
 end
 
----The environment variable that names the verb of a ci run, as `DEV_CI_VERB`.
-M.VERB_ENV = "DEV_CI_VERB"
+---The environment variable that names the command of a ci run, as `DEV_CI_COMMAND`.
+M.COMMAND_ENV = "DEV_CI_COMMAND"
 
 ---The environment variable that names the card of a ci run, as `DEV_CI_CARD`.
 M.CARD_ENV = "DEV_CI_CARD"
@@ -153,11 +153,11 @@ M.CARD_ENV = "DEV_CI_CARD"
 ---The environment variable that starts the ci run ahead of normal jobs, as `DEV_CI_PRIORITY=1`.
 M.PRIORITY_ENV = "DEV_CI_PRIORITY"
 
----The verbs dev puts in a ci run label when the caller names none.
+---The commands dev puts in a ci run label when the caller names none.
 ---@enum dev.remote.Verb
 M.Verb = { CHECK = "check", REMOTE = "remote", RELEASE = "release" }
 
----Name the ci run dev starts, as `repo/verb` or `repo/verb/card`.
+---Name the ci run dev starts, as `repo/command` or `repo/command/card`.
 ---@param root string the project root
 ---@param verb_name string the role, such as `remote`, `check`, `land` or `release`
 ---@param card string? the card's short id
@@ -175,15 +175,15 @@ end
 
 ---Choose the `DEV_AGENT` label for a run dev starts on ci.
 ---
----A check run is always labelled by its verb and card. Otherwise a caller's non-empty
+---A check run is always labelled by its command and card. Otherwise a caller's non-empty
 ---`DEV_AGENT` wins, a bare run from a terminal carries none, and any other run is
----labelled by its verb and card.
+---labelled by its command and card.
 ---@param root string the project root
----@param env table<string, string?> `DEV_AGENT`, `DEV_CI_VERB` and `DEV_CI_CARD`
+---@param env table<string, string?> `DEV_AGENT`, `DEV_CI_COMMAND` and `DEV_CI_CARD`
 ---@param opts dev.remote.run_label.Opts
 ---@return string? name the label to set, or nil to set none
 function M.run_label(root, env, opts)
-    local verb_name = env.DEV_CI_VERB
+    local verb_name = env.DEV_CI_COMMAND
     if verb_name == M.Verb.CHECK then
         return label(root, verb_name, env.DEV_CI_CARD)
     end
@@ -253,7 +253,7 @@ function M.ci_runner(run, opts)
     trace(argv, opts.verbosity)
     local name = M.run_label(run.root, {
         DEV_AGENT = os.getenv("DEV_AGENT"),
-        DEV_CI_VERB = os.getenv(M.VERB_ENV),
+        DEV_CI_COMMAND = os.getenv(M.COMMAND_ENV),
         DEV_CI_CARD = os.getenv(M.CARD_ENV),
     }, { tty = dev_os.isatty(0) })
     local env = name and { DEV_AGENT = name } or nil

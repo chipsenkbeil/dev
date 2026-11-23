@@ -39,18 +39,18 @@ end
 ---@field words string[] the command words, with a noun first in a subcommand's
 ---@field name string the words joined by a space
 ---@field kind "builtin"|"override"|"local" where the row comes from, `override` for a project
----   script that replaces a built-in verb
+---   script that replaces a built-in command
 ---@field source dev.Source which layer answers, a global or project script beating a built-in
 ---   row
 ---@field replaces dev.Source? the source a script row replaces, `builtin` or `global`
 ---@field noun boolean whether the row is a noun
----@field handler string? the built-in handler, nil for a noun, a local verb or the project type's
+---@field handler string? the built-in handler, nil for a noun, a local command or the project type's
 ---   builtin
 ---@field flags string? flags a built-in row takes, space separated
 ---@field usage string? usage line of a built-in row
 ---@field desc string description shown in `dev help`
----@field group string? heading in `dev help`, set on a verb and a noun
----@field hidden boolean? whether `dev help` keeps the row to `-a`, set on a verb and a noun
+---@field group string? heading in `dev help`, set on a command and a noun
+---@field hidden boolean? whether `dev help` keeps the row to `-a`, set on a command and a noun
 ---@field remote false? false when the command never runs on a remote runner
 ---@field requires string[]? the preconditions the command declares, `workspace` the only one known
 ---@field script string? path of the project script behind the row
@@ -71,7 +71,7 @@ end
 ---@field private dirs table<string, dev.Dir|false> the directories read so far by the space-joined
 ---   words of the noun, `""` for `.dev`
 ---@field private headers table<string, dev.Header> parsed headers by script path
----@field private rows table<string, dev.Row|false> resolved verb rows by name
+---@field private rows table<string, dev.Row|false> resolved command rows by name
 ---@field private only dev.Source? the one source a view answers from, nil for the whole registry
 ---@field private views table<string, dev.Registry> the views made so far by source
 local Registry = {}
@@ -82,7 +82,7 @@ local M = {}
 
 M.Source = Source
 
----The flags dev takes before any verb's own, in the order completion lists them.
+---The flags dev takes before any command's own, in the order completion lists them.
 M.GLOBAL_FLAGS = GLOBAL_FLAGS
 
 ---The global flags that take a value, the word after one of them being its value.
@@ -599,15 +599,15 @@ end
 
 ---Find the row for a command.
 ---
----A project script beats a global script, which beats a built-in verb or
+---A project script beats a global script, which beats a built-in command or
 ---subcommand, though no script replaces a built-in noun. A script
----`.dev/<verb>.<ext>` beats a directory of the same name, but a project
+---`.dev/<command>.<ext>` beats a directory of the same name, but a project
 ---directory beats a global script of that name. A `__` script is found here
 ---though `commands` and `subs` list it.
 ---
 ---A first word `builtin:WORD` or `global:WORD` answers from that source alone, and the row's
 ---words are the bare ones.
----@param words string[] one word for a verb or noun, then one for each level of subcommand
+---@param words string[] one word for a command or noun, then one for each level of subcommand
 ---@return dev.Row? row nil when nothing answers to the words
 ---@return string? reason `unknown source NAME`, `no builtin command WORDS` or `no global command
 ---   WORDS` for a prefixed word the registry cannot answer

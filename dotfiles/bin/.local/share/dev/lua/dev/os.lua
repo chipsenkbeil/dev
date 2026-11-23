@@ -680,7 +680,7 @@ function M.append_path(dirs)
     ffi.C.setenv("PATH", path, 1)
 end
 
----Set a variable in this process's environment, which every later command and the verb inherit.
+---Set a variable in this process's environment, which every later program and the command inherit.
 ---@param name string the variable name
 ---@param value string its value
 function M.setenv(name, value)

@@ -13,7 +13,7 @@ local failure = guards.failure
 local index_of = require("dev.text").index_of
 local HUMAN_ACTOR = "human"
 
----The wait verb and the owner reads the other board verbs share.
+---The wait command and the owner reads the other board commands share.
 ---@class dev.board.wait
 local M = { SETTLE_SECONDS = 60 }
 

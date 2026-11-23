@@ -89,7 +89,7 @@ end
 ---A touched suite is picked itself. A touched Lua module picks every Lua suite that requires it,
 ---directly, through the modules that require it, or through a concatenated require, and no other.
 ---A touched file that is not a Lua module or a suite, a touched test helper, or a touched module
----that no Lua suite reaches or that a verb file loads leaves the map unsure.
+---that no Lua suite reaches or that a command file loads leaves the map unsure.
 ---@param sources table<string, string> the text of each Lua file and suite by path from the root
 ---@param touched string[] the paths the change touches
 ---@return string[]? suites the sorted suite paths, nil when the whole suite should run

@@ -1319,7 +1319,7 @@ end
 ---@class dev.cmd.box.pick_name.Opts
 ---@field sub string the subcommand's name, for ci's messages
 ---@field title string the picker's title
----@field keep fun(box: dev.cmd.box.Box): boolean whether the verb can act on a box
+---@field keep fun(box: dev.cmd.box.Box): boolean whether the command can act on a box
 ---@field none string what to say when no box qualifies
 ---@field example string? words that follow the example name in the usage error
 ---@field auto boolean? whether a single row skips the screen

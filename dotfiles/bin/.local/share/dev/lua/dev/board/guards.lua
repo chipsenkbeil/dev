@@ -32,9 +32,9 @@ local function failure(message)
     return { message = message, code = FAILURE }
 end
 
----Split a verb's arguments into its flags and its words.
----@param args string[] the arguments after the verb
----@param takes table<string, string|boolean> the flags the verb knows, `switch` for a bare flag
+---Split a command's arguments into its flags and its words.
+---@param args string[] the arguments after the command
+---@param takes table<string, string|boolean> the flags the command knows, `switch` for a bare flag
 ---@param many table<string, boolean>? the flags that may repeat, each kept as a list
 ---@return table<string, string|boolean|string[]>? flags the flags given, nil on a usage error
 ---@return string[]|dev.cmd.board.Result words the words left, or the usage error
@@ -140,10 +140,10 @@ local function row_refusal(runs, root)
     return nil
 end
 
----Refuse a verb run outside the jj workspace `dev ws new` names for the card.
+---Refuse a command run outside the jj workspace `dev ws new` names for the card.
 ---@param backend dev.board.Backend the board the command runs on
 ---@param short string the card's short id
----@return dev.cmd.board.Result? refusal a failure naming the workspace found, nil when the verb may
+---@return dev.cmd.board.Result? refusal a failure naming the workspace found, nil when the command may
 ---   go on
 local function workspace_refusal(backend, short)
     if not backend.root then
@@ -215,9 +215,9 @@ local function on_board(backend, args)
     return home, { args[1], unpack(args, 4) }
 end
 
----Refuse a card given as BOARD:PREFIX to a verb that only works on this board.
+---Refuse a card given as BOARD:PREFIX to a command that only works on this board.
 ---@param word string? the card word
----@param verb string the verb's name
+---@param verb string the command's name
 ---@return dev.cmd.board.Result? refused the failure naming the board, nil when the card is on this board
 local function foreign_refusal(word, verb)
     local named = split_board(word)
@@ -225,7 +225,7 @@ local function foreign_refusal(word, verb)
         return nil
     end
     return failure(
-        "The verb "
+        "The command "
             .. verb
             .. " works only on this board's cards, and "
             .. word
@@ -482,7 +482,7 @@ end
 ---Check whether a name is the lead or carries no role at a terminal.
 ---@param name string the agent name
 ---@param interactive boolean? whether stdin is a terminal, nil to read it
----@return boolean lead true when the name may run lead-only verbs
+---@return boolean lead true when the name may run lead-only commands
 local function is_lead(name, interactive)
     if not name:find("/", 1, true) then
         if interactive == nil then
@@ -579,7 +579,7 @@ end
 ---@enum dev.board.guards.Refusal
 local Refusal = { NOT_LEAD = "not_lead" }
 
----Refuse a lead-only verb run under another agent name.
+---Refuse a lead-only command run under another agent name.
 ---@return dev.board.guards.Refusal? reason `NOT_LEAD` when the caller is not a lead, nil otherwise
 local function delete_refusal()
     if not is_lead(os.getenv("DEV_AGENT") or "") then

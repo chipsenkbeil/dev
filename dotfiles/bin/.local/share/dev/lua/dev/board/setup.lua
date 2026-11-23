@@ -20,7 +20,7 @@ function M.has_section(root)
 end
 
 ---Read the board's name from the config and the `--name` flag, or die.
----@param ctx dev.Ctx the verb context
+---@param ctx dev.Ctx the command context
 ---@param flags table<string, string> the parsed flags
 ---@return string name the board's name
 ---@return boolean missing true when the project has no `[board]` section yet
@@ -94,7 +94,7 @@ function M.host()
 end
 
 ---Read the lanes the project's config names, or die when they are not a list of names.
----@param ctx dev.Ctx the verb context
+---@param ctx dev.Ctx the command context
 ---@return string[] lanes the lane names
 function M.config_lanes(ctx)
     local lanes = config.get(ctx.root, "board.lanes")
@@ -133,7 +133,7 @@ local function private_project(root)
 end
 
 ---Make the board of a private project that has none, or die when the project may be public.
----@param ctx dev.Ctx the verb context
+---@param ctx dev.Ctx the command context
 ---@param init_board fun(ctx: dev.Ctx): integer runs `dev board init` and returns its exit code
 function M.ensure_board(ctx, init_board)
     if config.get(ctx.root, "board.backend") ~= nil then

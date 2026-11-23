@@ -28,11 +28,11 @@ local Verb = {
 ---   is printed
 
 ---@class dev.cmd.types
----@field Verb table<string, dev.cmd.types.Verb> the verbs the project type decides
----@field VERBS table<string, boolean> the same verbs as a set of names
----@field handlers table<string, fun(ctx: dev.Ctx): integer> one handler per verb, for the
+---@field Verb table<string, dev.cmd.types.Verb> the commands the project type decides
+---@field COMMANDS table<string, boolean> the same commands as a set of names
+---@field handlers table<string, fun(ctx: dev.Ctx): integer> one handler per command, for the
 ---   registry's rows
-local M = { Verb = Verb, VERBS = {}, handlers = {} }
+local M = { Verb = Verb, COMMANDS = {}, handlers = {} }
 
 local CARGO = { "cargo", "brew install rustup" }
 local MAKE = { "make", "xcode-select --install" }
@@ -284,10 +284,10 @@ local function plan(root, kind, verb_name, args)
     return steps, none_line or no_built_in(verb_name, kind)
 end
 
----List the command lines a built-in runs, as `dev help <verb>` prints them.
+---List the command lines a built-in runs, as `dev help <command>` prints them.
 ---@param root string the project root
 ---@param kind string the project type, `project.Kind.NONE` for an undetected one
----@param verb_name dev.cmd.types.Verb the verb
+---@param verb_name dev.cmd.types.Verb the command
 ---@return string[] lines one command per line, or a single sentence that says why there is none
 function M.commands(root, kind, verb_name)
     local steps, none_line = plan(root, kind, verb_name, {})
@@ -319,13 +319,13 @@ local function probe_fails(step)
     return true
 end
 
----Run the standard sequence of a verb for the detected project type.
+---Run the standard sequence of a command for the detected project type.
 ---
----1. When a command fails, the run stops and returns its exit code.
----2. A verb the type has no built-in for prints the usual message and returns 1.
+---1. When a step fails, the run stops and returns its exit code.
+---2. A command the type has no built-in for prints the usual message and returns 1.
 ---3. A fmt with no .lua file to format prints why and returns 0.
----@param ctx dev.Ctx the verb's context, whose `args` reach the last command verbatim
----@param verb_name dev.cmd.types.Verb the verb
+---@param ctx dev.Ctx the command's context, whose `args` reach the last step verbatim
+---@param verb_name dev.cmd.types.Verb the command
 ---@return integer code 0 when every command passed
 function M.run(ctx, verb_name)
     local kind = project.detect_type(ctx.root)
@@ -357,7 +357,7 @@ function M.run(ctx, verb_name)
 end
 
 for _, name in pairs(Verb) do
-    M.VERBS[name] = true
+    M.COMMANDS[name] = true
     M.handlers[name] = function(ctx)
         return M.run(ctx, name)
     end

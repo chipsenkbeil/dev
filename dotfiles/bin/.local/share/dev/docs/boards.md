@@ -3601,7 +3601,7 @@ The settings:
 - `require_change_run = true` under `[board.land]` makes a Gerrit `land` refuse
   a change run still going and a rebased commit with no run. It is off by
   default, and then only a failed run refuses.
-- `board.land.verb` names the repo's own land command, as the words to type.
+- `board.land.command` names the repo's own land command, as the words to type.
   When it is a non-empty string, `dev board land` and `dev land`
   refuse before any turn, push or move and print that command, to keep a
   runner from skipping the repo's own land checks. Without it both land as

@@ -55,7 +55,7 @@ end
 ---
 ---The first command that fails ends the run with its exit code. An argument
 ---is refused before this runs.
----@param ctx dev.Ctx the verb's context
+---@param ctx dev.Ctx the command's context
 ---@return integer code the exit code
 function M.run(ctx)
     local steps, err = resolve(ctx.root)

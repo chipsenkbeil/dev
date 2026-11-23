@@ -109,7 +109,7 @@ local function dev_env(base, env)
         HOME = base .. "/home",
         CI = "",
         DEV_AGENT = "",
-        DEV_CI_VERB = "",
+        DEV_CI_COMMAND = "",
         DEV_CI_CARD = "",
         DEV_CI_PRIORITY = "",
         DEV_BOX_MARKER = base .. "/no-box",
@@ -635,18 +635,18 @@ testing.test("--remote ci run label is repo/remote when DEV_AGENT is unset", fun
     testing.eq(fs.read(base .. "/log.agent"), "p/remote\n")
 end)
 
-testing.test("--remote ci run label takes DEV_CI_VERB and DEV_CI_CARD", function()
+testing.test("--remote ci run label takes DEV_CI_COMMAND and DEV_CI_CARD", function()
     local root, base = setup()
     local _, code = dev(
         root,
         base,
         { "--remote", "test" },
-        { DEV_CI_VERB = "land", DEV_CI_CARD = "d9f0e004" }
+        { DEV_CI_COMMAND = "land", DEV_CI_CARD = "d9f0e004" }
     )
     testing.eq(code, 0)
     testing.eq(fs.read(base .. "/log.agent"), "p/land/d9f0e004\n")
     fs.remove(base .. "/log.agent")
-    _, code = dev(root, base, { "--remote", "test" }, { DEV_CI_VERB = "release" })
+    _, code = dev(root, base, { "--remote", "test" }, { DEV_CI_COMMAND = "release" })
     testing.eq(code, 0)
     testing.eq(fs.read(base .. "/log.agent"), "p/release\n")
 end)
@@ -674,7 +674,7 @@ testing.test("run label is unset for a bare run in a terminal", function()
     with_empty_home(function()
         local terminal = { tty = true }
         testing.eq(remote.run_label(root, {}, terminal), nil)
-        testing.eq(remote.run_label(root, { DEV_AGENT = "", DEV_CI_VERB = "" }, terminal), nil)
+        testing.eq(remote.run_label(root, { DEV_AGENT = "", DEV_CI_COMMAND = "" }, terminal), nil)
         testing.eq(remote.run_label(root, { DEV_CI_CARD = "d9f0e004" }, terminal), nil)
     end)
 end)
@@ -683,11 +683,11 @@ testing.test("run label keeps check and release labels in a terminal", function(
     local remote = require("dev.remote")
     local root = setup()
     with_empty_home(function()
-        local check = { DEV_CI_VERB = remote.Verb.CHECK, DEV_CI_CARD = "d9f0e004" }
+        local check = { DEV_CI_COMMAND = remote.Verb.CHECK, DEV_CI_CARD = "d9f0e004" }
         local terminal, piped = { tty = true }, { tty = false }
         testing.eq(remote.run_label(root, check, terminal), "p/check/d9f0e004")
         local release = "release"
-        testing.eq(remote.run_label(root, { DEV_CI_VERB = release }, terminal), "p/" .. release)
+        testing.eq(remote.run_label(root, { DEV_CI_COMMAND = release }, terminal), "p/" .. release)
         testing.eq(remote.run_label(root, {}, piped), "p/remote")
         local agent = { DEV_AGENT = "dotfiles/implementer/x/1" }
         testing.eq(remote.run_label(root, agent, piped), nil)
@@ -701,7 +701,7 @@ testing.test("run label names a check run even under an agent DEV_AGENT", functi
     with_empty_home(function()
         local agent = "dotfiles/implementer/d9f0e004"
         local check =
-            { DEV_AGENT = agent, DEV_CI_VERB = remote.Verb.CHECK, DEV_CI_CARD = "d9f0e004" }
+            { DEV_AGENT = agent, DEV_CI_COMMAND = remote.Verb.CHECK, DEV_CI_CARD = "d9f0e004" }
         testing.eq(remote.run_label(root, check, { tty = false }), "p/check/d9f0e004")
         testing.eq(remote.run_label(root, check, { tty = true }), "p/check/d9f0e004")
         testing.eq(remote.run_label(root, { DEV_AGENT = agent }, { tty = false }), nil)
@@ -911,7 +911,7 @@ testing.test("--remote ci run label keeps a caller's DEV_AGENT", function()
         root,
         base,
         { "--remote", "test" },
-        { DEV_AGENT = "dotfiles/implementer/x/1", DEV_CI_VERB = "land" }
+        { DEV_AGENT = "dotfiles/implementer/x/1", DEV_CI_COMMAND = "land" }
     )
     testing.eq(code, 0)
     testing.eq(fs.read(base .. "/log.agent"), "dotfiles/implementer/x/1\n")

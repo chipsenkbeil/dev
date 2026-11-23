@@ -16,7 +16,7 @@ local turn = require("dev.board.turn")
 local vcs = require("dev.vcs")
 local dev_command = require("dev.command")
 
----The parsing, refusals and turn waits behind the `board` check and land verbs.
+---The parsing, refusals and turn waits behind the `board` check and land commands.
 ---@class dev.board.wiring
 local M = {}
 
@@ -152,7 +152,7 @@ local function run_shared(opts, plan, env)
     )
     local label = remote.run_label(opts.backend.root, {
         DEV_AGENT = os.getenv("DEV_AGENT"),
-        DEV_CI_VERB = env[remote.VERB_ENV],
+        DEV_CI_COMMAND = env[remote.COMMAND_ENV],
         DEV_CI_CARD = env[remote.CARD_ENV],
     }, { tty = false })
     local done = check.run_group({
@@ -432,7 +432,7 @@ local function check_rows(opts)
         ran[row] = { unpack(argvs[row], #argvs[row] - count + 1) }
     end
     local env = {
-        [remote.VERB_ENV] = remote.Verb.CHECK,
+        [remote.COMMAND_ENV] = remote.Verb.CHECK,
         [remote.CARD_ENV] = short,
     }
     local listed = mac_only_files(backend.root)

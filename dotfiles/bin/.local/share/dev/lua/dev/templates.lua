@@ -313,15 +313,15 @@ local function script_head(content, marker)
     return table.concat(out, "\n")
 end
 
----Drop the Lua verbs a project still on bash has not ported.
+---Drop the Lua commands a project still on bash has not ported.
 ---
----While any `.dev/<verb>.sh` of the manifest's verbs exists, a Lua verb the project lacks is not
----written, and a Lua verb it already has stays synced. The shared library goes too when no verb
----is left to use it.
+---While any `.dev/<command>.sh` of the manifest's commands exists, a Lua command the project lacks
+---is not written, and a Lua command it already has stays synced. The shared library goes too when
+---no command is left to use it.
 ---@param root string the project root
 ---@param entries dev.templates.Entry[] the manifest
 ---@return dev.templates.Entry[] kept the entries a sync may write
----@return string[] pending the bash verbs left alone, such as `.dev/lint.sh`
+---@return string[] pending the bash commands left alone, such as `.dev/lint.sh`
 function M.skip_pending(root, entries)
     local pending = {}
     for _, entry in ipairs(entries) do

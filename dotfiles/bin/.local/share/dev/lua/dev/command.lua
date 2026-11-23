@@ -19,15 +19,15 @@ local stdout = io.stdout
 local M = {}
 
 ---Print `dev <name>: <msg>` and exit 2.
----@param ctx dev.Ctx the verb's context
+---@param ctx dev.Ctx the command's context
 ---@param msg string what is wrong with the arguments
 function M.usage_error(ctx, msg)
     stderr:write("dev ", ctx.name, ": ", msg, "\n")
     os.exit(2)
 end
 
----Refuse any positional argument, for a verb that takes no positional arguments.
----@param ctx dev.Ctx the verb's context
+---Refuse any positional argument, for a command that takes no positional arguments.
+---@param ctx dev.Ctx the command's context
 function M.no_args(ctx)
     local arg = ctx.args[1]
     if arg == nil then
@@ -36,7 +36,10 @@ function M.no_args(ctx)
     if arg:sub(1, 1) == "-" then
         M.usage_error(ctx, "Unknown flag " .. arg .. ".")
     end
-    M.usage_error(ctx, "Unknown argument " .. arg .. ". This verb takes no positional arguments.")
+    M.usage_error(
+        ctx,
+        "Unknown argument " .. arg .. ". This command takes no positional arguments."
+    )
 end
 
 ---Write `msg` and a newline to standard output.
@@ -69,7 +72,7 @@ function M.die(msg)
 end
 
 ---Print the command on standard error as `+ command` when `ctx.verbose` is 1 or more.
----@param ctx dev.Ctx the verb's context
+---@param ctx dev.Ctx the command's context
 ---@param argv string[] the command and its arguments, joined with spaces
 function M.show(ctx, argv)
     if ctx.verbose >= 1 then
@@ -78,7 +81,7 @@ function M.show(ctx, argv)
 end
 
 ---Exit 1 with one line when `binary` is not on PATH.
----@param binary string the command the verb needs
+---@param binary string the program the command needs
 ---@param install string how to install it, as the warning shows
 function M.need(binary, install)
     if not dev_os.which(binary) then
@@ -87,7 +90,7 @@ function M.need(binary, install)
     end
 end
 
----Run a verb script in this process.
+---Run a command script in this process.
 ---
 ---A syntax error, an error a script raises and a script that returns anything
 ---but an integer all end the run with a message and no traceback.

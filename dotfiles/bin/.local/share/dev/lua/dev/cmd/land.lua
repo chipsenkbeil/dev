@@ -60,7 +60,7 @@ end
 ---unproven card, and the `board land` command lands the rest with its turn, note and move. A
 ---project with no board gets a rebase onto trunk and a land of the change. A `.dev/land.lua`
 ---replaces all of it.
----@param ctx dev.Ctx the verb's context
+---@param ctx dev.Ctx the command's context
 ---@return integer code the exit code
 function M.run(ctx)
     local flags = parse(ctx)

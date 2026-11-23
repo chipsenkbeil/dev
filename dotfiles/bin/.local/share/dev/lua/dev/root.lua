@@ -26,7 +26,7 @@ local TEMP_TEMPLATE = "/tmp/dev-tools.XXXXXX"
 local M = { Reason = Reason, MAX_BYTES = MAX_BYTES, MAX_LINE_BYTES = MAX_LINE_BYTES }
 
 ---Say whether dev may run these command words as root.
----@param words string[] the command words, a verb and its subcommand
+---@param words string[] the command words, a command and its subcommand
 ---@return boolean allowed true for `tools install` and `tools check` only
 function M.allowed(words)
     return words[1] == "tools" and (words[2] == "install" or words[2] == "check")

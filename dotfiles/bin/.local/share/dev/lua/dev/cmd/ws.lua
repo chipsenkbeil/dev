@@ -367,7 +367,7 @@ end
 ---trunk revision, a git project a worktree on a new branch NAME at the fetched
 ---trunk of the remote of record, and any other folder a plain directory. The
 ---path is printed on standard output.
----@param ctx dev.Ctx the verb's context
+---@param ctx dev.Ctx the command's context
 ---@return integer code the exit code
 M.handlers["ws new"] = function(ctx)
     local name = parse(ctx)
@@ -490,7 +490,7 @@ end
 ---
 ---Each line is the folder's name, a tab and its path. A project with no
 ---workspaces prints nothing.
----@param ctx dev.Ctx the verb's context
+---@param ctx dev.Ctx the command's context
 ---@return integer code the exit code
 M.handlers["ws ls"] = function(ctx)
     if ctx.args[1] ~= nil then
@@ -923,7 +923,7 @@ end
 ---changes not in a commit is refused and left in place. A jj folder whose
 ---workspace jj no longer lists is refused unless `--forgotten` is given (it
 ---then moves to the trash). A plain file directly under ROOT/<repo> is moved.
----@param ctx dev.Ctx the verb's context
+---@param ctx dev.Ctx the command's context
 ---@return integer code the exit code
 M.handlers["ws rm"] = function(ctx)
     local discard = false
@@ -1229,7 +1229,7 @@ end
 ---
 ---`--dry-run` prints the plan and removes nothing. Each action is one line and
 ---the last line counts them.
----@param ctx dev.Ctx the verb's context
+---@param ctx dev.Ctx the command's context
 ---@return integer code the exit code
 M.handlers["ws prune"] = function(ctx)
     local dry = false
@@ -1423,7 +1423,7 @@ end
 ---moves with `git worktree move`. A folder that is not a workspace of this
 ---project, one already under the root, one with changes not in a commit, and
 ---a target that exists are refused and left in place.
----@param ctx dev.Ctx the verb's context
+---@param ctx dev.Ctx the command's context
 ---@return integer code the exit code
 M.handlers["ws adopt"] = function(ctx)
     local path = ctx.args[1]

@@ -87,7 +87,7 @@ end
 ---
 ---It queries the change for its current revision, refuses one that is missing or not NEW, then
 ---sends `gerrit review --abandon`, with `--reason TEXT` as the message.
----@param ctx dev.Ctx the verb's context, whose `args` hold a change number or Change-Id
+---@param ctx dev.Ctx the command's context, whose `args` hold a change number or Change-Id
 ---@return integer code 0 when the change was abandoned, 1 otherwise
 function M.run(ctx)
     local change, reason = parse(ctx)

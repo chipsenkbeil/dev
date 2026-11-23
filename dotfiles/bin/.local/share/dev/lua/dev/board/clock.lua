@@ -297,7 +297,7 @@ end
 ---@param as_flag string? the `--as` value
 ---@param note string? the `--note` value
 ---@param find fun(word: string): dev.board.Card?, dev.cmd.board.Result? the card lookup
----@return dev.cmd.board.Result result the outcome of the verb
+---@return dev.cmd.board.Result result the outcome of the command
 function M.run(backend, positional, as_flag, note, find)
     local word = positional[1]
     if #positional ~= 2 then

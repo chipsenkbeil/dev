@@ -19,7 +19,7 @@ local CHILD_UNSET = { "BASH_ENV", "ENV", "PS4", "VERBOSE" }
 local M = { handlers = {} }
 
 ---@class dev.cmd.init.Run
----@field ctx dev.Ctx the verb's context
+---@field ctx dev.Ctx the command's context
 ---@field root string the project root
 ---@field dry boolean whether nothing may be written
 ---@field name string the project's name
@@ -250,7 +250,7 @@ end
 ---
 ---It takes `--name` and `--dry-run`. Anything already in the project is
 ---skipped, and a dry run prints `would create:` lines and writes nothing.
----@param ctx dev.Ctx the verb's context
+---@param ctx dev.Ctx the command's context
 ---@param reg dev.Registry the project's registry
 ---@return integer code 0
 function M.run(ctx, reg)

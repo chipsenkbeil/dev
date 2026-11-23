@@ -169,10 +169,10 @@ local function split_words(row)
     return words
 end
 
----Find the verb of a dev row after dev's flags.
+---Find the command of a dev row after dev's flags.
 ---@param words string[] the row's words, dev first
----@return integer? verb_at the index of the verb, nil when a double dash or the row's end comes first
----@return boolean remote true when `--remote` came before the verb
+---@return integer? verb_at the index of the command, nil when a double dash or the row's end comes first
+---@return boolean remote true when `--remote` came before the command
 local function dev_verb(words)
     local remote = false
     local i = 2

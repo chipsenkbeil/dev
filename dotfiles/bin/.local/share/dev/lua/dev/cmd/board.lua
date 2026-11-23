@@ -64,7 +64,7 @@ local POMB_REFUSALS = {
         .. "https address in ~/.config/dev/config.toml.",
 }
 
----Write the refusal of a verb that only a lead runs.
+---Write the refusal of a command that only a lead runs.
 ---@param action string? what the lead does, nil for deleting a card
 ---@return string message the sentence
 local function not_lead_message(action)
@@ -2785,7 +2785,7 @@ function commands.escalate(backend, args)
     return { output = "escalated " .. prefix .. " to " .. board.NEEDS_LEAD }
 end
 
----Past-tense verb reported for each outcome mode
+---Past-tense word reported for each outcome mode
 local OUTCOME_SAID = {
     [OutcomeMode.DELETE] = "deleted",
     [OutcomeMode.RENAME] = "reworded",
@@ -3297,7 +3297,7 @@ function commands.edit(backend, args)
         return failure(
             "The text holds the rendered line `"
                 .. rendered
-                .. "`. The outcomes and checks have their own verbs, `dev board outcome`"
+                .. "`. The outcomes and checks have their own commands, `dev board outcome`"
                 .. " and `dev board checks`."
         )
     end
@@ -3835,7 +3835,7 @@ function commands.land(backend, args)
     if not backend.root then
         return failure("`dev board land` needs the project's root.")
     end
-    local own = config.get(backend.root, "board.land.verb")
+    local own = config.get(backend.root, "board.land.command")
     if type(own) == "string" and own ~= "" then
         return failure(
             string.format(
