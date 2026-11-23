@@ -58,6 +58,35 @@ runs with the project you are in as its root. A global Lua command finds its
 modules in the `lua` folder of the global folder, not in the project's
 `.dev/lua`. `-v` prints its path relative to the global folder.
 
+## Reaching an overridden command
+
+A script that replaces a command hides the one it replaced. A first word of
+the form `builtin:<command>` or `global:<command>` answers from that source
+alone, whatever the project holds:
+
+```
+dev builtin:init
+dev builtin:board ls
+```
+
+`builtin:` runs the built-in, to let a global `init` call the built-in one
+first. `global:` runs the script in the global folder and skips a project
+script of the same name. Both work for a command with subcommands, and the
+rest of the line reads as it does without the prefix: `dev help builtin:board`,
+`dev builtin:board ls --help` and shell completion take the prefix too.
+
+A prefixed command always runs on this machine. `--remote` with one exits 2,
+and the remote default does not send it.
+
+A source other than `builtin` or `global`, or a command the source lacks, exits
+2 with one sentence on standard error:
+
+- `The source <name> is not builtin or global.`
+- `The built-in commands have no command <words>.`
+- `The global commands have no command <words>.`
+
+There is no `project:` prefix.
+
 ## Reserved folders
 
 `.dev/lua`, `.dev/topics` and `.dev/standalone` are never commands, and dev

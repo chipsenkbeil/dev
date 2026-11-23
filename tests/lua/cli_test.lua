@@ -215,6 +215,67 @@ testing.test("a .lua verb that cannot be read is an error", function()
     testing.ok(out:find("dev locked: cannot read ", 1, true), out)
 end)
 
+local function echoing(text)
+    return table.concat({ "#!/usr/bin/env bash", "echo " .. text, "" }, "\n")
+end
+
+local function overriding_global()
+    local config = support.tempdir()
+    local commands = config .. "/dev/commands"
+    for name, text in pairs({
+        ["init.sh"] = echoing("global init ran"),
+        ["board/ls.sh"] = echoing("global ls ran"),
+        ["shared.sh"] = echoing("global shared ran"),
+    }) do
+        local path = commands .. "/" .. name
+        assert(fs.mkdir(fs.dirname(path), { parents = true }))
+        assert(fs.write(path, text))
+        assert(dev_os.run({ "chmod", "755", path }) == 0, "chmod failed")
+    end
+    return { XDG_CONFIG_HOME = config }
+end
+
+testing.test("builtin:init runs the built-in under a global init", function()
+    local env = overriding_global()
+    local root = project({})
+    testing.eq(dev(root, { "init" }, env), "global init ran\n")
+    local out, code = dev(root, { "builtin:init", "-h" }, env)
+    testing.eq(code, 0)
+    testing.ok(out:find("Seed a project with lint, CI and remotes", 1, true), out)
+    testing.ok(not out:find("global init ran", 1, true), out)
+end)
+
+testing.test("builtin:board ls reaches the built-in subcommand under an override", function()
+    local env = overriding_global()
+    local root = project({})
+    testing.eq(dev(root, { "board", "ls" }, env), "global ls ran\n")
+    local out, code = dev(root, { "builtin:board", "ls", "-h" }, env)
+    testing.eq(code, 0)
+    testing.ok(out:find("List the cards of the board", 1, true), out)
+end)
+
+testing.test("global:shared answers from the global folder and skips the project script", function()
+    local env = overriding_global()
+    local root = project({ ["shared.sh"] = echoing("project shared ran") })
+    testing.eq(dev(root, { "shared" }, env), "project shared ran\n")
+    testing.eq(dev(root, { "global:shared" }, env), "global shared ran\n")
+    testing.eq(dev(root, { "global:board", "ls" }, env), "global ls ran\n")
+end)
+
+testing.test("an unknown source is a usage error naming it", function()
+    local env = overriding_global()
+    local root = project({})
+    local out, code = dev(root, { "project:lint" }, env)
+    testing.eq(code, 2)
+    testing.eq(out, "The source project is not builtin or global.\n")
+    out, code = dev(root, { "builtin:nope" }, env)
+    testing.eq(code, 2)
+    testing.eq(out, "The built-in commands have no command nope.\n")
+    out, code = dev(root, { "global:lint" }, env)
+    testing.eq(code, 2)
+    testing.eq(out, "The global commands have no command lint.\n")
+end)
+
 local REFUSAL = ". Pass it after -- to reach the script, or add it to the script's # flags: line.\n"
 
 local function marked(root)

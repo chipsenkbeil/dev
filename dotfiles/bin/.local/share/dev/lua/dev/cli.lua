@@ -587,6 +587,19 @@ function M.main(argv)
     require_min_version(project_root)
     local reg = registry.load(project_root)
     hidden_helper(args, project_root, reg)
+    local source, bare = registry.split(name)
+    if source then
+        local found, reason = reg:find({ name })
+        if not found then
+            stderr:write(registry.sentence(reason), "\n")
+            os.exit(2)
+        end
+        if parsed.remote then
+            stderr:write("The flag `--remote` does not take a command with a source prefix.\n")
+            os.exit(2)
+        end
+        reg, name = reg:view(source), bare
+    end
     local words, rest = { name }, tail(args, 2)
     local row = reg:find(words)
     while row and row.noun do
@@ -639,8 +652,13 @@ function M.main(argv)
         }))
     end
     if
-        not (parsed.local_flag or parsed.env_local or on_remote_host or runs_local(reg, row))
-        and remote_default(project_root, words, never_remote == false)
+        not (
+            parsed.local_flag
+            or parsed.env_local
+            or on_remote_host
+            or source
+            or runs_local(reg, row)
+        ) and remote_default(project_root, words, never_remote == false)
     then
         os.exit(remote.run(ctx, words, rest, { detach = false, priority = false }))
     end

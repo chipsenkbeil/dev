@@ -187,6 +187,73 @@ testing.test("a global script replaces a built-in subcommand", function()
     fs.remove(root, { recursive = true })
 end)
 
+local function described(text)
+    return table.concat({ "#!/usr/bin/env bash", "# " .. text, "" }, "\n")
+end
+
+testing.test("a builtin word answers from the built-ins under an override", function()
+    local root = make_project()
+    scripted(root, ".dev/lint.sh", described("Project lint."))
+    with_global({
+        ["board/ls.sh"] = described("Global ls."),
+    }, function()
+        local reg = registry.load(root)
+        testing.eq(reg:find({ "lint" }).kind, "override")
+        local row = reg:find({ "builtin:lint" })
+        testing.eq(row.kind, "builtin")
+        testing.eq(row.words, { "lint" })
+        testing.eq(reg:find({ "board", "ls" }).kind, "override")
+        local sub = reg:find({ "builtin:board", "ls" })
+        testing.eq(sub.kind, "builtin")
+        testing.eq(sub.words, { "board", "ls" })
+        local missing, reason = reg:find({ "builtin:a" })
+        testing.eq(missing, nil)
+        testing.eq(reason, "no builtin command a")
+        testing.eq(reg:flags({ "builtin:board", "ls" })[1], "--column")
+        testing.eq(words(reg:subs({ "builtin:board" }))[1], "board status")
+    end)
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("a global word skips the project script of its name", function()
+    local root = make_project()
+    scripted(root, ".dev/both.sh", described("Project both."))
+    scripted(root, ".dev/lint.sh", described("Project lint."))
+    with_global({
+        ["both.sh"] = described("Global both."),
+        ["n/more.sh"] = described("Global more."),
+    }, function(dir)
+        local reg = registry.load(root)
+        local row = reg:find({ "global:both" })
+        testing.eq(row.source, "global")
+        testing.eq(row.script, dir .. "/both.sh")
+        testing.eq(row.desc, "Global both.")
+        testing.eq(reg:find({ "both" }).source, "project")
+        testing.eq(words(reg:subs({ "global:n" })), { "n more" })
+        local missing, reason = reg:find({ "global:a" })
+        testing.eq(missing, nil)
+        testing.eq(reason, "no global command a")
+        _, reason = reg:find({ "global:lint" })
+        testing.eq(reason, "no global command lint")
+    end)
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("another prefix is an unknown source and the sentence names it", function()
+    local reg = registry.load(make_project())
+    local row, reason = reg:find({ "project:a" })
+    testing.eq(row, nil)
+    testing.eq(reason, "unknown source project")
+    testing.eq(registry.sentence(reason), "The source project is not builtin or global.")
+    testing.eq(
+        registry.sentence("no builtin command x y"),
+        "The built-in commands have no command x y."
+    )
+    testing.eq(registry.sentence("no global command x"), "The global commands have no command x.")
+    testing.eq({ registry.split("builtin:lint") }, { "builtin", "lint" })
+    testing.eq({ registry.split("lint") }, {})
+end)
+
 testing.test("the override row names the replaced source", function()
     local root = make_project()
     scripted(root, ".dev/lint.sh", "#!/usr/bin/env bash\n# My lint.\n")

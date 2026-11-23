@@ -591,17 +591,23 @@ function M.run(ctx, reg)
     if #args == 0 then
         return M.overview(ctx, reg, { no_pager = no_pager })
     elseif #args == 1 then
-        local row = reg:find({ first })
+        local row, reason = reg:find({ first })
         if row and row.noun then
             return M.noun(reg, first)
         elseif row then
             return M.verb(ctx, reg, { words = { first } })
+        elseif reason then
+            fail(registry.sentence(reason))
         elseif topic_path(ctx, first) then
             print_topic(ctx, first, { no_pager = no_pager })
         else
             fail("unknown command " .. first .. ", and no topic of that name")
         end
     else
+        local _, reason = reg:find({ first })
+        if reason then
+            fail(registry.sentence(reason))
+        end
         local parent = { first }
         for i = 2, #args do
             if not reg:is_noun(parent) then

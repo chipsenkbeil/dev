@@ -72,6 +72,8 @@ end
 ---   words of the noun, `""` for `.dev`
 ---@field private headers table<string, dev.Header> parsed headers by script path
 ---@field private rows table<string, dev.Row|false> resolved verb rows by name
+---@field private only dev.Source? the one source a view answers from, nil for the whole registry
+---@field private views table<string, dev.Registry> the views made so far by source
 local Registry = {}
 Registry.__index = Registry
 
@@ -218,6 +220,7 @@ function M.load(root, opts)
         dirs = {},
         headers = {},
         rows = {},
+        views = {},
     }, Registry)
     for _, row in ipairs(builtins) do
         self.builtin[table.concat(row.words, " ")] = row
@@ -286,10 +289,11 @@ function Registry:__dir(name)
     local rel = (name:gsub(" ", "/"))
     local dir
     if not RESERVED_DIRS[name:match("^%S+")] then
-        dir = merge_dirs(
-            read_dir(fs.join(self.root, ".dev", rel), name, Source.PROJECT),
-            read_dir(fs.join(self.global, rel), name, Source.GLOBAL)
-        )
+        local project = not self.only
+            and read_dir(fs.join(self.root, ".dev", rel), name, Source.PROJECT)
+        local global = self.only ~= Source.BUILTIN
+            and read_dir(fs.join(self.global, rel), name, Source.GLOBAL)
+        dir = merge_dirs(project or nil, global or nil)
     end
     dir = dir or name == "" and { scripts = {}, order = {}, subs = {}, source = Source.PROJECT }
     self.dirs[name] = dir or false
@@ -519,6 +523,80 @@ function Registry:__sub(noun, sub)
     end
 end
 
+---Make the registry that answers from one source alone.
+---
+---The built-in view holds the built-in rows and no script. The global view holds the scripts of the
+---global folder and no built-in row, so a global script of a built-in's name is a local row there.
+---@param source dev.Source `builtin` or `global`
+---@return dev.Registry view the registry of that source
+function Registry:view(source)
+    local view = self.views[source]
+    if not view then
+        local builtin = source == Source.BUILTIN
+        view = setmetatable({
+            root = self.root,
+            global = self.global,
+            warn = self.warn,
+            builtin = builtin and self.builtin or {},
+            builtin_subs = builtin and self.builtin_subs or {},
+            dirs = {},
+            headers = self.headers,
+            rows = {},
+            views = {},
+            only = source,
+        }, Registry)
+        self.views[source] = view
+    end
+    return view
+end
+
+local PREFIXED = "^([A-Za-z0-9_-]+):([A-Za-z0-9_-]+)$"
+
+---Split a word such as `builtin:board` into its source and its bare word.
+---@param word string the command word
+---@return string? source nil when the word has no prefix
+---@return string? bare the word without the prefix
+function M.split(word)
+    return word:match(PREFIXED)
+end
+
+---Split a first word such as `builtin:board` and pick the view it names.
+---@param self dev.Registry the registry
+---@param words string[] the command words
+---@return dev.Registry? view the registry to ask, `self` for an unprefixed word, nil on a reason
+---@return string[]|string? bare the words without the prefix, or the reason when the view is nil
+---@return string? source the prefix, nil for an unprefixed word
+local function scope(self, words)
+    local source, first = M.split(words[1] or "")
+    if not source then
+        return self, words
+    end
+    if source ~= Source.BUILTIN and source ~= Source.GLOBAL then
+        return nil, "unknown source " .. source
+    end
+    local bare = { first }
+    for i = 2, #words do
+        bare[i] = words[i]
+    end
+    return self:view(source), bare, source
+end
+
+---Turn a reason from `find` into the sentence `dev` prints.
+---@param reason string the reason, `unknown source NAME`, `no builtin command WORD` or
+---   `no global command WORD`
+---@return string sentence the sentence for standard error
+function M.sentence(reason)
+    local name = reason:match("^unknown source (.+)$")
+    if name then
+        return "The source " .. name .. " is not builtin or global."
+    end
+    local source, word = reason:match("^no (%a+) command (.+)$")
+    if source == Source.BUILTIN then
+        return "The built-in commands have no command " .. word .. "."
+    end
+    return "The " .. source .. " commands have no command " .. word .. "."
+end
+
 ---Find the row for a command.
 ---
 ---A project script beats a global script, which beats a built-in verb or
@@ -526,9 +604,25 @@ end
 ---`.dev/<verb>.<ext>` beats a directory of the same name, but a project
 ---directory beats a global script of that name. A `__` script is found here
 ---though `commands` and `subs` list it.
+---
+---A first word `builtin:WORD` or `global:WORD` answers from that source alone, and the row's
+---words are the bare ones.
 ---@param words string[] one word for a verb or noun, then one for each level of subcommand
 ---@return dev.Row? row nil when nothing answers to the words
+---@return string? reason `unknown source NAME`, `no builtin command WORDS` or `no global command
+---   WORDS` for a prefixed word the registry cannot answer
 function Registry:find(words)
+    local view, bare, source = scope(self, words)
+    if not view then
+        return nil, bare
+    end
+    if view ~= self then
+        local row = view:find(bare)
+        if row then
+            return row
+        end
+        return nil, "no " .. source .. " command " .. table.concat(bare, " ")
+    end
     for _, word in ipairs(words) do
         if not word:find(WORD) then
             return nil
@@ -600,6 +694,13 @@ end
 ---   a noun
 function Registry:subs(noun)
     local words = type(noun) == "string" and { noun } or noun
+    local view, bare = scope(self, words)
+    if not view then
+        return {}
+    end
+    if view ~= self then
+        return view:subs(bare)
+    end
     local parent = self:find(words)
     local rows = {}
     if not (parent and parent.noun) then
@@ -656,6 +757,13 @@ end
 ---@param words string[] the command words
 ---@return string[] flags the flags, empty when nothing answers to the words
 function Registry:flags(words)
+    local view, bare = scope(self, words)
+    if not view then
+        return {}
+    end
+    if view ~= self then
+        return view:flags(bare)
+    end
     local row = self:find(words)
     local flags = {}
     if row and row.script then

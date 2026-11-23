@@ -98,6 +98,32 @@ testing.test("a usage error of dev help names the command and exits 2", function
     testing.eq(code, 2)
 end)
 
+testing.test("dev help takes a source prefix and names a bad one", function()
+    local root = project({})
+    local out, code = dev(root, { "help", "builtin:board" })
+    testing.eq(code, 0)
+    testing.ok(out:find("dev builtin:board", 1, true), out)
+    out, code = dev(root, { "help", "builtin:board", "ls" })
+    testing.eq(code, 0)
+    testing.ok(out:find("List the cards of the board", 1, true), out)
+    out, code = dev(root, { "help", "project:x" })
+    testing.eq(out, "dev help: The source project is not builtin or global.\n")
+    testing.eq(code, 2)
+    out, code = dev(root, { "help", "project:x", "y" })
+    testing.eq(out, "dev help: The source project is not builtin or global.\n")
+    testing.eq(code, 2)
+    out, code = dev(root, { "help", "builtin:nosuch" })
+    testing.eq(out, "dev help: The built-in commands have no command nosuch.\n")
+    testing.eq(code, 2)
+end)
+
+testing.test("a source prefix is refused with --remote", function()
+    local env = { CI = "", DEV_BOX_MARKER = "/nonexistent/box-marker" }
+    local out, code = dev(project({}), { "--remote", "builtin:lint" }, env)
+    testing.eq(out, "The flag `--remote` does not take a command with a source prefix.\n")
+    testing.eq(code, 2)
+end)
+
 testing.test("a topic that shares a verb's name is reported by the topic check", function()
     local root = project({
         ["a.sh"] = "#!/usr/bin/env bash\n# A verb.\n",

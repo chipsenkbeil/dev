@@ -162,7 +162,9 @@ end
 ---@param ctx dev.Ctx the context
 ---@return integer code 0, with no output when nothing completes
 function M.args(ctx)
-    local words = ctx.args
+    local words = { unpack(ctx.args) }
+    local _, bare = registry.split(words[1] or "")
+    words[1] = bare or words[1]
     if words[#words] == "--run" then
         print_ci({ "runs" })
     elseif words[1] == "connect" and #words == 1 then

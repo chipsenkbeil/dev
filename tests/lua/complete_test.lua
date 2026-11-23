@@ -62,6 +62,24 @@ testing.test(
     end
 )
 
+testing.test("complete takes the source prefix of the first word", function()
+    local root = project({
+        ["box/ls.sh"] = table.concat(
+            { "#!/usr/bin/env bash", "# My ls.", "# flags: --mine", "" },
+            "\n"
+        ),
+        ["board/ls.sh"] = table.concat({ "#!/usr/bin/env bash", "# My board ls.", "" }, "\n"),
+    })
+    testing.eq(dev(root, { "__flags", "box", "ls" }), "--mine\n" .. GLOBAL_TAIL)
+    testing.eq(dev(root, { "__flags", "builtin:box", "ls" }), "--all\n--json\n" .. GLOBAL_TAIL)
+    local out = dev(root, { "__subs", "builtin:box" })
+    testing.ok(out:find("ls\tbuiltin\t", 1, true), out)
+    out = dev(root, { "__subs", "box" })
+    testing.ok(out:find("ls\toverride\t", 1, true), out)
+    testing.eq(dev(root, { "__subs", "project:box" }), "")
+    fs.remove(root, { recursive = true })
+end)
+
 testing.test("__topics check reports a .lua flags line with -h and exits 1", function()
     local root = project({ ["a.lua"] = "--[[\nA.\nflags: -h\n]]\nreturn 0\n" })
     local out, code = dev_os.capture(
