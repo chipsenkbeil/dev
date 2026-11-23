@@ -1,13 +1,12 @@
 dev init
-  Seed a project with lint, CI and remotes
+  Set up a project's version control and remotes
 
 flags
-  --type
   --name
   --dry-run
 
 the built-in runs
-  dev init [--type T] [--name N] [--dry-run]
+  dev init [--name N] [--dry-run]
 
 Global flags:
   -v                      print each command before it runs

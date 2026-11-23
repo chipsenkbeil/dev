@@ -4,28 +4,12 @@ local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local help = require("dev.help")
 local json = require("dev.json")
-local pipelines = require("dev.pipelines")
-local project = require("dev.project")
-local sync = require("dev.cmd.sync")
-local templates = require("dev.templates")
 local vcs = require("dev.vcs")
 local dev_command = require("dev.command")
 
-local Kind = project.Kind
-local TYPES = {
-    [Kind.RUST] = true,
-    [Kind.LOVE2D] = true,
-    [Kind.LUA] = true,
-    [Kind.GODOT] = true,
-    [Kind.NODE] = true,
-}
 local BOARD_SECONDS = "5"
 local BOARD_REFUSED = "401"
 local CHILD_UNSET = { "BASH_ENV", "ENV", "PS4", "VERBOSE" }
-local STYLE_TAIL = "\n"
-    .. templates.STYLE_MARKER
-    .. "\n\nRules that apply only to this project go here. Number them P1, P2, and so on. The numbers above only grow, so a project rule never shares a number with a guide rule.\n"
-local NEEDS_YQ = "brew install yq"
 
 ---@class dev.cmd.init
 ---@field handlers table<string, fun(ctx: dev.Ctx, reg: dev.Registry): integer> the handler of
@@ -35,7 +19,6 @@ local M = { handlers = {} }
 ---@class dev.cmd.init.Run
 ---@field ctx dev.Ctx the verb's context
 ---@field root string the project root
----@field kind string the project type
 ---@field dry boolean whether nothing may be written
 ---@field name string the project's name
 ---@field hint string the command that adds a remote, `jj git remote add` or `git remote add`
@@ -49,7 +32,7 @@ local function parse(ctx, reg)
     local i = 1
     while i <= #args do
         local arg = args[i]
-        if arg == "--type" or arg == "--name" then
+        if arg == "--name" then
             if i == #args then
                 dev_command.usage_error(ctx, arg .. " needs a value")
             end
@@ -79,10 +62,6 @@ local function leave(run, item)
     run.human[#run.human + 1] = item
 end
 
-local function die(message)
-    dev_command.die(tostring(message))
-end
-
 local function run_or_exit(run, argv, opts)
     dev_command.show(run.ctx, argv)
     local code = dev_os.run(argv, opts)
@@ -98,24 +77,6 @@ local function has(list, want)
         end
     end
     return false
-end
-
-local function put_text(run, dest, text)
-    local path = run.root .. "/" .. dest
-    if fs.exists(path) then
-        skipped(run, dest .. " exists")
-        return
-    end
-    if not run.dry then
-        local ok, err = fs.mkdir(fs.dirname(path), { parents = true })
-        if ok then
-            ok, err = fs.write(path, text)
-        end
-        if not ok then
-            die(err)
-        end
-    end
-    created(run, dest)
 end
 
 local function init_vcs(run)
@@ -150,147 +111,6 @@ local function init_vcs(run)
             skipped(run, ".jj (jj not installed, git only)")
         end
     end
-end
-
-local function init_lint_files(run, dir, channel)
-    local entries, pending = templates.skip_pending(run.root, templates.manifest(dir, run.kind))
-    for _, bash in ipairs(pending) do
-        skipped(run, bash .. " exists, left on bash")
-    end
-    for _, entry in ipairs(entries) do
-        local opts = { kind = run.kind, dest = entry.dest, src = entry.src, channel = channel }
-        local path = run.root .. "/" .. entry.dest
-        if fs.exists(path) then
-            skipped(run, entry.dest .. " exists")
-        else
-            if not run.dry then
-                local ok, err = templates.install(run.root, opts)
-                if not ok then
-                    die(err)
-                end
-            end
-            created(run, entry.dest)
-        end
-    end
-end
-
-local function init_workspace_lints(run, dir)
-    local cargo = run.root .. "/Cargo.toml"
-    if not fs.is_file(cargo) then
-        skipped(run, "workspace lints: no Cargo.toml")
-        return
-    end
-    local text = fs.read(cargo) or ""
-    if templates.lints_project_block(text) ~= "" then
-        skipped(run, "workspace lints in Cargo.toml exist")
-        return
-    end
-    if not run.dry then
-        local block, err = templates.lints_template_block(dir)
-        if not block then
-            die(err)
-        end
-        local ok, write_err = fs.write(cargo, templates.lints_replace(text, block))
-        if not ok then
-            die(write_err)
-        end
-        if dev_os.which("cargo-sort") then
-            local argv = { "cargo", "sort", "--workspace" }
-            dev_command.show(run.ctx, argv)
-            dev_os.run(argv, { cwd = run.root, stdout = "null", stderr = "null" })
-        end
-    end
-    created(run, "[workspace.lints] block in Cargo.toml")
-    leave(run, 'add "[lints]" with "workspace = true" to each member crate Cargo.toml')
-    io.write("reminder: each member crate needs [lints] with workspace = true\n")
-    io.write(
-        "note: the lints deny warnings, so fix every finding in the same change that adds this block\n"
-    )
-end
-
-local function init_lib_attrs(run, dir)
-    local libs = templates.lib_crates(run.root)
-    local snippet
-    if #libs > 0 then
-        local err
-        snippet, err = templates.lib_snippet(dir)
-        if not snippet then
-            die(err)
-        end
-    end
-    for _, lib in ipairs(libs) do
-        local path = run.root .. "/" .. lib .. "/src/lib.rs"
-        local text = fs.read(path) or ""
-        if templates.lib_attr_present(snippet, text) then
-            skipped(run, lib .. "/src/lib.rs has the library-register attribute")
-        else
-            if not run.dry then
-                local ok, err = fs.write(path, templates.lib_attr_insert(snippet, text))
-                if not ok then
-                    die(err)
-                end
-            end
-            created(run, lib .. "/src/lib.rs library-register attribute")
-        end
-    end
-    for _, app in ipairs(templates.app_crates(run.root)) do
-        io.write("application register, no doc lints: ", app, "\n")
-    end
-end
-
-local function init_lints(run)
-    local kind = run.kind
-    local dir
-    if templates.set_for(kind) then
-        local found, _, reason, detail = templates.dir(kind)
-        if not found then
-            die(sync.template_refusal(reason, detail))
-        end
-        dir = found
-    end
-    if kind == Kind.RUST then
-        init_lint_files(run, dir, templates.channel(run.root))
-        init_workspace_lints(run, dir)
-        init_lib_attrs(run, dir)
-    elseif dir then
-        init_lint_files(run, dir, "")
-    else
-        skipped(run, "lint set: none yet for " .. kind .. " projects")
-    end
-end
-
-local function init_style(run)
-    local set = templates.set_for(run.kind)
-    if not set then
-        skipped(run, "docs/STYLE.md: no style guide for " .. run.kind .. " projects")
-        return
-    end
-    local path = run.root .. "/docs/STYLE.md"
-    local guide = templates.style_guide(run.kind)
-    if fs.exists(path) then
-        skipped(run, "docs/STYLE.md exists")
-    elseif not fs.is_file(guide) then
-        skipped(run, "docs/STYLE.md: no " .. set .. " guide at " .. guide)
-    else
-        put_text(run, "docs/STYLE.md", (fs.read(guide) or "") .. STYLE_TAIL)
-    end
-end
-
-local function init_readme(run)
-    local template = templates.readme_template()
-    if fs.is_file(template) then
-        put_text(run, ".dev/README.md", fs.read(template) or "")
-    else
-        skipped(run, ".dev/README.md: no template at " .. template)
-    end
-end
-
-local function init_editorconfig(run)
-    put_text(run, ".editorconfig", templates.EDITORCONFIG)
-end
-
-local function init_ci(run)
-    put_text(run, ".ci/jobs.lua", pipelines.jobs(run.kind == Kind.RUST))
 end
 
 local function remote_names(run)
@@ -390,29 +210,19 @@ local function summarize(run)
     end
 end
 
----Seed a project with lint files, a style guide, a README, a CI pipeline and remotes.
+---Seed a project with version control, remotes and a board hint.
 ---
----It takes `--type`, `--name` and `--dry-run`. Anything already in the
----project is skipped, and a dry run prints `would create:` lines and writes nothing.
+---It takes `--name` and `--dry-run`. Anything already in the project is
+---skipped, and a dry run prints `would create:` lines and writes nothing.
 ---@param ctx dev.Ctx the verb's context
 ---@param reg dev.Registry the project's registry
 ---@return integer code 0
 function M.run(ctx, reg)
     local opts = parse(ctx, reg)
     local root = ctx.root
-    local kind = opts.type
-    if kind == nil or kind == "" then
-        kind = project.detect_type(root) or Kind.NONE
-    elseif not TYPES[kind] then
-        dev_command.usage_error(ctx, "--type takes rust, love2d, lua, godot or node")
-    end
-    if kind == Kind.RUST and fs.is_file(root .. "/Cargo.toml") then
-        dev_command.need("yq", NEEDS_YQ)
-    end
     local run = {
         ctx = ctx,
         root = root,
-        kind = kind,
         dry = opts.dry,
         name = (opts.name ~= nil and opts.name ~= "") and opts.name or fs.basename(root),
         hint = "git remote add",
@@ -420,13 +230,8 @@ function M.run(ctx, reg)
         skipped = {},
         human = {},
     }
-    io.write("init ", run.name, ": type ", kind, ", dry run ", opts.dry and "1" or "0", "\n")
+    io.write("init ", run.name, ": dry run ", opts.dry and "1" or "0", "\n")
     init_vcs(run)
-    init_lints(run)
-    init_style(run)
-    init_readme(run)
-    init_ci(run)
-    init_editorconfig(run)
     init_remotes(run)
     init_board_hint(run)
     summarize(run)

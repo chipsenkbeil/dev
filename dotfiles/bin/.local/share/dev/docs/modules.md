@@ -19,15 +19,17 @@ The luajit modules of `dev`, one per item.
 - `dev.cmd.box`: the `box` subcommands, the time-left text and the `ci box`
   call.
 - `dev.cmd.connect`: `connect` and `box connect`.
-- `dev.cmd.init`: `init` with `--type`, `--name` and `--dry-run`. It
-  prints the `would create:`, `created:` and `skipped:` lines and the
-  summary, then the Pomb board hint and its note that Pomb refused the token.
-  It seeds `.dev/README.md` from the template for every project type and
-  skips a file that exists. It sets up no Gerrit project: the dotfiles global
-  `init` runs it as `builtin:init` and then adds the Gerrit step, which
-  `--no-gerrit` skips. That step reads `[gerrit] host` (the ssh
-  destination) and `port` from the user config, and with no host it skips the
-  step and leaves a line for the owner. The board hint reads
+- `dev.cmd.init`: `init` with `--name` and `--dry-run`. It sets up version
+  control and the `origin` remote hint, prints the `would create:`,
+  `created:` and `skipped:` lines and the summary, then the Pomb board hint
+  and its note that Pomb refused the token, and skips what exists. It writes
+  no lint file, style guide, README, CI jobs file or `.editorconfig`, takes
+  no `--type` and sets up no Gerrit project: the dotfiles global `init` takes
+  `--type`, runs it as `builtin:init`, then writes those files in a `Files`
+  summary and adds the Gerrit step, which `--no-gerrit` skips. That step
+  reads `[gerrit] host` (the ssh destination) and `port` from the user
+  config, and with no host it skips the step and leaves a line for the
+  owner. The board hint reads
   `[board.pomb] url` (after `POMB_URL`) and `token` from the user config and
   is skipped when either is unset. None of the keys has a default.
 - `dev.cmd.sync`: the lint-template `sync` with `--check`, `--yes` and `-y`.

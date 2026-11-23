@@ -241,7 +241,7 @@ testing.test("builtin:init runs the built-in under a global init", function()
     testing.eq(dev(root, { "init" }, env), "global init ran\n")
     local out, code = dev(root, { "builtin:init", "-h" }, env)
     testing.eq(code, 0)
-    testing.ok(out:find("Seed a project with lint, CI and remotes", 1, true), out)
+    testing.ok(out:find("Set up a project's version control and remotes", 1, true), out)
     testing.ok(not out:find("global init ran", 1, true), out)
 end)
 

@@ -42,18 +42,33 @@ local function created_in(out)
     return items
 end
 
-testing.test("init --dry-run writes nothing and plans the files", function()
+testing.test("the global init plans the lint files the style guide and the README", function()
     local root = project()
     local before = names(root)
-    local out, code = support.dev(root, { "builtin:init", "--type", "lua", "--dry-run" })
+    local out, code = support.dev(root, { "init", "--type", "lua", "--dry-run" }, user_env(""))
     testing.eq(code, 0)
     testing.ok(out:find("would create: .ci/jobs.lua", 1, true), out)
     testing.ok(out:find("would create: .dev/lint.lua", 1, true), out)
     testing.ok(out:find("would create: .dev/lua/lintset.lua", 1, true), out)
     testing.ok(out:find("would create: docs/STYLE.md", 1, true), out)
+    testing.ok(out:find("would create: .dev/README.md", 1, true), out)
     testing.ok(out:find("(dry run, nothing written)", 1, true), out)
     testing.ok(not out:find("\ncreated:"), out)
     testing.eq(names(root), before)
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("the built-in init writes no lint file and takes no type", function()
+    local root = project()
+    local out, code = support.dev(root, { "builtin:init", "--dry-run" })
+    testing.eq(code, 0, out)
+    testing.ok(not out:find(".dev/lint.lua", 1, true), out)
+    testing.ok(not out:find("docs/STYLE.md", 1, true), out)
+    testing.ok(not out:find(".ci/jobs.lua", 1, true), out)
+    testing.ok(not out:find(".editorconfig", 1, true), out)
+    out, code = support.dev(root, { "builtin:init", "--type", "lua", "--dry-run" })
+    testing.eq(code, 2, out)
+    testing.ok(out:find("Unknown flag --type.", 1, true), out)
     fs.remove(root, { recursive = true })
 end)
 
@@ -63,7 +78,8 @@ testing.test("a second init skips every file the first one created", function()
         return
     end
     local root = project()
-    local first, first_code = support.dev(root, { "builtin:init", "--type", "lua" })
+    local user = user_env("")
+    local first, first_code = support.dev(root, { "init", "--type", "lua" }, user)
     testing.eq(first_code, 0)
     local items = created_in("\n" .. first)
     testing.ok(#items > 0, first)
@@ -74,7 +90,7 @@ testing.test("a second init skips every file the first one created", function()
     for _, name in ipairs(names(root .. "/.dev")) do
         testing.ok(not name:find("%.sh$"), name)
     end
-    local second, second_code = support.dev(root, { "builtin:init", "--type", "lua" })
+    local second, second_code = support.dev(root, { "init", "--type", "lua" }, user)
     testing.eq(second_code, 0)
     testing.ok(not second:find("\ncreated:"), second)
     for _, item in ipairs(items) do
@@ -121,13 +137,14 @@ testing.test("the global init runs the built-in init and then the Gerrit step", 
         user_env(GERRIT_CONFIG)
     )
     testing.eq(code, 0, out)
-    local builtin = out:find("init zz: type lua, dry run 1", 1, true)
+    local builtin = out:find("init zz: dry run 1", 1, true)
     local summary = out:find("Summary (dry run, nothing written)", 1, true)
+    local files = out:find("\nFiles (dry run, nothing written)\nCreated:\n", 1, true)
     local want =
         "would create: gerrit project zz (create-project when absent) and remote gerrit gr:zz"
     local gerrit = out:find(want, 1, true)
-    testing.ok(builtin and summary and gerrit, out)
-    testing.ok(builtin < summary and summary < gerrit, out)
+    testing.ok(builtin and summary and files and gerrit, out)
+    testing.ok(builtin < summary and summary < files and files < gerrit, out)
     testing.ok(
         out:find("\nGerrit (dry run, nothing written)\nCreated:\n  gerrit project zz", 1, true),
         out
@@ -150,7 +167,7 @@ end)
 
 testing.test("the built-in init refuses the no-gerrit flag", function()
     local root = project()
-    local out, code = support.dev(root, { "builtin:init", "--type", "lua", "--no-gerrit" })
+    local out, code = support.dev(root, { "builtin:init", "--no-gerrit" })
     testing.eq(code, 2, out)
     testing.ok(out:find("--no-gerrit", 1, true), out)
     fs.remove(root, { recursive = true })
@@ -162,11 +179,9 @@ testing.test("init prints the no lint templates sentence for a clone with no lin
     end
     local root = project()
     local clone = support.sandbox({}, {})
-    local out, code = support.dev(
-        root,
-        { "builtin:init", "--type", "lua", "--dry-run" },
-        { env = { DOTFILES = clone } }
-    )
+    local user = user_env("")
+    user.env.DOTFILES = clone
+    local out, code = support.dev(root, { "init", "--type", "lua", "--dry-run" }, user)
     testing.eq(code, 1, out)
     testing.ok(out:find("There are no lint templates at " .. clone, 1, true), out)
     testing.ok(out:find("Set DOTFILES to the dotfiles repo.", 1, true), out)
@@ -176,7 +191,7 @@ end)
 
 testing.test("init skips the lint set for a type that has none", function()
     local root = project()
-    local out = support.dev(root, { "builtin:init", "--type", "godot", "--dry-run" })
+    local out = support.dev(root, { "init", "--type", "godot", "--dry-run" }, user_env(""))
     testing.ok(out:find("skipped: lint set: none yet for godot projects", 1, true), out)
     fs.remove(root, { recursive = true })
 end)
@@ -184,7 +199,7 @@ end)
 testing.test("init plans a lint set exactly for the types templates.set_for knows", function()
     for _, kind in ipairs({ Kind.RUST, Kind.LOVE2D, Kind.LUA, Kind.GODOT, Kind.NODE }) do
         local root = project()
-        local out = support.dev(root, { "builtin:init", "--type", kind, "--dry-run" })
+        local out = support.dev(root, { "init", "--type", kind, "--dry-run" }, user_env(""))
         local none = out:find("skipped: lint set: none yet for " .. kind, 1, true) ~= nil
         testing.eq(none, templates.set_for(kind) == nil, kind .. "\n" .. out)
         fs.remove(root, { recursive = true })
@@ -193,9 +208,12 @@ end)
 
 testing.test("init refuses a type it has no name for", function()
     local root = project()
-    local out, code = support.dev(root, { "builtin:init", "--type", "cobol" })
+    local out, code = support.dev(root, { "init", "--type", "cobol" }, user_env(""))
     testing.eq(code, 2)
     testing.eq(out, "dev init: --type takes rust, love2d, lua, godot or node\n")
+    out, code = support.dev(root, { "init", "--type" }, user_env(""))
+    testing.eq(code, 2)
+    testing.eq(out, "dev init: --type needs a value\n")
     out, code = support.dev(root, { "builtin:init", "--name" })
     testing.eq(code, 2)
     testing.eq(out, "dev init: --name needs a value\n")
@@ -205,7 +223,7 @@ end)
 testing.test("init plans no GitHub workflow for any type", function()
     for _, kind in ipairs({ Kind.RUST, Kind.LOVE2D, Kind.LUA, Kind.GODOT, Kind.NODE }) do
         local root = project()
-        local out = support.dev(root, { "builtin:init", "--type", kind, "--dry-run" })
+        local out = support.dev(root, { "init", "--type", kind, "--dry-run" }, user_env(""))
         testing.ok(not out:find(".github", 1, true), kind .. "\n" .. out)
         fs.remove(root, { recursive = true })
     end
@@ -341,7 +359,8 @@ testing.test(
 
 testing.test("init treats an empty --type and --name as unset", function()
     local root = project()
-    local out, code = support.dev(root, { "builtin:init", "--type", "", "--name", "", "--dry-run" })
+    local out, code =
+        support.dev(root, { "init", "--type", "", "--name", "", "--dry-run" }, user_env(""))
     testing.eq(code, 0)
     testing.ok(out:find("init " .. fs.basename(root) .. ": type lua", 1, true), out)
     fs.remove(root, { recursive = true })
@@ -354,7 +373,7 @@ testing.test("init leaves a project on bash verbs without Lua verbs", function()
     end
     local root = project()
     assert(fs.write(root .. "/.dev/lint.sh", "#!/bin/sh\n"), "fixture setup failed")
-    local out, code = support.dev(root, { "builtin:init", "--type", "lua" })
+    local out, code = support.dev(root, { "init", "--type", "lua" }, user_env(""))
     testing.eq(code, 0)
     testing.ok(out:find("skipped: .dev/lint.sh exists, left on bash", 1, true), out)
     testing.ok(not fs.exists(root .. "/.dev/lint.lua"), out)
@@ -370,7 +389,7 @@ testing.test("init seeds .dev/README.md from the template", function()
     end
     for _, kind in ipairs({ Kind.LUA, Kind.GODOT }) do
         local root = project()
-        local out, code = support.dev(root, { "builtin:init", "--type", kind })
+        local out, code = support.dev(root, { "init", "--type", kind }, user_env(""))
         testing.eq(code, 0)
         testing.ok(out:find("created: .dev/README.md", 1, true), out)
         testing.eq(fs.read(root .. "/.dev/README.md"), fs.read(templates.readme_template()))
@@ -384,11 +403,12 @@ testing.test("a second init keeps an edited .dev/README.md", function()
         return
     end
     local root = project()
-    local _, first = support.dev(root, { "builtin:init", "--type", "lua" })
+    local user = user_env("")
+    local _, first = support.dev(root, { "init", "--type", "lua" }, user)
     testing.eq(first, 0)
     local edited = "# my own readme\n"
     assert(fs.write(root .. "/.dev/README.md", edited))
-    local out, code = support.dev(root, { "builtin:init", "--type", "lua" })
+    local out, code = support.dev(root, { "init", "--type", "lua" }, user)
     testing.eq(code, 0)
     testing.ok(out:find("skipped: .dev/README.md exists", 1, true), out)
     testing.eq(fs.read(root .. "/.dev/README.md"), edited)
@@ -401,13 +421,14 @@ testing.test("init writes an .editorconfig with indent_size 4", function()
         return
     end
     local root = project()
-    local out, code = support.dev(root, { "builtin:init", "--type", "lua" })
+    local user = user_env("")
+    local out, code = support.dev(root, { "init", "--type", "lua" }, user)
     testing.eq(code, 0)
     testing.ok(out:find("created: .editorconfig", 1, true), out)
     testing.ok(fs.read(root .. "/.editorconfig"):find("indent_size = 4", 1, true))
     local edited = "root = true\n"
     assert(fs.write(root .. "/.editorconfig", edited))
-    local again = support.dev(root, { "builtin:init", "--type", "lua" })
+    local again = support.dev(root, { "init", "--type", "lua" }, user)
     testing.ok(again:find("skipped: .editorconfig exists", 1, true), again)
     testing.eq(fs.read(root .. "/.editorconfig"), edited)
     fs.remove(root, { recursive = true })

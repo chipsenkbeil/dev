@@ -111,9 +111,9 @@ return {
         remote = false,
         requires = { "workspace" },
         handler = "lua",
-        flags = "--type --name --dry-run",
-        usage = "dev init [--type T] [--name N] [--dry-run]",
-        desc = "Seed a project with lint, CI and remotes",
+        flags = "--name --dry-run",
+        usage = "dev init [--name N] [--dry-run]",
+        desc = "Set up a project's version control and remotes",
         group = "Set up a machine or project",
     },
     {

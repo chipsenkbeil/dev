@@ -232,11 +232,12 @@ end
 
 ## The lint set verbs
 
-`dev init` and `dev sync` write the Rust and Lua lint sets as Lua verbs:
-`.dev/lint.lua`, `.dev/fmt.lua` and, for Rust, `.dev/test.lua`. The code they
-share is in `.dev/lua/lintset.lua` (`require("lintset")`). A Rust project also
-gets the shared `stylua.toml`, and its `fmt` and `lint` verbs run stylua over
-the Lua under `.dev` and `.ci` only, which `lint:dev_lua()` lists.
+The dotfiles global `dev init` and `dev sync` write the Rust and Lua lint sets
+as Lua verbs: `.dev/lint.lua`, `.dev/fmt.lua` and, for Rust, `.dev/test.lua`.
+The code they share is in `.dev/lua/lintset.lua` (`require("lintset")`). A
+Rust project also gets the shared `stylua.toml`, and its `fmt` and `lint` verbs
+run stylua over the Lua under `.dev` and `.ci` only, which `lint:dev_lua()`
+lists.
 
 They write no `.sh` file. The templates live in the style skill's `lint/`
 folder.
@@ -278,5 +279,6 @@ To port the verbs:
    and point the project's ci jobs at `dev lint` and `dev test`.
 
 A leftover `.sh` file keeps the `pending:` line until it is deleted. Once the
-Lua verb exists, dev runs the `.lua` verb (see "Which script runs"). `dev init`
-follows the same rule and prints `skipped: .dev/lint.sh exists, left on bash`.
+Lua verb exists, dev runs the `.lua` verb (see "Which script runs"). The
+global `dev init` follows the same rule and prints
+`skipped: .dev/lint.sh exists, left on bash`.

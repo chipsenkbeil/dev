@@ -18,7 +18,7 @@ Share it
 
 Set up a machine or project
   sync            builtin               Compare the copied lint files with the dotfiles templates
-  init            builtin               Seed a project with lint, CI and remotes
+  init            builtin               Set up a project's version control and remotes
   tools           builtin               Install and check the tools in .dev/tools.tsv
   ws              builtin               Make, list and remove workspaces under one central root
 
