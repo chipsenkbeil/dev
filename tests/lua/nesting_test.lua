@@ -33,7 +33,7 @@ local function nested()
         ["n/m/x.sh"] = RAN,
         ["n/m/__h.sh"] = "#!/usr/bin/env bash\n# Hidden.\n",
         ["n/m/o/y.lua"] = "-- Run y.\nprint('ran-y')\nreturn 0\n",
-        ["n/m/DESCRIPTION"] = "The m noun\n",
+        ["n/m/DESCRIPTION"] = "The m parent command\n",
     })
 end
 
@@ -46,7 +46,7 @@ testing.test("a script three words deep runs with its arguments", function()
     fs.remove(root, { recursive = true })
 end)
 
-testing.test("a noun that holds only a noun is a noun", function()
+testing.test("a parent command that holds only a parent command is a parent command", function()
     local root = project({ ["n/m/x.sh"] = RAN })
     local out, code = dev(root, { "n" })
     testing.eq(code, 2)
@@ -64,7 +64,7 @@ end)
 testing.test("dev help lists the subcommands at each depth and shows a leaf", function()
     local root = nested()
     local out = dev(root, { "help", "n" })
-    testing.ok(out:find("\n  m +The m noun\n"), out)
+    testing.ok(out:find("\n  m +The m parent command\n"), out)
     out = dev(root, { "help", "n", "m" })
     testing.ok(out:find("\n  x +Run x%.\n"), out)
     testing.ok(out:find("\n  o ", 1, true), out)
@@ -82,7 +82,7 @@ end)
 
 testing.test("__subs and __flags take one word per level", function()
     local root = nested()
-    testing.eq(dev(root, { "__subs", "n" }), "m\tlocal\tThe m noun\n")
+    testing.eq(dev(root, { "__subs", "n" }), "m\tlocal\tThe m parent command\n")
     testing.eq(dev(root, { "__subs", "n", "m" }), "x\tlocal\tRun x.\no\tlocal\ty\n")
     testing.eq(dev(root, { "__subs", "n", "m", "x" }), "")
     local out = dev(root, { "__flags", "n", "m", "x" })
@@ -90,7 +90,7 @@ testing.test("__subs and __flags take one word per level", function()
     fs.remove(root, { recursive = true })
 end)
 
-testing.test("the topic check follows a noun to any depth", function()
+testing.test("the topic check follows a parent command to any depth", function()
     local root = nested()
     assert(fs.mkdir(root .. "/.dev/topics", { parents = true }))
     assert(

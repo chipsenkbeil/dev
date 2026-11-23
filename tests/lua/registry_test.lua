@@ -34,7 +34,7 @@ local function make_project()
 end
 
 testing.test(
-    ".lua beats .sh and needs no exec bit, while an unexecutable .sh is no verb",
+    ".lua beats .sh and needs no exec bit, while an unexecutable .sh is no command",
     function()
         local root = make_project()
         local reg = registry.load(root)
@@ -49,7 +49,7 @@ testing.test(
 )
 
 testing.test(
-    "a directory with scripts is a noun whose subs are listed without __ helpers",
+    "a directory with scripts is a parent command whose subs are listed without __ helpers",
     function()
         local root = make_project()
         local reg = registry.load(root)
@@ -72,14 +72,14 @@ testing.test("verbose_count counts the v letters and --verbose, and nothing else
     testing.eq(registry.verbose_count("plain"), nil)
 end)
 
-testing.test("DESCRIPTION supplies a noun's description", function()
+testing.test("DESCRIPTION supplies a parent command's description", function()
     local root = make_project()
-    assert(fs.write(root .. "/.dev/n/DESCRIPTION", "The n noun\nsecond line\n"))
-    testing.eq(registry.load(root):find({ "n" }).desc, "The n noun")
+    assert(fs.write(root .. "/.dev/n/DESCRIPTION", "The n parent command\nsecond line\n"))
+    testing.eq(registry.load(root):find({ "n" }).desc, "The n parent command")
     fs.remove(root, { recursive = true })
 end)
 
-testing.test("verbs lists builtins, then project verbs, and keeps __ helpers out", function()
+testing.test("commands lists builtins, then project commands, and keeps __ helpers out", function()
     local root = make_project()
     local names = words(registry.load(root):commands())
     testing.eq(names[1], "lint")
@@ -94,7 +94,7 @@ testing.test("verbs lists builtins, then project verbs, and keeps __ helpers out
     fs.remove(root, { recursive = true })
 end)
 
-testing.test("a hidden header and a group header place a local verb", function()
+testing.test("a hidden header and a group header place a local command", function()
     local root = make_project()
     local reg = registry.load(root)
     testing.eq(reg:find({ "quiet" }).hidden, true)
@@ -279,7 +279,7 @@ testing.test("the override row names the replaced source", function()
     fs.remove(root, { recursive = true })
 end)
 
-testing.test("a script replaces a built-in subcommand but not a built-in noun", function()
+testing.test("a script replaces a built-in subcommand but not a built-in parent command", function()
     local root = make_project()
     scripted(root, ".dev/box.sh", "#!/usr/bin/env bash\n# Fake box.\n")
     scripted(
@@ -299,7 +299,7 @@ testing.test("a script replaces a built-in subcommand but not a built-in noun", 
     fs.remove(root, { recursive = true })
 end)
 
-testing.test("a script named like a builtin verb overrides it and keeps its place", function()
+testing.test("a script named like a builtin command overrides it and keeps its place", function()
     local root = make_project()
     scripted(root, ".dev/lint.sh", "#!/usr/bin/env bash\n# My lint.\n# flags: --mine\n")
     scripted(root, ".dev/deploy.sh", "#!/usr/bin/env bash\n# My deploy.\n# group: Elsewhere\n")
@@ -365,18 +365,18 @@ testing.test("--help in a flags line is dropped with the warning", function()
     fs.remove(root, { recursive = true })
 end)
 
-testing.test("a noun with no description file lists its subcommand names", function()
+testing.test("a parent command with no description file lists its subcommand names", function()
     local root = make_project()
     scripted(root, ".dev/n/z.sh", "#!/usr/bin/env bash\n# Sub z.\n")
     testing.eq(registry.load(root):find({ "n" }).desc, "x, z")
     fs.remove(root, { recursive = true })
 end)
 
-testing.test(".dev/lua, .dev/topics and .dev/standalone are never nouns", function()
+testing.test(".dev/lua, .dev/topics and .dev/standalone are never parent commands", function()
     local root = make_project()
     scripted(root, ".dev/lua/helper.lua", "return {}\n", "644")
-    scripted(root, ".dev/topics/guide.sh", "#!/usr/bin/env bash\n# Not a verb.\n")
-    scripted(root, ".dev/standalone/run.sh", "#!/usr/bin/env bash\n# Not a verb.\n")
+    scripted(root, ".dev/topics/guide.sh", "#!/usr/bin/env bash\n# Not a command.\n")
+    scripted(root, ".dev/standalone/run.sh", "#!/usr/bin/env bash\n# Not a command.\n")
     local reg = registry.load(root)
     testing.eq(reg:is_parent("lua"), false)
     testing.eq(reg:is_parent("topics"), false)
@@ -468,21 +468,24 @@ testing.test("as uid 0, root only tests for .jj, .git and .dev and runs no VCS c
     fs.remove(bin, { recursive = true })
 end)
 
-testing.test("dotfile scripts and dot directories are neither verbs nor nouns", function()
-    local root = make_project()
-    scripted(root, ".dev/.hid.sh", "#!/usr/bin/env bash\n# Hidden file.\n")
-    scripted(root, ".dev/.dd/x.sh", "#!/usr/bin/env bash\n# In a dot dir.\n")
-    scripted(root, ".dev/n/.dot.sh", "#!/usr/bin/env bash\n# Dot sub.\n")
-    local reg = registry.load(root)
-    for _, row in ipairs(reg:commands()) do
-        testing.ok(row.name:sub(1, 1) ~= ".", "dot name listed as " .. row.name)
+testing.test(
+    "dotfile scripts and dot directories are neither commands nor parent commands",
+    function()
+        local root = make_project()
+        scripted(root, ".dev/.hid.sh", "#!/usr/bin/env bash\n# Hidden file.\n")
+        scripted(root, ".dev/.dd/x.sh", "#!/usr/bin/env bash\n# In a dot dir.\n")
+        scripted(root, ".dev/n/.dot.sh", "#!/usr/bin/env bash\n# Dot sub.\n")
+        local reg = registry.load(root)
+        for _, row in ipairs(reg:commands()) do
+            testing.ok(row.name:sub(1, 1) ~= ".", "dot name listed as " .. row.name)
+        end
+        testing.eq(reg:find({ "n", ".dot" }), nil)
+        testing.eq(words(reg:subs("n")), { "n x" })
+        fs.remove(root, { recursive = true })
     end
-    testing.eq(reg:find({ "n", ".dot" }), nil)
-    testing.eq(words(reg:subs("n")), { "n x" })
-    fs.remove(root, { recursive = true })
-end)
+)
 
-testing.test("local verbs come in the order the shell glob gives", function()
+testing.test("local commands come in the order the shell glob gives", function()
     local root = support.tempdir()
     for _, name in ipairs({ "UP", "Up.Case", "a", "B", "b-c", "Zed" }) do
         scripted(root, ".dev/" .. name .. ".sh", "#!/usr/bin/env bash\n# " .. name .. ".\n")

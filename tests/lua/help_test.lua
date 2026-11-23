@@ -37,7 +37,7 @@ local function dev(root, args, env)
 end
 
 testing.test("help prints no escape under NO_COLOR or into a pipe", function()
-    local root = project({ ["a.sh"] = "#!/usr/bin/env bash\n# A verb.\n" })
+    local root = project({ ["a.sh"] = "#!/usr/bin/env bash\n# A command.\n" })
     for _, args in ipairs({ {}, { "help", "-a" }, { "help", "a" }, { "a", "-h" } }) do
         local out = dev(root, args, { NO_COLOR = "1" })
         testing.ok(not out:find("\27", 1, true), out)
@@ -47,7 +47,7 @@ testing.test("help prints no escape under NO_COLOR or into a pipe", function()
 end)
 
 testing.test("dev help | head -1 ends without a traceback", function()
-    local root = project({ ["a.sh"] = "#!/usr/bin/env bash\n# A verb.\n" })
+    local root = project({ ["a.sh"] = "#!/usr/bin/env bash\n# A command.\n" })
     local out, code = dev_os.capture(
         { "sh", "-c", 'luajit "$1" help | head -1', "sh", MAIN },
         { cwd = root, stderr = "stdout", env = { DEV_SELF = SELF } }
@@ -58,15 +58,15 @@ testing.test("dev help | head -1 ends without a traceback", function()
 end)
 
 testing.test(
-    "the curated view lists a project verb and its topics, and -a adds the helpers",
+    "the curated view lists a project command and its topics, and -a adds the helpers",
     function()
         local root = project({
-            ["a.sh"] = "#!/usr/bin/env bash\n# A verb.\n",
+            ["a.sh"] = "#!/usr/bin/env bash\n# A command.\n",
             ["q.sh"] = "#!/usr/bin/env bash\n# Quiet.\n# hidden\n",
             ["topics/t.md"] = "# t: A topic: with a colon\n\nbody\n",
         })
         local out = dev(root, { "help" })
-        testing.ok(out:find("\n  a +A verb%.\n"), out)
+        testing.ok(out:find("\n  a +A command%.\n"), out)
         testing.ok(not out:find("  q ", 1, true), out)
         testing.ok(out:find("\nTopics\n", 1, true), out)
         testing.ok(out:find("\n  t +A topic: with a colon\n"), out)
@@ -124,10 +124,10 @@ testing.test("a source prefix is refused with --remote", function()
     testing.eq(code, 2)
 end)
 
-testing.test("a topic that shares a verb's name is reported by the topic check", function()
+testing.test("a topic that shares a command's name is reported by the topic check", function()
     local root = project({
-        ["a.sh"] = "#!/usr/bin/env bash\n# A verb.\n",
-        ["topics/a.md"] = "# a: A topic named like a verb\n",
+        ["a.sh"] = "#!/usr/bin/env bash\n# A command.\n",
+        ["topics/a.md"] = "# a: A topic named like a command\n",
     })
     local out, code = dev(root, { "__topics", "check" })
     testing.eq(code, 1)
@@ -148,10 +148,10 @@ local function styled(root, width)
 end
 
 testing.test(
-    "the curated view on a terminal has bold verbs, dim headings and one cut line per verb",
+    "the curated view on a terminal has bold commands, dim headings and one cut line per command",
     function()
         local root = project({
-            ["a.sh"] = "#!/usr/bin/env bash\n# A verb with a description that is far too long for a narrow screen.\n",
+            ["a.sh"] = "#!/usr/bin/env bash\n# A command with a description that is far too long for a narrow screen.\n",
             ["topics/t.md"] = "# t: A topic with a summary that is also far too long for a narrow screen\n",
         })
         local out = styled(root, 40)
@@ -219,13 +219,13 @@ end)
 
 local function parent_fixture()
     return project({
-        ["n/DESCRIPTION"] = "The n noun\n",
+        ["n/DESCRIPTION"] = "The n parent command\n",
         ["n/a.sh"] = "#!/usr/bin/env bash\n# Run a with a description that is far too long for one line of a narrow screen.\n",
         ["n/bb.sh"] = "#!/usr/bin/env bash\n# Short.\n",
     })
 end
 
-testing.test("noun help wraps a long subcommand description under its column", function()
+testing.test("parent command help wraps a long subcommand description under its column", function()
     local text = require("dev.text")
     local reg = require("dev.registry").load(parent_fixture())
     local c = ui.context({ color = true, interactive = false, width = 40 })
@@ -243,7 +243,7 @@ testing.test("noun help wraps a long subcommand description under its column", f
     end
 end)
 
-testing.test("noun help keeps a short subcommand description on one line", function()
+testing.test("parent command help keeps a short subcommand description on one line", function()
     local reg = require("dev.registry").load(parent_fixture())
     local c = ui.context({ color = true, interactive = false, width = 40 })
     local plain = help.parent_text(reg, c, { "n" }):gsub("\27%[[%d;]*m", "")
@@ -272,7 +272,7 @@ local function board_rows()
     return rows
 end
 
-testing.test("dev help board names every board verb of the builtins table", function()
+testing.test("dev help board names every board command of the builtins table", function()
     local reg = registry.load(project({}))
     local c = ui.context({ color = false, interactive = false, width = 100 })
     local out = help.parent_text(reg, c, { "board" })
@@ -285,27 +285,27 @@ testing.test("dev help board names every board verb of the builtins table", func
     end
 end)
 
-testing.test("every board verb the commands table or handlers run has a builtins row", function()
+testing.test("every board command the commands table or handlers run has a builtins row", function()
     local rowed = {}
     for _, row in ipairs(board_rows()) do
         rowed[row.words[2]] = true
     end
-    local verbs = {}
+    local commands = {}
     for name in assert(fs.read(BOARD_SOURCE)):gmatch("\nfunction commands%.(%a+)%(") do
-        verbs[#verbs + 1] = name
+        commands[#commands + 1] = name
     end
     for key in pairs(cmd_board.handlers) do
-        verbs[#verbs + 1] = key:match("^board (%a+)")
+        commands[#commands + 1] = key:match("^board (%a+)")
     end
-    table.sort(verbs)
-    testing.ok(#verbs > 30, "found only " .. #verbs .. " board verbs")
-    for _, name in ipairs(verbs) do
+    table.sort(commands)
+    testing.ok(#commands > 30, "found only " .. #commands .. " board commands")
+    for _, name in ipairs(commands) do
         testing.ok(rowed[name], "board " .. name .. " has no builtins row")
     end
 end)
 
 testing.test("every global flag description starts at one column", function()
-    local root = project({ ["a.sh"] = "#!/usr/bin/env bash\n# A verb.\n" })
+    local root = project({ ["a.sh"] = "#!/usr/bin/env bash\n# A command.\n" })
     local out = dev(root, { "a", "--help" })
     local column, seen, inside = nil, 0, false
     for line in out:gmatch("([^\n]*)\n") do
@@ -337,7 +337,7 @@ end
 
 local function sourced_fixture()
     local root = project({
-        ["a.sh"] = "#!/usr/bin/env bash\n# A verb.\n",
+        ["a.sh"] = "#!/usr/bin/env bash\n# A command.\n",
         ["lint.sh"] = "#!/usr/bin/env bash\n# My lint.\n",
         ["shared.sh"] = "#!/usr/bin/env bash\n# Project shared.\n",
     })
@@ -352,7 +352,7 @@ end
 testing.test("help -a names the source of each command", function()
     local root, env = sourced_fixture()
     local out = dev(root, { "help", "-a" }, env)
-    testing.ok(out:find("\n  a +project +A verb%.\n"), out)
+    testing.ok(out:find("\n  a +project +A command%.\n"), out)
     testing.ok(out:find("\n  hello +global +Say hello%.\n"), out)
     testing.ok(out:find("\n  test +builtin +"), out)
     testing.ok(out:find("\n  __topics check +builtin +"), out)

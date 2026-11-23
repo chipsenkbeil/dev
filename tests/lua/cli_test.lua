@@ -7,7 +7,7 @@ local version = require("dev.version")
 
 local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local MAIN = REPO .. "/dotfiles/bin/.local/share/dev/main.lua"
-local FIXTURES = REPO .. "/tests/lua/fixtures/verbs/"
+local FIXTURES = REPO .. "/tests/lua/fixtures/commands/"
 
 local function project(files)
     local root = support.tempdir()
@@ -44,14 +44,14 @@ testing.test("-vvv gives level 2 and a bare -v after -- stays an argument", func
     testing.ok(out:find("v\ttrue\t0", 1, true), out)
 end)
 
-testing.test("a .lua verb gets positional args and KEY=value vars", function()
+testing.test("a .lua command gets positional args and KEY=value vars", function()
     local out = dev(project({ ["v.lua"] = "@v.lua" }), { "v", "a", "B=1", "--", "--x" })
     testing.ok(out:find("args\ta,--x", 1, true), out)
     testing.ok(out:find("vars\tB=1", 1, true), out)
 end)
 
 testing.test(
-    "a positional header keeps KEY=value words in args, and other verbs split them",
+    "a positional header keeps KEY=value words in args, and other commands split them",
     function()
         local body = assert(fs.read(FIXTURES .. "v.lua"))
         local root = project({
@@ -70,43 +70,43 @@ testing.test(
     end
 )
 
-testing.test("a .lua verb's integer is the exit code", function()
+testing.test("a .lua command's integer is the exit code", function()
     local root = project({ ["seven.lua"] = "@seven.lua" })
     local _, code = dev(root, { "seven" })
     testing.eq(code, 7)
 end)
 
-testing.test("an error in a .lua verb prints one line and exits 1", function()
+testing.test("an error in a .lua command prints one line and exits 1", function()
     local out, code = dev(project({ ["boom.lua"] = "@boom.lua" }), { "boom" })
     testing.eq(code, 1)
     testing.eq(out, "dev boom: boom\n")
     testing.ok(not out:find("stack traceback", 1, true), out)
 end)
 
-testing.test("a syntax error in a .lua verb is handled the same way", function()
+testing.test("a syntax error in a .lua command is handled the same way", function()
     local out, code = dev(project({ ["bad.lua"] = "local = =\n" }), { "bad" })
     testing.eq(code, 1)
     testing.ok(out:find("dev bad: ", 1, true), out)
     testing.ok(not out:find("stack traceback", 1, true), out)
 end)
 
-testing.test("a .lua verb beats a .sh verb of the same name", function()
+testing.test("a .lua command beats a .sh command of the same name", function()
     local out = dev(project({ ["both.lua"] = "@both.lua", ["both.sh"] = "@both.sh" }), { "both" })
     testing.eq(out, "lua ran\n")
 end)
 
-testing.test("a .sh verb runs by exec with its arguments", function()
+testing.test("a .sh command runs by exec with its arguments", function()
     local root = project({ ["s.sh"] = '#!/usr/bin/env bash\necho "sh $* ${VERBOSE:-unset}"\n' })
     testing.eq(dev(root, { "s", "a", "B=1" }), "sh a B=1 unset\n")
     testing.eq(dev(root, { "-v", "s" }), "+ .dev/s.sh\nsh  1\n")
 end)
 
-testing.test("dev run -- -h reaches a verb", function()
+testing.test("dev run -- -h reaches a command", function()
     local out = dev(project({ ["run.lua"] = "@run.lua" }), { "run", "--", "-h" })
     testing.eq(out, "run got\t-h\n")
 end)
 
-testing.test("a .lua verb finds modules under .dev/lua", function()
+testing.test("a .lua command finds modules under .dev/lua", function()
     local root = project({ ["helper.lua"] = "@helper.lua" })
     assert(fs.mkdir(root .. "/.dev/lua/tools", { parents = true }))
     assert(
@@ -136,7 +136,7 @@ testing.test("a global Lua command requires from its own lua folder", function()
     testing.ok(out:find("+ helper.lua\n", 1, true), out)
 end)
 
-testing.test("the root gate refuses a verb other than tools install and check", function()
+testing.test("the root gate refuses a command other than tools install and check", function()
     local root = project({ ["v.lua"] = "@v.lua" })
     local env = {
         LUA_INIT = "@" .. REPO .. "/tests/lua/fake_env.lua",
@@ -153,7 +153,7 @@ testing.test("the root gate refuses a verb other than tools install and check", 
 end)
 
 testing.test(
-    "--remote refuses a machine-local verb and an unknown subcommand is a usage error",
+    "--remote refuses a machine-local command and an unknown subcommand is a usage error",
     function()
         local root = project({ ["v.lua"] = "@v.lua" })
         local out, code = dev(root, { "--remote", "fmt" })
@@ -168,7 +168,7 @@ testing.test(
     end
 )
 
-testing.test("a noun runs its subcommand script and refuses a __ helper", function()
+testing.test("a parent command runs its subcommand script and refuses a __ helper", function()
     local root = project({
         ["n/x.sh"] = "#!/usr/bin/env bash\necho x ran\n",
         ["n/__h.sh"] = "#!/usr/bin/env bash\necho helper\n",
@@ -179,7 +179,7 @@ testing.test("a noun runs its subcommand script and refuses a __ helper", functi
     testing.ok(out:find("dev n: unknown subcommand __h", 1, true), out)
 end)
 
-testing.test("a .lua verb's children see VERBOSE only when it is on", function()
+testing.test("a .lua command's children see VERBOSE only when it is on", function()
     local root = project({
         ["e.lua"] = 'local o = require("dev.os")\n'
             .. 'io.write(o.capture({ "sh", "-c", \'printf %s "${VERBOSE-unset}"\' }), "|", (...).verbose)\n',
@@ -190,7 +190,7 @@ testing.test("a .lua verb's children see VERBOSE only when it is on", function()
     testing.ok(out:find("1|1", 1, true), out)
 end)
 
-testing.test("a .lua verb's exit code is taken modulo 256 like a shell's", function()
+testing.test("a .lua command's exit code is taken modulo 256 like a shell's", function()
     local root = project({
         ["big.lua"] = "return 300\n",
         ["neg.lua"] = "return -1\n",
@@ -204,7 +204,7 @@ testing.test("a .lua verb's exit code is taken modulo 256 like a shell's", funct
     testing.eq(code, 0)
 end)
 
-testing.test("a .lua verb that cannot be read is an error", function()
+testing.test("a .lua command that cannot be read is an error", function()
     if dev_os.getuid() == 0 then
         return
     end
@@ -297,7 +297,7 @@ local function undeclared_project()
     return root, { MARKER = root .. "/marker" }
 end
 
-testing.test("an undeclared flag is refused before a .sh verb runs", function()
+testing.test("an undeclared flag is refused before a .sh command runs", function()
     local root, env = undeclared_project()
     local out, code = dev(root, { "s", "--nope" }, env)
     testing.eq(code, 2)
@@ -305,7 +305,7 @@ testing.test("an undeclared flag is refused before a .sh verb runs", function()
     testing.ok(not marked(root), "script ran")
 end)
 
-testing.test("an undeclared flag is refused before a .lua verb runs", function()
+testing.test("an undeclared flag is refused before a .lua command runs", function()
     local root, env = undeclared_project()
     local out, code = dev(root, { "l", "a", "--nope=1" }, env)
     testing.eq(code, 2)
@@ -313,7 +313,7 @@ testing.test("an undeclared flag is refused before a .lua verb runs", function()
     testing.ok(not marked(root), "script ran")
 end)
 
-testing.test("an undeclared flag of a noun subcommand names both words", function()
+testing.test("an undeclared flag of a parent command subcommand names both words", function()
     local root, env = undeclared_project()
     for _, sub in ipairs({ "x", "y" }) do
         local out, code = dev(root, { "n", sub, "-z" }, env)
@@ -357,14 +357,14 @@ testing.test("the verbose flags work in any position", function()
     testing.ok(dev(root, { "s", "--verbose" }, env):find("+ .dev/s.sh", 1, true))
 end)
 
-testing.test("-h after a verb is help and never runs the script", function()
+testing.test("-h after a command is help and never runs the script", function()
     local root, env = undeclared_project()
     local _, code = dev(root, { "s", "-h" }, env)
     testing.eq(code, 0)
     testing.ok(not marked(root), "help ran the script")
 end)
 
-testing.test("-h and --help in a later position are help, and never run a .sh verb", function()
+testing.test("-h and --help in a later position are help, and never run a .sh command", function()
     local root, env = undeclared_project()
     local short, code = dev(root, { "s", "--days", "7", "-h" }, env)
     testing.eq(code, 0)
@@ -374,16 +374,19 @@ testing.test("-h and --help in a later position are help, and never run a .sh ve
     testing.ok(not marked(root), "help ran the script")
 end)
 
-testing.test("-h in a later position is help for a noun subcommand and a .lua verb", function()
-    local root, env = undeclared_project()
-    local out, code = dev(root, { "n", "x", "--days=7", "-h" }, env)
-    testing.eq(code, 0)
-    testing.ok(out:find("dev n x", 1, true), out)
-    out, code = dev(root, { "l", "a", "-h" }, env)
-    testing.eq(code, 0)
-    testing.ok(out:find("dev l", 1, true), out)
-    testing.ok(not marked(root), "help ran the script")
-end)
+testing.test(
+    "-h in a later position is help for a parent command subcommand and a .lua command",
+    function()
+        local root, env = undeclared_project()
+        local out, code = dev(root, { "n", "x", "--days=7", "-h" }, env)
+        testing.eq(code, 0)
+        testing.ok(out:find("dev n x", 1, true), out)
+        out, code = dev(root, { "l", "a", "-h" }, env)
+        testing.eq(code, 0)
+        testing.ok(out:find("dev l", 1, true), out)
+        testing.ok(not marked(root), "help ran the script")
+    end
+)
 
 testing.test("-h after -- still reaches the script", function()
     local root, env = undeclared_project()
@@ -392,7 +395,7 @@ testing.test("-h after -- still reaches the script", function()
 end)
 
 testing.test(
-    "a noun with no subcommand or an unknown one prints its subcommands on stderr",
+    "a parent command with no subcommand or an unknown one prints its subcommands on stderr",
     function()
         local root, env = undeclared_project()
         local out, code = dev(root, { "n" }, env)
@@ -440,7 +443,7 @@ testing.test("guard maps an interrupted error to 130 and raises any other", func
     testing.ok(not ok and tostring(err):find("boom", 1, true), tostring(err))
 end)
 
-testing.test("help for a built-in outside the type verbs runs no project detection", function()
+testing.test("help for a built-in outside the type commands runs no project detection", function()
     local root = support.tempdir()
     assert(fs.write(root .. "/Makefile", ""))
     local out = dev(root, { "pull", "--help" })
@@ -638,10 +641,13 @@ testing.test(
     end
 )
 
-testing.test("a project Lua verb that is interrupted exits 130 with nothing on stderr", function()
-    local root = project({ ["stop.lua"] = 'error("interrupted!", 0)\n' })
-    local out, code = dev(root, { "stop" })
-    testing.eq(code, 130)
-    testing.eq(out, "")
-    fs.remove(root, { recursive = true })
-end)
+testing.test(
+    "a project Lua command that is interrupted exits 130 with nothing on stderr",
+    function()
+        local root = project({ ["stop.lua"] = 'error("interrupted!", 0)\n' })
+        local out, code = dev(root, { "stop" })
+        testing.eq(code, 130)
+        testing.eq(out, "")
+        fs.remove(root, { recursive = true })
+    end
+)

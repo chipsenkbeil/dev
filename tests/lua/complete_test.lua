@@ -39,7 +39,7 @@ testing.test("__commands lists a .lua project command as local with its descript
 end)
 
 testing.test(
-    "__subs lists a noun's subcommands and nothing for a word that is not a noun",
+    "__subs lists a parent command's subcommands and nothing for a word that is not a parent command",
     function()
         local root = project({ ["n/x.sh"] = "#!/usr/bin/env bash\n# Sub x.\n" })
         testing.eq(dev(root, { "__subs", "n" }), "x\tlocal\tSub x.\n")
@@ -50,7 +50,7 @@ testing.test(
 )
 
 testing.test(
-    "__flags lists the verb's flags, then the global ones, and takes a word per level",
+    "__flags lists the command's flags, then the global ones, and takes a word per level",
     function()
         local root = project({ ["a.lua"] = "--[[\nA.\nflags: --ok\n]]\nreturn 0\n" })
         testing.eq(dev(root, { "__flags", "a" }), "--ok\n" .. GLOBAL_TAIL)
