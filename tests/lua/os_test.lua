@@ -8,7 +8,7 @@ local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local MAIN = REPO .. "/dotfiles/bin/.local/share/dev/main.lua"
 local LAUNCHER = REPO .. "/dotfiles/bin/.local/bin/dev"
 local WAIT_TICKS = 100
-local VERB_WAIT_TICKS = 300
+local COMMAND_WAIT_TICKS = 300
 local COMMAND_POLL_SECS = 0.1
 local WAIT_POLL_SECS = "0.1"
 local CLEANUP_COMMAND = "-- Register a cleanup.\n"
@@ -30,7 +30,7 @@ for _ = 1, %d do
 end
 return 0
 ]],
-        VERB_WAIT_TICKS,
+        COMMAND_WAIT_TICKS,
         COMMAND_POLL_SECS
     )
 local SIGNAL_SCRIPT = [[
