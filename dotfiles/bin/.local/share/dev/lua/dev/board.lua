@@ -417,6 +417,8 @@ end
 ---   string? a card's name or colour
 ---@field add_checks_field fun(self: dev.board.Layout): boolean?, string? the checks field defined
 ---   on the board
+---@field add_card_field fun(self: dev.board.Layout, name: string): boolean?, string? the allow,
+---   tests or files field defined on the board
 ---@field add_roles fun(self: dev.board.Layout): (string[]|false)?, string?, string? the standard
 ---   agent roles granted to the board, the names this call created, or false when the board has no
 ---   roles. A refusal for a missing permission names it in the third value, as `roles.grant`, or
@@ -455,6 +457,7 @@ end
 ---@field colors dev.board.LayoutColor[] the palette
 ---@field cards {id: string, name: string, color_id: string?}[] every card
 ---@field has_checks boolean whether the board has the checks field
+---@field card_fields table<string, boolean> the allow, tests and files fields the board has, by name
 ---@field lanes string[]? the names of the board's lanes in board order
 
 ---The name of the custom field that holds a card's checks.
@@ -468,6 +471,9 @@ M.TESTS_FIELD = "tests"
 
 ---The name of the custom field that holds the files a card names.
 M.FILES_FIELD = "files"
+
+---The names of the card fields that init defines after the checks field, in order.
+M.CARD_FIELDS = { M.ALLOW_FIELD, M.TESTS_FIELD, M.FILES_FIELD }
 
 ---Return the key a Pomb board gives the custom field `name`.
 ---

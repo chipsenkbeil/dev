@@ -1076,8 +1076,8 @@ whole value under the claim's fence and is queued while Pomb is unreachable.
 
 A board that lacks the field is refused before any write (exit 1), naming the
 field. The message reads
-`The board has no runner.allow field. Define it on the board first.`
-`dev board init` defines none of them.
+``The board has no runner.allow field. Run `dev board init` to add it.``
+`dev board init` defines all three.
 
 - `allow CARD WORD...`: sets `runner.allow`, a multiselect, to the JSON array
   of `test-edits` and `ci-edits` given (duplicates dropped). `allow CARD none`
@@ -3788,7 +3788,7 @@ the JSON array of the words and prints `set allow <id prefix>, <words>`.
 - No word, any other word, or `none` beside another word is exit 2. An unknown
   card is exit 1.
 - A Pomb board without the field is refused before any write with
-  `The board has no runner.allow field. Define it on the board first.`
+  ``The board has no runner.allow field. Run `dev board init` to add it.``
   (exit 1).
 - Sending the same value twice changes nothing more, so it is queued while Pomb
   is unreachable like `checks`.
@@ -5076,7 +5076,8 @@ The name and the config:
    follows, kept and reported on every run as
    `Kept column "X", which is not part of the standard board.`
 3. Grant the agent roles.
-4. Define the checks field when the board lacks it.
+4. Define the checks field, then the allow, tests and files fields, each when
+   the board lacks it.
 5. Name the palette through `PATCH /api/boards/{id}/colors/{color_id}`. The
    colours are found by `value`: yellow `1 Pomodoro`, green `2 Pomodori`, blue
    `3 Pomodori`, red `>3 Pomodori` and white `Unsized`, each with a legend
@@ -5109,6 +5110,13 @@ Details by step:
   elsewhere. The definition is copied from a dispatcher's board. The line is
   `added the checks field runner.checks`. An existing field never changes,
   and a local board gets nothing.
+- allow, tests and files fields: each is posted to the same
+  `POST /api/boards/{id}/fields` when its key is missing from the list, as one
+  change per field. `runner.allow` is an optional multiselect with the options
+  `test-edits` and `ci-edits`, and `runner.tests` and `runner.files` are
+  optional multiline fields. The lines are `added the field runner.allow`,
+  `added the field runner.tests` and `added the field runner.files`. A board
+  that has all three gets no post and no line, and a local board gets nothing.
 - size words: strip a trailing `(yellow)`, `(green)`, `(blue)`, `(red)` or
   `(red, split)` from every card name with `PATCH /api/tasks/{id}`. The same
   call sets the colour from the word when the card's colour is white, unset or

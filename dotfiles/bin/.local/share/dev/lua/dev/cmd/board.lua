@@ -276,7 +276,7 @@ local function named_field_problem(backend, key)
         return FIELD_REFUSALS[key]
             or "The board has no "
                 .. board.field_key(key)
-                .. " field. Define it on the board first."
+                .. " field. Run `dev board init` to add it."
     end
 end
 

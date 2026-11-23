@@ -99,6 +99,13 @@ local function checks_definition()
     }
 end
 
+---The definitions of the allow, tests and files card fields, by name
+local CARD_FIELDS = {
+    [board.ALLOW_FIELD] = { label = "Allow", kind = "multiselect", options = board.ALLOW_WORDS },
+    [board.TESTS_FIELD] = { label = "Tests", kind = "multiline", options = {} },
+    [board.FILES_FIELD] = { label = "Files", kind = "multiline", options = {} },
+}
+
 ---Pomb over its HTTP API, through curl.
 ---
 ---The token comes from `pass` and goes to curl on standard input as a config
@@ -3100,8 +3107,14 @@ function Backend:read()
         return nil, message
     end
     local has_checks = false
+    local card_fields = {}
     for _, field in ipairs(fields) do
         has_checks = has_checks or field.key == board.field_key(board.CHECKS_FIELD)
+        for name in pairs(CARD_FIELDS) do
+            if field.key == board.field_key(name) then
+                card_fields[name] = true
+            end
+        end
     end
     local columns, colors, cards = {}, {}, {}
     for _, column in ipairs(detail.columns) do
@@ -3152,6 +3165,7 @@ function Backend:read()
         colors = colors,
         cards = cards,
         has_checks = has_checks,
+        card_fields = card_fields,
         lanes = lanes,
     }
 end
@@ -3180,6 +3194,30 @@ function Backend:add_checks_field()
     end
     local made
     made, message = self:__request("POST", "/api/boards/" .. id .. "/fields", checks_definition())
+    if not made then
+        return nil, message
+    end
+    self.__field_keys = nil
+    return true
+end
+
+function Backend:add_card_field(name)
+    local definition = CARD_FIELDS[name]
+    if not definition then
+        return nil, "No card field is named " .. tostring(name) .. "."
+    end
+    local id, message = self:__board_id()
+    if not id then
+        return nil, message
+    end
+    local made
+    made, message = self:__request("POST", "/api/boards/" .. id .. "/fields", {
+        key = board.field_key(name),
+        label = definition.label,
+        kind = definition.kind,
+        options = definition.options,
+        required = false,
+    })
     if not made then
         return nil, message
     end

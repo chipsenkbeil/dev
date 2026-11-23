@@ -85,6 +85,14 @@ local function template_columns()
     return columns
 end
 
+local function every_card_field()
+    local fields = {}
+    for _, name in ipairs(board.CARD_FIELDS) do
+        fields[name] = true
+    end
+    return fields
+end
+
 local function fake_layout(opts)
     opts = opts or {}
     local state = {
@@ -93,6 +101,7 @@ local function fake_layout(opts)
         colors = opts.colors or stock_palette(),
         cards = opts.cards or {},
         has_checks = opts.has_checks ~= false,
+        card_fields = opts.card_fields or every_card_field(),
         roles = opts.roles == nil and {} or opts.roles,
         groups = opts.groups or {},
         seats = opts.seats or {},
@@ -147,6 +156,7 @@ local function fake_layout(opts)
             colors = state.colors,
             cards = state.cards,
             has_checks = state.has_checks,
+            card_fields = state.card_fields,
             lanes = opts.lanes,
         })
     end
@@ -174,6 +184,11 @@ local function fake_layout(opts)
     function layout:add_checks_field()
         write("add_checks_field")
         state.has_checks = true
+        return true
+    end
+    function layout:add_card_field(name)
+        write("add_card_field", name)
+        state.card_fields[name] = true
         return true
     end
     function layout:add_column(name, is_done)
@@ -381,6 +396,58 @@ testing.test("a board without the checks field gains it once and keeps it", func
         added = added + (write[1] == "add_checks_field" and 1 or 0)
     end
     testing.eq(added, 1)
+end)
+
+testing.test("init defines the missing card fields, one change each", function()
+    local cases = {
+        { held = {}, want = { board.ALLOW_FIELD, board.TESTS_FIELD, board.FILES_FIELD } },
+        {
+            held = { [board.ALLOW_FIELD] = true, [board.FILES_FIELD] = true },
+            want = { board.TESTS_FIELD },
+        },
+    }
+    for _, case in ipairs(cases) do
+        local held, want = case.held, case.want
+        local layout = fake_layout({ card_fields = held, columns = template_columns() })
+        local before, message, lines
+        support.with_user_config("", function()
+            before, message, lines = run(layout)
+        end)
+        testing.eq(message, nil)
+        local added = {}
+        for _, write in ipairs(layout.state.writes) do
+            if write[1] == "add_card_field" then
+                added[#added + 1] = write[2]
+            end
+        end
+        testing.eq(added, want)
+        local said = {}
+        for _, line in ipairs(lines) do
+            if line:find("added the field", 1, true) then
+                said[#said + 1] = line:match("added the field (%S+)")
+            end
+        end
+        testing.eq(said, want)
+        testing.ok(before >= #want)
+    end
+end)
+
+testing.test("init leaves a board with every card field alone", function()
+    local layout = fake_layout({ columns = template_columns() })
+    support.with_user_config("", function()
+        run(layout)
+    end)
+    local writes = #layout.state.writes
+    local changes, message, lines
+    support.with_user_config("", function()
+        changes, message, lines = run(layout)
+    end)
+    testing.eq(message, nil)
+    testing.eq(#layout.state.writes, writes)
+    for _, line in ipairs(lines) do
+        testing.eq(line:find("added the field", 1, true), nil)
+    end
+    testing.eq(changes, 0)
 end)
 
 testing.test("a second run changes nothing and says nothing", function()
@@ -716,8 +783,16 @@ local STANDARD_LABELS = '{"highlights":[{"label":"needs:human","color":"#b8461f"
     .. '{"label":"needs:lead","color":"#2f6fab"},{"label":"needs:planner","color":"#7a5ab0"}],'
     .. '"show_all":false,"added":[]}'
 
-local FIELDS = '[{"id":"f1","key":"runner.checks","label":"Checks","kind":"table",'
+local CHECKS_ONLY = '[{"id":"f1","key":"runner.checks","label":"Checks","kind":"table",'
     .. '"options":[],"columns":[],"required":true}]'
+local FIELDS = '[{"id":"f1","key":"runner.checks","label":"Checks","kind":"table",'
+    .. '"options":[],"columns":[],"required":true},'
+    .. '{"id":"f2","key":"runner.allow","label":"Allow","kind":"multiselect",'
+    .. '"options":["test-edits","ci-edits"],"columns":[],"required":false},'
+    .. '{"id":"f3","key":"runner.tests","label":"Tests","kind":"multiline",'
+    .. '"options":[],"columns":[],"required":false},'
+    .. '{"id":"f4","key":"runner.files","label":"Files","kind":"multiline",'
+    .. '"options":[],"columns":[],"required":false}]'
 
 local EXPORT = '{"tasks":['
     .. support.pomb_export_task({
@@ -1220,7 +1295,15 @@ testing.test("init defines the checks field once with the runner definition", fu
     local root, home, tmp = sandbox({ fields = "[]" })
     local out, code = dev(root, home, tmp, { "board", "init" })
     testing.eq(code, 0, out)
-    testing.eq(out, UNCHANGED .. "added the checks field runner.checks\nboard demo: 1 change\n")
+    testing.eq(
+        out,
+        UNCHANGED
+            .. "added the checks field runner.checks\n"
+            .. "added the field runner.allow\n"
+            .. "added the field runner.tests\n"
+            .. "added the field runner.files\n"
+            .. "board demo: 4 changes\n"
+    )
     local body = '{"columns":[{"key":"run","kind":"text","label":"Run",'
         .. '"options":[],"required":true},'
         .. '{"key":"on","kind":"multiselect","label":"On","options":["local"],"required":false}],'
@@ -1233,11 +1316,36 @@ testing.test("init defines the checks field once with the runner definition", fu
         ),
         calls_of(root)
     )
-    testing.eq(writes(root), 1)
+    testing.eq(writes(root), 4)
     root, home, tmp = sandbox()
     out = dev(root, home, tmp, { "board", "init" })
     testing.eq(out, STANDARD_OUT)
     testing.eq(writes(root), 0)
+end)
+
+testing.test("init posts only the card fields a Pomb board lacks", function()
+    local root, home, tmp = sandbox({ fields = CHECKS_ONLY })
+    local out, code = dev(root, home, tmp, { "board", "init" })
+    testing.eq(code, 0, out)
+    testing.eq(
+        out,
+        UNCHANGED
+            .. "added the field runner.allow\n"
+            .. "added the field runner.tests\n"
+            .. "added the field runner.files\n"
+            .. "board demo: 3 changes\n"
+    )
+    local allow = '{"key":"runner.allow","kind":"multiselect","label":"Allow",'
+        .. '"options":["test-edits","ci-edits"],"required":false}'
+    testing.ok(
+        calls_of(root):find(
+            "--data-raw " .. allow .. " https://pomb.example/api/boards/board-1/fields",
+            1,
+            true
+        ),
+        calls_of(root)
+    )
+    testing.eq(writes(root), 3)
 end)
 
 testing.test("init sends the changes an old board needs as the API's own calls", function()

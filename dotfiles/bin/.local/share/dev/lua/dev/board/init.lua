@@ -295,6 +295,20 @@ local function checks_step(layout, state, say)
     return true
 end
 
+local function card_fields_step(layout, state, say)
+    for _, name in ipairs(board.CARD_FIELDS) do
+        if not state.card_fields[name] then
+            local ok, message = layout:add_card_field(name)
+            if not ok then
+                return nil, message
+            end
+            say("added the field " .. board.field_key(name))
+            state.changes = state.changes + 1
+        end
+    end
+    return true
+end
+
 local function palette_step(layout, state, say)
     local by_value = {}
     for _, color in ipairs(state.colors) do
@@ -580,11 +594,13 @@ function M.run(layout, name, say, opts)
     state.columns, state.colors, state.cards, state.has_checks =
         layout_state.columns, layout_state.colors, layout_state.cards, layout_state.has_checks
     state.lanes = layout_state.lanes or {}
+    state.card_fields = layout_state.card_fields
     for _, step in ipairs({
         columns_step,
         roles_step,
         seats_step,
         checks_step,
+        card_fields_step,
         palette_step,
         strip_step,
         enabled_step,

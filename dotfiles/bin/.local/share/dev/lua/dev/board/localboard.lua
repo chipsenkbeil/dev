@@ -637,6 +637,10 @@ function Backend:add_checks_field()
     return true
 end
 
+function Backend:add_card_field()
+    return true
+end
+
 function Backend:add_highlights()
     return false
 end
@@ -1278,7 +1282,18 @@ function Backend:read()
     for _, lane in ipairs(doc.swimlanes) do
         lanes[#lanes + 1] = lane.name
     end
-    return { columns = columns, colors = colors, cards = cards, has_checks = true, lanes = lanes }
+    local card_fields = {}
+    for _, name in ipairs(board.CARD_FIELDS) do
+        card_fields[name] = true
+    end
+    return {
+        columns = columns,
+        colors = colors,
+        cards = cards,
+        has_checks = true,
+        card_fields = card_fields,
+        lanes = lanes,
+    }
 end
 
 function Backend:add_lane(name)
