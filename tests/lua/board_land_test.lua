@@ -456,23 +456,36 @@ local function with_seats(seats)
     }
 end
 
+local function seat_opts(carried, comments)
+    return { carried = carried, comments = comments or {} }
+end
+
 testing.test("land.refuses.a.seat.still.waiting", function()
-    local problems = land.seats_problem({ seat("code", nil, nil, false) }, COMMIT)
+    local problems = land.seats_problem({ seat("code", nil, nil, false) }, COMMIT, seat_opts())
     testing.eq(problems, { "The reviewer seat code has not answered." })
-    testing.eq(wiring.seat_problems(with_seats({ seat("style") }), { id = "c" }, STATE), {
-        "The reviewer seat style has not answered.",
-    })
+    testing.eq(
+        wiring.seat_problems(with_seats({ seat("style") }), { id = "c" }, STATE, seat_opts()),
+        {
+            "The reviewer seat style has not answered.",
+        }
+    )
 end)
 
 testing.test("land.refuses.a.seat.that.asks.for.changes", function()
-    local problems =
-        land.seats_problem({ seat("code", review.SeatVerdict.CHANGES_NEEDED, COMMIT) }, COMMIT)
+    local problems = land.seats_problem(
+        { seat("code", review.SeatVerdict.CHANGES_NEEDED, COMMIT) },
+        COMMIT,
+        seat_opts()
+    )
     testing.eq(problems, { "The reviewer seat code asks for changes." })
 end)
 
 testing.test("land.refuses.an.approval.of.an.older.revision", function()
-    local problems =
-        land.seats_problem({ seat("code", review.SeatVerdict.APPROVED, OTHER) }, COMMIT)
+    local problems = land.seats_problem(
+        { seat("code", review.SeatVerdict.APPROVED, OTHER) },
+        COMMIT,
+        seat_opts()
+    )
     testing.eq(problems, {
         "The reviewer seat code approved commit "
             .. land.short(OTHER)
@@ -480,7 +493,10 @@ testing.test("land.refuses.an.approval.of.an.older.revision", function()
             .. land.short(COMMIT)
             .. " that would land.",
     })
-    testing.eq(#land.seats_problem({ seat("code", review.SeatVerdict.APPROVED) }, COMMIT), 1)
+    testing.eq(
+        #land.seats_problem({ seat("code", review.SeatVerdict.APPROVED) }, COMMIT, seat_opts()),
+        1
+    )
 end)
 
 testing.test("land.lands.when.every.seat.approved.the.revision", function()
@@ -489,14 +505,14 @@ testing.test("land.lands.when.every.seat.approved.the.revision", function()
         seat("style", review.SeatVerdict.APPROVED, OTHER),
         seat("recheck", nil, nil, true),
     }
-    testing.eq(land.seats_problem(seats, COMMIT, OTHER), {})
-    testing.eq(wiring.seat_problems(with_seats(seats), { id = "c" }, STATE, OTHER), {})
+    testing.eq(land.seats_problem(seats, COMMIT, seat_opts(OTHER)), {})
+    testing.eq(wiring.seat_problems(with_seats(seats), { id = "c" }, STATE, seat_opts(OTHER)), {})
 end)
 
 testing.test("land.asks.nothing.of.a.card.without.seats", function()
-    testing.eq(land.seats_problem({}, COMMIT), {})
-    testing.eq(wiring.seat_problems(with_seats({}), { id = "c" }, STATE), {})
-    testing.eq(wiring.seat_problems({}, { id = "c" }, STATE), {})
+    testing.eq(land.seats_problem({}, COMMIT, seat_opts()), {})
+    testing.eq(wiring.seat_problems(with_seats({}), { id = "c" }, STATE, seat_opts()), {})
+    testing.eq(wiring.seat_problems({}, { id = "c" }, STATE, seat_opts()), {})
 end)
 
 testing.test("land.names.a.failed.seat.read", function()
@@ -505,9 +521,106 @@ testing.test("land.names.a.failed.seat.read", function()
             return nil, "pomb answered 500"
         end,
     }
-    testing.eq(wiring.seat_problems(backend, { id = "c" }, STATE), {
+    testing.eq(wiring.seat_problems(backend, { id = "c" }, STATE, seat_opts()), {
         "The card's seats could not be read: pomb answered 500",
     })
+end)
+
+local function rechecked_as(of, commit, verdict)
+    return {
+        body = review.record(
+            review.Kind.RECHECK,
+            "r",
+            { commit = commit, change = "chg" },
+            verdict,
+            of
+        ),
+    }
+end
+
+testing.test("land.accepts.a.seat.a.recheck.covers", function()
+    local seats = {
+        seat(review.Kind.CODE, review.SeatVerdict.APPROVED, OTHER),
+        seat(review.Kind.STYLE, review.SeatVerdict.CHANGES_NEEDED, OTHER),
+    }
+    local comments = {
+        rechecked_as(review.Kind.CODE, COMMIT, review.Verdict.CLEAN),
+        rechecked_as(review.Kind.STYLE, COMMIT, review.Verdict.MINOR),
+    }
+    testing.eq(land.seats_problem(seats, COMMIT, seat_opts(nil, comments)), {})
+end)
+
+testing.test("land.takes.the.newest.recheck.of.a.kind", function()
+    local seats = { seat(review.Kind.CODE, review.SeatVerdict.APPROVED, OTHER) }
+    local comments = {
+        rechecked_as(review.Kind.CODE, COMMIT, review.Verdict.CLEAN),
+        rechecked_as(review.Kind.CODE, COMMIT, review.Verdict.NEEDS_WORK),
+    }
+    testing.eq(land.seats_problem(seats, COMMIT, seat_opts(nil, comments)), {
+        "The reviewer seat code approved commit "
+            .. land.short(OTHER)
+            .. ", not the commit "
+            .. land.short(COMMIT)
+            .. " that would land.",
+    })
+end)
+
+testing.test("land.refuses.a.recheck.that.cannot.cover.a.seat", function()
+    local approved = seat(review.Kind.CODE, review.SeatVerdict.APPROVED, OTHER)
+    local stale = "The reviewer seat code approved commit "
+        .. land.short(OTHER)
+        .. ", not the commit "
+        .. land.short(COMMIT)
+        .. " that would land."
+    testing.eq(
+        land.seats_problem(
+            { approved },
+            COMMIT,
+            seat_opts(nil, { rechecked_as(review.Kind.CODE, COMMIT, review.Verdict.NEEDS_WORK) })
+        ),
+        { stale }
+    )
+    testing.eq(
+        land.seats_problem(
+            { approved },
+            COMMIT,
+            seat_opts(nil, { rechecked_as(review.Kind.STYLE, COMMIT, review.Verdict.CLEAN) })
+        ),
+        { stale }
+    )
+    testing.eq(
+        land.seats_problem(
+            { approved },
+            COMMIT,
+            seat_opts(nil, { rechecked_as(review.Kind.CODE, OTHER, review.Verdict.CLEAN) })
+        ),
+        { stale }
+    )
+    testing.eq(
+        land.seats_problem(
+            { seat(review.Kind.CODE, review.SeatVerdict.CHANGES_NEEDED, COMMIT) },
+            COMMIT,
+            seat_opts(nil, { rechecked_as(review.Kind.CODE, COMMIT, review.Verdict.CLEAN) })
+        ),
+        { "The reviewer seat code asks for changes." }
+    )
+end)
+
+testing.test("land.lands.on.a.recheck.of.a.stale.seat", function()
+    local seats = {
+        seat(review.Kind.CODE, review.SeatVerdict.APPROVED, OTHER),
+        seat(review.Kind.STYLE, review.SeatVerdict.APPROVED, OTHER),
+        seat(review.Kind.RECHECK, nil, nil, true),
+    }
+    local comments = {
+        rechecked_as(review.Kind.CODE, COMMIT, review.Verdict.CLEAN),
+        rechecked_as(review.Kind.STYLE, COMMIT, review.Verdict.CLEAN),
+    }
+    testing.eq(
+        wiring.seat_problems(with_seats(seats), { id = "c" }, STATE, seat_opts(nil, comments)),
+        {}
+    )
+    testing.eq(#wiring.seat_problems(with_seats(seats), { id = "c" }, STATE, seat_opts()), 2)
 end)
 
 testing.test("checks_problem counts only the newest passing run at the commit", function()

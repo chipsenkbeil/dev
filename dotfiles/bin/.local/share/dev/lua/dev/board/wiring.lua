@@ -854,9 +854,9 @@ end
 ---@param backend dev.board.Backend the board backend
 ---@param card dev.board.Card the card
 ---@param state dev.board.check.State the commit that would land
----@param carried string|false|nil an earlier commit whose reviews carry over
+---@param opts dev.board.land.seats_problem.Opts the carried commit and the card's comments
 ---@return string[] problems one line per seat, or one naming a failed read
-local function seat_problems(backend, card, state, carried)
+local function seat_problems(backend, card, state, opts)
     if type(backend.seats) ~= "function" then
         return {}
     end
@@ -864,7 +864,7 @@ local function seat_problems(backend, card, state, carried)
     if not seats then
         return { "The card's seats could not be read: " .. tostring(message) }
     end
-    return land.seats_problem(seats, state.commit, carried or nil)
+    return land.seats_problem(seats, state.commit, opts)
 end
 
 ---List what keeps the card from landing, from its column to the trunk and the reviews.
@@ -942,7 +942,11 @@ local function land_problems(backend, card, who)
     for _, line in ipairs(credential_problems(who.comments, state)) do
         problems[#problems + 1] = line
     end
-    for _, line in ipairs(seat_problems(backend, card, state, not check_only and carried)) do
+    local seat_lines = seat_problems(backend, card, state, {
+        carried = not check_only and carried or nil,
+        comments = who.comments,
+    })
+    for _, line in ipairs(seat_lines) do
         problems[#problems + 1] = line
     end
     if unproven then

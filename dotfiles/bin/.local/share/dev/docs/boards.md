@@ -3166,8 +3166,14 @@ second recheck, which Pomb refuses with `seat_held` (the one recheck seat is
 taken), prints no warning and ends its
 output with
 `The recheck seat is already held, so only the card records this review.`
-The first recheck's seat verdict stands, and land reads only the review
-comments. The local board has no seats and keeps only the comment.
+The first recheck's seat verdict stands. Land reads the review comments, and a
+recheck comment can meet a seat as described next. A clean or minor recheck of
+kind `code` or `style` recorded at the
+landing commit meets that kind's seat for land, even when the seat still holds
+an approval of an earlier commit, as a recheck cannot post to a seat that
+another credential holds. A needs-work recheck, a recheck of the other kind and
+a seat that asks for changes at the landing commit do not meet it. The local
+board has no seats and keeps only the comment.
 
 The comment stays for landing to read. It is one `status` comment on the
 card that begins with a reserved first line and has no other:
@@ -3370,10 +3376,13 @@ lists each one that fails. A refusal can leave the change rebased onto trunk.
   the reviewer and the claimant. With no `reviewer_token` the check is skipped.
 - On a Pomb board every seat must be approved at the landing commit. Land reads
   the seats with the seat read, and a seat that asks for changes, has not
-  answered or approved another commit refuses and is named. A seat nobody took
-  and that never answered is skipped, and so is a card with no seats, which a
-  backend without the seat read always is. An approval of the commit the
-  carried reviews were recorded at counts. A failed read refuses and names why.
+  answered or approved another commit refuses and is named. A seat of the code
+  or style kind that approved or asked for changes at an earlier commit is met
+  by a clean or minor recheck of that kind recorded at the landing commit (see
+  `review`). A seat nobody took and that never answered is skipped, and so is a
+  card with no seats, which a backend without the seat read always is. An
+  approval of the commit the carried reviews were recorded at counts. A failed
+  read refuses and names why.
 - `dev board seat reset CARD SEAT` frees a seat that another credential holds,
   so the next review takes it. A review refused with `seat_held` names this
   command. The reset reads the seat, drops it with `DELETE` on

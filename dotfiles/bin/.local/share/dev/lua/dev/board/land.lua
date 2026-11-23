@@ -396,24 +396,63 @@ end
 ---@field revision string? the commit the answer is about
 ---@field idle boolean? true when nobody took the seat
 
+---List the kinds whose newest recheck at a commit is clean or minor.
+---@param comments {body: string}[] the card's comments, oldest first
+---@param commit string the full commit id that would land
+---@return table<string, boolean> met the kinds a recheck at the commit covers
+local function rechecked_kinds(comments, commit)
+    local newest = {}
+    for _, comment in ipairs(comments) do
+        local record = review.parse(comment.body)
+        if
+            record
+            and record.kind == review.Kind.RECHECK
+            and record.of
+            and record.commit == commit
+        then
+            newest[record.of] = record
+        end
+    end
+    local met = {}
+    for kind, record in pairs(newest) do
+        if record.verdict == review.Verdict.CLEAN or record.verdict == review.Verdict.MINOR then
+            met[kind] = true
+        end
+    end
+    return met
+end
+
+---@class dev.board.land.seats_problem.Opts
+---@field carried string? an earlier commit whose reviews carry over to the commit
+---@field comments {body: string}[] the card's comments, oldest first
+
 ---List the seats that do not approve the commit that would land.
+---
+---A seat of the code or style kind that approved or asked for changes at an earlier commit
+---counts as met when a clean or minor recheck of its kind is recorded at the commit. A seat
+---that asks for changes at the commit or at the carried one still refuses.
 ---@param seats dev.board.land.Seat[] the card's seats
 ---@param commit string the full commit id that would land
----@param carried string? an earlier commit whose reviews carry over to the commit
+---@param opts dev.board.land.seats_problem.Opts the carried commit and the card's comments
 ---@return string[] problems one reason per seat, empty when every seat approved
-function M.seats_problem(seats, commit, carried)
+function M.seats_problem(seats, commit, opts)
+    local rechecked = rechecked_kinds(opts.comments, commit)
     local problems = {}
     for _, seat in ipairs(seats) do
         local label = "reviewer seat " .. (seat.name or "?")
         local revision = seat.revision
+        local stale = revision ~= nil and revision ~= commit and revision ~= opts.carried
+        local covered = stale and rechecked[seat.name] == true
         local reason
         if seat.verdict == review.SeatVerdict.CHANGES_NEEDED then
-            reason = string.format("The %s asks for changes.", label)
+            if not covered then
+                reason = string.format("The %s asks for changes.", label)
+            end
         elseif seat.verdict ~= review.SeatVerdict.APPROVED then
             if seat.verdict ~= nil or not seat.idle then
                 reason = string.format("The %s has not answered.", label)
             end
-        elseif revision == nil or (revision ~= commit and revision ~= carried) then
+        elseif revision == nil or (stale and not covered) then
             reason = string.format(
                 "The %s approved commit %s, not the commit %s that would land.",
                 label,
