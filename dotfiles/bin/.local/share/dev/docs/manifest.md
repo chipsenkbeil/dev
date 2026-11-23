@@ -293,9 +293,10 @@ rg -o --no-filename 'script:scripts/[^ ",]+' .dev/tools.tsv | sort -u
 
 ## The driver
 
-`dev tools install` and `dev tools check` are built-in verbs for any project.
-They run `luajit pkg.lua` from the directory that holds `dev`'s own `main.lua`,
-from the project root, and pass the project's `.dev/tools.tsv` as `--manifest`.
+`dev tools install` and `dev tools check` are built-in commands for any
+project. They run `luajit pkg.lua` from the directory that holds `dev`'s own
+`main.lua`, from the project root, and pass the project's `.dev/tools.tsv` as
+`--manifest`.
 The driver refuses `check` and `install` without `--manifest` and exits 2.
 Nothing writes into `dev`'s own directory.
 

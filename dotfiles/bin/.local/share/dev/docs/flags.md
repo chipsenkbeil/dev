@@ -2,18 +2,19 @@
 
 ## Global flags
 
-Nine flags work anywhere before a `--` on the line, whatever the verb.
+Nine flags work anywhere before a `--` on the line, whatever the command.
 
 - `-v` or `--verbose`: print each command before it runs, and export
   `VERBOSE=1` to it.
 - `-vv`: also trace every line of dev and of each bash script it runs, which
   exports `VERBOSE=2`.
 - `--remote`: run the command on a remote runner. By default that is the job
-  named like the verb in the project's default pipeline (`.ci/jobs.lua`), run
-  on example-box through ci. `DEV_REMOTE=1` in the environment is the same.
+  named like the command in the project's default pipeline (`.ci/jobs.lua`),
+  run on example-box through ci. `DEV_REMOTE=1` in the environment is the
+  same.
 - `--local`: run the command here, whatever the `[remote] default` setting
   says. With `--remote` it is a usage error. Under `DEV_AGENT` a run of a
-  verb with a ci job that stays here is refused (see the `remote` topic).
+  command with a ci job that stays here is refused (see the `remote` topic).
 - `--detach`: with `--remote`, start the job and return. Alone it is a usage
   error.
 - `--priority`: with `--remote`, add `--priority` to the `ci run`, which starts
@@ -72,15 +73,15 @@ misses it.
 
 ## Help flags
 
-`-h` and `--help` are reserved for help on every verb and noun subcommand, in
-any position, but only before a `--`. A script never sees them there, so it
+`-h` and `--help` are reserved for help on every command and subcommand,
+in any position, but only before a `--`. A script never sees them there, so it
 cannot declare them in its `# flags:` line (`dev __topics check` reports one
-that does). Everything after a `--` reaches the verb verbatim, so
+that does). Everything after a `--` reaches the command verbatim, so
 `dev run -- -h` runs `cargo run -- -h`.
 
-- `-h` anywhere after a verb prints its description, usage and flags.
-- `--help` anywhere after a verb prints the long form, the same as
-  `dev help <verb>`. When both appear, the first one found wins.
+- `-h` anywhere after a command prints its description, usage and flags.
+- `--help` anywhere after a command prints the long form, the same as
+  `dev help <command>`. When both appear, the first one found wins.
 - `dev help -a` lists every command, hidden ones included.
 - `dev help --topics` lists the topics, and `dev help -k <topic>` prints one.
 - A topic taller than the terminal opens in `$PAGER` (else `less -R`).
@@ -102,7 +103,7 @@ Before a `--`, a word that starts with `-` (and is not the lone word `-`) must
 be a global flag, `-h` or `--help`, or listed on the line. Anything else stops
 dev before the script runs.
 
-`<verb>` is the command words, a noun and its subcommand included.
+`<command>` is the command words, a subcommand included.
 `--name=value` is checked as `--name`, and a declared flag's separate value
 (`--days 7`) is a plain word. Words that do not start with `-` are never
 refused, and a value that starts with `-` is checked as a flag, so write it as
@@ -112,84 +113,88 @@ Everything after the first `--` reaches the script untouched, so flags meant
 for another tool go there. `dev test -- <args>` runs the test suites with
 `<args>`.
 
-Built-in verbs check their own flags. With `--remote`, arguments typed with no
-`--` reach the job, and arguments on both sides of a `--` are refused, as the
-`remote` topic describes.
+Built-in commands check their own flags. With `--remote`, arguments typed with
+no `--` reach the job, and arguments on both sides of a `--` are refused, as
+the `remote` topic describes.
 
 The refusal exits 2 with this message:
 
 ```
-dev <verb>: Unknown flag <flag>. Pass it after -- to reach the script, or add it to the script's # flags: line.
+dev <command>: Unknown flag <flag>. Pass it after -- to reach the script, or add it to the script's # flags: line.
 ```
 
 ## Script headers
 
-Each verb is `.dev/<verb>.lua` or `.dev/<verb>.sh`, and `dev help <verb>`
-prints the script's header. A header can carry these lines.
+Each command is `.dev/<command>.lua` or `.dev/<command>.sh`, and
+`dev help <command>` prints the script's header. A header can carry these
+lines.
 
-- `# flags: --a --b`: the flags that `dev help <verb>` and shell completion
+- `# flags: --a --b`: the flags that `dev help <command>` and shell completion
   offer. Commas also separate the words.
-- `# group: <name>`: the heading the verb is listed under. A verb with none
-  lands in a group named after the project directory, and a built-in override
-  keeps its built-in group.
-- `# hidden`: keeps a flat verb to `dev help -a`.
-- `# local`: keeps the remote default from sending that verb to ci, for a
+- `# group: <name>`: the heading the command is listed under. A command with
+  none lands in a group named after the project directory, and a built-in
+  override keeps its built-in group.
+- `# hidden`: keeps a flat command to `dev help -a`.
+- `# local`: keeps the remote default from sending that command to ci, for a
   script that drives ci itself beside a same-named job. An explicit `--remote`
-  still sends it, and `dev help <verb>` says it runs here under the default.
+  still sends it, and `dev help <command>` says it runs here under the
+  default.
 - `# remote: false`: marks a command that never runs on a remote runner. The
-  remote default skips it, `--remote` refuses it, and a noun's line covers its
-  subcommands. A script that overrides a built-in keeps the built-in's flags.
+  remote default skips it, `--remote` refuses it, and the line of a command
+  with subcommands covers its subcommands. A script that overrides a built-in
+  keeps the built-in's flags.
 - `# requires: workspace`: refuses the command to a `DEV_AGENT` with a
   workspace role in the primary checkout. The line is a list of preconditions
   and `workspace` is the only one dev knows. Any other word is a header
   warning that names it.
-- `# fetch JOB FILE`: runs the verb here, and under the remote mode first
+- `# fetch JOB FILE`: runs the command here, and under the remote mode first
   builds `FILE` with the ci job `JOB` on this host's platform and hands the
-  pulled path to the verb in `DEV_FETCHED`. `dev help remote` has the rule.
+  pulled path to the command in `DEV_FETCHED`. `dev help remote` has the rule.
 - `# patch JOB FILE`: under the remote mode runs the ci job `JOB` and applies
-  the patch `FILE` it keeps at the project root, in place of running the verb.
-  `dev help remote` has the rule.
-- `# positional`: marks a `.lua` verb that takes positional words. A word
+  the patch `FILE` it keeps at the project root, in place of running the
+  command. `dev help remote` has the rule.
+- `# positional`: marks a `.lua` command that takes positional words. A word
   shaped `KEY=value` stays in `ctx.args` for it and `ctx.vars` is empty.
 
-Any other `.lua` verb has such words split into `ctx.vars`, and a `.sh` verb
-always gets every word as given. A verb documents its `KEY=value` arguments in
-its header, as in `dev setup STEPS="--install-brew"`.
+Any other `.lua` command has such words split into `ctx.vars`, and a `.sh`
+command always gets every word as given. A command documents its `KEY=value`
+arguments in its header, as in `dev setup STEPS="--install-brew"`.
 
 ## The help views
 
-`dev` with no arguments is `dev help`. It prints the project line, the verbs
-under task-named group headings, the topic list and a pointer line.
+`dev` with no arguments is `dev help`. It prints the project line, the
+commands under task-named group headings, the topic list and a pointer line.
 
 The groups are Check your work, Share it, Set up a machine or project and
 Boxes, shown in that order and only when they have members. Any project group
-follows, then Hidden. A verb's description is the first comment line of its
+follows, then Hidden. A command's description is the first comment line of its
 script.
 
 Each view reads the terminal like this.
 
-- On a terminal with color, the curated view and `dev help -a` draw verbs in
-  bold and group headings in dim. Each verb and topic sits on one line cut to
-  the terminal width with `…`.
+- On a terminal with color, the curated view and `dev help -a` draw commands
+  in bold and group headings in dim. Each command and topic sits on one line
+  cut to the terminal width with `…`.
 - Piped output, `NO_COLOR` and `TERM=dumb` stay plain and uncut.
 - The closing pointer line draws its backticked spans in cyan without the
   backticks and is cut to the width with `…`. Piped, it keeps the backticks
   and is not cut.
-- `dev help -a` adds the hidden verbs and dev's own `__` helpers. Its mark
+- `dev help -a` adds the hidden commands and dev's own `__` helpers. Its mark
   column names the source of each command, `builtin`, `global` or `project`,
   and `project over builtin`, `global over builtin` or `project over global`
   for a script that replaces another. The curated view marks such a script
   `(override)` and has no source column.
-- `dev help <verb>` and `dev <verb> --help` print the long form, and
-  `dev <verb> -h` prints the description, usage and flags. The heading of a
+- `dev help <command>` and `dev <command> --help` print the long form, and
+  `dev <command> -h` prints the description, usage and flags. The heading of a
   script that replaces another names its source and what it replaces, as in
   `dev lint (project over builtin)`.
 - `dev help <topic>`, `dev help -k <topic>` and `dev help --topics` read
   topics.
 
-A noun takes the group of its first subcommand script with a `# group:` line.
-`builtin_table` rows end in a group column, where `hidden` keeps a built-in to
-`dev help -a` and a subcommand row leaves the column empty to take its noun's.
+A command with subcommands takes the group of its first subcommand script with
+a `# group:` line. `builtin_table` rows end in a group column, where `hidden`
+keeps a built-in to `dev help -a` and a subcommand row leaves the column empty
+to take its parent command's.
 
 ## Paging
 
@@ -232,13 +237,13 @@ the text prints directly without the filter line.
 
 Topics are Markdown files whose first line is `# <name>: <summary>`. Built-in
 ones live in the `docs` folder beside `main.lua`, and project ones in
-`.dev/topics/`. A topic may not share a name with a verb or a built-in topic.
+`.dev/topics/`. A topic may not share a name with a command or a built-in topic.
 
 `dev __topics check` checks the built-in topics when that folder lies inside
 the project or `DEV_CHECKOUT` names the project, and the project's topics in
 every project. For each topic it checks the first line,
 the names, and that each backticked or fenced `dev` line followed by words
-names a real verb or subcommand and only flags `dev __flags` lists for it. It
+names a real command or subcommand and only flags `dev __flags` lists for it. It
 exits 1 with `file:line` for each problem.
 
 `tests/dev/help_test.sh` runs the check on the real topics and snapshots the
@@ -280,17 +285,17 @@ writes at box creation (see "Dev boxes" in ci's README), or the path in
 `DEV_BOX_MARKER`, which `dev.remote.BOX_MARKER` defaults to. A box made before
 ci writes `/etc/ci-box` has no marker, so pass `--local` there.
 
-A run under `DEV_AGENT` of a verb with a ci job that stays here is refused,
-whatever chose it. The exceptions are a verb with a `# local` header and a run
-inside a ci job or a dev box. See the `remote` topic.
+A run under `DEV_AGENT` of a command with a ci job that stays here is refused,
+whatever chose it. The exceptions are a command with a `# local` header and a
+run inside a ci job or a dev box. See the `remote` topic.
 
 A `DEV_AGENT` with a workspace role, `runner`, `implementer`, `planner`,
 `reviewer` or `verifier`, is also refused with exit 2 when a command that
 declares `requires: workspace` runs in the primary checkout, so `-C WS` must
 name a workspace or worktree. The lead role is refused the same way for
 `land`, `board land`, `abandon`, `clean`, `purge` and `fmt` only. The repo's
-`agent.primary_guarded` list in `.dev/config.toml` adds verbs to that refusal
-for any set `DEV_AGENT`. The `remote` topic has the rule.
+`agent.primary_guarded` list in `.dev/config.toml` adds commands to that
+refusal for any set `DEV_AGENT`. The `remote` topic has the rule.
 
 A command line with both `--local` and `--remote` exits 2 with this message:
 
@@ -321,11 +326,11 @@ The runner is `.dev/__remote.lua` when the project has one, else `ci`. A
 `run = {words, args, detach, priority, job_timeout, root, verbose}`.
 
 The ci runner needs `ci` on PATH and checks `ci -C <root> run --list --json`
-for the job. The job is `<verb>`, or the words joined by a hyphen for a
-subcommand (`<noun>-<sub>`, and `<noun>-<sub>-<sub2>` one level deeper). It
-then runs `ci -C <root> run --local --follow --job <job> -- <args>` on
-example-box, with `--detach` in place of `--follow`, and never falls back to a
-local run.
+for the job. The job is `<command>`, or the words joined by a hyphen for a
+subcommand (`<command>-<sub>`, and `<command>-<sub>-<sub2>` one level
+deeper). It then runs
+`ci -C <root> run --local --follow --job <job> -- <args>` on example-box, with
+`--detach` in place of `--follow`, and never falls back to a local run.
 
 Arguments on both sides of the `--` are a usage error, and so are `--detach`,
 `--priority` and `--job-timeout` without `--remote`.
@@ -344,7 +349,7 @@ Every other command goes to `dev.remote.ci_runner`. The topic is
 its built-in row. The refusal exits 2 whatever the runner, with this message:
 
 ```
-dev <verb>: runs on this machine only, so --remote does not apply
+dev <command>: runs on this machine only, so --remote does not apply
 ```
 
 ## Push and pull
@@ -355,7 +360,7 @@ gerrit project, else `origin`, from the same forge setting `jj land` reads.
 
 `dev push origin` and `dev push gerrit` push to the one remote named.
 `dev push` prints which forge and remote it chose and why. A flag or argument
-a verb does not take is a usage error that names it and exits 2.
+a command does not take is a usage error that names it and exits 2.
 
 ## Follow
 
@@ -377,13 +382,13 @@ sets it to the commit it tested, and a value that is not hex exits 2.
   a detached HEAD that no branch holds stays as it is too. One line names the
   folder and says why.
 - For jj, an empty `@` whose parent is not on trunk stays as it is too, to keep
-  the verb from moving a checkout off unlanded changes. A set `DEV_FOLLOW_REV`
-  is subject to the same rule.
+  the command from moving a checkout off unlanded changes. A set
+  `DEV_FOLLOW_REV` is subject to the same rule.
 - A set `DEV_FOLLOW_REV` never moves a checkout back to an older commit. A
   checkout on a commit newer than the rev stays as it is, and the line reads
   `FOLDER stays on the newer commit COMMIT.` A rev ahead of the checkout still
   moves it.
-- The verb prints one sentence with a final period. It reads
+- The command prints one sentence with a final period. It reads
   `FOLDER is on trunk COMMIT.`,
   `FOLDER was left alone: it has uncommitted changes.`,
   `FOLDER was left alone: it sits on changes that are not on trunk.` or
@@ -433,17 +438,17 @@ A user's launcher runs dev from the installed snapshot when
 `${XDG_STATE_HOME:-~/.local/state}/dev/snapshot/current` holds a `main.lua`
 and an `ORIGIN` file naming the clone that launcher belongs to. It resolves
 that link once, hands luajit the real version directory and exports
-`DEV_CHECKOUT`, the clone it started from, for the verbs that read the
+`DEV_CHECKOUT`, the clone it started from, for the commands that read the
 repository. A checkout update therefore never shows a running dev half-written
-code. `dev install bin` publishes the snapshot: it copies `share/dev` into a new
-`versions/` directory, then renames a link over `current`, so the swap is one
-step. The newest three versions stay.
+code. `dev install bin` publishes the snapshot: it copies `share/dev` into a
+new `versions/` directory, then renames a link over `current`, so the swap is
+one step. The newest three versions stay.
 
 The launcher runs the checkout copy instead when `DEV_FROM=checkout` is set
 (`dev test` sets it for every suite), when no snapshot exists yet or it came
 from another clone, and always for root. A landing is live only after
 `dev install bin`. When a landing changed a `dev.*` module that the install
-verb itself needs, run `DEV_FROM=checkout dev install bin`.
+command itself needs, run `DEV_FROM=checkout dev install bin`.
 
 ### Without luajit
 
@@ -467,30 +472,31 @@ The flag `--remote` needs luajit. Install it with `brew install luajit`, `pacman
 `dev.cli`. That module does these steps in order.
 
 - Parses the global flags and applies the root check.
-- Resolves the verb through `dev.registry`.
-- Refuses a flag the verb's `# flags:` line does not declare. With `--remote`
-  it does not, and the remote check refuses arguments on both sides of a `--`.
-- Runs a `.lua` verb in process (`chunk(ctx)`, with `.dev/lua` added to
-  `package.path` unless root), or execs a `.sh` verb.
+- Resolves the command through `dev.registry`.
+- Refuses a flag the command's `# flags:` line does not declare. With
+  `--remote` it does not, and the remote check refuses arguments on both sides
+  of a `--`.
+- Runs a `.lua` command in process (`chunk(ctx)`, with `.dev/lua` added to
+  `package.path` unless root), or execs a `.sh` command.
 - Runs `--remote` through `dev.remote`.
 
-An error or a syntax error in a `.lua` verb prints as `dev <verb>: <message>`
-with exit 1. A word the registry does not know is `dev: unknown verb <word>`
-with the curated help on standard error (exit 2).
+An error or a syntax error in a `.lua` command prints as
+`dev <command>: <message>` with exit 1. A word the registry does not know is
+`dev: unknown command <word>` with the curated help on standard error (exit 2).
 
 Other modules serve these commands.
 
-- `dev.complete` and `dev.topics`: `__verbs`, `__subs`, `__flags`, `__args` and
-  `__topics check`.
-  `dev __args WORD...` takes the words from the verb up to the one being typed
-  and prints `value<TAB>label` per line. A card id completes after a `dev board`
-  subcommand that takes a card, from a cache file under `$XDG_CACHE_HOME/dev`
-  that a background `dev board ls` refreshes when it is a minute old, so Tab
-  never waits on Pomb. A box name completes after `dev box show`, `stop`,
-  `resume`, `extend`, `retag` and `delete`, a box or connectable name after
-  `dev connect` and `dev box connect`, and a run id after `--run`. Those come
-  from `ci __complete KIND` under a 3 second limit for each kind. A missing,
-  slow or failing `ci` prints nothing and exits 0.
+- `dev.complete` and `dev.topics`: `__commands`, `__subs`, `__flags`, `__args`
+  and `__topics check`.
+  `dev __args WORD...` takes the words from the command up to the one being
+  typed and prints `value<TAB>label` per line. A card id completes after a
+  `dev board` subcommand that takes a card, from a cache file under
+  `$XDG_CACHE_HOME/dev` that a background `dev board ls` refreshes when it is a
+  minute old, so Tab never waits on Pomb. A box name completes after
+  `dev box show`, `stop`, `resume`, `extend`, `retag` and `delete`, a box or
+  connectable name after `dev connect` and `dev box connect`, and a run id
+  after `--run`. Those come from `ci __complete KIND` under a 3 second limit
+  for each kind. A missing, slow or failing `ci` prints nothing and exits 0.
 - `dev.cmd.types`: the project-type built-ins `lint`, `fmt`, `test`, `build`,
   `run` and `fetch`, in process.
 - `dev.cmd.push` and `dev.cmd.pull`: `push` and `pull`, with the backend and

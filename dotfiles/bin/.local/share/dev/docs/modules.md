@@ -7,10 +7,10 @@ The luajit modules of `dev`, one per item.
 ### Commands and dispatch
 
 - `dev.cli`: dispatch.
-- `dev.command`: the `.lua` verb contract (`chunk(ctx)`, `usage_error`,
-  `no_args`, `say`, `relay`, `note`, `die`, `show`, `need`).
+- `dev.command`: the `.lua` command contract (`chunk(ctx)`,
+  `usage_error`, `no_args`, `say`, `relay`, `note`, `die`, `show`, `need`).
 - `dev.cmd.types`: the project type's built-ins and the command lines
-  `dev help <verb>` prints for them.
+  `dev help <command>` prints for them.
 - `dev.cmd.tools`: `tools install` and `tools check`.
 - `dev.cmd.land`: `land`, which reads the card from the workspace name through
   `dev.scm` and `dev.board`, refuses it through the card's `land_problem`,
@@ -40,7 +40,7 @@ The luajit modules of `dev`, one per item.
   result into output and an exit code.
 - `dev.board`: the column names and short forms, the card-id prefix match, the
   size label, the table lines and the `dev.board.Backend` interface the
-  commands call. It is also the board half of dev's public API for verbs.
+  commands call. It is also the board half of dev's public API for commands.
   `board.find(workspace)` returns a board with `find_card`, `release_column`
   and `done_column`, and a card found on it has `land_problem`, `carry_proof`,
   `move_to`, `move_to_release` and `move_to_done`. `land_problem` returns why
@@ -48,20 +48,20 @@ The luajit modules of `dev`, one per item.
   or nil, and lands nothing. `carry_proof` writes the card's check and reviews
   onto a rebased commit. `move_to` into Release or Done refuses a card its
   check, reviews and outcomes do not prove, read at the working-copy commit or
-  at the state a caller passes. A verb calls them in its own order.
+  at the state a caller passes. A command calls them in its own order.
 - `dev.scm`: the source control half of that API, a new module over `dev.vcs`
   and `dev.board.land`. `scm.workspace(root)` returns a workspace with `name`,
   `is_dirty`, `touched`, `holds`, `state`, `rebase` and `merge_into_trunk`.
   `board land` runs on it.
 - `dev.board.render`: the color terminal table and summary `board ls` prints.
-- `dev.board.guards`: the refusals and guards the `board` verbs run before they
-  act, and the usage and failure results they return.
+- `dev.board.guards`: the refusals and guards the `board` subcommands run before
+  they act, and the usage and failure results they return.
 - `dev.board.runner`: a runner's size limit and refusals, the full-column result
   and the claim a `take` makes.
 - `dev.board.wait`, `dev.board.ship`, `dev.board.stale`, `dev.board.runcard`,
-  `dev.board.setup`: the `board wait`, `ship`, `stale` and `run` verbs and the
-  board setup helpers, split out of `dev.cmd.board` to keep it below the 200
-  locals LuaJIT allows in one chunk.
+  `dev.board.setup`: the `board wait`, `ship`, `stale` and `run` subcommands
+  and the board setup helpers, split out of `dev.cmd.board` to keep it below
+  the 200 locals LuaJIT allows in one chunk.
 - `dev.board.wiring`: the flag parsing and rows behind `board check`, and the
   landing problems, turn wait and held landing behind `board land`.
 - `dev.board.pomb`: that interface over curl. The token comes from
@@ -94,7 +94,7 @@ Otherwise it works by project kind:
   them. The calling workspace then runs
   `jj workspace update-stale`, which changes nothing in a fresh one. In a
   colocated project, a prunable git worktree record for the path of NAME is
-  pruned first, but when another prunable record would drop with it the verb
+  pruned first, but when another prunable record would drop with it the command
   exits 1 and names it. The project then gets
   `jj workspace add --name NAME -r trunk()`.
 - A git project fetches its remote of record the same way (`git fetch
@@ -264,12 +264,12 @@ card's bookmark.
 - `dev.root`: the command words dev may run as root (`tools install` and
   `tools check`) and the checked manifest copy.
 - `dev.remote`: `--remote`.
-- `dev.fetch`: the `# fetch JOB FILE` and `# patch JOB FILE` verb headers.
-  `fetch.pull(root, spec)` runs the job on ci for this host's platform and
-  returns the pulled file, and `dev.cli` hands it to the verb in
+- `dev.fetch`: the `# fetch JOB FILE` and `# patch JOB FILE` command
+  headers. `fetch.pull(root, spec)` runs the job on ci for this host's
+  platform and returns the pulled file, and `dev.cli` hands it to the command in
   `DEV_FETCHED`. `fetch.apply(root, spec)` runs a patch job on its first listed
   target and applies the pulled patch at the project root (`dev help remote`).
-- `dev.registry`: the registry of verbs.
+- `dev.registry`: the registry of commands.
 - `dev.version`: `current` reads the `VERSION` file beside `main.lua`, and
   `compare` orders two `MAJOR.MINOR.PATCH` strings. `dev.cli` refuses a
   project whose `[dev] min_version` is newer (`dev help flags`).
@@ -280,13 +280,14 @@ card's bookmark.
 
 ### Help and completion
 
-- `dev.help`: `dev help` and the help every verb's `-h` and `--help` print.
+- `dev.help`: `dev help` and the help every command's `-h` and `--help`
+  print.
   It detects the project type only for `lint`, `fmt`, `test`, `build`, `run`
   and `fetch`. The Lua check of `dev.project` is one `find` capped at 4 levels
   that skips dot directories, `node_modules` and `target` and does not follow
   symlinks below the root. `dev.cli.guard` and `dev.command` turn an
   `interrupted!` error into exit 130 with nothing on standard error.
-- `dev.complete`: the hidden `__verbs`, `__subs`, `__flags` and `__args` that
+- `dev.complete`: the hidden `__commands`, `__subs`, `__flags` and `__args` that
   feed shell completion, and `__topics check`. `__args` reads a card cache and
   asks `ci __complete`, see `dev help flags`.
 - `dev.topics`: the topic files and the check behind `__topics check`.
@@ -307,9 +308,9 @@ card's bookmark.
     `root/bin/NAME` that prints `out` and `err`, appends its arguments to
     `root/bin/NAME.log` and exits `code`.
   - `calls(root, name)`: the logged lines.
-  - `verb(root, words, opts)`: runs the dev launcher in `root` with
-    `root/bin` first on PATH and `opts.env`. It returns `out, code, err` with
-    standard error apart.
+  - the launcher helper, called with `(root, words, opts)`: runs the dev
+    launcher in `root` with `root/bin` first on PATH and `opts.env`. It
+    returns `out, code, err` with standard error apart.
 
   `tests/lua/projtest_test.lua` pins all three helpers.
 
@@ -379,8 +380,8 @@ ran no case.
 
 This repo's own `dev lint`, `dev fmt` and `dev test` are `.dev/lint.lua`,
 `.dev/fmt.lua` and `.dev/test.lua`. The shared code is in
-`.dev/lua/dotfiles/checks.lua`, and project verbs get `.dev/lua` on
-`package.path`.
+`.dev/lua/dotfiles/checks.lua`, and project commands get `.dev/lua`
+on `package.path`.
 
 #### dev lint and dev fmt
 
@@ -441,10 +442,11 @@ the working-copy change (`dev.board.select`). This is the selection rule:
   whole suite as the backstop.
 - A touched file that is not a Lua module or a suite, a touched test helper,
   or a touched module that no Lua suite reaches leaves the whole suite running.
-- A touched module that a verb file loads, directly or through other modules,
-  leaves the whole suite running. A verb file is a Lua file under `.dev` that
-  is not a module, not a suite and not under `tests/`. Its parity suites run it
-  as a subprocess and never require the module, so the map cannot name them.
+- A touched module that a command file loads, directly or through other
+  modules, leaves the whole suite running. A command file is a Lua file under
+  `.dev` that is not a module, not a suite and not under `tests/`. Its parity
+  suites run it as a subprocess and never require the module, so the map
+  cannot name them.
 - A moved or copied file counts at both its old and its new path.
 
 The recorded row stays the card's own plain row, so the checks fingerprint does
@@ -504,11 +506,11 @@ on the card for that rebuild.
 
 ## .dev scripts
 
-There is one script per verb (`install.lua`, `uninstall.lua`, `restow.lua`,
+There is one script per command (`install.lua`, `uninstall.lua`, `restow.lua`,
 `purge.lua`, `clean.lua`, `list.lua`, `stow.lua`, `sync.lua`, `setup.lua`,
-`skills.lua`, ...), run through `dev <verb>`.
+`skills.lua`, ...), run through `dev <command>`.
 
-The subdirectories hold the Lua subcommands of three nouns:
+The subdirectories hold the Lua subcommands of three commands:
 
 - `pi/`: `dev pi` with `install`, `save`, `diff` and `check`, over
   `.dev/lua/dotfiles/pi.lua`.
@@ -516,7 +518,7 @@ The subdirectories hold the Lua subcommands of three nouns:
   `.dev/lua/dotfiles/antinote.lua`.
 - `zen/`: `dev zen` with `link`, over `.dev/lua/dotfiles/zen.lua`.
 
-`lint.lua`, `fmt.lua`, `test.lua`, `soak.lua` and `skills.lua` are Lua verbs
+`lint.lua`, `fmt.lua`, `test.lua`, `soak.lua` and `skills.lua` are Lua commands
 that run in the dev process (see the `dev.*` items above).
 
 ### The install family
@@ -545,7 +547,7 @@ a temp tree. `dev install nvim TARGET_DIR=/tmp/home` installs into a temp
 tree.
 
 `dev install`, `uninstall`, `restow` and `purge` take package names, and the
-other verbs take only `KEY=value`. `dev skills` calls `packages.fetch_skills`
+other commands take only `KEY=value`. `dev skills` calls `packages.fetch_skills`
 and takes no argument.
 
 ### dev sync
@@ -587,10 +589,10 @@ With a question it runs `guide dev -- <question>` from the repo root. When
 `.dev/topics` exists it adds `--context-dir <root>/.dev/topics`, so the
 project's topics are gathered before the rest of the help.
 
-The curated `dev help` has no verb-count cap. It is curated by purpose and
-fits a 50-line screen. `board` is shown under "Share it".
+The curated `dev help` has no cap on the number of commands. It is
+curated by purpose and fits a 50-line screen. `board` is shown under "Share it".
 
-The hidden verbs are `bootstrap` (machine-local setup run once), `help`,
+The hidden commands are `bootstrap` (machine-local setup run once), `help`,
 `gpgkeys` (the legacy GPG key listing), `waits` (the leftover shell wait-loop
 listing) and dev's own `__` helpers.
 `tests/dev/guide_test.sh` pins that exact list, and `dev help -a` still lists
@@ -745,7 +747,7 @@ so a background child of a finished probe does not stay behind.
 early, scribe exiting unread) fail instead of killing the process.
 
 `dev.os.on_exit(fn)` registers a cleanup, the Lua match for a bash `trap` on
-`EXIT`. Each cleanup runs once, newest first, when the verb returns, when it
+`EXIT`. Each cleanup runs once, newest first, when the command returns, when it
 raises and when `SIGTERM`, `SIGHUP` or `SIGINT` ends it. A cleanup that
 raises is reported on standard error and the rest still run, and the first
 registration wraps `os.exit` to run the cleanups before the process leaves.

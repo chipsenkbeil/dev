@@ -214,7 +214,7 @@ assert_contains "help of an unknown name says so" "$out" "unknown command nosuch
 assert_contains "help of an unknown name exits 2" "$out" "exit 2"
 
 # The porting topic's before and after verbs behave the same
-assert_contains "the real topics list porting" "$(cd "$REPO" && DOTFILES="$REPO" "$DEV" help --topics)" $'porting\tPort a .dev bash verb to Lua'
+assert_contains "the real topics list porting" "$(cd "$REPO" && DOTFILES="$REPO" "$DEV" help --topics)" $'porting\tPort a .dev bash command to Lua'
 fence() {
     awk -v lang="$1" '
         $0 == "```" lang { on = 1; next }

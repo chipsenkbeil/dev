@@ -6,11 +6,11 @@ A command that has a ci job runs remote by default. A forgotten flag never
 spikes the laptop.
 
 `dev test` and `dev --remote test` are the same, and `dev test --local` runs
-here. A set `DEV_AGENT` refuses a local run of a verb that has a ci job (see
-"Agents").
+here. A set `DEV_AGENT` refuses a local run of a command that has a ci job
+(see "Agents").
 
 `--remote` runs the command on a remote runner instead of this machine. It
-works for every verb.
+works for every command.
 
 `DEV_REMOTE=1` in the environment is the same as the flag. Empty means unset,
 and `0`, `no` and `false` mean `--local`.
@@ -18,8 +18,8 @@ and `0`, `no` and `false` mean `--local`.
 `--remote` and `--local` work anywhere before a `--`. Together they are a usage
 error (exit 2).
 
-`--local` sets `DEV_LOCAL=1` in the environment before any verb runs, to let a
-verb tell that a local run was asked for. Without the flag dev leaves
+`--local` sets `DEV_LOCAL=1` in the environment before any command runs, to
+let a command tell that a local run was asked for. Without the flag dev leaves
 `DEV_LOCAL` alone, so a value inherited from an outer dev run still shows.
 
 dev strips `--remote` and `--detach`. The launcher has already entered the
@@ -68,20 +68,20 @@ command the listing does not name runs here with no message, so `dev board ls`
 is the same under either default.
 
 The default passes every argument to the job, as an explicit `--remote` does.
-A verb with no job is not an error.
+A command with no job is not an error.
 
-### Verbs that stay local
+### Commands that stay local
 
-A verb script whose header has a `# local` line is never sent to ci by the
+A command script whose header has a `# local` line is never sent to ci by the
 default. It suits a script that prepares something and then drives ci itself,
 beside a job of the same name.
 
-`--remote` still sends it. `dev help <verb>` says the verb runs here under the
-default.
+`--remote` still sends it. `dev help <command>` says the command runs here
+under the default.
 
-### Verbs that fetch a built file
+### Commands that fetch a built file
 
-A verb script whose header has a `# fetch JOB FILE` line runs here, and under
+A command script whose header has a `# fetch JOB FILE` line runs here, and under
 the remote mode it first builds `FILE` on ci. `JOB` is a job of a pipeline in
 `.ci/`, and `FILE` is the artifact that job keeps with `ci.artifact`. The
 header is `# fetch client ci` for the job `client` that keeps `ci`.
@@ -92,12 +92,13 @@ whose OS word matches this host (`macos-` for Darwin, `freebsd-`, `windows-`,
 and any other target for Linux), and starts the job on that target at this
 host's architecture, `aarch64` for `arm64` and `x86_64` for `amd64`. It waits
 for the run with `ci ps RUN -w`, pulls the artifact `JOB.INDEX.TARGET/FILE`
-with `ci cp`, and runs the verb here with `DEV_FETCHED` set to the pulled
+with `ci cp`, and runs the command here with `DEV_FETCHED` set to the pulled
 file's path in a new temporary directory.
 
-`--local`, `DEV_REMOTE=0` and `[remote] default = "local"` run the verb here
-with no fetch and no `DEV_FETCHED`, so the verb builds the file itself. Inside a
-ci job or a dev box the verb always runs here with no fetch.
+`--local`, `DEV_REMOTE=0` and `[remote] default = "local"` run the command
+here with no fetch and no `DEV_FETCHED`, so the command builds the file
+itself. Inside a ci job or a dev box the command always runs here with no
+fetch.
 
 A host whose platform no target of the job matches, or whose job ci cannot
 start for it, fails with exit 1. The message names the platform, such as
@@ -105,12 +106,12 @@ start for it, fails with exit 1. The message names the platform, such as
 with its run id and the `ci logs` command that reads it. An agent's `DEV_AGENT`
 label rides on every ci run the fetch starts, as for `--remote`.
 
-### Verbs that apply a patch from ci
+### Commands that apply a patch from ci
 
-A verb script whose header has a `# patch JOB FILE` line never runs here under
-the remote mode. It suits a verb that rewrites files, such as a formatter that
-must not run on the laptop. `JOB` is a job of a pipeline in `.ci/`, and `FILE`
-is the patch that job keeps with `ci.artifact`.
+A command script whose header has a `# patch JOB FILE` line never runs here
+under the remote mode. It suits a command that rewrites files, such as a
+formatter that must not run on the laptop. `JOB` is a job of a pipeline in
+`.ci/`, and `FILE` is the patch that job keeps with `ci.artifact`.
 
 In the remote mode dev starts `JOB` on the first target ci lists for it,
 whatever its OS and with no `--arch`, waits with `ci ps RUN -w`, and pulls
@@ -149,14 +150,15 @@ the marker or `CI=true`. The denial names only `dev --remote test` or
 
 ## The default runner
 
-With no override, the runner is `ci`. A verb runs the job of the same name from
-the project's default pipeline (`.ci/jobs.lua`).
+With no override, the runner is `ci`. A command runs the job of the same name
+from the project's default pipeline (`.ci/jobs.lua`).
 
-`dev <noun> <sub>` runs the job `<noun>-<sub>`, and one level deeper it is
-`<noun>-<sub>-<sub2>`, with a hyphen between every word. ci refuses a dot in a
-job name. A word holding a dot or an underscore is no job, and ci is not asked.
+`dev <command> <sub>` runs the job `<command>-<sub>`, and one level deeper it
+is `<command>-<sub>-<sub2>`, with a hyphen between every word. ci refuses a
+dot in a job name. A word holding a dot or an underscore is no job, and ci is
+not asked.
 
-dev checks `ci run --list --json` first. A verb with no such job exits 1 with
+dev checks `ci run --list --json` first. A command with no such job exits 1 with
 ``No job named <job> exists in the project's default pipeline (.ci/jobs.lua).
 Add one to run it with `--remote`.``, and nothing runs. It never falls back to a
 local run.
@@ -176,14 +178,14 @@ it (`dev help boards`), such as `dotfiles/implementer/f5f0e007`.
 
 ### The local refusal
 
-Under `DEV_AGENT`, a run that would happen here for a verb with a default ci
-job is refused. It makes no difference what chose the laptop (`--local`,
+Under `DEV_AGENT`, a run that would happen here for a command with a default
+ci job is refused. It makes no difference what chose the laptop (`--local`,
 `DEV_REMOTE=0` or `[remote] default = "local"`).
 
-The refusal exits 2, prints a line that names the verb and `--remote`, and
+The refusal exits 2, prints a line that names the command and `--remote`, and
 runs nothing. The default remote run and `--remote` still go to ci.
 
-The refusal does not apply to a `# local` verb, to a command that declares
+The refusal does not apply to a `# local` command, to a command that declares
 `remote: false`, or inside a ci job or dev box (`CI=true` or the box
 marker). An unset or empty `DEV_AGENT` changes nothing.
 
@@ -194,26 +196,26 @@ When ci cannot be asked, the refusal fails with ci's error and the hint
 
 A `DEV_AGENT` whose role, the second part of its name, is `runner`,
 `implementer`, `planner`, `reviewer` or `verifier` is a workspace role. Such an
-agent is refused when a mutating verb runs with its root in the
+agent is refused when a mutating command runs with its root in the
 primary checkout, the folder a workspace or worktree belongs to.
 
 The refused commands are the ones that declare `requires: workspace`, in the
-built-in row or the script header, and a noun's line covers its subcommands.
-Every other command passes.
+built-in row or the script header, and the line of a command with subcommands
+covers its subcommands. Every other command passes.
 
 The lead role is refused only for `land`, `board land`, `abandon`, `clean`,
-`purge` and `fmt`, the verbs a lead never runs in the primary checkout. It still
-runs `install`, `push`, `pull` and the rest there.
+`purge` and `fmt`, the commands a lead never runs in the primary checkout. It
+still runs `install`, `push`, `pull` and the rest there.
 
-A repo adds verbs to that refusal with `agent.primary_guarded` in its
-`.dev/config.toml`, a list of verb names or verb phrases such as
-`["bump", "board land"]`. A listed verb is refused for any set `DEV_AGENT`, the
-lead role included, with the same exit 2 and the same primary checkout test. Its
-line says the repo's `agent.primary_guarded` lists it. A verb the list leaves
-out runs as before, and a value that is not a list of names ends dev with
-exit 1.
+A repo adds commands to that refusal with `agent.primary_guarded` in its
+`.dev/config.toml`, a list of command names or command phrases such as
+`["bump", "board land"]`. A listed command is refused for any set `DEV_AGENT`,
+the lead role included, with the same exit 2 and the same primary checkout
+test. Its line says the repo's `agent.primary_guarded` lists it. A command the
+list leaves out runs as before, and a value that is not a list of names ends
+dev with exit 1.
 
-The refusal exits 2, prints a line that names the verb and `dev -C WS`, and
+The refusal exits 2, prints a line that names the command and `dev -C WS`, and
 runs nothing. A workspace or worktree root passes, whether dev started there or
 `-C` points at it. An unset or empty `DEV_AGENT` and a run inside a ci job or
 dev box are not refused.
@@ -305,8 +307,8 @@ A runner can reuse the default one with
 level. `opts.pipeline` names a pipeline under `.ci/`, so the job runs from
 `.ci/<pipeline>.lua` instead of the default pipeline.
 
-This repo's `.dev/__remote.lua` sends two verbs to their own pipelines and
-everything else to the default one:
+This repo's `.dev/__remote.lua` sends two commands to their own pipelines
+and everything else to the default one:
 
 - `bootstrap` goes to `.ci/bootstrap.lua` (`dev --remote bootstrap`, the Arch
   bootstrap proof)
@@ -316,9 +318,9 @@ everything else to the default one:
 ## What it refuses
 
 A command that declares `remote: false`, in its built-in row or with a
-`# remote: false` header line, exits 2 with `dev <verb>: runs on this machine
-only, so --remote does not apply`, whatever the runner. A noun's line covers
-its subcommands.
+`# remote: false` header line, exits 2 with `dev <command>: runs on this
+machine only, so --remote does not apply`, whatever the runner. The line of a
+command with subcommands covers its subcommands.
 
 A `remote: false` command whose script has a `# patch JOB FILE` line runs its
 job on ci and applies the patch here instead of exiting 2.

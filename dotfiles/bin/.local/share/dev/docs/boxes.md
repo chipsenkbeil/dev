@@ -118,7 +118,7 @@ removes that folder when the work ends. Projects live under `/srv/projects`.
 
 Leave the box out of `show`, `stop`, `resume`, `extend`, `tools install` or
 `delete` and a terminal gets the same box picker `dev connect` uses. It lists
-only the boxes the verb can act on: running ones for `stop`, `extend` and
+only the boxes the command can act on: running ones for `stop`, `extend` and
 `tools install`, stopped ones for `resume`.
 
 Without a terminal a missing name exits 2 and says to pass a name, with an
@@ -143,7 +143,7 @@ instance's config.
 
 A box with no `--target`, or with no name, is a usage error before ci runs.
 When ci cannot retag the box, its reason prints on standard error, as for the
-other box verbs, and dev exits with ci's code.
+other box commands, and dev exits with ci's code.
 
 ### tools install
 
@@ -262,9 +262,10 @@ exit code. Progress lines ci writes to stderr reach the terminal.
 
 ## Reference: the subcommands in detail
 
-`dev box` is a built-in noun for any project. It reads ci's JSON with
-`dev.json` and needs `ci` on PATH, else it dies saying so. Every box is named
-by ci, and dev takes the host only from the box's `tailnet_name`.
+`dev box` is a built-in command with subcommands for any project. It reads
+ci's JSON with `dev.json` and needs `ci` on PATH, else it dies saying so.
+Every box is named by ci, and dev takes the host only from the box's
+`tailnet_name`.
 
 - `ls [--all] [--json]`: prints the room, then one row per box.
   - The room starts with a hub line
@@ -352,7 +353,7 @@ by ci, and dev takes the host only from the box's `tailnet_name`.
   - Both the box name and `--target` are required, and a missing one is a
     usage error before ci runs.
   - When ci cannot retag the box, its reason prints on standard error, as for
-    the other box verbs, and dev exits with ci's code.
+    the other box commands, and dev exits with ci's code.
 - `tools install [BOX] [PROJECT...]`: reinstalls a running box's tools through
   `ci box install-tools BOX --json`, with the projects after `--`.
   - It prints `<project>: tools installed` or
@@ -380,16 +381,16 @@ and `delete` pick one with the shared picker (`dev.ui.picker`, rows as in
 `ls`). It runs when standard input and output are both terminals.
 
 - titles: `Show which box?`, `Stop which box?` and so on.
-- rows: every box for `show` and `delete`, only the boxes the verb can act on
-  for the others (running ones for `stop`, `extend` and `tools install`,
+- rows: every box for `show` and `delete`, only the boxes the command can act
+  on for the others (running ones for `stop`, `extend` and `tools install`,
   stopped ones for `resume`).
 - skipped screen: `stop` and `delete` always show the screen, and the others
   skip it when one row is left.
-- no such box: dev prints `dev <verb>: no running boxes to stop` (or the
+- no such box: dev prints `dev <command>: no running boxes to stop` (or the
   matching words) and exits 1.
 
 Without a terminal a missing name is a usage error with exit 2. The line ends
-like this, in the verb's own words, with `-y` only for `delete`:
+like this, in the command's own words, with `-y` only for `delete`:
 
 ```
 No box given and no terminal to pick one. Pass a name,
@@ -426,7 +427,7 @@ for the target and the shape with the pickers of `create`, then creates and
 attaches.
 
 With no name and no terminal, once boxes exist, it is a usage error like the
-other box verbs (exit 2). With no boxes outside a project it prints
+other box commands (exit 2). With no boxes outside a project it prints
 `There are no boxes. Create one with dev box create.` and exits 1.
 
 A stopped box is resumed first. Any state other than running or stopped exits
