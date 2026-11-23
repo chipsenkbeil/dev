@@ -107,7 +107,7 @@ functions in its doc comments.
 - `dev.ui`: `context`, colors through `paint` and `mark`, `table`, `bar`,
   `confirm` and `spin`
 - `dev.ui.picker`: the list picker, `run(ctx, items, opts)`
-- `dev.project`: `root`, `dotfiles_root`, `share` and `detect_type`
+- `dev.project`: `root`, `share` and `detect_type`
 - `dev.testing`, `dev.testrun` and `dev.testenv`: the test registry, the
   runner and the helpers (see "Testing a command")
 

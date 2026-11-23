@@ -81,7 +81,6 @@ if [ "$luajit" = luajit ] && [ "${DEV_FROM:-}" != checkout ] && [ -n "${HOME:-}"
     if version=$(cd -P "$state/dev/snapshot/current" 2>/dev/null && pwd -P) &&
         [ -f "$version/main.lua" ] && [ "$(cat "$version/ORIGIN" 2>/dev/null)" = "$checkout" ]; then
         share=$version
-        export DEV_CHECKOUT=$checkout
     fi
 fi
 

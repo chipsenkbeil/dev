@@ -191,12 +191,9 @@ end
 function M.check(reg)
     local out = {}
     local here, share = fs.realpath(reg.root), fs.realpath(project.share)
-    local checkout = os.getenv("DEV_CHECKOUT")
     local own = here ~= nil
-        and (
-            here == checkout
-            or share ~= nil and (share == here or share:sub(1, #here + 1) == here .. "/")
-        )
+        and share ~= nil
+        and (share == here or share:sub(1, #here + 1) == here .. "/")
     for _, file in ipairs(M.files(reg.root)) do
         if own or not file.builtin then
             check_file(reg, file, out)

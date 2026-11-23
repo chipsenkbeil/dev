@@ -257,7 +257,6 @@ rm -f "$ARGS_OUT" "$ENV_OUT"
 snap_rec "$DEV" help >/dev/null 2>&1
 assert_eq "a snapshot gives luajit its resolved version directory" "$(cat "$ARGS_OUT")" "$V1_REAL/main.lua help"
 assert_eq "a snapshot run still reports the checkout launcher as DEV_SELF" "$(grep '^DEV_SELF=' "$ENV_OUT")" "DEV_SELF=$DEV"
-assert_eq "a snapshot run names the checkout it came from" "$(grep '^DEV_CHECKOUT=' "$ENV_OUT")" "DEV_CHECKOUT=$REPO"
 
 rm -f "$ARGS_OUT"
 snap_rec DEV_FROM=checkout "$DEV" help >/dev/null 2>&1
@@ -282,14 +281,6 @@ printf '%s\n' "$REPO" >"$SNAP/versions/v1/ORIGIN"
 rm -f "$ARGS_OUT"
 env -u DEV_FROM HOME="$SNAPHOME" XDG_STATE_HOME=relative/state PATH="$RECORDER:$NOLUA" "$DEV" help >/dev/null 2>&1
 assert_eq "a relative XDG_STATE_HOME falls back to the home state directory" "$(cat "$ARGS_OUT")" "$V1_REAL/main.lua help"
-
-SNAP3="$TMP/home3/.local/state/dev/snapshot"
-mkdir -p "$SNAP3/versions"
-cp -R "$REPO/dotfiles/bin/.local/share/dev/." "$SNAP3/versions/v3"
-printf '%s\n' "$REPO" >"$SNAP3/versions/v3/ORIGIN"
-ln -s versions/v3 "$SNAP3/current"
-out="$(cd "$REPO" && env -u XDG_STATE_HOME -u DEV_FROM -u DOTFILES HOME="$TMP/home3" PATH="$TMP/realjit:$PATH" "$DEV" help overview 2>&1)"
-assert_contains "dev from a snapshot finds the clone through DEV_CHECKOUT" "$out" "This repo holds the owner's dotfiles"
 
 ln -s versions/v2 "$SNAP/current.new"
 out="$(SWAP=1 snap_dev "$DEV" help 2>&1)"

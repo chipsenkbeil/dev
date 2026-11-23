@@ -132,8 +132,7 @@ print(mode or "unset")
 ### dev.project
 
 `root()` finds the project root, `detect_type(root)` names the project's
-language from the files in its root, `dotfiles_root()` finds the dotfiles
-clone that holds dev, and `share` is dev's own share directory.
+language from the files in its root, and `share` is dev's own share directory.
 
 ```lua
 local project = require("dev.project")

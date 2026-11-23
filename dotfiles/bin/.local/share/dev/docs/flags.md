@@ -240,9 +240,9 @@ ones live in the `docs` folder beside `main.lua`, and project ones in
 `.dev/topics/`. A topic may not share a name with a command or a built-in topic.
 
 `dev __topics check` checks the built-in topics when that folder lies inside
-the project or `DEV_CHECKOUT` names the project, and the project's topics in
-every project. For each topic it checks the first line,
-the names, and that each backticked or fenced `dev` line followed by words
+the project, and the project's topics in every project. For each topic it
+checks the first line, the names, and that each backticked or fenced `dev` line
+followed by words
 names a real command or subcommand and only flags `dev __flags` lists for it. It
 exits 1 with `file:line` for each problem.
 
@@ -466,11 +466,10 @@ The launcher resolves its own real path into `DEV_SELF`. An enabled
 A user's launcher runs dev from the installed snapshot when
 `${XDG_STATE_HOME:-~/.local/state}/dev/snapshot/current` holds a `main.lua`
 and an `ORIGIN` file naming the clone that launcher belongs to. It resolves
-that link once, hands luajit the real version directory and exports
-`DEV_CHECKOUT`, the clone it started from, for the commands that read the
-repository. A checkout update therefore never shows a running dev half-written
-code. `dev install bin` publishes the snapshot: it copies `share/dev` into a
-new `versions/` directory, then renames a link over `current`, so the swap is
+that link once and hands luajit the real version directory. A checkout
+update therefore never shows a running dev half-written code. `dev install bin`
+publishes the snapshot: it copies `share/dev` into a new `versions/` directory,
+then renames a link over `current`, so the swap is
 one step. The newest three versions stay.
 
 The launcher runs the checkout copy instead when `DEV_FROM=checkout` is set
