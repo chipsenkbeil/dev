@@ -180,9 +180,14 @@ end
 ---   Pomb's refusal and `no_seat` when the card has no such seat and the token cannot add it, nil
 ---   on a board with no seats
 ---@field seats fun(self: dev.board.Backend, id: string): dev.board.Seat[]?, string? the seats the
----   card holds, each with its name, role, verdict, revision and idle flag, a nil verdict and
----   revision before an answer, an empty list for a card with no seats, or nil and why the read
+---   card holds, each with its name, holder, role, verdict, revision and idle flag, a nil verdict
+---   and revision before an answer, an empty list for a card with no seats, or nil and why the read
 ---   failed. The field is optional: it is nil on a board with no seats
+---@field reset_seat (fun(self: dev.board.Backend, id: string, seat: string): boolean?, string?,
+---   string?, dev.board.Seat?)? the seat SEAT dropped and added back open, with the seat it held
+---   before as the fourth value (nil when the card had none), or nil, Pomb's refusal and
+---   `seats.manage` when Pomb refused the drop or the add for that permission. The field is
+---   optional: it is nil on a board with no seats
 ---@field ask fun(self: dev.board.Backend, id: string, question: dev.board.Ask, fence: integer?):
 ---   boolean?, string? a structured question posted on the card, which Pomb moves to Blocked with
 ---   needs:human, or nil and Pomb's refusal
@@ -339,6 +344,7 @@ end
 
 ---@class dev.board.Seat
 ---@field name string the seat's name
+---@field holder string? the credential that holds the seat, nil when none
 ---@field role string? the role the seat is for
 ---@field verdict string? `approved` or `changes_needed`, nil before an answer
 ---@field revision string? the change the holder suggests with the verdict
@@ -491,7 +497,7 @@ M.MoveReason = { FULL = "full", NO_COLUMN = "no_column", NO_LANE = "no_lane" }
 
 ---The reason a seat verdict names beside its message when the card lacks the seat.
 ---@enum dev.board.SeatReason
-M.SeatReason = { NO_SEAT = "no_seat" }
+M.SeatReason = { NO_SEAT = "no_seat", HELD = "held" }
 
 ---The reasons a claim release names beside its message when the refusal is a fixed one.
 ---@enum dev.board.ReleaseReason
@@ -516,13 +522,23 @@ end
 ---@param reason dev.board.SeatReason? the reason the backend named
 ---@param why string the backend's message
 ---@param seat string the seat of the verdict
+---@param card string the card's short id, which the reset command names
 ---@return string message the text
-function M.seat_refusal(reason, why, seat)
+function M.seat_refusal(reason, why, seat, card)
     if reason == M.SeatReason.NO_SEAT then
         return string.format(
             "The card has no %s seat and this token cannot add one (%s). The claim adds the seats, so take the card with dev board take first.",
             seat,
             why
+        )
+    end
+    if reason == M.SeatReason.HELD then
+        return string.format(
+            "The %s seat is held by another credential (%s). A lead frees it with `dev board seat reset %s %s`.",
+            seat,
+            why,
+            card,
+            seat
         )
     end
     return text.sentence(why)

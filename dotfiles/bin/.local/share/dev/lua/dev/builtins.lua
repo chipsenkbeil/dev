@@ -444,6 +444,17 @@ return {
         desc = "Revoke the role token that token mint issued as NAME",
     },
     {
+        words = { "board", "seat" },
+        noun = true,
+        desc = "Free a reviewer seat that a credential holds: reset",
+    },
+    {
+        words = { "board", "seat", "reset" },
+        handler = "lua",
+        usage = "dev board seat reset CARD SEAT",
+        desc = "Drop a seat and add it back open, for a token with seats.manage",
+    },
+    {
         words = { "board", "attach" },
         handler = "lua",
         usage = "dev board attach CARD FILE...",

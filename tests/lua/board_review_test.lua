@@ -823,6 +823,7 @@ testing.test("a code review refused with the seat held warns", function()
     testing.eq(result.code, nil)
     testing.eq(#result.warnings, 1)
     testing.ok(result.warnings[1]:find("seat_held", 1, true), result.warnings[1])
+    testing.ok(result.warnings[1]:find("dev board seat reset", 1, true), result.warnings[1])
     testing.eq(result.output:find("already held", 1, true), nil)
 end)
 
@@ -1194,4 +1195,67 @@ testing.test("seats returns the reason when the read fails", function()
         testing.eq(seats, nil)
         testing.ok(message and message:find("gone", 1, true), tostring(message))
     end)
+end)
+
+local HELD_CODE_SEAT = '[{"name":"code","role":"reviewer","holder":"r","idle":false,'
+    .. '"verdict":"changes_needed","revision":"abc123"}]'
+
+local function calls_of(root)
+    local lines = {}
+    for line in (fs.read(root .. "/calls") or ""):gmatch("[^\n]+") do
+        lines[#lines + 1] = line
+    end
+    return lines
+end
+
+local function first_index(lines, matches)
+    for index, line in ipairs(lines) do
+        if matches(line) then
+            return index
+        end
+    end
+    return nil
+end
+
+local function posted_to_seats(line)
+    return line:sub(-#"/seats") == "/seats"
+end
+
+testing.test("a lead resets a held seat", function()
+    local root = seats_root()
+    assert(fs.write(root .. "/task.seats.json", HELD_CODE_SEAT))
+    on_seats(root, function(backend)
+        local done, message, missing, previous = backend:reset_seat(SEATS_ID, "code")
+        testing.eq({ done, message, missing }, { true, nil, nil })
+        testing.eq(previous.holder, "r")
+        testing.eq(previous.verdict, "changes_needed")
+        local took, why = backend:seat_verdict(SEATS_ID, "code", "r2", "approved", "def456")
+        testing.eq(took, true, tostring(why))
+    end)
+    local lines = calls_of(root)
+    local dropped = first_index(lines, function(line)
+        return line:sub(-#"/seats?name=code") == "/seats?name=code"
+    end)
+    local added = first_index(lines, posted_to_seats)
+    local taken = first_index(lines, function(line)
+        return line:sub(-#"/seats/take") == "/seats/take"
+    end)
+    testing.ok(
+        dropped and added and taken and dropped < added and added < taken,
+        table.concat(lines, "\n")
+    )
+    testing.ok((fs.read(root .. "/calls") or ""):find("-X DELETE", 1, true) ~= nil)
+end)
+
+testing.test("a reset without seats.manage is refused", function()
+    local root = seats_root()
+    assert(fs.write(root .. "/task.seats.json", HELD_CODE_SEAT))
+    assert(fs.write(root .. "/seat_drop_refused", ""))
+    on_seats(root, function(backend)
+        local done, message, missing = backend:reset_seat(SEATS_ID, "code")
+        testing.eq(done, nil)
+        testing.ok(message ~= nil)
+        testing.eq(missing, "seats.manage")
+    end)
+    testing.eq(first_index(calls_of(root), posted_to_seats), nil)
 end)

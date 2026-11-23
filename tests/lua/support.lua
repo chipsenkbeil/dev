@@ -737,6 +737,12 @@ case "$last" in
         status=403
     fi
     ;;
+*/seats\?name=*)
+    if [ -f "$ROOT/seat_drop_refused" ]; then
+        body='{"code":"permission_denied","message":"seats.manage is needed"}'
+        status=403
+    fi
+    ;;
 *) body='{"ok":true}' ;;
 esac
 ]] .. M.PREFIX_MISS .. [[

@@ -314,10 +314,11 @@ token of its own.
 - A second round reuses NAME. While the earlier token lives, the lead mints
   again only after `dev board token revoke --as NAME` or its expiry.
 - The seat read: `Backend:seats` reads the card seats from the task, with `GET
-  /api/tasks/ID`, and returns a list of `{name, role, verdict, revision,
-  idle}`. A seat that has not answered has no verdict and no revision, and a
-  task with no `seats` key gives an empty list. A failed read returns nil and
-  the reason. A local board has no seats and leaves the field unset.
+  /api/tasks/ID`, and returns a list of `{name, holder, role, verdict,
+  revision, idle}`. A seat that has not answered has no verdict and no
+  revision, and a task with no `seats` key gives an empty list. A failed read
+  returns nil and the reason. A local board has no seats and leaves the field
+  unset.
 
 ## Which token each tool holds
 
@@ -3373,6 +3374,15 @@ lists each one that fails. A refusal can leave the change rebased onto trunk.
   and that never answered is skipped, and so is a card with no seats, which a
   backend without the seat read always is. An approval of the commit the
   carried reviews were recorded at counts. A failed read refuses and names why.
+- `dev board seat reset CARD SEAT` frees a seat that another credential holds,
+  so the next review takes it. A review refused with `seat_held` names this
+  command. The reset reads the seat, drops it with `DELETE` on
+  `/api/tasks/ID/seats?name=SEAT`, adds it back open with `POST`, and prints
+  the old holder and verdict. Pomb needs `seats.manage` for it, and a token
+  without that permission is refused with the permission named. A refusal
+  after the drop leaves the seat missing, and the next review adds it back.
+  SEAT is a seat name such as `code`, `style` or `recheck`. It is for a Pomb
+  board, and a local board has no seats.
 - The newest `dev-check:` record with `mode=run` at the landing commit has a
   `pass` for every checks row, in the card's row order. A `mode=expect-fail`
   record never counts, even when it does not parse, and neither does a

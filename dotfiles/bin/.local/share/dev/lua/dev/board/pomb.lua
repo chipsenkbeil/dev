@@ -1532,6 +1532,7 @@ function Backend:seats(id)
         if type(seat) == "table" then
             seats[#seats + 1] = {
                 name = json.present(seat.name),
+                holder = json.present(seat.holder),
                 role = json.present(seat.role),
                 verdict = json.present(seat.verdict),
                 revision = json.present(seat.revision),
@@ -1540,6 +1541,35 @@ function Backend:seats(id)
         end
     end
     return seats
+end
+
+function Backend:reset_seat(id, seat)
+    local held, message = self:seats(id)
+    if not held then
+        return nil, message
+    end
+    local previous
+    for _, found in ipairs(held) do
+        if found.name == seat then
+            previous = found
+        end
+    end
+    local base = "/api/tasks/" .. id .. "/seats"
+    local made, status
+    if previous then
+        made, message, status = self:__request("DELETE", base .. "?name=" .. seat)
+        if not made then
+            return nil, message, status == FORBIDDEN and SEATS_MANAGE or nil
+        end
+    end
+    made, message, status = self:__request("POST", base, { name = seat, role = SEAT_ROLE })
+    if not made then
+        if previous then
+            message = message .. " The seat was dropped, and the next review adds it back."
+        end
+        return nil, message, status == FORBIDDEN and SEATS_MANAGE or nil
+    end
+    return true, nil, nil, previous
 end
 
 function Backend:escalate(id, tier, reason, fence)

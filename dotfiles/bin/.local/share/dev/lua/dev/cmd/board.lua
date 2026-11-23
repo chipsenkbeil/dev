@@ -94,6 +94,7 @@ local STAMP_CHARS = 16
 local COMMIT_CHARS = 12
 local SEAT_HELD_CODE = "seat_held"
 local OWNER_SEAT_CODE = "owner_seat"
+local SEAT_NAME_PATTERN = "^[%w_-]+$"
 local WAIT_FLAG = "--wait"
 local FROM_FLAG = "--from"
 local IGNORE_CHANGE_RUN_FLAG = "--ignore-change-run"
@@ -3628,14 +3629,16 @@ function commands.review(backend, args)
         local refusal
         ok, message, refusal =
             backend:seat_verdict(card.id, kind, by, review.SEAT_VERDICTS[verdict], rev.commit)
-        if
-            not ok
-            and kind == review.Kind.RECHECK
-            and (message or ""):find(SEAT_HELD_CODE, 1, true)
-        then
-            seat_note = "\nThe recheck seat is already held, so only the card records this review."
+        local held = (message or ""):find(SEAT_HELD_CODE, 1, true)
+        if not ok and kind == review.Kind.RECHECK and held then
+            seat_note = string.format(
+                "\nThe recheck seat is already held, so only the card records this review. A lead frees it with `dev board seat reset %s %s`.",
+                short,
+                kind
+            )
         elseif not ok then
-            local detail = board.seat_refusal(refusal, message, kind)
+            local detail =
+                board.seat_refusal(held and board.SeatReason.HELD or refusal, message, kind, short)
             if (message or ""):find(OWNER_SEAT_CODE, 1, true) and not tokenfile.read(by) then
                 detail = string.format(
                     "%s No minted reviewer token file was found for %s. The lead mints one with `dev board token mint --role reviewer --as %s`, or sets `%s` in `[board.pomb]`.",
@@ -5785,6 +5788,57 @@ M.handlers["board token revoke"] = function(ctx)
     print(
         done.revoked and ("revoked the role token of " .. flags["--as"])
             or ("Nothing was left to revoke for " .. flags["--as"] .. ".")
+    )
+    return 0
+end
+
+M.handlers["board seat reset"] = function(ctx)
+    if #ctx.args ~= 2 then
+        verb.usage_error(ctx, "needs CARD and SEAT")
+    elseif not ctx.args[2]:find(SEAT_NAME_PATTERN) then
+        verb.usage_error(ctx, "SEAT is a seat name such as code, style or recheck")
+    end
+    local found = settings(ctx)
+    if found.backend ~= board.Backend.POMB then
+        verb.die("A local board has no seats to reset.")
+    end
+    local backend, message = M.open(found)
+    if not backend then
+        verb.die(message)
+    end
+    local card, err = find_card(backend, ctx.args[1])
+    if not card then
+        verb.die(err.message)
+    end
+    local short = card.id:sub(1, board.MIN_PREFIX)
+    local seat = ctx.args[2]
+    local done, why, missing, previous = backend:reset_seat(card.id, seat)
+    if not done then
+        if missing then
+            verb.die(
+                string.format(
+                    "The reset of seat %s on card %s needs the %s permission, and Pomb refused this token (%s).",
+                    seat,
+                    short,
+                    missing,
+                    why
+                )
+            )
+        end
+        verb.die(why)
+    end
+    if not previous then
+        verb.say(string.format("Added seat %s to card %s, open.", seat, short))
+        return 0
+    end
+    verb.say(
+        string.format(
+            "Reset seat %s on card %s. It was held by %s with verdict %s, and is open again.",
+            seat,
+            short,
+            previous.holder or "no one",
+            previous.verdict or "no verdict"
+        )
     )
     return 0
 end
