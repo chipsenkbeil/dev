@@ -4,7 +4,7 @@ local fs = require("dev.fs")
 local header = require("dev.header")
 local pipelines = require("dev.pipelines")
 local support = require("support")
-local templates = require("dev.templates")
+local templates = require("dotfiles.templates")
 local Kind = require("dev.project").Kind
 
 local function project()
@@ -23,8 +23,10 @@ local function user_env(text)
     local config = home .. "/.config"
     assert(fs.mkdir(config .. "/dev", { parents = true }), "mkdir failed")
     assert(fs.write(config .. "/dev/config.toml", text), "write failed")
-    local commands = assert(fs.realpath("dotfiles/dev/.config/dev/commands"))
-    assert(fs.symlink(commands, config .. "/dev/commands"), "symlink failed")
+    for _, name in ipairs({ "commands", "lua" }) do
+        local target = assert(fs.realpath("dotfiles/dev/.config/dev/" .. name))
+        assert(fs.symlink(target, config .. "/dev/" .. name), "symlink failed")
+    end
     return { env = { HOME = home, XDG_CONFIG_HOME = config } }
 end
 

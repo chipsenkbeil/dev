@@ -3,7 +3,7 @@ local ffi = require("ffi")
 local testing = require("dev.testing")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
-local templates = require("dev.templates")
+local templates = require("dotfiles.templates")
 local project = require("dev.project")
 local support = require("support")
 
@@ -523,4 +523,26 @@ testing.test("dir returns the no_set reason", function()
     testing.eq(message, nil)
     testing.eq(reason, templates.Reason.NO_SET)
     testing.eq(detail, Kind.GODOT)
+end)
+
+testing.test("templates.root finds the clone above the module", function()
+    if dev_os.getuid() == 0 then
+        return
+    end
+    local previous = os.getenv("DOTFILES") or ""
+    ffi.C.setenv("DOTFILES", "", 1)
+    local found = templates.root()
+    ffi.C.setenv("DOTFILES", previous, 1)
+    testing.eq(found, fs.realpath("."))
+end)
+
+testing.test("templates.root takes DOTFILES for a user", function()
+    if dev_os.getuid() == 0 then
+        return
+    end
+    local previous = os.getenv("DOTFILES") or ""
+    ffi.C.setenv("DOTFILES", "/srv/clone", 1)
+    local found = templates.root()
+    ffi.C.setenv("DOTFILES", previous, 1)
+    testing.eq(found, "/srv/clone")
 end)

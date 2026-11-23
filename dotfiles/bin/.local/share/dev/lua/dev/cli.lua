@@ -407,6 +407,9 @@ local function run_script(row, ctx, rest)
     local global = row.source == registry.Source.GLOBAL
     local lua_dir = global and registry.global_dir() or ctx.root .. "/.dev"
     package.path = lua_dir .. "/lua/?.lua;" .. package.path
+    if global then
+        package.path = fs.dirname(lua_dir) .. "/lua/?.lua;" .. package.path
+    end
     dev_os.defaults.show = ctx.verbose >= 1
     local code = dev_command.run(row.script, ctx)
     os.exit(code)

@@ -55,8 +55,9 @@ files, the `lua` folder and the reserved folders below.
 For one command, and for each subcommand of a command with subcommands, a
 project script beats a global script, which beats a built-in. A global script
 runs with the project you are in as its root. A global Lua command finds its
-modules in the `lua` folder of the global folder, not in the project's
-`.dev/lua`. `-v` prints its path relative to the global folder.
+modules in the `lua` folder of the global folder and in the `lua` folder
+beside it, not in the project's `.dev/lua`. `-v` prints its path relative to
+the global folder.
 
 ## Reaching an overridden command
 

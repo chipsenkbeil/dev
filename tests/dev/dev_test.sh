@@ -79,6 +79,7 @@ run_dev() {
 ginit_config="$TMP/ginit-config"
 mkdir -p "$ginit_config/dev"
 ln -s "$REPO/dotfiles/dev/.config/dev/commands" "$ginit_config/dev/commands"
+ln -s "$REPO/dotfiles/dev/.config/dev/lua" "$ginit_config/dev/lua"
 : >"$ginit_config/dev/config.toml"
 
 ginit() {
