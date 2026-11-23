@@ -170,9 +170,9 @@ a lead starts it by hand. It prints the role, the `agent-N` label and the
 expiry, never the token. `--hours N` sets the lifetime, from 1 to 8 hours and
 8 by default. Pomb still caps it at the owner's limit for the lead's children
 and never past the lead's own expiry. When Pomb refuses the lifetime as above
-that limit, the verb says so and names `--hours`.
+that limit, the command says so and names `--hours`.
 
-The verb makes two calls:
+The command makes two calls:
 
 - `GET /api/v1/agent-roles` reads the role's id by name.
 - `POST /api/v1/auth/tokens/children` with `{name, role_id,
@@ -190,7 +190,7 @@ The lead then starts the runner with `DEV_AGENT=NAME` and no token in its
 environment or prompt. NAME is the claimant name, so it follows
 `repo/role[/card]`.
 
-The verb runs only for a lead, and so does `delete`. Both read one helper,
+The command runs only for a lead, and so does `delete`. Both read one helper,
 which counts a `DEV_AGENT` as the lead when its role segment (the second) is
 `lead`, as in `dotfiles/lead`, or when it holds no slash and stdin is a
 terminal. Any other role is refused. On a Pomb board init runs only for a lead
@@ -219,7 +219,7 @@ expired token's name is free at once, and the new token reuses NAME with no
 suffix. The file of NAME is replaced with the new token.
 
 Only a live or suspended token of that name, matched without regard to case,
-gets a 409 `name_taken`. The verb refuses by naming NAME and leaves the file
+gets a 409 `name_taken`. The command refuses by naming NAME and leaves the file
 as it was.
 
 `dev board token mint --role ROLE --as NAME --renew` renews a live token in
@@ -265,7 +265,7 @@ is open and an outcome that is unticked, and names the count and the outcomes.
 NAME, once its run is over. The lead is refused as `mint` and `delete` are, by
 the one lead helper.
 
-The verb makes two calls:
+The command makes two calls:
 
 - `GET /api/v1/auth/tokens/children` reads the lead token's own child tokens
   and finds the one named NAME.
@@ -332,7 +332,7 @@ works.
 - lead session: `lead_token`, preset `lead`.
   - calls: everything `work` does, plus `boards.create`, `columns.create`,
     `columns.edit`, `columns.reorder`, `fields.create` and `colors.edit` (for
-    `init`), `tasks.bin` (for the `dev board delete` verb),
+    `init`), `tasks.bin` (for the `dev board delete` command),
     `subtasks.delete` for `outcome --delete`, and
     `epics.manage` for closing an epic.
   - deletes: `tasks.bin` sends a card to the bin for 30 days, and
@@ -1250,7 +1250,7 @@ outcome that was never achievable is deleted and not reworded.
 
 On a Pomb board the DELETE goes out with the lead token, `lead_token` in
 `[board.pomb]`, never with the work token, `DEV_BOARD_TOKEN` or the token file
-for `DEV_AGENT`, which every other verb reads first. Pomb 0.5.78 gives
+for `DEV_AGENT`, which every other command reads first. Pomb 0.5.78 gives
 `subtasks.delete` to the lead tier only. A local board needs no lead token.
 
 A delete is refused when:
@@ -1799,7 +1799,7 @@ keeps its column.
 The claimant is the name from `take --as NAME`, else the `DEV_AGENT`
 environment variable. With neither set, `take` and a `move` into In Progress are
 refused with `Set DEV_AGENT to <repo>/<role>[/<card>] to claim a card.` (exit 2)
-and claim nothing, so neither verb holds a claim under a host name. A name is
+and claim nothing, so neither command holds a claim under a host name. A name is
 one word of letters, digits and `.`, `-`, `_` and `/`, else exit 2. `ls` shows
 it as the holder.
 
@@ -1815,7 +1815,7 @@ so `dotfiles/implementer/f5f0e007` sends `implementer`.
 A name of another shape is refused with
 `An agent name is <repo>/<role>[/<card>], got NAME.` (exit 2). That happens when
 `take` or a `move` into In Progress would take a new claim, whether the name
-came from `DEV_AGENT` or `--as`. Every other verb on a card already claimed
+came from `DEV_AGENT` or `--as`. Every other command on a card already claimed
 under that exact name passes, so a card claimed under an older name finishes and
 lands under it.
 
@@ -1847,7 +1847,7 @@ dev finds the note by who posted it, never by its text or `--as` label. The note
 is any later comment posted by the same Pomb token as the latest such record for
 the claimant.
 
-A comment does not count when its body begins with a prefix a dev verb writes
+A comment does not count when its body begins with a prefix a dev command writes
 (`dev-check:`, `dev-review:`, `dev-turn:`, `dev-claim:`, `dev-tick:`). A comment
 whose kind is decision does not count either.
 
@@ -1866,7 +1866,7 @@ The loop stops in four cases:
 A crashed agent therefore loses its claim within 15 minutes of the loop's end. A
 network failure does not stop the loop.
 
-These verbs renew the claimant's claim and restart the loop, and the claim
+These commands renew the claimant's claim and restart the loop, and the claim
 lasts 900 seconds after each renewal:
 
 - `check`, before each row. The loop it restarts lasts for the longer of the
@@ -1908,13 +1908,13 @@ the name.
 
 ## Reference: the subcommands in detail
 
-`dev board` is a built-in noun for any project. It reads and updates the
-project's kanban board so an agent never handles the API.
+`dev board` is a built-in command with subcommands for any project. It reads and
+updates the project's kanban board so an agent never handles the API.
 
 It is machine-local. `--remote` refuses it, as does the root refusal.
 
 `dev help board` lists every subcommand. `tests/lua/help_test.lua` fails when a
-verb in the commands table or a board handler has no builtins row, or when a
+command in the commands table or a board handler has no builtins row, or when a
 non-hidden row is missing from that listing.
 
 ### status
@@ -2350,8 +2350,8 @@ typed in this session, on a `needs:human` card.
   `dev board note CARD --kind decision` command with the full text, so the
   quote is not lost.
 - `answer` is never queued, to keep a replay from posting the note twice.
-- dev cannot tell a typed answer from a relayed one. The verb is for the agent
-  whose own session the owner answered in.
+- dev cannot tell a typed answer from a relayed one. The command is for the
+  agent whose own session the owner answered in.
 
 ### epic
 
@@ -2495,7 +2495,7 @@ to OTHER (a card of this board, or `BOARD:PREFIX`).
 
 - It prints `<id prefix>  <size>  <name>` for each, in the order Pomb lists
   them, else `No attachments.`
-- Listing is its own verb, to keep `show` at one request.
+- Listing is its own command, to keep `show` at one request.
 - A local board refuses it.
 
 ### download
@@ -2562,7 +2562,7 @@ ordinary token (Pomb asks only `tasks.edit` of it).
   added again with `dev board link` (Pomb keeps no record of which ones
   they were).
 - A card whose old column is gone comes back to the board's first column.
-- Listing the bin and emptying it are not verbs.
+- Listing the bin and emptying it are not commands.
 
 ### stale
 
@@ -2736,7 +2736,7 @@ is null or a page is empty.
   `api-token` for a token) and the token's name (`-` for a browser session or
   the server).
 - It prints `no history` when there are no events.
-- A local board keeps no history, so the verb exits 1 there.
+- A local board keeps no history, so the command exits 1 there.
 
 ### flow
 
@@ -2748,7 +2748,7 @@ its `history`.
 - It prints `landed N`, then `median M min` and `p90 P min`, in whole minutes
   by the nearest-rank rule. With no landed card it prints only `landed 0`.
 - A Done card with no move into Verify is not counted.
-- A local board keeps no history, so the verb exits 1 there.
+- A local board keeps no history, so the command exits 1 there.
 
 ### show
 
@@ -2810,7 +2810,7 @@ edit takes BOARD:PREFIX in place of --board.
 - A card labelled `needs:human` is refused (exit 1).
 - A text with a line that is exactly `done when:`, `checks:`, `allow:`,
   `tests:` or `files:`, the blocks `show` prints from the card's fields, is
-  refused (exit 1). The outcomes and checks have their own verbs,
+  refused (exit 1). The outcomes and checks have their own commands,
   `dev board outcome` and `dev board checks`.
 - `--board B` replaces the description of the card on the Pomb board named `B`
   from any repo, looked up as `add --board` looks it up. A local board
@@ -2922,8 +2922,8 @@ How a row runs:
   rest as the command and passes only when it exits 1 (a search that found
   nothing). Exit 0 fails the row as a match found, and any other exit fails it
   as an error, so rg's exit 2 never passes.
-- Under a set `DEV_AGENT`, dev refuses a local run of a verb that has a ci job,
-  so a row reads `dev --remote lint` (not `dev lint`).
+- Under a set `DEV_AGENT`, dev refuses a local run of a command that has a ci
+  job, so a row reads `dev --remote lint` (not `dev lint`).
 - Each row may run for `--timeout` seconds (7200 by default, at most 86400,
   anything else is exit 2), counted from the row's start to its end. The wait
   in the ci queue and a job that ci restarts count too.
@@ -3238,7 +3238,7 @@ The result:
 ### land
 
 `dev land [--card CARD] [--wait SECONDS] [--ignore-change-run REASON]` is the
-one land verb, and runners use nothing else. Run in the workspace
+one land command, and runners use nothing else. Run in the workspace
 `dev ws new` made, it reads the card id from the workspace's directory name
 and hands the card to `dev board land`, which does the landing below. A
 workspace whose name is no card on the board is refused and nothing lands. In
@@ -3689,7 +3689,7 @@ Following trunk:
 - On a board that deploys, `land` does not run it. `ship` does.
 - A project `.dev/follow.sh` or `.dev/follow.lua` replaces the built-in for
   `land` and `ship` alike. `dev help follow` and `docs/dev/flags.md`
-  describe the verb.
+  describe the command.
 - It never changes the exit code or the card's column.
 
 ### turn
@@ -3969,7 +3969,7 @@ The move:
   (`Shipped in trunk, commit <12 characters>.`).
 - The landed commit comes from the card's newest land note, in either form:
   `Landed commit <commit> (change <id>) on trunk` from `dev board land`, or
-  `landed <commit> on <remote>/main` from the land verb Pomb ships.
+  `landed <commit> on <remote>/main` from the land command Pomb ships.
 
 The cards left in Release:
 
@@ -4535,9 +4535,10 @@ The dev-tick record:
 - A successful `outcome --tick N` by a named ticker then writes a status note
   `dev-tick: by=NAME outcome=N`, so the ticker's name outlives the tick, which
   Pomb stores only as a done flag. `outcome --convert` writes one for each
-  outcome it ticks. When the note cannot be written the verb exits 1, says the
-  outcome was ticked and queues nothing, even when Pomb is unreachable, and a
-  tick that would have moved the card to Verify leaves it in Review.
+  outcome it ticks. When the note cannot be written the command exits 1,
+  says the outcome was ticked and queues nothing, even when Pomb is
+  unreachable, and a tick that would have moved the card to Verify leaves it in
+  Review.
 - `note` refuses the `dev-tick:` prefix as it does `dev-claim:`.
 - Lint reads these records to keep a card's builder and its verifier apart.
 
@@ -4993,12 +4994,12 @@ Reads:
   picks the list. Each list row carries the card's `owner`, whose `fence` is the
   claim fence, and its `children_total` and `children_done`. Every other read
   keeps the cached `/export-data`. A local board ignores the opts.
-- A single-card verb reads `/api/tasks/WORD` first for a word of at least 8
+- A single-card command reads `/api/tasks/WORD` first for a word of at least 8
   characters that holds only hex digits and dashes. Pomb takes a unique id
-  prefix on that one route and returns the full task, so the verb needs no list
-  and writes with the full id the read returns. A 404 (an unknown or ambiguous
-  prefix, which Pomb does not tell apart), a card on another board or a failed
-  read falls through to the list, which resolves the word and names the
+  prefix on that one route and returns the full task, so the command needs no
+  list and writes with the full id the read returns. A 404 (an unknown or
+  ambiguous prefix, which Pomb does not tell apart), a card on another board or
+  a failed read falls through to the list, which resolves the word and names the
   refusal. A shorter word or one with another character reads only the list.
   The resolved card of an epic whose children are all Done carries no child
   counts, as a card of the export did, so the Done guard asks for its outcomes
@@ -5126,8 +5127,8 @@ Details by step:
 - admin-only colours: Pomb keeps `enabled` admin-only. A 403 on it prints one
   line, ``Left the colours enabled as they are, since this token may not change
   them. This token may not change this board, so run `dev board init --admin`.``
-  The library names the reason and the verb writes the hint. The run carries on
-  instead of exiting 1.
+  The library names the reason and the command writes the hint. The run carries
+  on instead of exiting 1.
 
 Labels are plain strings on cards in Pomb, so `needs:lead` and `needs:human`
 need no creation.
