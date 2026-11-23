@@ -95,7 +95,7 @@ token = "pass:secrets/worker/token/pomb.example.com"
 lead_token = "pass:secrets/lead/token/pomb.example.com"
 reviewer_token = "pass:secrets/reviewer/token/pomb.example.com"
 verifier_token = "pass:secrets/verifier/token/pomb.example.com"
-field_prefix = "dev"
+field_prefix = "runner"
 ```
 
 dev reads `[board.pomb]` from the user file alone, so a repository cannot send
@@ -104,8 +104,8 @@ the token to another server.
 `field_prefix` names the four custom fields dev reads and writes on a Pomb
 board: `checks`, `allow`, `tests` and `files`. It has no default. With it set,
 the key of a field on the wire is the prefix, a dot and the name, so
-`field_prefix = "dev"` gives `dev.checks`, `dev.allow`,
-`dev.tests` and `dev.files`. With it unset the keys are the bare
+`field_prefix = "runner"` gives `runner.checks`, `runner.allow`,
+`runner.tests` and `runner.files`. With it unset the keys are the bare
 names. A local board keeps the bare names whatever the key says.
 
 ## The token
@@ -241,8 +241,8 @@ for itself, and dispatch's own re-mint is a separate matter.
 `dev board status` warns a lead who mints by hand. When a token file expires
 within the hour or has expired, it prints a tokens: line with both counts, and
 prints nothing when both are zero. A file holds no agent name, so the line
-gives counts and never a name or a token. A runner reminting the tokens of the
-runs it spawns is a separate matter that the line does not cover.
+gives counts and never a name or a token. A dispatcher reminting the tokens
+of the runs it spawns is a separate matter that the line does not cover.
 
 ### Closing an epic
 
@@ -346,7 +346,7 @@ works.
     Pomb answers 403 `permission_denied` for `subtasks.delete`, and only the
     lead deletes either, with the lead token. Nobody deletes an outcome from
     Ready on, where outcomes are fixed.
-- runner: preset `work` on its board.
+- a dispatcher: preset `work` on its board.
   - calls: read the board, create and move cards, set fields and labels,
     comment, link, claim, heartbeat and release.
   - deletes: none. Its `init` needs `lead`, which the lead runs.
@@ -364,7 +364,7 @@ A card delete is token policy, not something dev enforces on its own. Only
 the lead decides and does one, and Pomb refuses a `work` token with a 403
 naming `tasks.bin`. A restore from the bin needs only `tasks.edit`.
 
-The calls come from `board/pomb.lua`, a runner's Pomb contract notes and
+The calls come from `board/pomb.lua`, a dispatcher's Pomb contract notes and
 Pomb's permission catalog.
 
 The review found no preset to change. The outcome delete is a Pomb right with
@@ -578,9 +578,9 @@ without a `[board]` section get one from `--name`, an uncommitted change to
 ```
 cd ~/projects/dotfiles && dev board init --admin
 cd ~/src/ci && dev board init --admin --name ci
-cd ~/projects/infra && dev board init --admin --name infra
+cd ~/projects/hosts && dev board init --admin --name hosts
 cd ~/projects/pomb && dev board init --admin --name pomb
-cd ~/projects/demo && dev board init --admin --name demo
+cd ~/projects/runner && dev board init --admin --name runner
 ```
 
 ## Columns, cards and sizes
@@ -1017,7 +1017,7 @@ repeated `--change` adds a bullet line each, and a repeated `--problem`,
 `--out-of-scope` or `--source` is refused.
 
 A card needs a checks row to enter Ready too. The checks live in the board's
-`dev.checks` field, a table with a `run` column, and `add --checks CMD`
+`runner.checks` field, a table with a `run` column, and `add --checks CMD`
 (repeatable) writes one row per command.
 
 - `move CARD ready` refuses a card with no row (exit 1), unless the card has
@@ -1071,21 +1071,21 @@ files it passes when any one lacks the text.
 
 The planner reads the code each Change bullet relies on before filing.
 
-Three more card fields are set the same way. Each replaces the field's
+Three more runner fields are set the same way. Each replaces the field's
 whole value under the claim's fence and is queued while Pomb is unreachable.
 
 A board that lacks the field is refused before any write (exit 1), naming the
 field. The message reads
-`The board has no dev.allow field. Define it on the board first.`
+`The board has no runner.allow field. Define it on the board first.`
 `dev board init` defines none of them.
 
-- `allow CARD WORD...`: sets `dev.allow`, a multiselect, to the JSON array
+- `allow CARD WORD...`: sets `runner.allow`, a multiselect, to the JSON array
   of `test-edits` and `ci-edits` given (duplicates dropped). `allow CARD none`
   sends null to clear it. Any other word, or `none` with another word, is a
   usage error (exit 2).
-- `tests CARD NAME...`: sets `dev.tests`, a multiline text field, to the
+- `tests CARD NAME...`: sets `runner.tests`, a multiline text field, to the
   names joined one per line. A blank name or one holding a line break is exit 2.
-- `files CARD PATH...`: sets `dev.files`, a multiline text field, the same
+- `files CARD PATH...`: sets `runner.files`, a multiline text field, the same
   way.
 
 `show` prints `allow:`, `tests:` and `files:` blocks after `checks:` when set.
@@ -1851,8 +1851,8 @@ A comment does not count when its body begins with a prefix a dev verb writes
 (`dev-check:`, `dev-review:`, `dev-turn:`, `dev-claim:`, `dev-tick:`). A comment
 whose kind is decision does not count either.
 
-A client that posts through the claim's token satisfies the
-check with any text. A card with no claim record for its claimant is not
+A client that posts through the claim's token, such as a dispatcher, satisfies
+the check with any text. A card with no claim record for its claimant is not
 checked. A move after the note releases the claim as before.
 
 The loop stops in four cases:
@@ -2259,7 +2259,7 @@ Outcomes:
 Checks:
 
 - Each `--checks CMD` (repeatable) gives the card one row of the board's checks
-  field `dev.checks`, a table whose `run` column holds the command.
+  field `runner.checks`, a table whose `run` column holds the command.
 - A blank command, or one that `dev board check` would refuse, is exit 2, as
   for `checks`.
 - It sends `POST /api/tasks` with `fields`, and a local card keeps the rows in
@@ -2774,7 +2774,7 @@ The layout, top to bottom:
 - `checks:` and one `- <command>` line per checks row, then a blank line, when
   the card has any.
 - The same for `allow:`, `tests:` and `files:` with one `- <word or name>` line
-  each (the `dev.allow`, `dev.tests` and `dev.files` fields).
+  each (the `runner.allow`, `runner.tests` and `runner.files` fields).
 - A blank line and the comments as `notes` lists them, from
   `GET /api/tasks/{id}/comments`, with every line of each body in full and the
   later lines indented under the first.
@@ -2846,7 +2846,7 @@ While Pomb is unreachable:
 command and prints `set checks <id prefix>, N rows`, or `1 row` for one.
 
 - It sends `PATCH /api/tasks/{id}` with
-  `{"fields":{"dev.checks":[{"run":CMD},...]}}`, with the claim's fence
+  `{"fields":{"runner.checks":[{"run":CMD},...]}}`, with the claim's fence
   when this machine holds one. Pomb merges by key, so the sent rows replace the
   field's whole value.
 - A local board sets the card's `checks` under the same fence rule.
@@ -3773,20 +3773,20 @@ Landing under a hold:
 
 ### allow
 
-`dev board allow CARD WORD...` replaces the card's `dev.allow` field with
+`dev board allow CARD WORD...` replaces the card's `runner.allow` field with
 the JSON array of the words and prints `set allow <id prefix>, <words>`.
 
 - Each word is `test-edits` or `ci-edits`, with duplicates dropped. They are the
   guard rails the card lifts.
 - It sends `PATCH /api/tasks/{id}` with
-  `{"fields":{"dev.allow":["test-edits","ci-edits"]}}`, with the claim's
+  `{"fields":{"runner.allow":["test-edits","ci-edits"]}}`, with the claim's
   fence when this machine holds one.
 - `allow CARD none` sends `null` to clear the field and prints
   `cleared allow <id prefix>`.
 - No word, any other word, or `none` beside another word is exit 2. An unknown
   card is exit 1.
 - A Pomb board without the field is refused before any write with
-  `The board has no dev.allow field. Define it on the board first.`
+  `The board has no runner.allow field. Define it on the board first.`
   (exit 1).
 - Sending the same value twice changes nothing more, so it is queued while Pomb
   is unreachable like `checks`.
@@ -3794,13 +3794,13 @@ the JSON array of the words and prints `set allow <id prefix>, <words>`.
 
 ### tests
 
-`dev board tests CARD NAME...` replaces the card's `dev.tests` field with
+`dev board tests CARD NAME...` replaces the card's `runner.tests` field with
 the names joined by line breaks and prints `set tests <id prefix>, N names`
 (`1 name` for one).
 
-- It sends `PATCH /api/tasks/{id}` with `{"fields":{"dev.tests":"a\nb"}}`,
+- It sends `PATCH /api/tasks/{id}` with `{"fields":{"runner.tests":"a\nb"}}`,
   with the claim's fence when this machine holds one. The field is multiline
-  text, and a runner reads one name per line.
+  text, and a dispatcher reads one name per line.
 - No name, a blank name or a name with a line break is exit 2. An unknown card
   is exit 1.
 - A board without the field is refused before any write, naming it (exit 1).
@@ -3809,7 +3809,7 @@ the names joined by line breaks and prints `set tests <id prefix>, N names`
 
 ### files
 
-`dev board files CARD PATH...` is the same as `tests`, for the `dev.files`
+`dev board files CARD PATH...` is the same as `tests`, for the `runner.files`
 field. It prints `set files <id prefix>, N names` (`1 name` for one).
 
 ### outcome
@@ -5081,12 +5081,12 @@ Details by step:
   of 4 to `/api/boards/{id}/limit-groups`, only when the board has no group. A
   local board gets none.
 - checks field: `GET /api/boards/{id}/fields` lists the keys, and
-  `POST /api/boards/{id}/fields` sends `dev.checks` with the label
+  `POST /api/boards/{id}/fields` sends `runner.checks` with the label
   `Checks`, the kind `table` and `required` true. Its columns are `run` (text,
   required) and `on` (multiselect, optional, with the one option `local`).
   Pomb refuses a multiselect without options, and runner names are set
-  elsewhere. The definition is copied from the dev board. The line is
-  `added the checks field dev.checks`. An existing field never changes,
+  elsewhere. The definition is copied from a dispatcher's board. The line is
+  `added the checks field runner.checks`. An existing field never changes,
   and a local board gets nothing.
 - size words: strip a trailing `(yellow)`, `(green)`, `(blue)`, `(red)` or
   `(red, split)` from every card name with `PATCH /api/tasks/{id}`. The same

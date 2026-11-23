@@ -829,11 +829,11 @@ testing.test("check records why a row failed without a run", function()
 end)
 
 local REFUSED_STUB = table.concat({
-    "echo 'error: the hub is draining since 1m ago by agent:infra: protocol 67 deploy; running jobs finish and nothing new starts until `ci fleet drain off`' >&2",
+    "echo 'error: the hub is draining since 1m ago by agent:ops: protocol 67 deploy; running jobs finish and nothing new starts until `ci fleet drain off`' >&2",
     "exit 1",
 }, "\n")
 local TARGET_STUB = table.concat({
-    "echo 'error: Target linux is draining since 1m ago by agent:infra. Running jobs finish and nothing new starts on it until `ci fleet drain off linux`.' >&2",
+    "echo 'error: Target linux is draining since 1m ago by agent:ops. Running jobs finish and nothing new starts on it until `ci fleet drain off linux`.' >&2",
     "exit 1",
 }, "\n")
 local FAILED_STUB = table.concat({
@@ -841,7 +841,7 @@ local FAILED_STUB = table.concat({
     "exit 1",
 }, "\n")
 local REFUSAL =
-    "the hub is draining since 1m ago by agent:infra: protocol 67 deploy; running jobs finish and nothing new starts until `ci fleet drain off`"
+    "the hub is draining since 1m ago by agent:ops: protocol 67 deploy; running jobs finish and nothing new starts until `ci fleet drain off`"
 
 testing.test("check records no row for a run the hub refused", function()
     local root, home = git_root({ ["stub-ci.sh"] = REFUSED_STUB })
@@ -901,7 +901,7 @@ testing.test("check tells a refused run from a failed one", function()
 end)
 
 local CAP_LINE =
-    "The drain did not lift within 60 minutes. The hub is draining since 1h ago by agent:infra: protocol 67 deploy."
+    "The drain did not lift within 60 minutes. The hub is draining since 1h ago by agent:ops: protocol 67 deploy."
 local CAP_STUB = "echo 'error: " .. CAP_LINE .. "' >&2\nexit 12"
 local EXIT_12_STUB = "echo 'error: something else' >&2\nexit 12"
 local RUN_THEN_12_STUB = "echo 'run 8cb600'\necho 'error: late' >&2\nexit 12"
@@ -2408,7 +2408,7 @@ testing.test("the claimant's note is found by the token that posted the claim", 
     end
     testing.eq(noted(note("agents", "built it")), nil)
     testing.eq(noted(claim), false)
-    testing.eq(noted(claim, note("agents", "[dev agent] done")), true)
+    testing.eq(noted(claim, note("agents", "[runner agent] done")), true)
     testing.eq(noted(note("agents", "early"), claim), false)
     testing.eq(noted(claim, note("other", "built it")), false)
     testing.eq(noted(claim, note("agents", "ruled", DECISION)), false)

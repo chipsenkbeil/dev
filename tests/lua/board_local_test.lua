@@ -29,7 +29,7 @@ local function setup(project)
     assert(
         fs.write(
             home .. "/.config/dev/config.toml",
-            '[board.pomb]\nurl = "https://pomb.example"\nfield_prefix = "dev"\ntoken = "pass:secrets/worker/token/pomb"\n'
+            '[board.pomb]\nurl = "https://pomb.example"\nfield_prefix = "runner"\ntoken = "pass:secrets/worker/token/pomb"\n'
         )
     )
     return root, home
@@ -3357,7 +3357,7 @@ testing.test("a queued checks replaces the rows when Pomb answers again", functi
     assert(fs.remove(root .. "/down"))
     out = pomb_dev(root, home, { "board", "sync" })
     testing.eq(out, "synced checks aaaaaaaa\nsynced\n")
-    testing.ok(fs.read(root .. "/bodies"):find('"dev.checks":[{"run":"dev lint"}]', 1, true))
+    testing.ok(fs.read(root .. "/bodies"):find('"runner.checks":[{"run":"dev lint"}]', 1, true))
 end)
 
 testing.test("a local board stores a card's allow, tests and files and shows them", function()
@@ -3420,9 +3420,9 @@ testing.test("queued allow, tests and files replace the fields when Pomb answers
     out = pomb_dev(root, home, { "board", "sync" })
     testing.eq(out, "synced allow aaaaaaaa\nsynced tests aaaaaaaa\nsynced files aaaaaaaa\nsynced\n")
     local bodies = fs.read(root .. "/bodies")
-    testing.ok(bodies:find('"dev.allow":["test-edits"]', 1, true), bodies)
-    testing.ok(bodies:find('"dev.tests":"one"', 1, true), bodies)
-    testing.ok(bodies:find('"dev.files":"src/a.rs"', 1, true), bodies)
+    testing.ok(bodies:find('"runner.allow":["test-edits"]', 1, true), bodies)
+    testing.ok(bodies:find('"runner.tests":"one"', 1, true), bodies)
+    testing.ok(bodies:find('"runner.files":"src/a.rs"', 1, true), bodies)
 end)
 
 testing.test("a gateway error still queues an edit, which is safe to repeat", function()

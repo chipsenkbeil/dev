@@ -429,24 +429,24 @@ function M.subtasks(outcomes, done)
     return "[" .. table.concat(parts, ",") .. "]"
 end
 
----Build the checks field of an export card from `M.READY_CHECKS`.
+---Build the runner checks field of an export card from `M.READY_CHECKS`.
 ---@return string json the fields object
 function M.ready_fields()
     local runs = {}
     for _, row in ipairs(M.READY_CHECKS) do
         runs[#runs + 1] = '{"run":"' .. row .. '"}'
     end
-    return '{"dev.checks":[' .. table.concat(runs, ",") .. "]}"
+    return '{"runner.checks":[' .. table.concat(runs, ",") .. "]}"
 end
 
----The fields JSON of a Pomb board that defines the four card fields.
-M.FIELDS = '[{"id":"f1","key":"dev.checks","label":"Checks","kind":"table",'
+---The fields JSON of a Pomb board that defines the four runner fields.
+M.FIELDS = '[{"id":"f1","key":"runner.checks","label":"Checks","kind":"table",'
     .. '"options":[],"columns":[],"required":true},'
-    .. '{"id":"f2","key":"dev.allow","label":"Allow","kind":"multiselect",'
+    .. '{"id":"f2","key":"runner.allow","label":"Allow","kind":"multiselect",'
     .. '"options":["test-edits","ci-edits"],"columns":[],"required":false},'
-    .. '{"id":"f3","key":"dev.tests","label":"Tests","kind":"multiline",'
+    .. '{"id":"f3","key":"runner.tests","label":"Tests","kind":"multiline",'
     .. '"options":[],"columns":[],"required":false},'
-    .. '{"id":"f4","key":"dev.files","label":"Files","kind":"multiline",'
+    .. '{"id":"f4","key":"runner.files","label":"Files","kind":"multiline",'
     .. '"options":[],"columns":[],"required":false}]'
 
 ---Shell functions for a fake curl that read tasks from the export fixture.

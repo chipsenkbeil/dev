@@ -141,7 +141,7 @@ The lookup runs in order: the folder `ROOT/<repo>/NAME` for the checkout's own
 folder name, then, from any workspace of the repo including a sibling, the
 folder `jj workspace root --name NAME` lists. The listed folder is taken only
 when it sits directly under a folder of `ROOT`, so a checkout named
-`infra-deploy` removes the workspace at `ROOT/infra/NAME`. The trash entry goes
+`host-setup` removes the workspace at `ROOT/hosts/NAME`. The trash entry goes
 under the folder the workspace sat in. The forget runs with
 `--ignore-working-copy` to keep a stale main checkout from stopping it. A
 failed forget or prune keeps the folder, and the message names the command's

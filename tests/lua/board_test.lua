@@ -43,7 +43,7 @@ local V1 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone\n\n## Don
 local SCAFFOLD = "## Problem\nx\n\n## Change\n\n## Out of scope\n"
 local COMPOSED = "## Problem\nx\n\n## Change\n- x\n\n## Out of scope\ny\n"
 local V2 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone"
-local LEAD_USER = '[board.pomb]\nurl = "https://pomb.example"\nfield_prefix = "dev"\ntoken = "pass:secrets/worker/token/pomb"\n'
+local LEAD_USER = '[board.pomb]\nurl = "https://pomb.example"\nfield_prefix = "runner"\ntoken = "pass:secrets/worker/token/pomb"\n'
     .. 'lead_token = "pass:secrets/lead/token/pomb"\n'
 
 local function executable(path, body)
@@ -2096,10 +2096,10 @@ testing.test(
         testing.eq(cmd_board.run("allow", { "11111111-a", "test-edits", "none" }, backend).code, 2)
         testing.eq(cmd_board.run("allow", { "deadbeef", "none" }, backend).code, 1)
         backend.nofield = true
-        support.with_user_config('[board.pomb]\nfield_prefix = "dev"\n', function()
+        support.with_user_config('[board.pomb]\nfield_prefix = "runner"\n', function()
             local result = cmd_board.run("allow", { "11111111-a", "test-edits" }, backend)
             testing.eq(result.code, 1)
-            testing.ok(result.message:find("no dev.allow field", 1, true), result.message)
+            testing.ok(result.message:find("no runner.allow field", 1, true), result.message)
         end)
         support.with_user_config("", function()
             local result = cmd_board.run("allow", { "11111111-a", "test-edits" }, backend)
@@ -6859,7 +6859,7 @@ local FIRST_CARD = {
     color_id = "yellow-id",
     labels = { "docs" },
     description = "Why it matters.",
-    fields = '{"dev.checks":[{"run":"dev test"},{"on":["local"],"run":"dev lint"}]}',
+    fields = '{"runner.checks":[{"run":"dev test"},{"on":["local"],"run":"dev lint"}]}',
 }
 local function export_with_first_card(first)
     return '{"tasks":['
@@ -6935,7 +6935,7 @@ local function sandbox(opts)
         fs.write(
             home .. "/.config/dev/config.toml",
             opts.user
-                or '[board.pomb]\nurl = "https://pomb.example"\nfield_prefix = "dev"\ntoken = "pass:secrets/worker/token/pomb"\n'
+                or '[board.pomb]\nurl = "https://pomb.example"\nfield_prefix = "runner"\ntoken = "pass:secrets/worker/token/pomb"\n'
         )
     )
     local export = opts.export or EXPORT
@@ -7700,7 +7700,7 @@ local SUBTASKS_CARD = {
     description = "## Problem\\nWhy.\\n\\n## Change\\n- x\\n\\n## Out of scope\\nnone",
     subtasks = '[{"id":"sub-a","name":"A works","done":false},'
         .. '{"id":"sub-b","name":"B works","done":true}]',
-    fields = '{"dev.checks":[{"run":"dev test"}]}',
+    fields = '{"runner.checks":[{"run":"dev test"}]}',
 }
 local function export_with_subtasks_card(card)
     return '{"tasks":['
@@ -8664,7 +8664,7 @@ testing.test("add posts the card to the named column", function()
     testing.eq(code, 0)
     testing.eq(out, "added 11111111 " .. support.COLUMN_NAME.READY .. "\n" .. LINK_A .. "\n")
     local calls = read(root, "calls")
-    testing.ok(calls:find('"fields":{"dev.checks":[{"run":"dev test"}]}', 1, true), calls)
+    testing.ok(calls:find('"fields":{"runner.checks":[{"run":"dev test"}]}', 1, true), calls)
     testing.ok(calls:find("-X POST", 1, true), calls)
     testing.ok(
         calls:find(
@@ -9070,7 +9070,7 @@ testing.test("checks patches the task's checks field whole, with the claim's fen
     local calls = read(root, "calls")
     testing.ok(
         calls:find(
-            '--data-raw {"fields":{"dev.checks":[{"run":"dev lint"},{"run":"dev test"}]}}',
+            '--data-raw {"fields":{"runner.checks":[{"run":"dev lint"},{"run":"dev test"}]}}',
             1,
             true
         ),
@@ -9144,10 +9144,10 @@ testing.test(
         testing.eq(out, "cleared allow 11111111\n")
         local calls = read(root, "calls")
         for _, body in ipairs({
-            '--data-raw {"fields":{"dev.allow":["test-edits","ci-edits"]}}',
-            '--data-raw {"fields":{"dev.tests":"one\\ntests::two"}}',
-            '--data-raw {"fields":{"dev.files":"src/a.rs\\nsrc/b.rs"}}',
-            '--data-raw {"fields":{"dev.allow":null}}',
+            '--data-raw {"fields":{"runner.allow":["test-edits","ci-edits"]}}',
+            '--data-raw {"fields":{"runner.tests":"one\\ntests::two"}}',
+            '--data-raw {"fields":{"runner.files":"src/a.rs\\nsrc/b.rs"}}',
+            '--data-raw {"fields":{"runner.allow":null}}',
         }) do
             testing.ok(calls:find(body, 1, true), calls)
         end
@@ -9162,9 +9162,9 @@ testing.test(
     function()
         local root, home = sandbox({ fields = "[]" })
         for _, case in ipairs({
-            { "allow", "test-edits", "dev.allow" },
-            { "tests", "one", "dev.tests" },
-            { "files", "src/a.rs", "dev.files" },
+            { "allow", "test-edits", "runner.allow" },
+            { "tests", "one", "runner.tests" },
+            { "files", "src/a.rs", "runner.files" },
         }) do
             local out, code = dev(root, home, { "board", case[1], "11111111-a", case[2] })
             testing.eq(code, 1)
@@ -9181,8 +9181,8 @@ testing.test("show prints the allow, tests and files fields a Pomb card holds", 
             name = "First",
             column_id = READY_COLUMN,
             color_id = false,
-            fields = '{"dev.allow":["ci-edits"],'
-                .. '"dev.tests":"one\\ntwo","dev.files":"src/a.rs"}',
+            fields = '{"runner.allow":["ci-edits"],'
+                .. '"runner.tests":"one\\ntwo","runner.files":"src/a.rs"}',
         }) .. "]}",
     })
     local out, code = dev(root, home, { "board", "show", "11111111-a" })
@@ -10700,7 +10700,7 @@ testing.test("take refuses a name that is not one word of the allowed characters
 end)
 
 testing.test("DEV_AGENT shape accepts repo/role and repo/role/card", function()
-    for _, name in ipairs({ "dotfiles/lead", "infra/runner/39f0e015", "a.b_c/d-e/1" }) do
+    for _, name in ipairs({ "dotfiles/lead", "example/runner/39f0e015", "a.b_c/d-e/1" }) do
         local root, home = sandbox({ export = PLANNED_EXPORT })
         local out, code = dev(root, home, { "board", "take", "11111111-a" }, { agent = name })
         testing.eq(code, 0, out)

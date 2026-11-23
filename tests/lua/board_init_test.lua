@@ -716,7 +716,7 @@ local STANDARD_LABELS = '{"highlights":[{"label":"needs:human","color":"#b8461f"
     .. '{"label":"needs:lead","color":"#2f6fab"},{"label":"needs:planner","color":"#7a5ab0"}],'
     .. '"show_all":false,"added":[]}'
 
-local FIELDS = '[{"id":"f1","key":"dev.checks","label":"Checks","kind":"table",'
+local FIELDS = '[{"id":"f1","key":"runner.checks","label":"Checks","kind":"table",'
     .. '"options":[],"columns":[],"required":true}]'
 
 local EXPORT = '{"tasks":['
@@ -844,7 +844,7 @@ local function sandbox(opts)
         fs.write(
             home .. "/.config/dev/config.toml",
             opts.user
-                or '[board.pomb]\nurl = "https://pomb.example"\nfield_prefix = "dev"\n'
+                or '[board.pomb]\nurl = "https://pomb.example"\nfield_prefix = "runner"\n'
                     .. 'lead_token = "pass:secrets/lead/token/pomb"\n'
         )
     )
@@ -1216,15 +1216,15 @@ testing.test("init on Pomb posts a landing turn card only when no open one exist
     testing.eq(posts('{"tasks":[' .. done .. "]}"), 1)
 end)
 
-testing.test("init defines the checks field once with the dev definition", function()
+testing.test("init defines the checks field once with the runner definition", function()
     local root, home, tmp = sandbox({ fields = "[]" })
     local out, code = dev(root, home, tmp, { "board", "init" })
     testing.eq(code, 0, out)
-    testing.eq(out, UNCHANGED .. "added the checks field dev.checks\nboard demo: 1 change\n")
+    testing.eq(out, UNCHANGED .. "added the checks field runner.checks\nboard demo: 1 change\n")
     local body = '{"columns":[{"key":"run","kind":"text","label":"Run",'
         .. '"options":[],"required":true},'
         .. '{"key":"on","kind":"multiselect","label":"On","options":["local"],"required":false}],'
-        .. '"key":"dev.checks","kind":"table","label":"Checks","required":true}'
+        .. '"key":"runner.checks","kind":"table","label":"Checks","required":true}'
     testing.ok(
         calls_of(root):find(
             "--data-raw " .. body .. " https://pomb.example/api/boards/board-1/fields",

@@ -175,7 +175,7 @@ local function sandbox(opts)
     assert(
         fs.write(
             home .. "/.config/dev/config.toml",
-            '[board.pomb]\nurl = "https://pomb.example"\nfield_prefix = "dev"\ntoken = "pass:secrets/worker/token/pomb"\n'
+            '[board.pomb]\nurl = "https://pomb.example"\nfield_prefix = "runner"\ntoken = "pass:secrets/worker/token/pomb"\n'
                 .. 'lead_token = "pass:secrets/lead/token/pomb"\n'
         )
     )
