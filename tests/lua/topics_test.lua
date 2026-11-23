@@ -29,7 +29,7 @@ local function problems(root)
     return out
 end
 
-testing.test("a topic naming a missing verb is reported at its line", function()
+testing.test("a topic naming a missing command is reported at its line", function()
     local root = project({ ["topics/a.md"] = "# a: A topic\n\nSee `dev nope` here.\n" })
     testing.eq(problems(root), { ".dev/topics/a.md:3: `dev nope`: no command nope" })
     fs.remove(root, { recursive = true })
@@ -38,13 +38,13 @@ end)
 testing.test("a fenced command is checked, a placeholder and a global flag are not", function()
     local root = project({
         ["topics/a.md"] = "# a: A topic\n\n```\ndev -vv --remote lint\ndev -C some/dir lint\n"
-            .. "dev <verb> --x\ndev nope\n```\n",
+            .. "dev <command> --x\ndev nope\n```\n",
     })
     testing.eq(problems(root), { ".dev/topics/a.md:7: no command nope" })
     fs.remove(root, { recursive = true })
 end)
 
-testing.test("a flag the verb does not list and a missing subcommand are reported", function()
+testing.test("a flag the command does not list and a missing subcommand are reported", function()
     local root = project({
         ["topics/a.md"] = "# a: A topic\n\n`dev help --nope`\n`dev tools nope`\n`dev help -a`\n"
             .. "`dev box ls [--all] --x=1`\n",
@@ -57,7 +57,7 @@ testing.test("a flag the verb does not list and a missing subcommand are reporte
     fs.remove(root, { recursive = true })
 end)
 
-testing.test("a bad first line and a topic named like a verb are reported", function()
+testing.test("a bad first line and a topic named like a command are reported", function()
     local root = project({
         ["topics/a.md"] = "# b: Wrong name\n",
         ["topics/lint.md"] = "# lint: A topic\n",
@@ -82,7 +82,7 @@ testing.test("a script that declares -h or --help is reported", function()
     fs.remove(root, { recursive = true })
 end)
 
-testing.test("a project verb's declared flags are accepted in a topic", function()
+testing.test("a project command's declared flags are accepted in a topic", function()
     local root = project({
         ["a.sh"] = "#!/usr/bin/env bash\n# A.\n# flags: --ok\n",
         ["topics/b.md"] = "# b: A topic\n\n`dev a --ok` and `dev a --bad`\n",
@@ -111,7 +111,7 @@ testing.test("a .lua script that declares -h in its flags line is reported", fun
     fs.remove(root, { recursive = true })
 end)
 
-testing.test("built-in topics are not checked against another project's verbs", function()
+testing.test("built-in topics are not checked against another project's commands", function()
     local root = project({ ["topics/b.md"] = "# b: A topic\n\n`dev nope`\n" })
     local reg = registry.load(root, { warn = function() end })
     for _, found in ipairs(topics.check(reg)) do

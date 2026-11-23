@@ -862,7 +862,7 @@ testing.test("turn stops on a failed renewal that leaves the hold in place", fun
         return claim(self, ...)
     end
 
-    -- Run the turn verb and expect the renewal's message with no second take
+    -- Run the turn command and expect the renewal's message with no second take
     local result
     as_agent("alpha", function()
         result = cmd_board.run("turn", { short, "--wait", "600" }, backend)
@@ -890,7 +890,7 @@ testing.test("a failed renewal of a hold that is gone takes the turn again", fun
         return claim(self, ...)
     end
 
-    -- Run the turn verb and expect a fresh hold with a new fence
+    -- Run the turn command and expect a fresh hold with a new fence
     local result
     as_agent("alpha", function()
         result = cmd_board.run("turn", { short, "--wait", "60" }, backend)
@@ -1154,7 +1154,7 @@ testing.test("a holder whose live claim outran its hold note releases the claim"
     testing.eq(turn.claimed(backend, "alpha", short), nil)
 end)
 
-testing.test("a failed release through the turn verb prints one sentence", function()
+testing.test("a failed release through the turn command prints one sentence", function()
     -- Open a board, reclaim its landing card and fail the release
     local backend = backend_at(board_home())
     local _, short = landing_card(backend)

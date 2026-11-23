@@ -162,8 +162,8 @@ end)
 
 testing.test("an unknown kernel has no package manager to use", function()
     local dir = sandbox()
-    for _, verb in ipairs({ "check", "install" }) do
-        local out, code = run(dir, "Plan9", "x86_64", { verb })
+    for _, command in ipairs({ "check", "install" }) do
+        local out, code = run(dir, "Plan9", "x86_64", { command })
         testing.eq(code, 1)
         testing.eq(out, "No supported package manager is detected on this OS.\n")
     end

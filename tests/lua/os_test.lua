@@ -9,9 +9,9 @@ local MAIN = REPO .. "/dotfiles/bin/.local/share/dev/main.lua"
 local LAUNCHER = REPO .. "/dotfiles/bin/.local/bin/dev"
 local WAIT_TICKS = 100
 local VERB_WAIT_TICKS = 300
-local VERB_POLL_SECS = 0.1
+local COMMAND_POLL_SECS = 0.1
 local WAIT_POLL_SECS = "0.1"
-local CLEANUP_VERB = "-- Register a cleanup.\n"
+local CLEANUP_COMMAND = "-- Register a cleanup.\n"
     .. [[
 local dev_os = require("dev.os")
 local dir = os.getenv("CLEANUP_DIR")
@@ -21,7 +21,7 @@ dev_os.on_exit(function()
     file:close()
 end)
 ]]
-local WAIT_VERB = CLEANUP_VERB
+local WAIT_COMMAND = CLEANUP_COMMAND
     .. string.format(
         [[
 assert(io.open(dir .. "/ready", "w")):close()
@@ -31,7 +31,7 @@ end
 return 0
 ]],
         VERB_WAIT_TICKS,
-        VERB_POLL_SECS
+        COMMAND_POLL_SECS
     )
 local SIGNAL_SCRIPT = [[
 cd "$1" || exit 97
@@ -806,29 +806,29 @@ local function kill_child(root, signal)
     return code
 end
 
-testing.test("a verb killed by SIGTERM runs its cleanup once and exits 143", function()
-    local root = cleanup_project(WAIT_VERB)
+testing.test("a command killed by SIGTERM runs its cleanup once and exits 143", function()
+    local root = cleanup_project(WAIT_COMMAND)
     testing.eq(kill_child(root, "TERM"), 143)
     testing.eq(ran(root), "cleanup\n")
     fs.remove(root, { recursive = true })
 end)
 
-testing.test("a verb killed by SIGHUP runs its cleanup once and exits 129", function()
-    local root = cleanup_project(WAIT_VERB)
+testing.test("a command killed by SIGHUP runs its cleanup once and exits 129", function()
+    local root = cleanup_project(WAIT_COMMAND)
     testing.eq(kill_child(root, "HUP"), 129)
     testing.eq(ran(root), "cleanup\n")
     fs.remove(root, { recursive = true })
 end)
 
-testing.test("a verb interrupted by SIGINT runs its cleanup once and exits 130", function()
-    local root = cleanup_project(WAIT_VERB)
+testing.test("a command interrupted by SIGINT runs its cleanup once and exits 130", function()
+    local root = cleanup_project(WAIT_COMMAND)
     testing.eq(kill_child(root, "INT"), 130)
     testing.eq(ran(root), "cleanup\n")
     fs.remove(root, { recursive = true })
 end)
 
 testing.test("a Lua error runs the cleanup once", function()
-    local root = cleanup_project(CLEANUP_VERB .. 'error("boom")\n')
+    local root = cleanup_project(CLEANUP_COMMAND .. 'error("boom")\n')
     local _, code = dev_os.capture({ "luajit", MAIN, "term" }, {
         cwd = root,
         stderr = "stdout",
@@ -840,7 +840,7 @@ testing.test("a Lua error runs the cleanup once", function()
 end)
 
 testing.test("a normal exit runs the cleanup once", function()
-    local root = cleanup_project(CLEANUP_VERB .. "return 4\n")
+    local root = cleanup_project(CLEANUP_COMMAND .. "return 4\n")
     local out, code = dev_os.capture({ "luajit", MAIN, "term" }, {
         cwd = root,
         stderr = "stdout",

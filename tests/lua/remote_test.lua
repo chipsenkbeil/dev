@@ -178,7 +178,7 @@ testing.test("--remote --priority puts --priority before the double dash", funct
     testing.ok(not log:find("--priority", 1, true), log)
 end)
 
-testing.test("a noun and its subcommand are one job named with a hyphen", function()
+testing.test("a parent command and its subcommand are one job named with a hyphen", function()
     local root, base = setup({ ["widget/save.sh"] = "#!/usr/bin/env bash\ntrue\n" })
     local _, _, log = dev(root, base, { "--remote", "widget", "save" })
     testing.ok(log:find("[--job] [widget-save]", 1, true), log)
@@ -230,7 +230,7 @@ testing.test(
     end
 )
 
-testing.test("a verb with no job exits 1 and runs nothing", function()
+testing.test("a command with no job exits 1 and runs nothing", function()
     local root, base = setup()
     local out, code, log = dev(root, base, { "--remote", "build" })
     testing.eq(code, 1)
@@ -241,7 +241,7 @@ testing.test("a verb with no job exits 1 and runs nothing", function()
     testing.eq(log, "")
 end)
 
-testing.test("a machine-local verb is refused with the mockup text", function()
+testing.test("a machine-local command is refused with the mockup text", function()
     local root, base = setup()
     for _, words in ipairs({ { "fetch" }, { "box", "ls" }, { "tools", "check" } }) do
         local args = { "--remote" }
@@ -322,17 +322,20 @@ testing.test("CI=true or a box marker runs here, whatever the flags and default"
     testing.eq(log, "")
 end)
 
-testing.test("commands without a job and machine-local verbs run here under the default", function()
-    local root, base = setup({ ["hello.sh"] = "#!/usr/bin/env bash\necho hi\n" })
-    local out, code, log = dev(root, base, { "hello" })
-    testing.eq(out, "hi\n")
-    testing.eq(code, 0)
-    testing.eq(log, "")
-    out, code, log = dev(root, base, { "board", "status" })
-    testing.eq(log, "")
-    testing.eq(out, "This project has no board.\n")
-    testing.eq(code, 1)
-end)
+testing.test(
+    "commands without a job and machine-local commands run here under the default",
+    function()
+        local root, base = setup({ ["hello.sh"] = "#!/usr/bin/env bash\necho hi\n" })
+        local out, code, log = dev(root, base, { "hello" })
+        testing.eq(out, "hi\n")
+        testing.eq(code, 0)
+        testing.eq(log, "")
+        out, code, log = dev(root, base, { "board", "status" })
+        testing.eq(log, "")
+        testing.eq(out, "This project has no board.\n")
+        testing.eq(code, 1)
+    end
+)
 
 testing.test("without ci on PATH the default fails with the --local hint", function()
     local root, base = setup({ ["hello.sh"] = "#!/usr/bin/env bash\necho hi\n" })
@@ -471,7 +474,7 @@ testing.test("a __remote.lua that returns a non-integer ends with one line and e
     end
 end)
 
-testing.test("-- before the verb or noun still names the job", function()
+testing.test("-- before the command or parent command still names the job", function()
     local root, base = setup({ ["widget/save.sh"] = "#!/usr/bin/env bash\ntrue\n" })
     local _, code, log = dev(root, base, { "--remote", "--", "test", "a" })
     testing.eq(code, 0)
@@ -483,7 +486,7 @@ testing.test("-- before the verb or noun still names the job", function()
     testing.ok(log:find("[--job] [widget-save] [--]", 1, true), log)
 end)
 
-testing.test("-- before a machine-local noun is still refused", function()
+testing.test("-- before a machine-local parent command is still refused", function()
     local root, base = setup()
     local out, code, log = dev(root, base, { "--remote", "--", "box", "ls" })
     testing.eq(code, 2)
@@ -575,12 +578,15 @@ testing.test("the project's __remote.lua keeps -v and -vv for the ci echo", func
     testing.ok(not out:find("+ ci", 1, true), out)
 end)
 
-testing.test("a noun nested two deep is one job with a hyphen between each word", function()
-    local root, base = setup({ ["n/m/x.sh"] = "#!/usr/bin/env bash\ntrue\n" })
-    local _, code, log = dev(root, base, { "--remote", "n", "m", "x" })
-    testing.eq(code, 0)
-    testing.ok(log:find("[--job] [n-m-x]", 1, true), log)
-end)
+testing.test(
+    "a parent command nested two deep is one job with a hyphen between each word",
+    function()
+        local root, base = setup({ ["n/m/x.sh"] = "#!/usr/bin/env bash\ntrue\n" })
+        local _, code, log = dev(root, base, { "--remote", "n", "m", "x" })
+        testing.eq(code, 0)
+        testing.ok(log:find("[--job] [n-m-x]", 1, true), log)
+    end
+)
 
 testing.test("DEV_REMOTE=0 runs here under the default and --remote still wins", function()
     local root, base = setup()
@@ -590,22 +596,25 @@ testing.test("DEV_REMOTE=0 runs here under the default and --remote still wins",
     testing.ok(log:find("[--job] [test]", 1, true), log)
 end)
 
-testing.test("a # local header keeps a verb with a same-named job here until --remote", function()
-    local root, base = setup({
-        ["test.sh"] = "#!/usr/bin/env bash\n# Run the tests.\n# local\necho ran-local\n",
-    })
-    local out, code, log = dev(root, base, { "test" })
-    testing.eq(out, "ran-local\n")
-    testing.eq(code, 0)
-    testing.eq(log, "")
-    _, _, log = dev(root, base, { "test", "--remote" })
-    testing.ok(log:find("[--job] [test]", 1, true), log)
-    out = dev(root, base, { "help", "test" })
-    testing.ok(out:find("runs here under the remote default", 1, true), out)
-    testing.ok(not out:find("# local", 1, true), out)
-end)
+testing.test(
+    "a # local header keeps a command with a same-named job here until --remote",
+    function()
+        local root, base = setup({
+            ["test.sh"] = "#!/usr/bin/env bash\n# Run the tests.\n# local\necho ran-local\n",
+        })
+        local out, code, log = dev(root, base, { "test" })
+        testing.eq(out, "ran-local\n")
+        testing.eq(code, 0)
+        testing.eq(log, "")
+        _, _, log = dev(root, base, { "test", "--remote" })
+        testing.ok(log:find("[--job] [test]", 1, true), log)
+        out = dev(root, base, { "help", "test" })
+        testing.ok(out:find("runs here under the remote default", 1, true), out)
+        testing.ok(not out:find("# local", 1, true), out)
+    end
+)
 
-testing.test("a verb script without # local keeps routing to its job", function()
+testing.test("a command script without # local keeps routing to its job", function()
     local root, base =
         setup({ ["test.sh"] = "#!/usr/bin/env bash\n# Run the tests.\necho ran-local\n" })
     local out, _, log = dev(root, base, { "test" })
@@ -614,7 +623,7 @@ testing.test("a verb script without # local keeps routing to its job", function(
 end)
 
 testing.test(
-    "# local also works in a Lua header and a noun subcommand, and shows under -h",
+    "# local also works in a Lua header and a parent command subcommand, and shows under -h",
     function()
         local root, base = setup({
             ["widget/save.lua"] = "--[[\nSave it.\nlocal\n]]\nprint('ran-lua')\n",
@@ -740,20 +749,23 @@ local FETCH_LOG = "ci -C %s [run] [client] [--local] [--detach] [--job] [client:
     .. "ci -C %s [ps] [--json]\n"
     .. "ci -C %s [cp] [123abc:client.2.%s/ci] [--force]\n"
 
-testing.test("a fetch verb run remote runs here with the pulled file for this platform", function()
-    local root, base = fetch_setup()
-    local expected =
-        FETCH_LOG:format(root, "macos-vm-rust", "aarch64", root, root, root, "macos-vm-rust")
-    for _, args in ipairs({ { "show" }, { "--remote", "show" } }) do
-        local out, code, log = dev(root, base, args)
-        testing.eq(code, 0, out)
-        testing.ok(out:find("fetched=/", 1, true), out)
-        testing.ok(out:find("binary", 1, true), out)
-        testing.eq(log, expected)
+testing.test(
+    "a fetch command run remote runs here with the pulled file for this platform",
+    function()
+        local root, base = fetch_setup()
+        local expected =
+            FETCH_LOG:format(root, "macos-vm-rust", "aarch64", root, root, root, "macos-vm-rust")
+        for _, args in ipairs({ { "show" }, { "--remote", "show" } }) do
+            local out, code, log = dev(root, base, args)
+            testing.eq(code, 0, out)
+            testing.ok(out:find("fetched=/", 1, true), out)
+            testing.ok(out:find("binary", 1, true), out)
+            testing.eq(log, expected)
+        end
     end
-end)
+)
 
-testing.test("a fetch verb picks the target for this host's OS and architecture", function()
+testing.test("a fetch command picks the target for this host's OS and architecture", function()
     local root, base = fetch_setup()
     local out, code, log = dev(
         root,
@@ -768,7 +780,7 @@ testing.test("a fetch verb picks the target for this host's OS and architecture"
     )
 end)
 
-testing.test("a fetch verb under --local or default local runs here with no fetch", function()
+testing.test("a fetch command under --local or default local runs here with no fetch", function()
     local root, base = fetch_setup()
     local runs = {
         { args = { "--local", "show" }, env = {} },
@@ -787,7 +799,7 @@ testing.test("a fetch verb under --local or default local runs here with no fetc
     testing.eq(log, "")
 end)
 
-testing.test("a fetch verb on a platform with no target names it and hints --local", function()
+testing.test("a fetch command on a platform with no target names it and hints --local", function()
     local root, base = fetch_setup()
     local out, code, log = dev(root, base, { "show" }, { UNAME_STUB = "Windows x86_64" })
     testing.eq(code, 1)
@@ -796,7 +808,7 @@ testing.test("a fetch verb on a platform with no target names it and hints --loc
     testing.ok(not log:find("[--detach]", 1, true), log)
 end)
 
-testing.test("a fetch verb fails and names the run when the job does not pass", function()
+testing.test("a fetch command fails and names the run when the job does not pass", function()
     local root, base = fetch_setup()
     local out, code = dev(root, base, { "show" }, { CI_STUB_STATUS = "failed" })
     testing.eq(code, 1)
@@ -824,7 +836,7 @@ local function patch_setup(patch)
 end
 
 testing.test(
-    "a patch verb run remote applies the pulled patch and never runs the script",
+    "a patch command run remote applies the pulled patch and never runs the script",
     function()
         local root, base, env = patch_setup(PATCH_TEXT)
         local expected = PATCH_LOG:format(root, root, root, root)
@@ -839,7 +851,7 @@ testing.test(
     end
 )
 
-testing.test("a patch verb leaves every file untouched on an empty patch", function()
+testing.test("a patch command leaves every file untouched on an empty patch", function()
     local root, base, env = patch_setup("")
     local out, code = dev(root, base, { "fmt" }, env)
     testing.eq(code, 0, out)
@@ -848,7 +860,7 @@ testing.test("a patch verb leaves every file untouched on an empty patch", funct
 end)
 
 testing.test(
-    "a patch verb that does not apply changes nothing and names the run and patch",
+    "a patch command that does not apply changes nothing and names the run and patch",
     function()
         local first = "--- a/b.txt\n+++ b/b.txt\n@@ -1 +1 @@\n-old\n+new\n"
         local root, base, env = patch_setup(first .. PATCH_TEXT)
@@ -863,7 +875,7 @@ testing.test(
     end
 )
 
-testing.test("a patch verb on a ci job or in a box runs here with no ci call", function()
+testing.test("a patch command on a ci job or in a box runs here with no ci call", function()
     local root, base, env = patch_setup(PATCH_TEXT)
     assert(fs.write(base .. "/box", "name=x\n"))
     local marker = { DEV_BOX_MARKER = base .. "/box" }
@@ -876,7 +888,7 @@ testing.test("a patch verb on a ci job or in a box runs here with no ci call", f
     end
 end)
 
-testing.test("a patch verb shows its help under --remote and applies nothing", function()
+testing.test("a patch command shows its help under --remote and applies nothing", function()
     local root, base, env = patch_setup(PATCH_TEXT)
     local out, code, log = dev(root, base, { "--remote", "fmt", "-h" }, env)
     testing.eq(code, 0, out)
@@ -885,7 +897,7 @@ testing.test("a patch verb shows its help under --remote and applies nothing", f
     testing.eq(fs.read(root .. "/a.txt"), "old\n")
 end)
 
-testing.test("a patch verb under --local or default local runs here with no ci call", function()
+testing.test("a patch command under --local or default local runs here with no ci call", function()
     local root, base, env = patch_setup(PATCH_TEXT)
     local runs = {
         { args = { "--local", "fmt" }, env = env },

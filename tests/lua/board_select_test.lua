@@ -82,22 +82,26 @@ testing.test("a file that is not a Lua module leaves the map unsure", function()
 end)
 
 testing.test("a change that touches a non-Lua file runs the whole suite", function()
-    for _, path in ipairs({ "src/main.rs", "Cargo.toml", ".dev/verb.lua", ".dev/__helper.sh" }) do
+    local paths = { "src/main.rs", "Cargo.toml", ".dev/command.lua", ".dev/__helper.sh" }
+    for _, path in ipairs(paths) do
         testing.eq(board_select.pick(sources(), { LIB .. "text.lua", path }), nil)
         testing.eq(board_select.pick(sources(), { path }), nil)
     end
 end)
 
-testing.test("a module a verb loads leaves the map unsure, directly or through another", function()
-    local all = sources()
-    all[".dev/bump.lua"] = 'local fs = require("dev.fs")'
-    testing.eq(board_select.pick(all, { LIB .. "fs.lua" }), nil)
-    all[".dev/bump.lua"] = 'local board = require("dev.board")'
-    testing.eq(board_select.pick(all, { LIB .. "fs.lua" }), nil)
-    testing.eq(board_select.pick(all, { LIB .. "board.lua" }), nil)
-end)
+testing.test(
+    "a module a command loads leaves the map unsure, directly or through another",
+    function()
+        local all = sources()
+        all[".dev/bump.lua"] = 'local fs = require("dev.fs")'
+        testing.eq(board_select.pick(all, { LIB .. "fs.lua" }), nil)
+        all[".dev/bump.lua"] = 'local board = require("dev.board")'
+        testing.eq(board_select.pick(all, { LIB .. "fs.lua" }), nil)
+        testing.eq(board_select.pick(all, { LIB .. "board.lua" }), nil)
+    end
+)
 
-testing.test("a module a verb does not reach still picks its suites", function()
+testing.test("a module a command does not reach still picks its suites", function()
     local all = sources()
     all[".dev/bump.lua"] = 'local fs = require("dev.fs")'
     testing.eq(board_select.pick(all, { LIB .. "text.lua" }), { "tests/lua/text_test.lua" })

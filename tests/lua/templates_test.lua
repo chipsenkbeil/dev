@@ -213,7 +213,7 @@ testing.test("render keeps the project's text below the deny.toml and lint.lua m
     fs.remove(root, { recursive = true })
 end)
 
-testing.test("line 2 of every lint template verb ends in a period", function()
+testing.test("line 2 of every lint template command ends in a period", function()
     for _, kind in ipairs({ Kind.LUA, Kind.RUST }) do
         local dir = assert(templates.dir(kind), "no template dir")
         for _, name in ipairs(assert(fs.list(dir))) do
@@ -307,7 +307,7 @@ local function has(list, name)
     return false
 end
 
-testing.test("the manifest names Lua verbs and the shared library for both sets", function()
+testing.test("the manifest names Lua commands and the shared library for both sets", function()
     local rust = dests(assert(templates.dir(Kind.RUST), "no template dir"), Kind.RUST)
     for _, name in ipairs({ ".dev/lint.lua", ".dev/fmt.lua", ".dev/test.lua" }) do
         testing.ok(has(rust, name), name)
@@ -324,7 +324,7 @@ testing.test("the manifest names Lua verbs and the shared library for both sets"
     end
 end)
 
-testing.test("skip_pending leaves a verb whose bash file has no Lua verb", function()
+testing.test("skip_pending leaves a command whose bash file has no Lua command", function()
     local root = support.sandbox({ [".dev/lint.sh"] = "#!/bin/sh\n", [".dev/fmt.lua"] = "" }, {})
     local entries = templates.manifest(assert(templates.dir(Kind.LUA), "no template dir"), Kind.LUA)
     local kept, pending = templates.skip_pending(root, entries)
@@ -339,7 +339,7 @@ testing.test("skip_pending leaves a verb whose bash file has no Lua verb", funct
     fs.remove(root, { recursive = true })
 end)
 
-testing.test("skip_pending drops the shared library when every verb is pending", function()
+testing.test("skip_pending drops the shared library when every command is pending", function()
     local root = support.sandbox({ [".dev/lint.sh"] = "", [".dev/fmt.sh"] = "" }, {})
     local entries = templates.manifest(assert(templates.dir(Kind.LUA), "no template dir"), Kind.LUA)
     local kept, pending = templates.skip_pending(root, entries)
@@ -351,7 +351,7 @@ testing.test("skip_pending drops the shared library when every verb is pending",
 end)
 
 testing.test(
-    "a rendered lint verb keeps the project's checks and renders the template unchanged",
+    "a rendered lint command keeps the project's checks and renders the template unchanged",
     function()
         local dir = assert(templates.dir(Kind.RUST), "no template dir")
         local template = assert(fs.read(dir .. "/lint.lua"), "read failed")
@@ -376,7 +376,7 @@ local function synced()
     return root
 end
 
-testing.test("sync writes Lua verbs and no shell file, and a second check is clean", function()
+testing.test("sync writes Lua commands and no shell file, and a second check is clean", function()
     local root = synced()
     testing.ok(fs.is_file(root .. "/.dev/lint.lua"))
     testing.ok(fs.is_file(root .. "/.dev/fmt.lua"))
@@ -407,47 +407,53 @@ testing.test("a project's checks below the marker survive a sync", function()
     fs.remove(root, { recursive = true })
 end)
 
-testing.test("a project still on bash verbs passes sync --check and gets no Lua verb", function()
-    local root = synced()
-    fs.remove(root .. "/.dev/lint.lua")
-    fs.remove(root .. "/.dev/fmt.lua")
-    fs.remove(root .. "/.dev/lua/lintset.lua")
-    assert(fs.write(root .. "/.dev/lint.sh", "#!/bin/sh\n"), "fixture setup failed")
-    assert(fs.write(root .. "/.dev/fmt.sh", "#!/bin/sh\n"), "fixture setup failed")
-    local out, code = support.dev(root, { "sync", "--check" })
-    testing.ok(code == 0, out)
-    testing.ok(out:find("pending: .dev/lint.sh, .dev/fmt.sh", 1, true), out)
-    out, code = support.dev(root, { "sync", "--yes" })
-    testing.ok(code == 0, out)
-    testing.ok(not fs.exists(root .. "/.dev/lint.lua"))
-    testing.ok(not fs.exists(root .. "/.dev/fmt.lua"))
-    testing.ok(not fs.exists(root .. "/.dev/lua/lintset.lua"))
-    fs.remove(root .. "/.dev/lint.sh")
-    out, code = support.dev(root, { "sync", "--yes" })
-    testing.ok(code == 0, out)
-    testing.ok(not fs.exists(root .. "/.dev/lint.lua"))
-    fs.remove(root .. "/.dev/fmt.sh")
-    out, code = support.dev(root, { "sync", "--yes" })
-    testing.ok(code == 0, out)
-    testing.ok(fs.is_file(root .. "/.dev/lint.lua"))
-    testing.ok(fs.is_file(root .. "/.dev/fmt.lua"))
-    fs.remove(root, { recursive = true })
-end)
-
-testing.test("skip_pending holds every missing Rust verb while lint.sh and fmt.sh exist", function()
-    local root = support.sandbox({ [".dev/lint.sh"] = "", [".dev/fmt.sh"] = "" }, {})
-    local entries =
-        templates.manifest(assert(templates.dir(Kind.RUST), "no template dir"), Kind.RUST)
-    local kept, pending = templates.skip_pending(root, entries)
-    testing.eq(pending, { ".dev/lint.sh", ".dev/fmt.sh" })
-    for _, entry in ipairs(kept) do
-        testing.ok(not entry.dest:find("^%.dev/[^/]+%.lua$"), entry.dest)
-        testing.ok(entry.dest ~= ".dev/lua/lintset.lua", entry.dest)
+testing.test(
+    "a project still on bash commands passes sync --check and gets no Lua command",
+    function()
+        local root = synced()
+        fs.remove(root .. "/.dev/lint.lua")
+        fs.remove(root .. "/.dev/fmt.lua")
+        fs.remove(root .. "/.dev/lua/lintset.lua")
+        assert(fs.write(root .. "/.dev/lint.sh", "#!/bin/sh\n"), "fixture setup failed")
+        assert(fs.write(root .. "/.dev/fmt.sh", "#!/bin/sh\n"), "fixture setup failed")
+        local out, code = support.dev(root, { "sync", "--check" })
+        testing.ok(code == 0, out)
+        testing.ok(out:find("pending: .dev/lint.sh, .dev/fmt.sh", 1, true), out)
+        out, code = support.dev(root, { "sync", "--yes" })
+        testing.ok(code == 0, out)
+        testing.ok(not fs.exists(root .. "/.dev/lint.lua"))
+        testing.ok(not fs.exists(root .. "/.dev/fmt.lua"))
+        testing.ok(not fs.exists(root .. "/.dev/lua/lintset.lua"))
+        fs.remove(root .. "/.dev/lint.sh")
+        out, code = support.dev(root, { "sync", "--yes" })
+        testing.ok(code == 0, out)
+        testing.ok(not fs.exists(root .. "/.dev/lint.lua"))
+        fs.remove(root .. "/.dev/fmt.sh")
+        out, code = support.dev(root, { "sync", "--yes" })
+        testing.ok(code == 0, out)
+        testing.ok(fs.is_file(root .. "/.dev/lint.lua"))
+        testing.ok(fs.is_file(root .. "/.dev/fmt.lua"))
+        fs.remove(root, { recursive = true })
     end
-    fs.remove(root, { recursive = true })
-end)
+)
 
-testing.test("a Rust project on bash verbs without test.sh passes sync --check", function()
+testing.test(
+    "skip_pending holds every missing Rust command while lint.sh and fmt.sh exist",
+    function()
+        local root = support.sandbox({ [".dev/lint.sh"] = "", [".dev/fmt.sh"] = "" }, {})
+        local entries =
+            templates.manifest(assert(templates.dir(Kind.RUST), "no template dir"), Kind.RUST)
+        local kept, pending = templates.skip_pending(root, entries)
+        testing.eq(pending, { ".dev/lint.sh", ".dev/fmt.sh" })
+        for _, entry in ipairs(kept) do
+            testing.ok(not entry.dest:find("^%.dev/[^/]+%.lua$"), entry.dest)
+            testing.ok(entry.dest ~= ".dev/lua/lintset.lua", entry.dest)
+        end
+        fs.remove(root, { recursive = true })
+    end
+)
+
+testing.test("a Rust project on bash commands without test.sh passes sync --check", function()
     if not dev_os.which("yq") then
         testing.ok(os.getenv("CI") ~= "true", "yq is not installed on ci")
         print("skip - yq is not installed")

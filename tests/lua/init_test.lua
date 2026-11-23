@@ -456,7 +456,7 @@ testing.test("init treats an empty --type and --name as unset", function()
     fs.remove(root, { recursive = true })
 end)
 
-testing.test("init leaves a project on bash verbs without Lua verbs", function()
+testing.test("init leaves a project on bash commands without Lua commands", function()
     if not dev_os.which("git") then
         print("skip - git is not installed")
         return

@@ -1562,9 +1562,12 @@ testing.test(
     "show and move refuse a board-qualified card id for a board that is not there",
     function()
         local backend = fake(sample())
-        for _, verb in ipairs({ "show", "move" }) do
-            local result =
-                cmd_board.run(verb, { "nope:11111111-a", support.COLUMN_NAME.BACKLOG }, backend)
+        for _, subcommand in ipairs({ "show", "move" }) do
+            local result = cmd_board.run(
+                subcommand,
+                { "nope:11111111-a", support.COLUMN_NAME.BACKLOG },
+                backend
+            )
             testing.eq(result.code, 1)
             testing.ok(result.message:find("no board named nope", 1, true), result.message)
         end
@@ -4713,7 +4716,7 @@ do
         end)
     end)
 
-    ---The allow, tests and files edits, each a verb with its card and one argument.
+    ---The allow, tests and files edits, each a subcommand with its card and one argument.
     local GUARD_EDITS = {
         { "allow", { "cccccccc", "ci-edits" } },
         { "tests", { "cccccccc", "one_test" } },
@@ -5092,13 +5095,13 @@ end)
 testing.test("outcome prints no after-the-land warning for a plain outcome", function()
     local card = colored("green")
     local backend = fake({ card })
-    local result = cmd_board.run("outcome", { "cccccccc", "The verb prints its help." }, backend)
+    local result = cmd_board.run("outcome", { "cccccccc", "The command prints its help." }, backend)
     testing.eq(result.warnings, {})
-    testing.eq(board.outcome_warning("The verb lands cleanly."), nil)
+    testing.eq(board.outcome_warning("The command lands cleanly."), nil)
 end)
 
 testing.test("text_warnings appends the after-the-land warning to the prose warnings", function()
-    testing.eq(board.text_warnings("The verb lands cleanly."), {})
+    testing.eq(board.text_warnings("The command lands cleanly."), {})
     testing.eq(board.text_warnings("see 2af0e003 once landed"), {
         "Card prose holds a hex id or hash: 2af0e003.",
         "Outcome names a step after the land: once landed."
@@ -10023,7 +10026,7 @@ testing.test("a nonexistent column on the board is reported", function()
     testing.ok(out:find("The board has no Backlog column", 1, true), out)
 end)
 
-testing.test("board refuses --remote like the other machine-local nouns", function()
+testing.test("board refuses --remote like the other machine-local parent commands", function()
     local root, home = sandbox()
     local out, code = dev(root, home, { "--remote", "--", "board", "ls" })
     testing.eq(code, 2)
@@ -13683,33 +13686,36 @@ end)
 
 local FAKE_ENV = "@" .. dev_os.capture({ "pwd" }):gsub("\n$", "") .. "/tests/lua/fake_env.lua"
 
-testing.test("a lead verb refuses an empty or slashless name when stdin is no terminal", function()
-    for _, name in ipairs({ "", "project-lead" }) do
-        local root, home = sandbox({ user = LEAD_USER })
-        local out, code = dev(
-            root,
-            home,
-            { "board", "delete", "11111111-a", "--reason", "x" },
-            { agent = name, env = { LUA_INIT = FAKE_ENV, FAKE_TTY = "0" } }
-        )
-        testing.eq(code, 1, out)
-        testing.ok(out:find("Only the lead deletes a card", 1, true), out)
-        testing.ok(out:find("only at a terminal", 1, true), out)
-        testing.eq(read(root, "calls"), "")
-        root, home = sandbox({ export = BACKLOG_EXPORT, user = LEAD_USER })
-        out, code = dev(
-            root,
-            home,
-            { "board", "outcome", "11111111", "--delete", "2", "--reason", "never possible" },
-            { agent = name, env = { LUA_INIT = FAKE_ENV, FAKE_TTY = "0" } }
-        )
-        testing.eq(code, 1, out)
-        testing.ok(out:find("Only the lead deletes an outcome", 1, true), out)
-        testing.eq(read(root, "calls"), "")
+testing.test(
+    "a lead command refuses an empty or slashless name when stdin is no terminal",
+    function()
+        for _, name in ipairs({ "", "project-lead" }) do
+            local root, home = sandbox({ user = LEAD_USER })
+            local out, code = dev(
+                root,
+                home,
+                { "board", "delete", "11111111-a", "--reason", "x" },
+                { agent = name, env = { LUA_INIT = FAKE_ENV, FAKE_TTY = "0" } }
+            )
+            testing.eq(code, 1, out)
+            testing.ok(out:find("Only the lead deletes a card", 1, true), out)
+            testing.ok(out:find("only at a terminal", 1, true), out)
+            testing.eq(read(root, "calls"), "")
+            root, home = sandbox({ export = BACKLOG_EXPORT, user = LEAD_USER })
+            out, code = dev(
+                root,
+                home,
+                { "board", "outcome", "11111111", "--delete", "2", "--reason", "never possible" },
+                { agent = name, env = { LUA_INIT = FAKE_ENV, FAKE_TTY = "0" } }
+            )
+            testing.eq(code, 1, out)
+            testing.ok(out:find("Only the lead deletes an outcome", 1, true), out)
+            testing.eq(read(root, "calls"), "")
+        end
     end
-end)
+)
 
-testing.test("a lead verb accepts an empty name when stdin is a terminal", function()
+testing.test("a lead command accepts an empty name when stdin is a terminal", function()
     local root, home = sandbox({ user = LEAD_USER })
     local out, code = dev(
         root,

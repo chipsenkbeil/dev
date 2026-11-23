@@ -28,9 +28,9 @@ testing.test("standalone passes a hidden __ helper under .dev", function()
 end)
 
 testing.test("standalone reports a nested __ shell under .dev", function()
-    local root = project({ [".dev/verbs/__x.sh"] = "#!/bin/sh\n" })
+    local root = project({ [".dev/commands/__x.sh"] = "#!/bin/sh\n" })
     testing.eq(standalone.problems(root), {
-        ".dev/verbs/__x.sh: shell outside .dev/standalone, port it to Lua (dev help porting)",
+        ".dev/commands/__x.sh: shell outside .dev/standalone, port it to Lua (dev help porting)",
     })
     fs.remove(root, { recursive = true })
 end)

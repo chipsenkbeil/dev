@@ -54,7 +54,7 @@ testing.test("the launcher consumes each value flag and reads each remote flag",
     )
 end)
 
-testing.test("--local exports DEV_LOCAL to a verb and no flag leaves it unset", function()
+testing.test("--local exports DEV_LOCAL to a command and no flag leaves it unset", function()
     local root = assert(fs.realpath(support.tempdir()))
     assert(fs.mkdir(root .. "/.dev", { parents = true }))
     local probe = 'print("DEV_LOCAL=" .. tostring(os.getenv("DEV_LOCAL")))\n'

@@ -70,7 +70,7 @@ local function titles(root)
     return found
 end
 
-local VERBS = {
+local COMMANDS = {
     { { "box", "show" }, "Show which box?", "show run-a --json" },
     { { "box", "stop" }, "Stop which box?", "stop run-a --json" },
     { { "box", "resume" }, "Resume which box?", "resume stop-a --json" },
@@ -79,7 +79,7 @@ local VERBS = {
     { { "box", "delete", "-y" }, "Delete which box?", "delete run-a --json" },
 }
 
-for _, case in ipairs(VERBS) do
+for _, case in ipairs(COMMANDS) do
     local words = case[1]
     testing.test("dev " .. table.concat(words, " ") .. " picks a box on a terminal", function()
         local root = sandbox()
@@ -134,7 +134,7 @@ testing.test("a missing name without a terminal is exit 2 with a hint", function
     end
 end)
 
-testing.test("a verb with no box it can act on says so", function()
+testing.test("a command with no box it can act on says so", function()
     local root = sandbox()
     assert(fs.write(root .. "/ls.json", '{"ok":true,"boxes":[]}'))
     local out, code = support.dev(root, { "box", "resume" }, env(root))
