@@ -623,6 +623,76 @@ testing.test("land.lands.on.a.recheck.of.a.stale.seat", function()
     testing.eq(#wiring.seat_problems(with_seats(seats), { id = "c" }, STATE, seat_opts()), 2)
 end)
 
+testing.test("a clean recheck at the landing commit meets a stale recheck seat", function()
+    local stale = seat(review.Kind.RECHECK, review.SeatVerdict.APPROVED, OTHER)
+    local changes = seat(review.Kind.RECHECK, review.SeatVerdict.CHANGES_NEEDED, OTHER)
+    local clean = { rechecked_as(review.Kind.CODE, COMMIT, review.Verdict.CLEAN) }
+    local minor = { rechecked_as(review.Kind.STYLE, COMMIT, review.Verdict.MINOR) }
+    testing.eq(land.seats_problem({ stale }, COMMIT, seat_opts(nil, clean)), {})
+    testing.eq(land.seats_problem({ stale }, COMMIT, seat_opts(nil, minor)), {})
+    testing.eq(land.seats_problem({ changes }, COMMIT, seat_opts(nil, clean)), {})
+    local refused = {
+        rechecked_as(review.Kind.CODE, COMMIT, review.Verdict.CLEAN),
+        rechecked_as(review.Kind.STYLE, COMMIT, review.Verdict.NEEDS_WORK),
+    }
+    testing.eq(#land.seats_problem({ stale }, COMMIT, seat_opts(nil, refused)), 1)
+    testing.eq(#land.seats_problem({ stale }, COMMIT, seat_opts(nil, {})), 1)
+    local older = { rechecked_as(review.Kind.CODE, OTHER, review.Verdict.CLEAN) }
+    testing.eq(#land.seats_problem({ stale }, COMMIT, seat_opts(nil, older)), 1)
+end)
+
+testing.test(
+    "a clean recheck at the landing commit meets a stale changes requested seat",
+    function()
+        local seats = {
+            seat(review.Kind.CODE, review.SeatVerdict.APPROVED, OTHER),
+            seat(review.Kind.STYLE, review.SeatVerdict.CHANGES_NEEDED, OTHER),
+            seat(review.Kind.RECHECK, review.SeatVerdict.APPROVED, OTHER),
+        }
+        local comments = {
+            rechecked_as(review.Kind.CODE, COMMIT, review.Verdict.CLEAN),
+            rechecked_as(review.Kind.STYLE, COMMIT, review.Verdict.CLEAN),
+        }
+        testing.eq(
+            wiring.seat_problems(with_seats(seats), { id = "c" }, STATE, seat_opts(nil, comments)),
+            {}
+        )
+        local bad = {
+            rechecked_as(review.Kind.CODE, COMMIT, review.Verdict.CLEAN),
+            rechecked_as(review.Kind.STYLE, COMMIT, review.Verdict.NEEDS_WORK),
+        }
+        testing.eq(
+            #wiring.seat_problems(with_seats(seats), { id = "c" }, STATE, seat_opts(nil, bad)),
+            2
+        )
+    end
+)
+
+testing.test("a recheck reviewer recheck meets a seat the code reviewer held", function()
+    local seats = {
+        seat(review.Kind.CODE, review.SeatVerdict.APPROVED, COMMIT),
+        seat(review.Kind.STYLE, review.SeatVerdict.APPROVED, COMMIT),
+        seat(review.Kind.RECHECK, review.SeatVerdict.APPROVED, OTHER),
+    }
+    local comments = {
+        {
+            body = review.record(
+                review.Kind.RECHECK,
+                "dotfiles/recheck-examiner/c1",
+                { commit = COMMIT, change = "chg" },
+                review.Verdict.CLEAN,
+                review.Kind.CODE
+            ),
+            who = "reviewer-token",
+        },
+    }
+    testing.eq(
+        wiring.seat_problems(with_seats(seats), { id = "c" }, STATE, seat_opts(nil, comments)),
+        {}
+    )
+    testing.eq(#wiring.seat_problems(with_seats(seats), { id = "c" }, STATE, seat_opts()), 1)
+end)
+
 testing.test("checks_problem counts only the newest passing run at the commit", function()
     local rows = { "dev lint", "dev test" }
     local pass = checked(COMMIT, check.Mode.RUN, { "pass - dev lint", "pass - dev test" })

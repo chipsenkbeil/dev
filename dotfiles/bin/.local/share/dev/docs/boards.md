@@ -3173,7 +3173,9 @@ landing commit meets that kind's seat for land, even when the seat still holds
 an approval of an earlier commit, as a recheck cannot post to a seat that
 another credential holds. A needs-work recheck, a recheck of the other kind and
 a seat that asks for changes at the landing commit do not meet it. The local
-board has no seats and keeps only the comment.
+board has no seats and keeps only the comment. The `recheck` seat itself is
+met the same way by any clean or minor recheck of either kind at the landing
+commit, whoever recorded it, unless a recheck at that commit says needs-work.
 
 The comment stays for landing to read. It is one `status` comment on the
 card that begins with a reserved first line and has no other:
