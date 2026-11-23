@@ -25,6 +25,7 @@ local remote = require("dev.remote")
 local root = require("dev.root")
 local vcs = require("dev.vcs")
 local verb = require("dev.verb")
+local version = require("dev.version")
 
 local stderr = io.stderr
 local INTERPRETER = arg and arg[-1]
@@ -161,6 +162,28 @@ local function default_is_remote(project_root)
         )
     end
     return setting ~= "local"
+end
+
+local function require_min_version(project_root)
+    local wanted = config.get(project_root, "dev.min_version")
+    if wanted == nil then
+        return
+    end
+    local current, why, detail = version.current()
+    if not current then
+        local what = why == version.Reason.UNREADABLE and " cannot be read."
+            or " holds " .. detail .. "."
+        verb.die("The version file of this dev" .. what)
+    end
+    local order, _, bad = version.compare(current, wanted)
+    if order == nil then
+        verb.die("The `dev.min_version` setting must be MAJOR.MINOR.PATCH, not " .. bad .. ".")
+    end
+    if order < 0 then
+        verb.die(
+            "This project needs dev " .. wanted .. " or newer, and this dev is " .. current .. "."
+        )
+    end
 end
 
 local function remote_default(project_root, words)
@@ -572,6 +595,7 @@ function M.main(argv)
         name = "help"
     end
     local project_root = project.root()
+    require_min_version(project_root)
     local reg = registry.load(project_root)
     hidden_helper(args, project_root, reg)
     local words, rest = { name }, tail(args, 2)

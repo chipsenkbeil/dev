@@ -2,6 +2,7 @@ local testing = require("dev.testing")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local support = require("support")
+local version = require("dev.version")
 
 local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local MAIN = REPO .. "/dotfiles/bin/.local/share/dev/main.lua"
@@ -420,6 +421,35 @@ testing.test("a dev module that fails to load for another reason still shows the
     )
     testing.ok(code ~= 0 and code ~= 130, "exited " .. tostring(code))
     testing.ok(out:find("boom", 1, true), out)
+end)
+
+testing.test("a project that needs a newer dev is refused", function()
+    local root =
+        project({ ["v.lua"] = "@v.lua", ["config.toml"] = '[dev]\nmin_version = "99.0.0"\n' })
+    local out, code = dev(root, { "v" })
+    testing.eq(code, 1)
+    local text = "This project needs dev 99.0.0 or newer, and this dev is "
+        .. assert(version.current())
+        .. "."
+    testing.ok(out:find(text, 1, true), out)
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("a project whose minimum is met or malformed", function()
+    local met = '[dev]\nmin_version = "' .. assert(version.current()) .. '"\n'
+    local root = project({ ["v.lua"] = "@v.lua", ["config.toml"] = met })
+    local out, code = dev(root, { "v" })
+    testing.eq(code, 0)
+    testing.ok(out:find("v\ttrue", 1, true), out)
+    fs.remove(root, { recursive = true })
+    root = project({ ["v.lua"] = "@v.lua", ["config.toml"] = '[dev]\nmin_version = "soon"\n' })
+    out, code = dev(root, { "v" })
+    testing.eq(code, 1)
+    testing.ok(
+        out:find("The `dev.min_version` setting must be MAJOR.MINOR.PATCH, not soon.", 1, true),
+        out
+    )
+    fs.remove(root, { recursive = true })
 end)
 
 testing.test("a project Lua verb that is interrupted exits 130 with nothing on stderr", function()

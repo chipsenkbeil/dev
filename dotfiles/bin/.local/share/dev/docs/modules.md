@@ -293,6 +293,9 @@ card's bookmark.
   `DEV_FETCHED`. `fetch.apply(root, spec)` runs a patch job on its first listed
   target and applies the pulled patch at the project root (`dev help remote`).
 - `dev.registry`: the registry of verbs.
+- `dev.version`: `current` reads the `VERSION` file beside `main.lua`, and
+  `compare` orders two `MAJOR.MINOR.PATCH` strings. `dev.cli` refuses a
+  project whose `[dev] min_version` is newer (`dev help flags`).
 - `dev.xdg`: `state_home`, the one place that resolves `XDG_STATE_HOME`. It
   falls back to `$HOME/.local/state` when the variable is unset or not
   absolute. The board claims, the board store, `dev.board.tokenfile` and

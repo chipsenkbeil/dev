@@ -285,6 +285,15 @@ A command line with both `--local` and `--remote` exits 2 with this message:
 The flags `--local` and `--remote` cannot be used together.
 ```
 
+## The minimum dev version
+
+dev's own version is the `VERSION` file beside `main.lua`. A project names the
+oldest dev it works with as `[dev] min_version = "MAJOR.MINOR.PATCH"` in
+`.dev/config.toml`. When this dev is older, dev exits 1 before it runs
+anything, with ``This project needs dev 0.2.0 or newer, and this dev is
+0.1.0.`` (the real versions). A value that is not `MAJOR.MINOR.PATCH` exits 1
+with ``The `dev.min_version` setting must be MAJOR.MINOR.PATCH, not X.``
+
 ## The remote runner
 
 `--remote` (or `DEV_REMOTE=1`) runs the command somewhere else. Dev strips
