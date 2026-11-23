@@ -5794,28 +5794,28 @@ end
 
 M.handlers["board seat reset"] = function(ctx)
     if #ctx.args ~= 2 then
-        verb.usage_error(ctx, "needs CARD and SEAT")
+        dev_command.usage_error(ctx, "needs CARD and SEAT")
     elseif not ctx.args[2]:find(SEAT_NAME_PATTERN) then
-        verb.usage_error(ctx, "SEAT is a seat name such as code, style or recheck")
+        dev_command.usage_error(ctx, "SEAT is a seat name such as code, style or recheck")
     end
     local found = settings(ctx)
     if found.backend ~= board.Backend.POMB then
-        verb.die("A local board has no seats to reset.")
+        dev_command.die("A local board has no seats to reset.")
     end
     local backend, message = M.open(found)
     if not backend then
-        verb.die(message)
+        dev_command.die(message)
     end
     local card, err = find_card(backend, ctx.args[1])
     if not card then
-        verb.die(err.message)
+        dev_command.die(err.message)
     end
     local short = card.id:sub(1, board.MIN_PREFIX)
     local seat = ctx.args[2]
     local done, why, missing, previous = backend:reset_seat(card.id, seat)
     if not done then
         if missing then
-            verb.die(
+            dev_command.die(
                 string.format(
                     "The reset of seat %s on card %s needs the %s permission, and Pomb refused this token (%s).",
                     seat,
@@ -5825,13 +5825,13 @@ M.handlers["board seat reset"] = function(ctx)
                 )
             )
         end
-        verb.die(why)
+        dev_command.die(why)
     end
     if not previous then
-        verb.say(string.format("Added seat %s to card %s, open.", seat, short))
+        dev_command.say(string.format("Added seat %s to card %s, open.", seat, short))
         return 0
     end
-    verb.say(
+    dev_command.say(
         string.format(
             "Reset seat %s on card %s. It was held by %s with verdict %s, and is open again.",
             seat,
