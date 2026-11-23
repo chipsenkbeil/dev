@@ -184,6 +184,31 @@ testing.test("a header with a fetch and a patch line keeps both", function()
     testing.eq(h.patch, { job = "fmt", file = "fmt.patch" })
 end)
 
+testing.test("a remote line and a requires line set their flags", function()
+    local h = header.parse(sh("# Desc.", "# remote: false", "# requires: workspace", "echo"), "sh")
+    testing.eq(h.remote, false)
+    testing.eq(h.requires, { "workspace" })
+    testing.eq(h.desc, "Desc.")
+    testing.eq(h.long, { "Desc." })
+    local lua =
+        header.parse("--[[\nDesc.\nremote: false\nrequires: workspace\n]]\nlocal x\n", "lua")
+    testing.eq(lua.remote, false)
+    testing.eq(lua.requires, { "workspace" })
+    local none = header.parse(sh("# Desc.", "echo"), "sh")
+    testing.eq(none.remote, nil)
+    testing.eq(none.requires, {})
+    testing.eq(none.warnings, {})
+end)
+
+testing.test("an unknown word on a requires line is a warning that names it", function()
+    local h = header.parse(sh("# Desc.", "# requires: workspace moon", "echo"), "sh", ".dev/x.sh")
+    testing.eq(h.requires, { "workspace" })
+    testing.eq(
+        h.warnings,
+        { "The requires line of .dev/x.sh names moon, which dev does not know." }
+    )
+end)
+
 testing.test("a positional line needs the word alone", function()
     testing.eq(header.parse(sh("# Desc.", "# positional x", "echo"), "sh").positional, false)
     testing.eq(header.parse(sh("# Desc.", "echo"), "sh").positional, false)

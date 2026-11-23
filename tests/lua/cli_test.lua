@@ -1,6 +1,7 @@
 local testing = require("dev.testing")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
+local registry = require("dev.registry")
 local support = require("support")
 local version = require("dev.version")
 
@@ -469,6 +470,115 @@ testing.test("a project whose minimum is met or malformed", function()
     )
     fs.remove(root, { recursive = true })
 end)
+
+testing.test(
+    "a project command with a requires workspace line is refused in the primary checkout",
+    function()
+        local root = project({
+            ["guarded.lua"] = "--[[\nrequires: workspace\n]]\nprint('guarded ran')\n",
+            ["open.lua"] = "print('open ran')\n",
+        })
+        assert(dev_os.run({ "git", "-C", root, "init", "-q" }) == 0, "git init failed")
+        local agent = { DEV_AGENT = "repo/implementer/c" }
+        local out, code = dev(root, { "guarded" }, agent)
+        testing.eq(code, 2)
+        testing.ok(
+            out:find(
+                "dev guarded: DEV_AGENT is the workspace role implementer, which never runs it in the primary checkout.",
+                1,
+                true
+            ),
+            out
+        )
+        testing.ok(not out:find("guarded ran", 1, true), out)
+        out, code = dev(root, { "open" }, agent)
+        testing.eq(code, 0)
+        testing.ok(out:find("open ran", 1, true), out)
+        out, code = dev(root, { "guarded" })
+        testing.eq(code, 0)
+        testing.ok(out:find("guarded ran", 1, true), out)
+        fs.remove(root, { recursive = true })
+    end
+)
+
+local function words_of(entry)
+    return type(entry) == "table" and entry or { entry }
+end
+
+testing.test(
+    "this repo's commands declare the remote and requires facts they always had",
+    function()
+        local reg = registry.load(REPO, { warn = function() end })
+        local never = {
+            "install",
+            "uninstall",
+            "restow",
+            "stow",
+            "setup",
+            "clean",
+            "purge",
+            "skills",
+            "list",
+            "sync",
+            "fmt",
+            "fetch",
+            "help",
+            "init",
+            "push",
+            "pull",
+            "follow",
+            "land",
+            "guide",
+            "connect",
+            { "tools", "check" },
+            { "box", "ls" },
+            { "ci", "logs" },
+            { "board", "status" },
+            { "ws", "new" },
+            { "pi", "check" },
+            { "pi", "diff" },
+            { "pi", "install" },
+            { "pi", "save" },
+            { "antinote", "diff" },
+            { "antinote", "export" },
+            { "antinote", "import" },
+            { "zen", "link" },
+        }
+        for _, entry in ipairs(never) do
+            local words = words_of(entry)
+            local remote = reg:declared(words)
+            testing.eq({ table.concat(words, " "), remote }, { table.concat(words, " "), false })
+        end
+        local guarded = {
+            "install",
+            "uninstall",
+            "restow",
+            "stow",
+            "sync",
+            "setup",
+            "fmt",
+            "init",
+            "push",
+            "pull",
+            "follow",
+            "land",
+            "abandon",
+            "clean",
+            "purge",
+            "skills",
+            { "tools", "install" },
+            { "board", "land" },
+        }
+        for _, entry in ipairs(guarded) do
+            local words = words_of(entry)
+            local _, requires = reg:declared(words)
+            local name = table.concat(words, " ")
+            testing.eq({ name, requires }, { name, { "workspace" } })
+        end
+        local _, requires = reg:declared({ "board", "status" })
+        testing.eq(requires, {})
+    end
+)
 
 testing.test("a project Lua verb that is interrupted exits 130 with nothing on stderr", function()
     local root = project({ ["stop.lua"] = 'error("interrupted!", 0)\n' })

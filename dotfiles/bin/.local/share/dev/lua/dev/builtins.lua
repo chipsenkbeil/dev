@@ -7,6 +7,10 @@
 ---@field desc string description shown in `dev help`
 ---@field group string? heading in `dev help`, nil for a subcommand or a hidden verb
 ---@field hidden boolean? whether `dev help` keeps the verb to `-a`
+---@field remote false? false when the command never runs on a remote runner, which covers its
+---   subcommands
+---@field requires string[]? preconditions the command needs, `workspace` for a refusal in a
+---   primary checkout
 
 ---@type dev.Builtin[]
 return {
@@ -18,6 +22,8 @@ return {
     },
     {
         words = { "fmt" },
+        remote = false,
+        requires = { "workspace" },
         handler = "lua",
         desc = "Format the source for the project type",
         group = "Check your work",
@@ -42,12 +48,15 @@ return {
     },
     {
         words = { "fetch" },
+        remote = false,
         handler = "lua",
         desc = "Download the crates and advisory data for offline lint and test",
         group = "Check your work",
     },
     {
         words = { "push" },
+        remote = false,
+        requires = { "workspace" },
         handler = "lua",
         flags = "--tag",
         desc = "Push the trunk or current branch to the remote of record",
@@ -55,6 +64,7 @@ return {
     },
     {
         words = { "abandon" },
+        requires = { "workspace" },
         handler = "lua",
         flags = "--reason",
         usage = "dev abandon CHANGE [--reason TEXT]",
@@ -63,18 +73,24 @@ return {
     },
     {
         words = { "pull" },
+        remote = false,
+        requires = { "workspace" },
         handler = "lua",
         desc = "Fetch the remote and rebase local work onto it",
         group = "Share it",
     },
     {
         words = { "follow" },
+        remote = false,
+        requires = { "workspace" },
         handler = "lua",
         desc = "Move the main checkout onto trunk",
         group = "Share it",
     },
     {
         words = { "land" },
+        remote = false,
+        requires = { "workspace" },
         handler = "lua",
         flags = "--card --wait --ignore-change-run",
         usage = "dev land [--card CARD] [--wait SECONDS] [--ignore-change-run REASON]",
@@ -83,6 +99,8 @@ return {
     },
     {
         words = { "sync" },
+        remote = false,
+        requires = { "workspace" },
         handler = "lua",
         flags = "--check --yes -y",
         desc = "Compare the copied lint files with the dotfiles templates",
@@ -90,6 +108,8 @@ return {
     },
     {
         words = { "init" },
+        remote = false,
+        requires = { "workspace" },
         handler = "lua",
         flags = "--type --name --dry-run --no-gerrit",
         usage = "dev init [--type T] [--name N] [--dry-run] [--no-gerrit]",
@@ -98,12 +118,14 @@ return {
     },
     {
         words = { "tools" },
+        remote = false,
         noun = true,
         desc = "Install and check the tools in .dev/tools.tsv",
         group = "Set up a machine or project",
     },
     {
         words = { "tools", "install" },
+        requires = { "workspace" },
         handler = "lua",
         flags = "--dry-run --force --group --system --user",
         usage = "dev tools install [--system or --user] [--group NAME] [--dry-run] [--force] [tool...]",
@@ -118,6 +140,7 @@ return {
     },
     {
         words = { "guide" },
+        remote = false,
         handler = "lua",
         usage = "dev guide [question...]",
         desc = "Show the overview or answer a question about dev",
@@ -125,6 +148,7 @@ return {
     },
     {
         words = { "ws" },
+        remote = false,
         noun = true,
         desc = "Make, list and remove workspaces under one central root",
         group = "Set up a machine or project",
@@ -163,6 +187,7 @@ return {
     },
     {
         words = { "connect" },
+        remote = false,
         handler = "lua",
         flags = "--ssh",
         usage = "dev connect [<box>] [--ssh]",
@@ -171,6 +196,7 @@ return {
     },
     {
         words = { "box" },
+        remote = false,
         noun = true,
         desc = "Create, show, stop, resume, extend, retag and delete dev boxes",
         group = "Boxes",
@@ -257,6 +283,7 @@ return {
     },
     {
         words = { "ci" },
+        remote = false,
         noun = true,
         desc = "Read what ci recorded",
         group = "Boxes",
@@ -270,6 +297,7 @@ return {
     },
     {
         words = { "board" },
+        remote = false,
         noun = true,
         desc = "Read and update the project's board",
         group = "Share it",
@@ -552,6 +580,7 @@ return {
     },
     {
         words = { "board", "land" },
+        requires = { "workspace" },
         handler = "lua",
         flags = "--wait --ignore-change-run",
         usage = "dev board land CARD [CARD...] [--wait SECONDS] [--ignore-change-run REASON]",
@@ -678,6 +707,7 @@ return {
     },
     {
         words = { "help" },
+        remote = false,
         handler = "lua",
         flags = "-a -k --topics --no-pager",
         usage = "dev help [-a] [--topics] [-k topic] [--no-pager] [verb or topic]",

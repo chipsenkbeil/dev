@@ -243,7 +243,7 @@ end)
 
 testing.test("a machine-local verb is refused with the mockup text", function()
     local root, base = setup()
-    for _, words in ipairs({ { "install" }, { "box", "ls" }, { "tools", "check" } }) do
+    for _, words in ipairs({ { "fetch" }, { "box", "ls" }, { "tools", "check" } }) do
         local args = { "--remote" }
         for _, word in ipairs(words) do
             args[#args + 1] = word

@@ -3,6 +3,8 @@
 ---@field group string? heading named by the `group:` line
 ---@field hidden boolean whether a `hidden` line is present
 ---@field runs_local boolean whether a `local` line is present
+---@field remote false? false when a `remote: false` line is present, else nil
+---@field requires string[] the words of the `requires:` lines
 ---@field positional boolean whether a `positional` line is present
 ---@field fetch dev.header.Fetch? the job and file named by the `fetch` line
 ---@field patch dev.header.Fetch? the job and file named by the `patch` line
@@ -18,9 +20,12 @@
 local M = {}
 
 local RESERVED_FLAGS = { ["-h"] = true, ["--help"] = true }
+local KNOWN_REQUIRES = { workspace = true }
 
 local function marker(line)
     return line:find("^# *group:")
+        or line:find("^# *remote: *false *$")
+        or line:find("^# *requires:")
         or line:find("^# *fetch +%S+ +%S+ *$")
         or line:find("^# *patch +%S+ +%S+ *$")
         or line:find("^# *hidden *$")
@@ -115,6 +120,31 @@ local function placement(lines)
     return group, hidden, runs_local, positional, fetch, patch
 end
 
+local function declarations(lines, name)
+    local remote, requires, warnings = nil, {}, {}
+    for number, line in ipairs(lines) do
+        local rest = line:match("^# *requires:(.*)$")
+        if line:find("^# *remote: *false *$") then
+            remote = false
+        elseif rest then
+            for word in rest:gmatch("%S+") do
+                if KNOWN_REQUIRES[word] then
+                    requires[#requires + 1] = word
+                else
+                    warnings[#warnings + 1] = string.format(
+                        "The requires line of %s names %s, which dev does not know.",
+                        name,
+                        word
+                    )
+                end
+            end
+        elseif ends_header(line, number) then
+            break
+        end
+    end
+    return remote, requires, warnings
+end
+
 local function split_lines(text)
     local lines = {}
     for line in text:gmatch("([^\n]*)\n") do
@@ -142,8 +172,8 @@ end
 ---
 ---A shell header is the comment block after the shebang. A Lua header is one
 ---leading `--[[ ... ]]` block holding the same lines. The first comment line
----is the description, and the `group:`, `hidden`, `local`, `positional`, `fetch JOB FILE`,
----`patch JOB FILE` and `flags:` lines set the rest.
+---is the description, and the `group:`, `hidden`, `local`, `remote: false`, `requires: WORD...`,
+---`positional`, `fetch JOB FILE`, `patch JOB FILE` and `flags:` lines set the rest.
 ---@param text string contents of the script
 ---@param kind "sh"|"lua" language of the script
 ---@param name string? script path, named in warnings
@@ -152,11 +182,17 @@ function M.parse(text, kind, name)
     local lines = kind == "lua" and lua_block(text) or split_lines(text .. "\n")
     local flags, warnings = flag_words(lines, name or "script")
     local group, hidden, runs_local, positional, fetch, patch = placement(lines)
+    local remote, requires, declared = declarations(lines, name or "script")
+    for _, warning in ipairs(declared) do
+        warnings[#warnings + 1] = warning
+    end
     return {
         desc = first_comment(lines),
         group = group ~= "" and group or nil,
         hidden = hidden,
         runs_local = runs_local,
+        remote = remote,
+        requires = requires,
         positional = positional,
         fetch = fetch,
         patch = patch,

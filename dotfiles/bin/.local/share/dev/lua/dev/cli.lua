@@ -188,8 +188,8 @@ local function require_min_version(project_root)
     end
 end
 
-local function remote_default(project_root, words)
-    if dev_os.getuid() == 0 or remote.machine_local(words) then
+local function remote_default(project_root, words, never_remote)
+    if dev_os.getuid() == 0 or never_remote then
         return false
     end
     return default_is_remote(project_root) and remote.has_default_job(project_root, words)
@@ -223,11 +223,11 @@ local function takes_positionals(reg, row)
     return header ~= nil and header.positional
 end
 
-local function refuse_agent_local(project_root, words)
+local function refuse_agent_local(project_root, words, never_remote)
     if (os.getenv("DEV_AGENT") or "") == "" then
         return
     end
-    if remote.refuses_agent_local(project_root, words) then
+    if remote.refuses_agent_local(project_root, words, never_remote) then
         local command = table.concat(words, " ")
         stderr:write(
             "dev ",
@@ -243,31 +243,6 @@ end
 ---Agent roles that work in a workspace, never the primary checkout
 local WORKSPACE_ROLES =
     { runner = true, implementer = true, planner = true, reviewer = true, verifier = true }
-
----Mutating verbs refused in the primary checkout, by verb name
-local PRIMARY_GUARDED = {}
-for _, name in ipairs({
-    "install",
-    "uninstall",
-    "restow",
-    "stow",
-    "sync",
-    "setup",
-    "fmt",
-    "init",
-    "push",
-    "pull",
-    "follow",
-    "land",
-    "abandon",
-    "clean",
-    "purge",
-    "skills",
-    "tools install",
-    "board land",
-}) do
-    PRIMARY_GUARDED[name] = true
-end
 
 ---Mutating verbs the lead role never runs in the primary checkout, by verb name
 local LEAD_GUARDED = {}
@@ -303,20 +278,30 @@ local function repo_guarded(project_root)
     return listed
 end
 
-local function refuse_agent_primary(project_root, words)
+local function requires_workspace(requires)
+    for _, word in ipairs(requires) do
+        if word == "workspace" then
+            return true
+        end
+    end
+    return false
+end
+
+local function refuse_agent_primary(project_root, words, requires)
     local agent = os.getenv("DEV_AGENT") or ""
     if agent == "" then
         return
     end
     local role = agent:match("^[^/]*/([^/]*)")
     local command = table.concat(words, " ")
-    local guarded, who
+    local builtin, who
     if role == "lead" then
-        guarded, who = LEAD_GUARDED, "lead role"
+        builtin = LEAD_GUARDED[words[1]] or LEAD_GUARDED[command]
+        who = "lead role"
     elseif role and WORKSPACE_ROLES[role] then
-        guarded, who = PRIMARY_GUARDED, "workspace role " .. role
+        builtin = requires_workspace(requires)
+        who = "workspace role " .. role
     end
-    local builtin = guarded ~= nil and (guarded[words[1]] or guarded[command])
     local listed = repo_guarded(project_root)
     if not (builtin or listed[words[1]] or listed[command]) then
         return
@@ -543,10 +528,12 @@ local function run_as_root(parsed)
         interpreter = INTERPRETER,
     }
     if parsed.remote then
+        local never_remote = registry.load(ctx.root):declared(words)
         os.exit(remote.run(ctx, words, tail(rest, math.max(1, #rest - parsed.after + 1)), {
             detach = parsed.detach,
             priority = parsed.priority,
             job_timeout = parsed.job_timeout,
+            never_remote = never_remote == false,
         }))
     end
     prepare(ctx)
@@ -636,6 +623,7 @@ function M.main(argv)
         interpreter = INTERPRETER,
     }
     local flag = name ~= "help" and help_flag(rest, parsed.after)
+    local never_remote, requires = reg:declared(words)
     local fetch_job = fetch_spec(reg, row)
     local patch_job = patch_spec(reg, row)
     if flag and (not parsed.remote or patch_job) then
@@ -649,19 +637,20 @@ function M.main(argv)
             detach = parsed.detach,
             priority = parsed.priority,
             job_timeout = parsed.job_timeout,
+            never_remote = never_remote == false,
         }))
     end
     if
         not (parsed.local_flag or parsed.env_local or on_remote_host or runs_local(reg, row))
-        and remote_default(project_root, words)
+        and remote_default(project_root, words, never_remote == false)
     then
         os.exit(remote.run(ctx, words, rest, { detach = false, priority = false }))
     end
     if not on_remote_host and not runs_local(reg, row) then
-        refuse_agent_local(project_root, words)
+        refuse_agent_local(project_root, words, never_remote == false)
     end
     if not on_remote_host then
-        refuse_agent_primary(project_root, words)
+        refuse_agent_primary(project_root, words, requires)
     end
     if row and row.script then
         refuse_undeclared(reg, ctx, rest, parsed.after)

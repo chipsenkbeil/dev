@@ -1012,6 +1012,10 @@ assert_contains "--remote maps a subcommand to the job noun-sub" "$(log)" "[--jo
 out="$(cirun "$cip" widget --remote zap 2>&1)"
 assert_eq "--remote with an unknown subcommand exits 2" "$?" "2"
 assert_contains "--remote with an unknown subcommand names it" "$out" "unknown subcommand zap"
+for verb in install uninstall restow setup clean purge list skills stow; do
+    printf '#!/usr/bin/env bash\n# remote: false\necho x\n' >"$cip/.dev/$verb.sh"
+    chmod +x "$cip/.dev/$verb.sh"
+done
 for verb in install uninstall restow sync setup fmt fetch help init push pull clean purge list skills stow; do
     out="$(cirun "$cip" --remote "$verb" 2>&1)"
     assert_eq "--remote refuses $verb with 2" "$?" "2"
@@ -1098,7 +1102,7 @@ assert_contains "DEV_AGENT unset runs a default run here under remote default lo
 prim="$(project prim)"
 mkdir -p "$prim/.dev"
 git -C "$prim" init -q
-printf '#!/usr/bin/env bash\necho install ran\n' >"$prim/.dev/install.sh"
+printf '#!/usr/bin/env bash\n# requires: workspace\necho install ran\n' >"$prim/.dev/install.sh"
 printf '#!/usr/bin/env bash\necho notes ran\n' >"$prim/.dev/notes.sh"
 chmod +x "$prim/.dev/install.sh" "$prim/.dev/notes.sh"
 git -C "$prim" add -A

@@ -136,6 +136,13 @@ prints the script's header. A header can carry these lines.
 - `# local`: keeps the remote default from sending that verb to ci, for a
   script that drives ci itself beside a same-named job. An explicit `--remote`
   still sends it, and `dev help <verb>` says it runs here under the default.
+- `# remote: false`: marks a command that never runs on a remote runner. The
+  remote default skips it, `--remote` refuses it, and a noun's line covers its
+  subcommands. A script that overrides a built-in keeps the built-in's flags.
+- `# requires: workspace`: refuses the command to a `DEV_AGENT` with a
+  workspace role in the primary checkout. The line is a list of preconditions
+  and `workspace` is the only one dev knows. Any other word is a header
+  warning that names it.
 - `# fetch JOB FILE`: runs the verb here, and under the remote mode first
   builds `FILE` with the ci job `JOB` on this host's platform and hands the
   pulled path to the verb in `DEV_FETCHED`. `dev help remote` has the rule.
@@ -243,10 +250,10 @@ Any other value is ``The `remote.default` setting must be "remote" or
 "local", not X.`` (exit 1).
 
 The default applies only to a command whose job `ci run --list --json` lists in
-the default pipeline. It never applies to a machine-local verb (listed below)
-or as root, which reads no config. A project with no `.ci/*.lua` pipeline file
-has no job and ci is not asked, and a command the listing does not name runs
-here with no message.
+the default pipeline. It never applies to a command that declares
+`remote: false` (see `# remote: false` above) or as root, which reads no
+config. A project with no `.ci/*.lua` pipeline file has no job and ci is not
+asked, and a command the listing does not name runs here with no message.
 
 A missing `ci` on PATH, or a `ci run --list` that exits non-zero or answers
 badly, fails the command with ci's error (exit code kept) and the hint
@@ -272,12 +279,12 @@ whatever chose it. The exceptions are a verb with a `# local` header and a run
 inside a ci job or a dev box. See the `remote` topic.
 
 A `DEV_AGENT` with a workspace role, `runner`, `implementer`, `planner`,
-`reviewer` or `verifier`, is also refused with exit 2 when a mutating verb
-runs in the primary checkout, so `-C WS` must name a workspace or worktree.
-The lead role is refused the same way for `land`, `board land`, `abandon`,
-`clean`, `purge` and `fmt` only. The repo's `agent.primary_guarded` list in
-`.dev/config.toml` adds verbs to that refusal for any set `DEV_AGENT`. The
-`remote` topic lists the verbs.
+`reviewer` or `verifier`, is also refused with exit 2 when a command that
+declares `requires: workspace` runs in the primary checkout, so `-C WS` must
+name a workspace or worktree. The lead role is refused the same way for
+`land`, `board land`, `abandon`, `clean`, `purge` and `fmt` only. The repo's
+`agent.primary_guarded` list in `.dev/config.toml` adds verbs to that refusal
+for any set `DEV_AGENT`. The `remote` topic has the rule.
 
 A command line with both `--local` and `--remote` exits 2 with this message:
 
@@ -327,11 +334,8 @@ The default pipeline runs on every patchset, so `bootstrap` stays out of
 Every other command goes to `dev.remote.ci_runner`. The topic is
 `docs/dev/remote.md`.
 
-`--remote` refuses the machine-local verbs `install`, `uninstall`, `restow`,
-`sync`, `setup`, `fmt`, `fetch`, `help`, `init`, `push`, `pull`, `follow`,
-`land`, `guide` and `connect`, and every `tools`, `box`, `board`, `ws`, `pi`,
-`antinote` and `zen` subcommand. The refusal exits 2 whatever the runner, with
-this message:
+`--remote` refuses every command that declares `remote: false` in its header or
+its built-in row. The refusal exits 2 whatever the runner, with this message:
 
 ```
 dev <verb>: runs on this machine only, so --remote does not apply

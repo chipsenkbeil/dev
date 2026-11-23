@@ -8,38 +8,6 @@ local stderr = io.stderr
 
 local UNSAFE_WORD = "[^%w_%-%./:=@%%%+,]"
 
-local MACHINE_VERBS = {
-    install = true,
-    uninstall = true,
-    restow = true,
-    sync = true,
-    setup = true,
-    fmt = true,
-    fetch = true,
-    help = true,
-    init = true,
-    push = true,
-    pull = true,
-    follow = true,
-    land = true,
-    guide = true,
-    connect = true,
-    clean = true,
-    purge = true,
-    list = true,
-    skills = true,
-    stow = true,
-}
-local MACHINE_NOUNS = {
-    tools = true,
-    box = true,
-    ci = true,
-    board = true,
-    ws = true,
-    pi = true,
-    antinote = true,
-    zen = true,
-}
 local JOB_NAME = "^[A-Za-z0-9-]+$"
 local LOCAL_HINT = "Rerun it, or pass `--local` to run it here."
 local AGENT_HINT = "An agent runs it on ci, so fix ci and rerun."
@@ -53,6 +21,12 @@ local AGENT_HINT = "An agent runs it on ci, so fix ci and rerun."
 ---@field root string absolute path of the project root
 ---@field verbose integer 0, or 1 or 2 for `-v` or `-vv`
 
+---@class dev.remote.Flags
+---@field detach boolean whether to start the job and return
+---@field priority boolean whether to start its ci jobs ahead of normal ones
+---@field job_timeout string? the run's time limit
+---@field never_remote boolean? whether the command declares `remote: false`
+
 ---@class dev.remote
 local M = {}
 
@@ -65,13 +39,6 @@ function M.is_remote_host()
     local marker = os.getenv("DEV_BOX_MARKER")
     return os.getenv("CI") == "true"
         or fs.exists(marker ~= nil and marker ~= "" and marker or M.BOX_MARKER)
-end
-
----Check whether the command acts on this machine, so it never goes remote by default.
----@param words string[] the command words
----@return boolean
-function M.machine_local(words)
-    return MACHINE_VERBS[words[1]] == true or MACHINE_NOUNS[words[1]] == true
 end
 
 ---Check whether `ci` lists a job for the command, for the remote default.
@@ -103,13 +70,14 @@ function M.has_default_job(root, words, hint)
     return M.has_job(root, job, nil, hint)
 end
 
----Check whether an agent's local run must be refused: the command is not
----machine-local and `ci` lists its default job, which the agent runs on ci.
+---Check whether an agent's local run must be refused: the command declares no
+---`remote: false` and `ci` lists its default job, which the agent runs on ci.
 ---@param root string the project root
 ---@param words string[] the command words
+---@param never_remote boolean whether the command declares `remote: false`
 ---@return boolean
-function M.refuses_agent_local(root, words)
-    return not M.machine_local(words) and M.has_default_job(root, words, AGENT_HINT)
+function M.refuses_agent_local(root, words, never_remote)
+    return not never_remote and M.has_default_job(root, words, AGENT_HINT)
 end
 
 ---List the job names of the default pipeline.
@@ -330,16 +298,15 @@ end
 ---Run a command somewhere else and return its exit code.
 ---
 ---The runner is `.dev/__remote.lua` when the project has one, else `ci`. A
----machine-local verb is refused whatever the runner. Without a `--` every
+---command that declares `remote: false` is refused whatever the runner. Without a `--` every
 ---argument reaches the job. Arguments on both sides of a `--` are a usage error.
 ---@param ctx dev.Ctx the command's context, whose `args` are every argument after the command words
 ---@param words string[] the command words
 ---@param args string[] the arguments after `--`
----@param flags {detach: boolean, priority: boolean, job_timeout: string|nil} whether to start the
----   job and return, whether to start its ci jobs ahead of normal ones, and the run's time limit
+---@param flags dev.remote.Flags how to start the job
 ---@return integer code the runner's exit code
 function M.run(ctx, words, args, flags)
-    if M.machine_local(words) then
+    if flags.never_remote then
         dev_command.usage_error(ctx, "runs on this machine only, so --remote does not apply")
     end
     if ctx.dashed and #ctx.args > #args then

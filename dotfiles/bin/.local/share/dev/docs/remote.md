@@ -60,8 +60,8 @@ With neither set the default is remote, and any other value exits 1. With
 `"local"`, only `--remote` and `DEV_REMOTE` go to ci.
 
 The default applies only to a command whose job `ci run --list --json` lists.
-It never applies to a machine-local verb (see "What it refuses") or as root,
-which reads no config.
+It never applies to a command that declares `remote: false` (see "What it
+refuses") or as root, which reads no config.
 
 A project with no `.ci/*.lua` pipeline file has no job, and ci is not asked. A
 command the listing does not name runs here with no message, so `dev board ls`
@@ -183,9 +183,9 @@ job is refused. It makes no difference what chose the laptop (`--local`,
 The refusal exits 2, prints a line that names the verb and `--remote`, and
 runs nothing. The default remote run and `--remote` still go to ci.
 
-The refusal does not apply to a `# local` verb, to a machine-local verb, or
-inside a ci job or dev box (`CI=true` or the box marker). An unset or empty
-`DEV_AGENT` changes nothing.
+The refusal does not apply to a `# local` verb, to a command that declares
+`remote: false`, or inside a ci job or dev box (`CI=true` or the box
+marker). An unset or empty `DEV_AGENT` changes nothing.
 
 When ci cannot be asked, the refusal fails with ci's error and the hint
 `An agent runs it on ci, so fix ci and rerun.`
@@ -197,10 +197,9 @@ A `DEV_AGENT` whose role, the second part of its name, is `runner`,
 agent is refused when a mutating verb runs with its root in the
 primary checkout, the folder a workspace or worktree belongs to.
 
-The mutating verbs are `install`, `uninstall`, `restow`, `stow`, `sync`,
-`setup`, `fmt`, `init`, `push`, `pull`, `follow`, `land`, `abandon`, `clean`,
-`purge`, `skills`, `tools install` and `board land`. Every other verb passes,
-`ws` and the rest of `board` included.
+The refused commands are the ones that declare `requires: workspace`, in the
+built-in row or the script header, and a noun's line covers its subcommands.
+Every other command passes.
 
 The lead role is refused only for `land`, `board land`, `abandon`, `clean`,
 `purge` and `fmt`, the verbs a lead never runs in the primary checkout. It still
@@ -316,12 +315,10 @@ everything else to the default one:
 
 ## What it refuses
 
-Verbs that act on this machine exit 2 with `dev <verb>: runs on this machine
-only, so --remote does not apply`, whatever the runner.
+A command that declares `remote: false`, in its built-in row or with a
+`# remote: false` header line, exits 2 with `dev <verb>: runs on this machine
+only, so --remote does not apply`, whatever the runner. A noun's line covers
+its subcommands.
 
-- install, uninstall, restow, sync, setup, fmt, fetch, help, init, push, pull,
-  follow, land, guide, connect, clean, purge, list, skills and stow
-- every subcommand of tools, box, board, ws, pi, antinote and zen
-
-A machine-local verb whose script has a `# patch JOB FILE` line runs its job on
-ci and applies the patch here instead of exiting 2.
+A `remote: false` command whose script has a `# patch JOB FILE` line runs its
+job on ci and applies the patch here instead of exiting 2.

@@ -49,6 +49,8 @@ end
 ---@field desc string description shown in `dev help`
 ---@field group string? heading in `dev help`, set on a verb and a noun
 ---@field hidden boolean? whether `dev help` keeps the row to `-a`, set on a verb and a noun
+---@field remote false? false when the command never runs on a remote runner
+---@field requires string[]? the preconditions the command declares, `workspace` the only one known
 ---@field script string? path of the project script behind the row
 ---@field lang "sh"|"lua"? language of that script
 
@@ -170,6 +172,24 @@ local function copy(row)
         out[key] = value
     end
     return out
+end
+
+local function declare(row, h)
+    if h.remote == false then
+        row.remote = false
+    end
+    if #h.requires > 0 then
+        local merged, seen = {}, {}
+        for _, list in ipairs({ row.requires or {}, h.requires }) do
+            for _, word in ipairs(list) do
+                if not seen[word] then
+                    seen[word] = true
+                    merged[#merged + 1] = word
+                end
+            end
+        end
+        row.requires = merged
+    end
 end
 
 local function stderr_warn(message)
@@ -397,8 +417,9 @@ function Registry:__verb(name)
         if script and not builtin.noun then
             row.kind, row.script, row.lang = "override", script.path, script.lang
             row.source = script.source
-            row.desc = self:__header(script.path, script.lang).desc
-            row.desc = row.desc ~= "" and row.desc or builtin.desc
+            local h = self:__header(script.path, script.lang)
+            row.desc = h.desc ~= "" and h.desc or builtin.desc
+            declare(row, h)
         end
     elseif script then
         row = {
@@ -408,7 +429,9 @@ function Registry:__verb(name)
             script = script.path,
             lang = script.lang,
         }
-        row.desc = self:__header(script.path, script.lang).desc
+        local h = self:__header(script.path, script.lang)
+        row.desc = h.desc
+        declare(row, h)
         if self:__has_subs(name) then
             local shadowed = fs.join(self.root, ".dev", (name:gsub(" ", "/")))
             if not fs.is_dir(shadowed) then
@@ -452,13 +475,15 @@ function Registry:__sub(noun, sub)
         if script and not builtin.noun then
             row.kind, row.script, row.lang = "override", script.path, script.lang
             row.source = script.source
-            local desc = self:__header(script.path, script.lang).desc
-            row.desc = desc ~= "" and desc or builtin.desc
+            local h = self:__header(script.path, script.lang)
+            row.desc = h.desc ~= "" and h.desc or builtin.desc
+            declare(row, h)
         end
         return row
     end
     if script then
-        return {
+        local h = self:__header(script.path, script.lang)
+        local row = {
             words = words,
             name = name,
             kind = "local",
@@ -466,10 +491,12 @@ function Registry:__sub(noun, sub)
             noun = false,
             script = script.path,
             lang = script.lang,
-            desc = self:__header(script.path, script.lang).desc,
+            desc = h.desc,
             group = noun.group,
             hidden = false,
         }
+        declare(row, h)
+        return row
     end
     if dir and self:__has_subs(name) then
         return {
@@ -508,6 +535,29 @@ function Registry:find(words)
         row = self:__sub(row, words[i])
     end
     return row
+end
+
+---Collect what a command and the commands above it declare.
+---
+---A `remote: false` or a `requires` word on a noun covers its subcommands.
+---@param words string[] the command words
+---@return false? remote false when the command or a noun above it never runs on a remote runner
+---@return string[] requires the preconditions the command and the nouns above it declare
+function Registry:declared(words)
+    local remote, requires, seen = nil, {}, {}
+    for count = 1, #words do
+        local row = self:find({ unpack(words, 1, count) })
+        if row and row.remote == false then
+            remote = false
+        end
+        for _, word in ipairs(row and row.requires or {}) do
+            if not seen[word] then
+                seen[word] = true
+                requires[#requires + 1] = word
+            end
+        end
+    end
+    return remote, requires
 end
 
 ---List the verbs and nouns.
