@@ -1826,6 +1826,99 @@ function Backend:delete_note(id, comment)
     return true
 end
 
+---The palette of a loaded board as a set of `label (value)` entries.
+---@param backend dev.board.Backend a board whose detail and palette are loaded
+---@return table<string, boolean> entries
+local function palette_entries(backend)
+    local entries = {}
+    for id, label in pairs(backend.__colors) do
+        entries[label .. " (" .. tostring(backend.__values[id]) .. ")"] = true
+    end
+    return entries
+end
+
+---List the keys of `have` that `want` lacks, sorted.
+---@param have table<string, boolean> the keys to check
+---@param want table<string, boolean> the keys that must hold them
+---@return string[] missing
+local function lacking(have, want)
+    local missing = {}
+    for key in pairs(have) do
+        if not want[key] then
+            missing[#missing + 1] = key
+        end
+    end
+    table.sort(missing)
+    return missing
+end
+
+---Read the keys of a loaded board's custom fields as a set.
+---@param backend dev.board.Backend a board whose detail is loaded
+---@return table<string, boolean>? keys
+---@return string? message
+local function field_key_set(backend)
+    local fields, message = backend:__fields(backend.__detail.id)
+    if not fields then
+        return nil, message
+    end
+    local keys = {}
+    for _, field in ipairs(fields) do
+        keys[field.key] = true
+    end
+    return keys
+end
+
+function Backend:move_to_board(id, name, column, opts)
+    local ok, message = self:__load()
+    if not ok then
+        return nil, message
+    end
+    local target = self:other_board(name)
+    ok, message = target:__load()
+    if not ok then
+        return nil, message
+    end
+    local ours, theirs = palette_entries(self), palette_entries(target)
+    local differs = lacking(ours, theirs)
+    for _, entry in ipairs(lacking(theirs, ours)) do
+        differs[#differs + 1] = entry
+    end
+    if #differs > 0 then
+        return nil, nil, board.CrossMoveReason.PALETTE, table.concat(differs, ", ")
+    end
+    local have, want
+    have, message = field_key_set(self)
+    if not have then
+        return nil, message
+    end
+    want, message = field_key_set(target)
+    if not want then
+        return nil, message
+    end
+    local absent = lacking(have, want)
+    if #absent > 0 then
+        return nil, nil, board.CrossMoveReason.FIELDS, table.concat(absent, ", ")
+    end
+    local column_id = target:__column_id(column)
+    if not column_id then
+        return nil, nil, board.CrossMoveReason.NO_COLUMN
+    end
+    if target:__column_done(column_id) then
+        return nil, nil, board.CrossMoveReason.DONE
+    end
+    local moved
+    moved, message = self:__request(
+        "POST",
+        "/api/tasks/" .. id .. "/move",
+        { column_id = column_id, position = TOP },
+        opts and opts.fence
+    )
+    if not moved then
+        return nil, message
+    end
+    return true
+end
+
 function Backend:move(id, column, opts)
     local ok, message = self:__load()
     if not ok then

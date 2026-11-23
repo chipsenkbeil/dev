@@ -275,6 +275,35 @@ testing.test("edit --board reaches the dispatcher and a local board refuses it",
     testing.eq(out, "A local board links only its own cards, so other is not reachable.\n")
 end)
 
+testing.test("move to board on a local board names Pomb and refuses", function()
+    local root, home = local_board()
+    local out, code = dev(root, home, {
+        "board",
+        "add",
+        "Write docs",
+        "--problem",
+        "x",
+        "--change",
+        "x",
+        "--out-of-scope",
+        "y",
+        "--size",
+        "1",
+        "--done-when",
+        JUDGED,
+        "--checks",
+        "dev test",
+    })
+    testing.eq(code, 0, out)
+    local id = prefix_of(out)
+    out, code = dev(root, home, { "board", "move", id, Column.READY, "--to-board", "other" })
+    testing.eq(code, 1, out)
+    testing.eq(
+        out,
+        "A local board cannot move a card to other. Moving between boards needs Pomb.\n"
+    )
+end)
+
 testing.test("boards and columns answer for a local board's own name only", function()
     local root, home = local_board()
     local out, code = dev(root, home, { "board", "boards" })

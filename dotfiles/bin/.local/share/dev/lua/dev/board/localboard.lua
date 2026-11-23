@@ -616,6 +616,11 @@ function Backend:other_board(name)
     return nil, "A local board links only its own cards, so " .. name .. " is not reachable."
 end
 
+function Backend:move_to_board(_, name)
+    return nil,
+        "A local board cannot move a card to " .. name .. ". Moving between boards needs Pomb."
+end
+
 function Backend:limit_groups()
     return false
 end

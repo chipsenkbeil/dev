@@ -8096,6 +8096,92 @@ testing.test(
     end
 )
 
+local function across_sandbox(opts)
+    opts = opts or {}
+    local root, home = sandbox()
+    local general = DETAIL
+        :gsub('"id":"board%-1","name":"dotfiles"', '"id":"board-2","name":"General"')
+        :gsub('"id":"col%-', '"id":"g-col-')
+    for name, body in pairs({
+        ["boards.json"] = '[{"id":"board-1","name":"dotfiles","archived":false},'
+            .. '{"id":"board-2","name":"General","archived":false}]',
+        ["general.json"] = general,
+        ["general_colors.json"] = opts.colors or COLORS,
+        ["general_fields.json"] = opts.fields or support.FIELDS,
+    }) do
+        assert(fs.write(root .. "/" .. name, body))
+    end
+    local routes = '*/board-2/colors) body=$(cat "$ROOT/general_colors.json") ;;\n'
+        .. '*/board-2/fields) body=$(cat "$ROOT/general_fields.json") ;;\n'
+    local at = assert(CURL:find("*/colors) body", 1, true))
+    executable(root .. "/bin/curl", CURL:sub(1, at - 1) .. routes .. CURL:sub(at))
+    return root, home
+end
+
+local function move_across(root, home, column)
+    return dev(root, home, { "board", "move", "11111111-a", column, "--to-board", "General" })
+end
+
+testing.test("move to board moves a card to the named column of the other board", function()
+    local root, home = across_sandbox()
+    local out, code = move_across(root, home, "Backlog")
+    testing.eq(code, 0, out)
+    testing.eq(out, "moved 11111111 to Backlog on board General\n")
+    local calls = read(root, "calls")
+    testing.ok(calls:find("/api/tasks/" .. ID_A .. "/move", 1, true), calls)
+    testing.ok(calls:find('"column_id":"g-col-backlog"', 1, true), calls)
+end)
+
+testing.test("move to board refuses a target with a different palette", function()
+    local root, home = across_sandbox({ colors = COLORS:gsub('"Two"', '"Deux"') })
+    local out, code = move_across(root, home, "Backlog")
+    testing.eq(code, 1, out)
+    testing.ok(out:find("Board General has a different palette", 1, true), out)
+    testing.ok(out:find("Two (green)", 1, true), out)
+    testing.ok(out:find("Deux (green)", 1, true), out)
+    testing.eq(read(root, "calls"):find("/move", 1, true), nil)
+end)
+
+testing.test("move to board refuses a target missing a field key", function()
+    local root, home = across_sandbox({
+        fields = '[{"id":"f1","key":"runner.checks","label":"Checks","kind":"table",'
+            .. '"options":[],"columns":[],"required":true}]',
+    })
+    local out, code = move_across(root, home, "Backlog")
+    testing.eq(code, 1, out)
+    testing.ok(out:find("Board General lacks the field keys", 1, true), out)
+    testing.ok(out:find("runner.allow", 1, true), out)
+    testing.ok(out:find("runner.files", 1, true), out)
+    testing.eq(read(root, "calls"):find("/move", 1, true), nil)
+end)
+
+testing.test("move to board refuses a missing column and a Done column", function()
+    local root, home = across_sandbox()
+    local out, code = move_across(root, home, "Nowhere")
+    testing.eq(code, 1, out)
+    testing.eq(out, "Board General has no Nowhere column.\n")
+    out, code = move_across(root, home, "Done")
+    testing.eq(code, 1, out)
+    testing.ok(out:find("is a Done column", 1, true), out)
+    testing.eq(read(root, "calls"):find("/move", 1, true), nil)
+end)
+
+testing.test("move to board refuses the flags that only apply to one board", function()
+    local root, home = across_sandbox()
+    local out, code = dev(root, home, {
+        "board",
+        "move",
+        "11111111-a",
+        "Backlog",
+        "--to-board",
+        "General",
+        "--lane",
+        "x",
+    })
+    testing.eq(code, 2, out)
+    testing.eq(read(root, "calls"):find("/move", 1, true), nil)
+end)
+
 testing.test("the lead's close of an epic names the open children", function()
     local root, home = epic_sandbox(1, true)
     local out, code = dev(

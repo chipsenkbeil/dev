@@ -603,9 +603,9 @@ return {
     {
         words = { "board", "move" },
         handler = "lua",
-        flags = "--lane --max-size --wait",
-        usage = "dev board move CARD COLUMN [--lane L] [--max-size N] [--wait SECONDS]",
-        desc = "Move a card to the top of a column",
+        flags = "--lane --max-size --to-board --wait",
+        usage = "dev board move CARD COLUMN [--lane L] [--max-size N] [--to-board NAME] [--wait SECONDS]",
+        desc = "Move a card to the top of a column, of another Pomb board with --to-board",
     },
     {
         words = { "board", "order" },

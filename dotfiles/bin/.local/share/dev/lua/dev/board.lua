@@ -255,6 +255,11 @@ end
 ---   boolean?, string?, dev.board.MoveReason? the card moved to a column, or nil, a message and
 ---   `full` when Pomb refuses it at a limit, or nil, no message and `no_column` or `no_lane` when
 ---   the board lacks it, which `move_refusal` writes
+---@field move_to_board fun(self: dev.board.Backend, id: string, name: string, column: string,
+---   opts: dev.board.move.Opts?): boolean?, string?, dev.board.CrossMoveReason?, string? the card
+---   moved to a column of the Pomb board `name` after both boards' palettes and field keys were
+---   read, or nil and a message, or nil, no message, a reason and its detail, which
+---   `cross_move_refusal` writes
 ---@field limits fun(self: dev.board.Backend, name: string?): dev.board.limits.Limits?, string? the
 ---   column and group limits the board holds, or those of the Pomb board named `name`, empty on a
 ---   board with none, or nil and a message
@@ -494,6 +499,32 @@ M.ACTOR = { AGENT = "agent", HUMAN = "human" }
 ---The reasons a move names beside its message when the refusal is a fixed one.
 ---@enum dev.board.MoveReason
 M.MoveReason = { FULL = "full", NO_COLUMN = "no_column", NO_LANE = "no_lane" }
+
+---The reasons a move to another board names beside its detail when the refusal is a fixed one.
+---@enum dev.board.CrossMoveReason
+M.CrossMoveReason =
+    { PALETTE = "palette", FIELDS = "fields", NO_COLUMN = "no_column", DONE = "done" }
+
+---Write why a move to another board was refused, from the reason the backend named.
+---@param reason dev.board.CrossMoveReason? the reason the backend named
+---@param detail string? what differs, the palette colours or the field keys
+---@param name string the target board's name
+---@param column string the column of the move
+---@return string message the text
+function M.cross_move_refusal(reason, detail, name, column)
+    if reason == M.CrossMoveReason.PALETTE then
+        return "Board " .. name .. " has a different palette (" .. detail .. ")."
+    elseif reason == M.CrossMoveReason.FIELDS then
+        return "Board " .. name .. " lacks the field keys " .. detail .. "."
+    elseif reason == M.CrossMoveReason.DONE then
+        return "Column "
+            .. column
+            .. " of board "
+            .. name
+            .. " is a Done column. Move the card to another column and close it there."
+    end
+    return "Board " .. name .. " has no " .. column .. " column."
+end
 
 ---The reason a seat verdict names beside its message when the card lacks the seat.
 ---@enum dev.board.SeatReason

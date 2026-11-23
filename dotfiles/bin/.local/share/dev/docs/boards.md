@@ -4156,14 +4156,32 @@ Whose comment:
 
 ### move
 
-`dev board move CARD COLUMN [--lane L] [--max-size N] [--wait SECONDS]` moves
-the card to the top of the column and prints `moved <id prefix> to <column>`.
-CARD may be `BOARD:PREFIX` for a card of another board of the same Pomb
-server, and the move acts on that board.
+`dev board move CARD COLUMN [--lane L] [--max-size N] [--to-board NAME]
+[--wait SECONDS]` moves the card to the top of the column and prints `moved <id
+prefix> to <column>`. CARD may be `BOARD:PREFIX` for a card of another board of
+the same Pomb server, and the move acts on that board.
 
 - The card keeps its swimlane. `--lane L` moves it to that lane too, and puts it
   at the top of the column in that lane. Pomb counts a position within one
   column and lane, so `order` takes cards of one lane only.
+
+`--to-board NAME` moves the card to a column of the Pomb board NAME and prints
+`moved <id prefix> to <column> on board NAME`. `--board` already names the board
+the card sits on, so it cannot carry this. Pomb keeps the card's comments,
+subtasks, links and time, and keeps a custom field only when NAME defines the
+same key.
+
+- COLUMN is read as a column name of NAME, with no stage rule of the card's own
+  board. The flag takes no `--lane`, `--wait` or `--max-size`, which exit 2.
+- dev posts the single move route and sends the claim fence when the card has
+  one.
+- Before any write, dev reads the palette and the field keys of both boards.
+  It refuses with exit 1 and no write when NAME has a colour or label the
+  card's board lacks or the other way round, naming each one, when NAME lacks a
+  field key of the card's board, naming each key, when NAME has no such column,
+  and when the column is a Done column, since the move would skip the outcome
+  check.
+- A local board refuses the flag with a message that names Pomb.
 
 A full column:
 

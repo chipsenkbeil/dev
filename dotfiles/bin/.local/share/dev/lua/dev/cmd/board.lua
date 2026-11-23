@@ -1801,7 +1801,12 @@ local function ready_refusal(backend, card, shape)
     end
 end
 
-local MOVE_FLAGS = { [runner.FLAG] = true, [WAIT_FLAG] = true, ["--lane"] = true }
+local MOVE_FLAGS = {
+    [runner.FLAG] = true,
+    [WAIT_FLAG] = true,
+    ["--lane"] = true,
+    ["--to-board"] = true,
+}
 
 ---Remove the workspace of a no-change card that has moved to Done.
 ---
@@ -2164,6 +2169,37 @@ local function until_room(wait, opts, try)
     end
 end
 
+---Move a card to a column of another board, which only Pomb can do.
+---@param backend dev.board.Backend the board the card sits on
+---@param flags table<string, string> the parsed flags
+---@param words string[] the card and the column words
+---@return dev.cmd.board.Result result the output, or a message and the exit code
+local function move_across(backend, flags, words)
+    if #words < 2 then
+        return usage("Needs a card and a column.")
+    end
+    if flags["--lane"] or flags[WAIT_FLAG] or flags[runner.FLAG] then
+        return usage("The --to-board flag cannot go with --lane, --wait or " .. runner.FLAG .. ".")
+    end
+    local card, err = find_card(backend, words[1])
+    if not card then
+        return err
+    end
+    local held_back = owner_holds(card)
+    if held_back then
+        return held_back
+    end
+    local held = claims.read(card.id)
+    local name, column = flags["--to-board"], table.concat(words, " ", 2)
+    local ok, message, reason, detail =
+        backend:move_to_board(card.id, name, column, { fence = held and held.fence })
+    if not ok then
+        return failure(reason and board.cross_move_refusal(reason, detail, name, column) or message)
+    end
+    local short = card.id:sub(1, board.MIN_PREFIX)
+    return { output = "moved " .. short .. " to " .. column .. " on board " .. name }
+end
+
 ---Move a card, and with `--wait SECONDS` try again while its column is full.
 ---@param backend dev.board.Backend the board
 ---@param args string[] the card, the column and the flags
@@ -2174,7 +2210,10 @@ local function move_card(backend, args, opts)
     if foreign then
         return foreign
     end
-    local flags = parse(args, MOVE_FLAGS)
+    local flags, words = parse(args, MOVE_FLAGS)
+    if flags and flags["--to-board"] then
+        return move_across(backend, flags, words)
+    end
     local wait, bad_wait = wait_seconds(flags)
     if not wait then
         return bad_wait
