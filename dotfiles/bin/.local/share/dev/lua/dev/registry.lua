@@ -518,7 +518,7 @@ end
 ---subcommand, though no script replaces a built-in noun. A script
 ---`.dev/<verb>.<ext>` beats a directory of the same name, but a project
 ---directory beats a global script of that name. A `__` script is found here
----though `verbs` and `subs` list it.
+---though `commands` and `subs` list it.
 ---@param words string[] one word for a verb or noun, then one for each level of subcommand
 ---@return dev.Row? row nil when nothing answers to the words
 function Registry:find(words)
@@ -560,12 +560,12 @@ function Registry:declared(words)
     return remote, requires
 end
 
----List the verbs and nouns.
+---List the commands.
 ---
 ---The built-in rows come first, in the order of the built-in table, then the
----project's scripts, then its noun directories. A `__` script is left out.
+---project's scripts, then its directories of subcommands. A `__` script is left out.
 ---@return dev.Row[] rows the rows, with the built-in ones overridden by a project script
-function Registry:verbs()
+function Registry:commands()
     local rows = {}
     for _, builtin in ipairs(builtins) do
         if #builtin.words == 1 then
@@ -587,7 +587,7 @@ function Registry:verbs()
     return rows
 end
 
----List the subcommands of a noun.
+---List the subcommands of a command.
 ---@param noun string|string[] the noun's words, or its name when it is one word
 ---@return dev.Row[] rows the built-in subcommands, then the project's, none for words that are not
 ---   a noun
@@ -627,7 +627,7 @@ function Registry:scripts()
 end
 
 ---Read the header of the script behind a row.
----@param row dev.Row a row from `find`, `verbs` or `subs`
+---@param row dev.Row a row from `find`, `commands` or `subs`
 ---@return dev.Header? header nil when the row has no script
 function Registry:header(row)
     return row.script and self:__header(row.script, row.lang) or nil

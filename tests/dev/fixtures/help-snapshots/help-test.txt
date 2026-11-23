@@ -9,7 +9,7 @@ Global flags:
   -v                      print each command before it runs
   -vv                     also trace every line of dev and of each bash script
   --remote                run this command on a remote runner, see `dev help remote`
-  --local                 run this command here, whatever the default is (refused for a ci verb under DEV_AGENT)
+  --local                 run this command here, whatever the default is (refused for a ci command under DEV_AGENT)
   --detach                with --remote, start the job and return
   --priority              with --remote, start the job ahead of normal ci jobs
   --job-timeout DURATION  with --remote, give the ci run a time limit

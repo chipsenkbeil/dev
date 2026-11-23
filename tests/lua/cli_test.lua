@@ -353,14 +353,14 @@ testing.test("--remote is never an unknown flag", function()
     testing.ok(not out:find("Unknown flag", 1, true), out)
 end)
 
-testing.test("root-tests and bootstrap-arch are unknown verbs", function()
+testing.test("root-tests and bootstrap-arch are unknown commands", function()
     for _, name in ipairs({ "root-tests", "bootstrap-arch" }) do
         local out, code = dev_os.capture(
             { REPO .. "/dotfiles/bin/.local/bin/dev", name },
             { cwd = REPO, stderr = "stdout" }
         )
         testing.eq(code, 2)
-        testing.ok(out:find("dev: unknown verb " .. name .. "\n", 1, true), out)
+        testing.ok(out:find("dev: unknown command " .. name .. "\n", 1, true), out)
     end
 end)
 

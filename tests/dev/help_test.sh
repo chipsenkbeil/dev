@@ -129,7 +129,7 @@ for root in "$PROJ" "$REPO"; do
         want=1
         case "$hidden" in *" $verb "*) want=0 ;; esac
         assert_eq "$(basename "$root"): $verb is in $want group" "$(group_count "$listing" "$verb")" "$want"
-    done < <(cd "$root" && DOTFILES="$REPO" "$DEV" __verbs | cut -f1)
+    done < <(cd "$root" && DOTFILES="$REPO" "$DEV" __commands | cut -f1)
     if [ "$root" = "$PROJ" ]; then
         assert_contains "the fixture hides plumbing" "$hidden" " plumbing "
     else
@@ -202,13 +202,13 @@ assert_eq "__topics check fails on a bad first line" "$rc" "1"
 assert_contains "__topics check explains the first line" "$out" "the first line must be"
 check_topic lint '# lint: A topic named like a verb'
 assert_eq "__topics check fails on a topic named like a verb" "$rc" "1"
-assert_contains "__topics check names the verb collision" "$out" "is also a verb"
+assert_contains "__topics check names the command collision" "$out" "is also a command"
 check_topic flags '# flags: A project topic named like a built-in one'
 assert_eq "__topics check fails on a topic that shadows a built-in" "$rc" "1"
 assert_contains "__topics check names the built-in collision" "$out" "is also a built-in topic"
 
 out="$(fixture_dev help nosuch)"
-assert_contains "help of an unknown name says so" "$out" "unknown verb nosuch, and no topic of that name"
+assert_contains "help of an unknown name says so" "$out" "unknown command nosuch, and no topic of that name"
 assert_contains "help of an unknown name exits 2" "$out" "exit 2"
 
 # The porting topic's before and after verbs behave the same

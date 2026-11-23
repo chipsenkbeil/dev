@@ -23,22 +23,22 @@ local TOPIC_WIDTH = 100
 local LESS = "less -R"
 local FILTER_HINT = "& filters · / searches · q quits"
 local HELP_CTX = { name = "help" }
-local ONE_COMMAND = "`dev help <verb>` for one command and `dev help <topic>` for a topic."
+local ONE_COMMAND = "`dev help <command>` for one command and `dev help <topic>` for a topic."
 local LISTED = { push = push, pull = pull, sync = sync, follow = follow }
 local HELPERS = {
-    { "__verbs", "List the verbs with their descriptions, for shell completion" },
-    { "__subs", "List the subcommands of a noun, for shell completion" },
-    { "__flags", "List the flags of a verb, for shell completion" },
+    { "__commands", "List the commands with their descriptions, for shell completion" },
+    { "__subs", "List the subcommands of a command, for shell completion" },
+    { "__flags", "List the flags of a command, for shell completion" },
     { "__args", "List the values the next word can take, for shell completion" },
     {
         "__topics check",
-        "Check the built-in and project topics against the real verbs and flags",
+        "Check the built-in and project topics against the real commands and flags",
     },
 }
 
 ---@class dev.help.verb.Opts
----@field words string[] one word for a verb, two for a subcommand
----@field short boolean? true for the usage and flags `dev <verb> -h` shows
+---@field words string[] one word for a command, two for a subcommand
+---@field short boolean? true for the usage and flags `dev <command> -h` shows
 
 ---@class dev.help.noun.Opts
 ---@field stderr boolean? print on standard error, for a usage error
@@ -84,7 +84,7 @@ local function row_text(c, lead, desc)
 end
 
 ---@class dev.help.Row
----@field name string the verb, subcommand or topic
+---@field name string the command, subcommand or topic
 ---@field origin string? where it comes from
 ---@field desc string the description
 
@@ -189,12 +189,12 @@ local function project_type(ctx)
 end
 
 ---@class dev.help.verb_rows.Opts
----@field all boolean? whether the hidden verbs and dev's helpers are listed too
+---@field all boolean? whether the hidden commands and dev's helpers are listed too
 
 local function verb_rows(reg, opts)
     local all = opts.all
     local rows = {}
-    for _, row in ipairs(reg:verbs()) do
+    for _, row in ipairs(reg:commands()) do
         if not row.hidden then
             rows[#rows + 1] =
                 { group = row.group, name = row.name, origin = row.kind, desc = row.desc }
@@ -279,17 +279,17 @@ local function overview(ctx, reg, c, opts)
         out[#out + 1] = "\n"
             .. pointer(
                 c,
-                "Run `dev help -a` for all, `dev help <verb>` for one, `dev help <topic>` for a topic."
+                "Run `dev help -a` for all, `dev help <command>` for one, `dev help <topic>` for a topic."
             )
     end
     return table.concat(out)
 end
 
----Return a noun's description and subcommands as `dev help <noun>` prints them.
+---Return a command's description and subcommands as `dev help <command>` prints them.
 ---@param reg dev.Registry the project's registry
 ---@param c dev.ui.Context the drawing settings
----@param words string[] the noun's words
----@return string text the noun's help
+---@param words string[] the command's words
+---@return string text the command's help
 function M.noun_text(reg, c, words)
     local out = {}
     local noun = table.concat(words, " ")
@@ -326,7 +326,7 @@ local function verb_text(ctx, reg, c, opts)
         {
             "--local",
             "run this command here, whatever the default is "
-                .. "(refused for a ci verb under DEV_AGENT)",
+                .. "(refused for a ci command under DEV_AGENT)",
         },
         { "--detach", "with --remote, start the job and return" },
         { "--priority", "with --remote, start the job ahead of normal ci jobs" },
@@ -338,7 +338,7 @@ local function verb_text(ctx, reg, c, opts)
     local name = table.concat(words, " ")
     local row = reg:find(words)
     if not row or row.noun then
-        fail("unknown verb " .. name)
+        fail("unknown command " .. name)
     end
     local out = {}
     out[#out + 1] = ui.paint(c, "dev " .. name, Style.BOLD)
@@ -396,12 +396,12 @@ local function verb_text(ctx, reg, c, opts)
     return table.concat(out)
 end
 
----Print the details of one verb or subcommand.
+---Print the details of one command or subcommand.
 ---
 ---An unknown name is a usage error of `dev help`, exit 2.
 ---@param ctx dev.Ctx the context of the command
 ---@param reg dev.Registry the project's registry
----@param opts dev.help.verb.Opts which verb, and whether to print the short form
+---@param opts dev.help.verb.Opts which command, and whether to print the short form
 ---@return integer code 0
 function M.verb(ctx, reg, opts)
     io.write(verb_text(ctx, reg, screen(), opts))
@@ -464,7 +464,7 @@ function M.hinted(content, c)
     return content .. "\n" .. ui.paint(c, FILTER_HINT, Style.DIM) .. "\n"
 end
 
----Refuse a flag or argument a verb does not take.
+---Refuse a flag or argument a command does not take.
 ---
 ---It prints the message and the curated view on standard error, then exits 2.
 ---@param ctx dev.Ctx the context of the command
@@ -480,7 +480,7 @@ function M.bad_argument(ctx, reg, arg)
     os.exit(2)
 end
 
----Refuse a combination of arguments a verb does not take.
+---Refuse a combination of arguments a command does not take.
 ---
 ---It prints `dev: <message>` and the curated view on standard error, then exits 2.
 ---@param ctx dev.Ctx the context of the command
@@ -521,9 +521,9 @@ function M.page(content, opts)
     page(content, opts)
 end
 
----Print a noun's description and its subcommands.
+---Print a command's description and its subcommands.
 ---@param reg dev.Registry the project's registry
----@param noun string|string[] the noun's words, or its name when it is one word
+---@param noun string|string[] the command's words, or its name when it is one word
 ---@param opts dev.help.noun.Opts? where to print
 ---@return integer code 0
 function M.noun(reg, noun, opts)
@@ -539,8 +539,8 @@ end
 
 ---Run `dev help`.
 ---
----With no argument it prints the curated view. `-a` adds the hidden verbs,
----`--topics` lists the topics, `-k TOPIC` prints one, and a verb, noun or
+---With no argument it prints the curated view. `-a` adds the hidden commands,
+---`--topics` lists the topics, `-k TOPIC` prints one, and a command or
 ---topic name prints its details. A topic goes through the pager when it is
 ---taller than the screen, unless `--no-pager` is given or `DEV_PAGER` is `0`.
 ---@param ctx dev.Ctx the context, whose `args` are the arguments after `help`
@@ -596,7 +596,7 @@ function M.run(ctx, reg)
         elseif topic_path(ctx, first) then
             print_topic(ctx, first, { no_pager = no_pager })
         else
-            fail("unknown verb " .. first .. ", and no topic of that name")
+            fail("unknown command " .. first .. ", and no topic of that name")
         end
     else
         local parent = { first }

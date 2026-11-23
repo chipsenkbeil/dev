@@ -150,7 +150,7 @@ end
 
 testing.test("no command word of this repository has a hyphen, at any depth", function()
     local found = {}
-    for line in dev(REPO, { "__verbs" }):gmatch("[^\n]+") do
+    for line in dev(REPO, { "__commands" }):gmatch("[^\n]+") do
         local name = line:match("^[^\t]+")
         found[#found + 1] = name
         names_below({ name }, found)

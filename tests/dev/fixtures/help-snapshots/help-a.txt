@@ -39,18 +39,18 @@ Widgets
 
 Hidden
   bootstrap                   Run bootstrap.sh from the dotfiles clone
-  help                        Show the commands, the details of one verb or a topic
-  plumbing                    Internal helper for the other verbs.
-  __verbs                     List the verbs with their descriptions, for shell completion
-  __subs                      List the subcommands of a noun, for shell completion
-  __flags                     List the flags of a verb, for shell completion
+  help                        Show the commands, the details of one command or a topic
+  plumbing                    Internal helper for the other commands.
+  __commands                  List the commands with their descriptions, for shell completion
+  __subs                      List the subcommands of a command, for shell completion
+  __flags                     List the flags of a command, for shell completion
   __args                      List the values the next word can take, for shell completion
-  __topics check              Check the built-in and project topics against the real verbs and flags
+  __topics check              Check the built-in and project topics against the real commands and flags
 
 Topics
   commands                    How the fixture commands work
   flags                       The global flags of the fixture
   overview                    What the fixture project is for and where to start
 
-Run `dev help <verb>` for one command and `dev help <topic>` for a topic.
+Run `dev help <command>` for one command and `dev help <topic>` for a topic.
 exit 0

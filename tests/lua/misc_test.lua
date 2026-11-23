@@ -53,11 +53,11 @@ testing.test("guide says how to install guide when it is missing", function()
     fs.remove(root, { recursive = true })
 end)
 
-testing.test("deploy is an unknown verb without a script", function()
+testing.test("deploy is an unknown command without a script", function()
     local root = support.sandbox({}, {})
     local out, code = support.dev(root, { "deploy" })
     testing.eq(code, 2)
-    testing.ok(out:find("dev: unknown verb deploy\n", 1, true), out)
+    testing.ok(out:find("dev: unknown command deploy\n", 1, true), out)
     fs.remove(root, { recursive = true })
 end)
 

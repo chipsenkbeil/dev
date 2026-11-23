@@ -1,12 +1,12 @@
 ---@class dev.Builtin
----@field words string[] the command words, a noun and a subcommand for a subcommand row
----@field handler string? "lua" for a Lua handler, nil for a noun
----@field noun boolean? whether the row is a noun
----@field flags string? the flags the verb takes, space separated
----@field usage string? the usage line `dev help <verb>` shows
+---@field words string[] the command words, a command and a subcommand for a subcommand row
+---@field handler string? "lua" for a Lua handler, nil for a command with subcommands
+---@field noun boolean? whether the row is a command with subcommands
+---@field flags string? the flags the command takes, space separated
+---@field usage string? the usage line `dev help <command>` shows
 ---@field desc string description shown in `dev help`
----@field group string? heading in `dev help`, nil for a subcommand or a hidden verb
----@field hidden boolean? whether `dev help` keeps the verb to `-a`
+---@field group string? heading in `dev help`, nil for a subcommand or a hidden command
+---@field hidden boolean? whether `dev help` keeps the command to `-a`
 ---@field remote false? false when the command never runs on a remote runner, which covers its
 ---   subcommands
 ---@field requires string[]? preconditions the command needs, `workspace` for a refusal in a
@@ -710,8 +710,8 @@ return {
         remote = false,
         handler = "lua",
         flags = "-a -k --topics --no-pager",
-        usage = "dev help [-a] [--topics] [-k topic] [--no-pager] [verb or topic]",
-        desc = "Show the commands, the details of one verb or a topic",
+        usage = "dev help [-a] [--topics] [-k topic] [--no-pager] [command or topic]",
+        desc = "Show the commands, the details of one command or a topic",
         hidden = true,
     },
 }

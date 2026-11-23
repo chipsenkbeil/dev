@@ -31,7 +31,7 @@ end
 
 testing.test("a topic naming a missing verb is reported at its line", function()
     local root = project({ ["topics/a.md"] = "# a: A topic\n\nSee `dev nope` here.\n" })
-    testing.eq(problems(root), { ".dev/topics/a.md:3: `dev nope`: no verb nope" })
+    testing.eq(problems(root), { ".dev/topics/a.md:3: `dev nope`: no command nope" })
     fs.remove(root, { recursive = true })
 end)
 
@@ -40,7 +40,7 @@ testing.test("a fenced command is checked, a placeholder and a global flag are n
         ["topics/a.md"] = "# a: A topic\n\n```\ndev -vv --remote lint\ndev -C some/dir lint\n"
             .. "dev <verb> --x\ndev nope\n```\n",
     })
-    testing.eq(problems(root), { ".dev/topics/a.md:7: no verb nope" })
+    testing.eq(problems(root), { ".dev/topics/a.md:7: no command nope" })
     fs.remove(root, { recursive = true })
 end)
 
@@ -66,7 +66,7 @@ testing.test("a bad first line and a topic named like a verb are reported", func
     testing.eq(problems(root), {
         '.dev/topics/a.md:1: the first line must be "# a: <summary>"',
         '.dev/topics/c.md:1: the first line must be "# c: <summary>"',
-        ".dev/topics/lint.md:1: topic lint is also a verb",
+        ".dev/topics/lint.md:1: topic lint is also a command",
     })
     fs.remove(root, { recursive = true })
 end)

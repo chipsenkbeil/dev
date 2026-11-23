@@ -259,10 +259,10 @@ assert_contains "help lists the global flags" "$(run_dev "$vp" help)" "global fl
 
 # Usage
 run_dev "$rust" bogus >/dev/null 2>&1
-assert_eq "unknown verb exits 2" "$?" "2"
+assert_eq "unknown command exits 2" "$?" "2"
 out="$(run_dev "$rust" help nosuch 2>&1)"
-assert_eq "help of an unknown verb exits 2" "$?" "2"
-assert_contains "help names the unknown verb" "$out" "dev help: unknown verb nosuch"
+assert_eq "help of an unknown command exits 2" "$?" "2"
+assert_contains "help names the unknown command" "$out" "dev help: unknown command nosuch"
 
 BOUNDED_TIMEOUT_SECS=10
 bounded_dev() {
@@ -299,7 +299,7 @@ out="$(run_dev "$rust")"
 assert_eq "no verb exits 0" "$?" "0"
 assert_contains "bare dev names the project type" "$out" "rust project at"
 assert_contains "help marks the override" "$out" "(override)"
-assert_not_contains "help hides the hidden verbs" "$out" "__verbs"
+assert_not_contains "help hides the hidden commands" "$out" "__commands"
 
 # A local-only verb runs, and the listings carry it with its description
 printf '#!/usr/bin/env bash\n# Install the thing.\n# flags: --now --later\necho "installed $*"\n' >"$rust/.dev/install.sh"
@@ -309,11 +309,11 @@ assert_eq "local-only verb runs its script" "$out" "installed --now"
 assert_contains "-h on a script verb gives help" "$(run_dev "$rust" install -h)" "dev install"
 assert_eq "-- lets -h through to a script verb" "$(run_dev "$rust" install -- -h)" "installed -h"
 assert_eq "-h after the -- of a built-in reaches its command" "$(run_dev "$rust" run -- -h >/dev/null && log)" "cargo run -- -h"
-out="$(run_dev "$rust" __verbs)"
-assert_contains "__verbs lists a local verb with its description" "$out" "install	local	Install the thing."
-assert_contains "__verbs lists a built-in" "$out" "fmt	builtin	"
-assert_contains "__verbs marks an override" "$out" "lint	override	"
-assert_not_contains "__verbs hides hidden verbs" "$out" "__"
+out="$(run_dev "$rust" __commands)"
+assert_contains "__commands lists a local command with its description" "$out" "install	local	Install the thing."
+assert_contains "__commands lists a built-in" "$out" "fmt	builtin	"
+assert_contains "__commands marks an override" "$out" "lint	override	"
+assert_not_contains "__commands hides hidden commands" "$out" "__"
 out="$(run_dev "$rust" help)"
 assert_contains "help lists a local verb under the project's group" "$out" "$(printf '\nrust\n  install')"
 assert_contains "help shows a local verb description" "$out" "Install the thing."
@@ -322,10 +322,10 @@ for flag in --type --name --dry-run --no-gerrit; do
     assert_contains "help init lists $flag" "$out" "$flag"
 done
 help_out="$(run_dev "$rust" help -a)"
-verbs_out="$(run_dev "$rust" __verbs)"
+commands_out="$(run_dev "$rust" __commands)"
 for verb in lint fmt test build run push pull sync init help; do
     assert_contains "help lists built-in $verb" "$help_out" "  $verb "
-    assert_contains "__verbs lists built-in $verb" "$verbs_out" "$verb	"
+    assert_contains "__commands lists built-in $verb" "$commands_out" "$verb	"
 done
 out="$(run_dev "$rust" __flags install)"
 assert_eq "__flags reads the flags line of a script and adds the global flags" "$out" "--now
@@ -866,9 +866,9 @@ assert_eq "noun --help exits 0" "$?" "0"
 assert_contains "noun --help lists the subcommands" "$out" "diff  Diff the widget."
 out="$(run_dev "$nn" widget __helper 2>&1)"
 assert_eq "a hidden script is not a subcommand" "$?" "2"
-out="$(run_dev "$nn" __verbs)"
-assert_contains "__verbs lists a noun" "$out" "widget	local	Manage the widget."
-assert_contains "__verbs lists a flat hyphenated verb" "$out" "verify-prod	local	Verify prod."
+out="$(run_dev "$nn" __commands)"
+assert_contains "__commands lists a command with subcommands" "$out" "widget	local	Manage the widget."
+assert_contains "__commands lists a flat hyphenated command" "$out" "verify-prod	local	Verify prod."
 out="$(run_dev "$nn" __subs widget)"
 assert_eq "__subs lists the subcommands with descriptions" "$out" "diff	local	Diff the widget.
 save	local	Save the widget."
@@ -1174,7 +1174,7 @@ badp="$(project repobad)"
 mkdir -p "$badp/.dev"
 printf '[agent]\nprimary_guarded = "bump"\n' >"$badp/.dev/config.toml"
 out="$(DEV_AGENT=repo/implementer/c cirun "$badp" bump 2>&1)"
-assert_contains "a non-list agent.primary_guarded is a malformed config" "$out" "must be a list of verb names."
+assert_contains "a non-list agent.primary_guarded is a malformed config" "$out" "must be a list of command names."
 
 if [ "$fails" -gt 0 ]; then
     printf '\n%d failure(s)\n' "$fails"

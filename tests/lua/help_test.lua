@@ -88,7 +88,7 @@ testing.test("a usage error of dev help names the command and exits 2", function
     testing.eq(out, "dev help: -a takes no arguments, got x\n")
     testing.eq(code, 2)
     out, code = dev(root, { "help", "nosuch" })
-    testing.eq(out, "dev help: unknown verb nosuch, and no topic of that name\n")
+    testing.eq(out, "dev help: unknown command nosuch, and no topic of that name\n")
     testing.eq(code, 2)
     out, code = dev(root, { "help", "-k" })
     testing.eq(out, "dev help: -k needs one topic name\n")
@@ -105,7 +105,7 @@ testing.test("a topic that shares a verb's name is reported by the topic check",
     })
     local out, code = dev(root, { "__topics", "check" })
     testing.eq(code, 1)
-    testing.ok(out:find("topic a is also a verb", 1, true), out)
+    testing.ok(out:find("topic a is also a command", 1, true), out)
 end)
 
 testing.test("--no-pager is accepted by help and changes nothing off a terminal", function()

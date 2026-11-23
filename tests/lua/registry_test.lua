@@ -81,7 +81,7 @@ end)
 
 testing.test("verbs lists builtins, then project verbs, and keeps __ helpers out", function()
     local root = make_project()
-    local names = words(registry.load(root):verbs())
+    local names = words(registry.load(root):commands())
     testing.eq(names[1], "lint")
     testing.eq({ unpack(names, #names - 2) }, { "a", "quiet", "n" })
     testing.eq(registry.load(root):find({ "__h" }).desc, "Helper.")
@@ -293,7 +293,7 @@ testing.test(".dev/lua, .dev/topics and .dev/standalone are never nouns", functi
     testing.eq(reg:find({ "topics", "guide" }), nil)
     testing.eq(reg:is_noun("standalone"), false)
     testing.eq(reg:find({ "standalone", "run" }), nil)
-    for _, row in ipairs(reg:verbs()) do
+    for _, row in ipairs(reg:commands()) do
         testing.ok(
             row.name ~= "lua" and row.name ~= "topics" and row.name ~= "standalone",
             "reserved directory listed as " .. row.name
@@ -383,7 +383,7 @@ testing.test("dotfile scripts and dot directories are neither verbs nor nouns", 
     scripted(root, ".dev/.dd/x.sh", "#!/usr/bin/env bash\n# In a dot dir.\n")
     scripted(root, ".dev/n/.dot.sh", "#!/usr/bin/env bash\n# Dot sub.\n")
     local reg = registry.load(root)
-    for _, row in ipairs(reg:verbs()) do
+    for _, row in ipairs(reg:commands()) do
         testing.ok(row.name:sub(1, 1) ~= ".", "dot name listed as " .. row.name)
     end
     testing.eq(reg:find({ "n", ".dot" }), nil)
@@ -401,7 +401,7 @@ testing.test("local verbs come in the order the shell glob gives", function()
     for name in out:gmatch("([^\n]+)%.sh\n") do
         want[#want + 1] = name
     end
-    local got = words(registry.load(root):verbs())
+    local got = words(registry.load(root):commands())
     testing.eq({ unpack(got, #got - #want + 1) }, want)
     fs.remove(root, { recursive = true })
 end)

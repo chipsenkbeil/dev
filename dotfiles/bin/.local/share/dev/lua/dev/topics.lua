@@ -82,7 +82,7 @@ local function command_error(reg, line)
     end
     local path = { name }
     if not reg:find(path) then
-        return "no verb " .. name
+        return "no command " .. name
     end
     while reg:is_noun(path) do
         local next_word = words[i + 1] or ""
@@ -148,7 +148,7 @@ local function check_file(reg, file, out)
         problem(1, "topic " .. file.name .. " is also a built-in topic")
     end
     if reg:find({ file.name }) then
-        problem(1, "topic " .. file.name .. " is also a verb")
+        problem(1, "topic " .. file.name .. " is also a command")
     end
     local fence = false
     local number = 0
@@ -177,13 +177,13 @@ local function check_file(reg, file, out)
     end
 end
 
----Check the topics and every script header against the real verbs and flags.
+---Check the topics and every script header against the real commands and flags.
 ---
 ---The built-in topics sit in the `docs` folder beside `main.lua`, so they are
 ---checked when that folder lies inside the project, and the project's topics in
 ---every project. A topic's first line must be `# <name>: <summary>`, its name
----may not clash with a built-in topic or a verb, and each backticked `dev ...` span or
----fenced `dev ...` line must name a real verb or subcommand and only flags
+---may not clash with a built-in topic or a command, and each backticked `dev ...` span or
+---fenced `dev ...` line must name a real command or subcommand and only flags
 ---`Registry:flags` or `Registry:shadowed_flags` lists. A script whose flags line declares
 ---`-h` or `--help` is a problem too.
 ---@param reg dev.Registry the project's registry, whose warnings are ignored

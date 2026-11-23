@@ -1,8 +1,8 @@
 dev help
-  Show the commands, the details of one verb or a topic
+  Show the commands, the details of one command or a topic
 
 usage
-  dev help [-a] [--topics] [-k topic] [--no-pager] [verb or topic]
+  dev help [-a] [--topics] [-k topic] [--no-pager] [command or topic]
 
 flags
   -a

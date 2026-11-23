@@ -30,9 +30,9 @@ local function dev(root, args)
     return dev_os.capture(argv, { cwd = root, stderr = "null", env = { DEV_SELF = SELF } })
 end
 
-testing.test("__verbs lists a .lua project verb as local with its description", function()
+testing.test("__commands lists a .lua project command as local with its description", function()
     local root = project({ ["a.lua"] = "--[[\nFrom Lua.\n]]\nreturn 0\n" })
-    local out = dev(root, { "__verbs" })
+    local out = dev(root, { "__commands" })
     testing.ok(out:find("\na\tlocal\tFrom Lua.\n", 1, true), out)
     testing.ok(out:find("^lint\tbuiltin\t"), out)
     fs.remove(root, { recursive = true })
@@ -103,7 +103,7 @@ testing.test(
         local share = share_copy(root)
         local out, code = check_with(share, root, { DEV_SELF = SELF })
         testing.eq(code, 1)
-        testing.eq(out, "dev/docs/bad.md:3: `dev nope`: no verb nope\n")
+        testing.eq(out, "dev/docs/bad.md:3: `dev nope`: no command nope\n")
         fs.remove(root, { recursive = true })
     end
 )

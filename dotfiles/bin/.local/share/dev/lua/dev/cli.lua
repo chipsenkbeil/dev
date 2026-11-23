@@ -57,7 +57,7 @@ local NOT_TAKEN = {
 }
 local EXCLUSIVE = { sync = true }
 local HIDDEN_HELPERS = {
-    __verbs = complete.verbs,
+    __commands = complete.commands,
     __subs = complete.subs,
     __flags = complete.flags,
     __args = complete.args,
@@ -244,7 +244,7 @@ end
 local WORKSPACE_ROLES =
     { runner = true, implementer = true, planner = true, reviewer = true, verifier = true }
 
----Mutating verbs the lead role never runs in the primary checkout, by verb name
+---Mutating commands the lead role never runs in the primary checkout, by command name
 local LEAD_GUARDED = {}
 for _, name in ipairs({
     "land",
@@ -265,7 +265,7 @@ local function repo_guarded(project_root)
     end
     local malformed = "The `agent.primary_guarded` setting in "
         .. project_root
-        .. "/.dev/config.toml must be a list of verb names."
+        .. "/.dev/config.toml must be a list of command names."
     if type(names) ~= "table" then
         dev_command.die(malformed)
     end
@@ -542,8 +542,8 @@ end
 
 ---Run `dev` with the command line and exit.
 ---
----Global flags, the root gate and the usage errors come first. A `.lua` verb
----runs in this process, a `.sh` verb replaces it, and a verb the registry does
+---Global flags, the root gate and the usage errors come first. A `.lua` command
+---runs in this process, a `.sh` command replaces it, and a command the registry does
 ---not know is a usage error.
 ---@param argv string[] the command line after `dev`
 ---@return nil
@@ -674,7 +674,7 @@ function M.main(argv)
         local code = handler(ctx, reg)
         os.exit(code)
     end
-    help.usage_error(ctx, reg, "unknown verb " .. name)
+    help.usage_error(ctx, reg, "unknown command " .. name)
 end
 
 ---Run `fn`, mapping Lua's interrupt error to the exit status of a SIGINT.

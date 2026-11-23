@@ -8,22 +8,22 @@ local stderr = io.stderr
 ---@class dev.complete
 local M = {}
 
----Print `name<TAB>origin<TAB>description` for every verb and noun, for shell completion.
+---Print `name<TAB>origin<TAB>description` for every command, for shell completion.
 ---@param _ dev.Ctx the context
 ---@param reg dev.Registry the project's registry
 ---@return integer code 0
-function M.verbs(_, reg)
-    for _, row in ipairs(reg:verbs()) do
+function M.commands(_, reg)
+    for _, row in ipairs(reg:commands()) do
         io.write(row.name, "\t", row.kind, "\t", row.desc, "\n")
     end
     return 0
 end
 
----Print `sub<TAB>origin<TAB>description` for each subcommand of the noun named by `ctx.args`, one
----word per level.
+---Print `sub<TAB>origin<TAB>description` for each subcommand of the command named by
+---`ctx.args`, one word per level.
 ---@param ctx dev.Ctx the context
 ---@param reg dev.Registry the project's registry
----@return integer code 0, with no output for a word that is not a noun
+---@return integer code 0, with no output for a word that is no command with subcommands
 function M.subs(ctx, reg)
     if reg:is_noun(ctx.args) then
         for _, row in ipairs(reg:subs(ctx.args)) do
@@ -33,7 +33,7 @@ function M.subs(ctx, reg)
     return 0
 end
 
----Print the flags of the verb in `ctx.args`, one word per level, then the global flags.
+---Print the flags of the command in `ctx.args`, one word per level, then the global flags.
 ---@param ctx dev.Ctx the context
 ---@param reg dev.Registry the project's registry
 ---@return integer code 0
@@ -156,8 +156,8 @@ end
 
 ---Print `value<TAB>label` for each value the next word of the command can take.
 ---
----`ctx.args` holds the words from the verb up to the one being typed. A card id completes after a
----`dev board` subcommand that takes one, a box or connectable name after `dev box` and
+---`ctx.args` holds the words from the command up to the one being typed. A card id completes after
+---a `dev board` subcommand that takes one, a box or connectable name after `dev box` and
 ---`dev connect`, and a run id after `--run`.
 ---@param ctx dev.Ctx the context
 ---@return integer code 0, with no output when nothing completes
