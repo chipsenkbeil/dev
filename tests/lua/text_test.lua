@@ -10,7 +10,7 @@ testing.test("width ignores ANSI escapes", function()
 end)
 
 testing.test("fit cuts with an ellipsis", function()
-    testing.eq(text.fit("myproject-k3x", 8), "doug-ga…")
+    testing.eq(text.fit("myproject-k3x", 8), "myproje…")
 end)
 
 testing.test("fit leaves a short string alone", function()

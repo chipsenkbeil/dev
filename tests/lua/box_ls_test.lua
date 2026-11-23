@@ -52,10 +52,10 @@ testing.test(
         for line in out:gmatch("[^\n]*\n") do
             lines[#lines + 1] = line:sub(1, -2)
         end
-        testing.eq(lines[1], "           Boxes   2 of 3 running · 1 more can start")
+        testing.eq(lines[1], "             Boxes   2 of 3 running · 1 more can start")
         testing.eq(lines[2], "example-box  Boxes   2 running")
-        testing.eq(lines[3], "           Memory  24 of 32 GiB used · 8 GiB free")
-        testing.eq(lines[4], "mac1       unreachable")
+        testing.eq(lines[3], "             Memory  24 of 32 GiB used · 8 GiB free")
+        testing.eq(lines[4], "mac1         unreachable")
         testing.eq(lines[5], "")
         testing.eq(
             columns(lines[6]),

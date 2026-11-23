@@ -230,9 +230,9 @@ keys.
 
 ### Machines that are not boxes
 
-Infra can mark a machine or an instance as connectable: an Incus instance, a
-tart VM, the Mac host or example-box. `dev connect` reaches them too, and it
-never talks to Incus or accepts a host key on first use.
+The host setup can mark a machine or an instance as connectable: an Incus
+instance, a tart VM, the Mac host or example-box. `dev connect` reaches them
+too, and it never talks to Incus or accepts a host key on first use.
 
 After listing boxes it runs `ci ssh config`, then reads `ci ssh ls --json` and
 keeps its host rows. The picker shows the connectables after the boxes, one row
@@ -461,8 +461,8 @@ host keys and allocates a terminal.
 
 ### Connectables in detail
 
-`dev connect` also reaches what infra marks as connectable (Incus instances,
-tart VMs, the Mac host, example-box), through `ci ssh`. After
+`dev connect` also reaches what the host setup marks as connectable (Incus
+instances, tart VMs, the Mac host, example-box), through `ci ssh`. After
 `ci box ls --json` it runs `ci ssh config`. That writes a `Host` block per box
 and host into ci's ssh_config include, and the blocks of hosts run
 `ci ssh proxy NAME` as their ProxyCommand.
