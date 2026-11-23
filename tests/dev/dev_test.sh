@@ -193,21 +193,21 @@ inithome="$(project inithome)"
 mkdir -p "$inithome/.config/dev"
 printf '[board.pomb]\nurl = "https://pomb.example.com"\ntoken = "pass:secrets/worker/token/pomb.example.com"\n' >"$inithome/.config/dev/config.toml"
 export BOARDS_JSON='[{"id":"b1","name":"General"}]'
-out="$(HOME="$inithome" run_dev "$initdir" init --type lua --dry-run --no-gerrit --name proj 2>&1)"
+out="$(HOME="$inithome" run_dev "$initdir" builtin:init --type lua --dry-run --name proj 2>&1)"
 assert_contains "init suggests a board when none is named after the project" "$out" "No Pomb board for proj"
 assert_contains "init asks the board with a read-only GET" "$(log)" "curl -fsS --max-time 5 -w"
 assert_contains "init asks the board for the status code" "$(log)" "%{http_code} -K - https://pomb.example.com/api/boards"
 assert_contains "init reads the worker token" "$(log)" "pass show secrets/worker/token/pomb.example.com"
 assert_not_contains "init keeps the token off the command line" "$(log | grep '^curl')" "cf_secret"
 export BOARDS_JSON='[{"id":"b1","name":"General"},{"id":"b2","name":"proj"}]'
-out="$(HOME="$inithome" run_dev "$initdir" init --type lua --dry-run --no-gerrit --name proj 2>&1)"
+out="$(HOME="$inithome" run_dev "$initdir" builtin:init --type lua --dry-run --name proj 2>&1)"
 assert_not_contains "init stays quiet when the board exists" "$out" "No Pomb board"
-out="$(HOME="$inithome" CURL_FAIL=1 run_dev "$initdir" init --type lua --dry-run --no-gerrit --name proj 2>&1)"
+out="$(HOME="$inithome" CURL_FAIL=1 run_dev "$initdir" builtin:init --type lua --dry-run --name proj 2>&1)"
 assert_eq "init survives an unreachable board" "$?" "0"
 assert_not_contains "init skips the hint when the board is unreachable" "$out" "No Pomb board"
 printf '#!/usr/bin/env bash\nexit 1\n' >"$STUBS/pass"
 export BOARDS_JSON='[]'
-out="$(HOME="$inithome" run_dev "$initdir" init --type lua --dry-run --no-gerrit --name proj 2>&1)"
+out="$(HOME="$inithome" run_dev "$initdir" builtin:init --type lua --dry-run --name proj 2>&1)"
 assert_not_contains "init skips the hint when pass has no token" "$out" "No Pomb board"
 unset BOARDS_JSON
 rm -f "$STUBS/pass" "$STUBS/curl"
@@ -284,16 +284,16 @@ bounded_dev() {
     fi
     BOUNDED_OUT=$(cat "$TMP/bounded.out")
 }
-bounded_dev "$rust" init --type
+bounded_dev "$rust" builtin:init --type
 assert_eq "init --type with no value exits 2" "$BOUNDED_RC" "2"
 assert_contains "init names the --type with no value" "$BOUNDED_OUT" "dev init: --type needs a value"
-bounded_dev "$rust" init --name
+bounded_dev "$rust" builtin:init --name
 assert_eq "init --name with no value exits 2" "$BOUNDED_RC" "2"
 assert_contains "init names the --name with no value" "$BOUNDED_OUT" "dev init: --name needs a value"
-out="$(run_dev "$rust" init --bogus 2>&1)"
+out="$(run_dev "$rust" builtin:init --bogus 2>&1)"
 assert_eq "init with a bad flag exits 2" "$?" "2"
 assert_contains "init names the bad flag" "$out" "dev init: Unknown flag --bogus"
-out="$(run_dev "$rust" init --type cobol 2>&1)"
+out="$(run_dev "$rust" builtin:init --type cobol 2>&1)"
 assert_eq "init with an unknown type exits 2" "$?" "2"
 out="$(run_dev "$rust")"
 assert_eq "no verb exits 0" "$?" "0"
@@ -318,7 +318,7 @@ out="$(run_dev "$rust" help)"
 assert_contains "help lists a local verb under the project's group" "$out" "$(printf '\nrust\n  install')"
 assert_contains "help shows a local verb description" "$out" "Install the thing."
 out="$(run_dev "$rust" help init)"
-for flag in --type --name --dry-run --no-gerrit; do
+for flag in --type --name --dry-run; do
     assert_contains "help init lists $flag" "$out" "$flag"
 done
 help_out="$(run_dev "$rust" help -a)"
@@ -421,18 +421,18 @@ if command -v jj >/dev/null 2>&1; then
     printf '[package]\nname = "init"\nversion = "0.1.0"\nedition = "2024"\n' >"$init/Cargo.toml"
     git -C "$init" init -q
 
-    out="$(run_dev "$init" init --dry-run --no-gerrit)"
+    out="$(run_dev "$init" builtin:init --dry-run)"
     assert_contains "init --dry-run plans the lint script" "$out" "would create: .dev/lint.lua"
     assert_contains "init --dry-run plans the pipeline" "$out" "would create: .ci/jobs.lua"
     assert_not_contains "init --dry-run plans no workflow" "$out" ".github/workflows"
     assert_contains "init --dry-run plans the style guide" "$out" "would create: docs/STYLE.md"
     assert_contains "init --dry-run prints the origin command" "$out" "jj git remote add origin hub:init"
     assert_eq "init --dry-run writes nothing" "$(find "$init" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')" "2"
-    out="$(run_dev "$init" init --dry-run -v --no-gerrit 2>/dev/null)"
+    out="$(run_dev "$init" builtin:init --dry-run -v 2>/dev/null)"
     assert_contains "init --dry-run -v still dry-runs" "$out" "would create: .dev/lint.lua"
     assert_eq "init --dry-run -v writes nothing" "$(find "$init" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')" "2"
 
-    out="$(run_dev "$init" init --no-gerrit)"
+    out="$(run_dev "$init" builtin:init)"
     assert_contains "init creates the lint script" "$out" "created: .dev/lint.lua"
     assert_eq "init writes the lint verb" "$([ -f "$init/.dev/lint.lua" ] && echo yes)" "yes"
     assert_contains "init writes the lint verb on the shared library" "$(cat "$init/.dev/lint.lua")" 'require("lintset")'
@@ -499,7 +499,7 @@ if command -v jj >/dev/null 2>&1; then
     cp "$TMP/STYLE.md.orig" "$init/docs/STYLE.md"
 
     before="$(cat "$init/Cargo.toml")"
-    out="$(run_dev "$init" init --no-gerrit)"
+    out="$(run_dev "$init" builtin:init)"
     assert_not_contains "init rerun creates nothing" "$out" "created:"
     assert_contains "init rerun skips an existing docs/STYLE.md" "$out" "skipped: docs/STYLE.md exists"
     assert_contains "init rerun skips existing files" "$out" "skipped: .dev/lint.lua exists"
@@ -512,11 +512,11 @@ if command -v jj >/dev/null 2>&1; then
     printf 'function love.conf(t)\n    t.window.title = "game"\nend\n' >"$game/conf.lua"
     printf 'local M = {}\n\nreturn M\n' >"$game/src/mod.lua"
     git -C "$game" init -q
-    out="$(run_dev "$game" init --dry-run --no-gerrit)"
+    out="$(run_dev "$game" builtin:init --dry-run)"
     assert_contains "love2d init --dry-run plans the lint script" "$out" "would create: .dev/lint.lua"
     assert_contains "love2d init --dry-run plans selene.toml" "$out" "would create: selene.toml"
     assert_eq "love2d init --dry-run writes nothing" "$(find "$game" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')" "4"
-    out="$(run_dev "$game" init --no-gerrit)"
+    out="$(run_dev "$game" builtin:init)"
     for f in .dev/lint.lua .dev/fmt.lua .dev/lua/lintset.lua selene.toml stylua.toml luajit.yml love.yml sgconfig.yml .dev/ast-grep/rules/comment-period.yml; do
         assert_contains "love2d init creates $f" "$out" "created: $f"
         assert_eq "love2d init writes $f" "$([ -f "$game/$f" ] && echo yes)" "yes"
@@ -539,7 +539,7 @@ if command -v jj >/dev/null 2>&1; then
     assert_contains "love2d sync --check reports the drifted stylua.toml" "$out" "differs: stylua.toml"
     assert_not_contains "love2d sync --check ignores a matching file" "$out" "selene.toml"
     cp "$REPO/dotfiles/claude/.claude/skills/style/lint/lua/stylua.toml" "$game/stylua.toml"
-    out="$(run_dev "$game" init --no-gerrit)"
+    out="$(run_dev "$game" builtin:init)"
     assert_not_contains "love2d init rerun creates nothing" "$out" "created:"
     assert_contains "love2d init rerun skips an existing lint script" "$out" "skipped: .dev/lint.lua exists"
 
@@ -560,7 +560,7 @@ if command -v jj >/dev/null 2>&1; then
     mkdir -p "$lib/src"
     printf 'local M = {}\n\nreturn M\n' >"$lib/src/mod.lua"
     git -C "$lib" init -q
-    out="$(run_dev "$lib" init --no-gerrit)"
+    out="$(run_dev "$lib" builtin:init)"
     assert_contains "lua init reports the type" "$out" "type lua"
     assert_contains "lua init creates the lint script" "$out" "created: .dev/lint.lua"
     assert_contains "lua init picks the luajit std" "$(cat "$lib/selene.toml")" 'std = "luajit"'
@@ -583,10 +583,10 @@ printf '//! Lib docs.\n\npub fn f() {}\n' >"$reg/crates/lib/src/lib.rs"
 printf 'pub fn g() {}\n' >"$reg/crates/app/src/lib.rs"
 printf 'fn main() {}\n' >"$reg/crates/bin/src/main.rs"
 attr='#![deny(clippy::missing_errors_doc, clippy::missing_panics_doc)]'
-out="$(run_dev "$reg" init --dry-run --no-gerrit)"
+out="$(run_dev "$reg" builtin:init --dry-run)"
 assert_contains "init --dry-run plans the attribute" "$out" "would create: crates/lib/src/lib.rs library-register attribute"
 assert_not_contains "init --dry-run leaves lib.rs alone" "$(cat "$reg/crates/lib/src/lib.rs")" "missing_errors_doc"
-out="$(run_dev "$reg" init --no-gerrit)"
+out="$(run_dev "$reg" builtin:init)"
 assert_contains "init adds the attribute to the library crate" "$out" "created: crates/lib/src/lib.rs library-register attribute"
 assert_contains "init writes the attribute line" "$(cat "$reg/crates/lib/src/lib.rs")" "$attr"
 assert_eq "init puts the attribute after the //! block" "$(sed -n 1p "$reg/crates/lib/src/lib.rs")" "//! Lib docs."
@@ -596,7 +596,7 @@ assert_not_contains "init skips the publish = false crate" "$(cat "$reg/crates/a
 assert_eq "init leaves the binary crate alone" "$(cat "$reg/crates/bin/src/main.rs")" "fn main() {}"
 assert_not_contains "workspace lints omit the library-only lints" "$(cat "$reg/Cargo.toml")" 'missing_errors_doc = '
 assert_contains "workspace lints keep missing_safety_doc" "$(cat "$reg/Cargo.toml")" 'missing_safety_doc = "deny"'
-out="$(run_dev "$reg" init --no-gerrit)"
+out="$(run_dev "$reg" builtin:init)"
 assert_contains "init rerun skips the attribute" "$out" "skipped: crates/lib/src/lib.rs has the library-register attribute"
 assert_not_contains "init rerun creates no attribute" "$out" "library-register attribute
 created"
@@ -646,14 +646,14 @@ git -C "$wtmain" init -q
 git -C "$wtmain" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
 git -C "$wtmain" worktree add -q "$TMP/wt" 2>/dev/null
 printf '[package]\nname = "wt"\nversion = "0.1.0"\nedition = "2024"\n' >"$TMP/wt/Cargo.toml"
-out="$(run_dev "$TMP/wt" init --dry-run --no-gerrit)"
+out="$(run_dev "$TMP/wt" builtin:init --dry-run)"
 assert_contains "init skips jj in a git worktree" "$out" "this is a git worktree"
 assert_not_contains "init plans no jj colocate in a git worktree" "$out" "jj git init --colocate"
 
 if ! PATH=/usr/bin:/bin command -v jj >/dev/null 2>&1; then
     nojj="$(project nojj)"
     git -C "$nojj" init -q
-    out="$(cd "$nojj" && env PATH="$LUABIN:/usr/bin:/bin" bash "$DEV" init --no-gerrit 2>&1)"
+    out="$(cd "$nojj" && env PATH="$LUABIN:/usr/bin:/bin" bash "$DEV" builtin:init 2>&1)"
     assert_eq "init without jj exits 0" "$?" "0"
     assert_contains "init without jj skips jj and says why" "$out" "skipped: .jj (jj not installed, git only)"
     assert_contains "init without jj prints the git remote command" "$out" "run: git remote add origin hub:nojj"

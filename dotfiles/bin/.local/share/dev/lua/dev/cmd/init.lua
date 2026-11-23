@@ -37,7 +37,6 @@ local M = { handlers = {} }
 ---@field root string the project root
 ---@field kind string the project type
 ---@field dry boolean whether nothing may be written
----@field gerrit boolean whether to set up the Gerrit project and remote
 ---@field name string the project's name
 ---@field hint string the command that adds a remote, `jj git remote add` or `git remote add`
 ---@field created string[] what was created, or would be
@@ -45,7 +44,7 @@ local M = { handlers = {} }
 ---@field human string[] what is left for the owner
 
 local function parse(ctx, reg)
-    local opts = { dry = false, gerrit = true }
+    local opts = { dry = false }
     local args = ctx.args
     local i = 1
     while i <= #args do
@@ -58,8 +57,6 @@ local function parse(ctx, reg)
             i = i + 1
         elseif arg == "--dry-run" then
             opts.dry = true
-        elseif arg == "--no-gerrit" then
-            opts.gerrit = false
         else
             help.bad_argument(ctx, reg, arg)
         end
@@ -101,10 +98,6 @@ local function has(list, want)
         end
     end
     return false
-end
-
-local function trimmed(text)
-    return (text:gsub("\n+$", ""))
 end
 
 local function put_text(run, dest, text)
@@ -311,88 +304,6 @@ local function remote_names(run)
     return vcs.remotes(run.root, backend)
 end
 
-local function add_remote(run, name, url)
-    local backend = vcs.backend(run.root)
-    local argv
-    if backend == vcs.JJ then
-        argv = vcs.with(vcs.base(run.root, backend), "git", "remote", "add", name, url)
-    else
-        argv = { "git", "-C", run.root, "remote", "add", name, url }
-    end
-    run_or_exit(run, argv)
-end
-
----Build the ssh command that reaches the Gerrit server.
----It reads `[gerrit] host` and `port` from the user config.
----@return string[]? argv the command, nil when no host is set
-local function gerrit_argv()
-    local host = config.user("gerrit.host")
-    if type(host) ~= "string" or host == "" then
-        return nil
-    end
-    local argv = { "ssh" }
-    local port = config.user("gerrit.port")
-    if port ~= nil then
-        argv[#argv + 1] = "-p"
-        argv[#argv + 1] = tostring(port)
-    end
-    argv[#argv + 1] = host
-    argv[#argv + 1] = "gerrit"
-    return argv
-end
-
-local function init_gerrit(run, gerrit)
-    local name = run.name
-    local gerrit_host = table.concat(gerrit, " ")
-    if run.dry then
-        created(
-            run,
-            "gerrit project "
-                .. name
-                .. " (create-project when absent) and remote gerrit gr:"
-                .. name
-        )
-        return
-    end
-    local list = vcs.with(gerrit, "ls-projects")
-    dev_command.show(run.ctx, list)
-    local out, code = dev_os.capture(list, { stderr = "stdout" })
-    if code ~= 0 then
-        dev_command.note("Gerrit ls-projects failed.")
-        dev_command.note(trimmed(out))
-        leave(
-            run,
-            "create the Gerrit project and remote: "
-                .. gerrit_host
-                .. " create-project "
-                .. name
-                .. ", then "
-                .. run.hint
-                .. " gerrit gr:"
-                .. name
-        )
-        return
-    end
-    local known = {}
-    for line in out:gmatch("[^\n]+") do
-        known[#known + 1] = line
-    end
-    if has(known, name) then
-        skipped(run, "gerrit project " .. name .. " exists")
-    else
-        local create = vcs.with(gerrit, "create-project", name)
-        dev_command.show(run.ctx, create)
-        if dev_os.run(create) == 0 then
-            created(run, "gerrit project " .. name)
-        else
-            leave(run, "create the Gerrit project: " .. gerrit_host .. " create-project " .. name)
-            return
-        end
-    end
-    add_remote(run, "gerrit", "gr:" .. name)
-    created(run, "remote gerrit gr:" .. name)
-end
-
 local function init_remotes(run)
     local remotes = remote_names(run)
     if has(remotes, "origin") then
@@ -406,22 +317,6 @@ local function init_remotes(run)
             "\n"
         )
         leave(run, "create the GitHub repo, then run: " .. run.hint .. " origin hub:" .. run.name)
-    end
-    if not run.gerrit then
-        skipped(run, "gerrit: --no-gerrit")
-    elseif has(remotes, "gerrit") then
-        skipped(run, "remote gerrit exists")
-    else
-        local gerrit = gerrit_argv()
-        if gerrit then
-            init_gerrit(run, gerrit)
-        else
-            skipped(run, "gerrit: no [gerrit] host in the user config")
-            leave(
-                run,
-                "set host under [gerrit] in ~/.config/dev/config.toml to set up the Gerrit project and remote"
-            )
-        end
     end
 end
 
@@ -497,7 +392,7 @@ end
 
 ---Seed a project with lint files, a style guide, a README, a CI pipeline and remotes.
 ---
----It takes `--type`, `--name`, `--dry-run` and `--no-gerrit`. Anything already in the
+---It takes `--type`, `--name` and `--dry-run`. Anything already in the
 ---project is skipped, and a dry run prints `would create:` lines and writes nothing.
 ---@param ctx dev.Ctx the verb's context
 ---@param reg dev.Registry the project's registry
@@ -519,7 +414,6 @@ function M.run(ctx, reg)
         root = root,
         kind = kind,
         dry = opts.dry,
-        gerrit = opts.gerrit,
         name = (opts.name ~= nil and opts.name ~= "") and opts.name or fs.basename(root),
         hint = "git remote add",
         created = {},
