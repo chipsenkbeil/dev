@@ -3,7 +3,7 @@ local forge = require("dev.forge")
 local json = require("dev.json")
 local text = require("dev.text")
 local vcs = require("dev.vcs")
-local verb = require("dev.verb")
+local dev_command = require("dev.command")
 
 local REASON_FLAG = "--reason"
 
@@ -18,21 +18,21 @@ local function parse(ctx)
         if word == REASON_FLAG then
             reason = ctx.args[i + 1]
             if reason == nil then
-                verb.usage_error(ctx, "The " .. REASON_FLAG .. " flag needs a value.")
+                dev_command.usage_error(ctx, "The " .. REASON_FLAG .. " flag needs a value.")
             end
             i = i + 2
         elseif word:sub(1, 1) == "-" or change then
-            verb.usage_error(ctx, "Unknown argument " .. word .. ".")
+            dev_command.usage_error(ctx, "Unknown argument " .. word .. ".")
         else
             change = word
             i = i + 1
         end
     end
     if not change then
-        verb.usage_error(ctx, "Name the change number or Change-Id to abandon.")
+        dev_command.usage_error(ctx, "Name the change number or Change-Id to abandon.")
     end
     if not change:match("^[%w]+$") then
-        verb.usage_error(ctx, change .. " is not a change number or Change-Id.")
+        dev_command.usage_error(ctx, change .. " is not a change number or Change-Id.")
     end
     return change, reason
 end
@@ -65,7 +65,7 @@ local function ssh(ctx, port, host, args)
     for _, arg in ipairs(args) do
         argv[#argv + 1] = arg
     end
-    verb.show(ctx, argv)
+    dev_command.show(ctx, argv)
     return dev_os.capture(argv, { cwd = ctx.root, stderr = "stdout" })
 end
 
@@ -93,19 +93,21 @@ function M.run(ctx)
     local change, reason = parse(ctx)
     local backend, err = vcs.require(ctx.root)
     if not backend then
-        verb.die(text.sentence(err))
+        dev_command.die(text.sentence(err))
     end
     local found, ferr = forge.resolve(ctx.root)
     if not found then
-        verb.die(text.sentence(ferr))
+        dev_command.die(text.sentence(ferr))
     end
     if found.kind ~= forge.Kind.GERRIT then
-        verb.die("The forge is " .. found.kind .. ", and only a gerrit change can be abandoned.")
+        dev_command.die(
+            "The forge is " .. found.kind .. ", and only a gerrit change can be abandoned."
+        )
     end
     local url = vcs.config(ctx.root, backend, "remote." .. found.remote .. ".url")
     local port, host, project = M.parse_url(url)
     if not port then
-        verb.die(
+        dev_command.die(
             "The remote "
                 .. found.remote
                 .. " has the URL "
@@ -121,14 +123,16 @@ function M.run(ctx)
         "change:" .. change,
     })
     if code ~= 0 then
-        verb.die("The query of change " .. change .. " failed.\n" .. out)
+        dev_command.die("The query of change " .. change .. " failed.\n" .. out)
     end
     local row = find_change(out)
     if not row then
-        verb.die("Gerrit has no change " .. change .. " in project " .. project .. ".")
+        dev_command.die("Gerrit has no change " .. change .. " in project " .. project .. ".")
     end
     if row.status ~= "NEW" then
-        verb.die("Change " .. change .. " is " .. row.status .. ", not NEW. Nothing was abandoned.")
+        dev_command.die(
+            "Change " .. change .. " is " .. row.status .. ", not NEW. Nothing was abandoned."
+        )
     end
     local review = { "review", "--abandon" }
     if reason then
@@ -138,9 +142,9 @@ function M.run(ctx)
     review[#review + 1] = row.currentPatchSet.revision
     out, code = ssh(ctx, port, host, review)
     if code ~= 0 then
-        verb.die("The abandon of change " .. change .. " failed.\n" .. out)
+        dev_command.die("The abandon of change " .. change .. " failed.\n" .. out)
     end
-    verb.say("Abandoned change " .. change .. ".")
+    dev_command.say("Abandoned change " .. change .. ".")
     return 0
 end
 

@@ -11,7 +11,7 @@ local term = require("dev.term")
 local text = require("dev.text")
 local topics = require("dev.topics")
 local ui = require("dev.ui")
-local verb = require("dev.verb")
+local dev_command = require("dev.command")
 
 local Style = ui.Style
 local stderr = io.stderr
@@ -47,7 +47,7 @@ local HELPERS = {
 local M = {}
 
 local function fail(message)
-    verb.usage_error(HELP_CTX, message)
+    dev_command.usage_error(HELP_CTX, message)
 end
 
 local function screen()

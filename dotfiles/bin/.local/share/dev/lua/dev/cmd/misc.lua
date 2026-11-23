@@ -2,14 +2,14 @@ local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local help = require("dev.help")
 local project = require("dev.project")
-local verb = require("dev.verb")
+local dev_command = require("dev.command")
 
 ---@class dev.cmd.misc
 local M = {}
 
 local function exec(argv, opts)
     local _, message = dev_os.exec(argv, opts)
-    verb.note("The command `" .. argv[1] .. "` could not run: " .. message .. ".")
+    dev_command.note("The command `" .. argv[1] .. "` could not run: " .. message .. ".")
     return dev_os.EXEC_FAILED
 end
 
@@ -31,7 +31,7 @@ function M.guide(ctx, reg)
         )
         return 0
     end
-    verb.need("guide", "dev install guide")
+    dev_command.need("guide", "dev install guide")
     local topics = ctx.root .. "/.dev/topics"
     local argv = { "guide", "dev" }
     if fs.is_dir(topics) then

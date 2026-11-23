@@ -2,7 +2,7 @@ local config = require("dev.config")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local json = require("dev.json")
-local verb = require("dev.verb")
+local dev_command = require("dev.command")
 
 local stderr = io.stderr
 
@@ -243,7 +243,7 @@ function M.ci_runner(run, opts)
     local pipeline = opts.pipeline
     local job = table.concat(run.words, "-")
     if not job:find(JOB_NAME) then
-        verb.die(
+        dev_command.die(
             "The flag `--remote` needs a job name, not " .. table.concat(run.words, " ") .. "."
         )
     end
@@ -254,7 +254,7 @@ function M.ci_runner(run, opts)
         return 1
     end
     if not M.has_job(run.root, job, pipeline) then
-        verb.die(
+        dev_command.die(
             "No job named "
                 .. job
                 .. " exists in the project's "
@@ -291,7 +291,7 @@ function M.ci_runner(run, opts)
     local env = name and { DEV_AGENT = name } or nil
     local code = dev_os.run(argv, { env = env })
     if code == nil then
-        verb.die("The command `ci` could not run.")
+        dev_command.die("The command `ci` could not run.")
     end
     return code
 end
@@ -299,7 +299,7 @@ end
 local function file_runner(path, run)
     local source, reason = fs.read(path)
     if not source then
-        verb.die("The file " .. path .. " cannot be read: " .. tostring(reason) .. ".")
+        dev_command.die("The file " .. path .. " cannot be read: " .. tostring(reason) .. ".")
     end
     local chunk, message = load(source, "=" .. path)
     local ok, runner = false, message
@@ -307,20 +307,22 @@ local function file_runner(path, run)
         ok, runner = pcall(chunk)
     end
     if not ok then
-        verb.die(tostring(runner))
+        dev_command.die(tostring(runner))
     end
     if type(runner) ~= "function" then
-        verb.die("The file " .. path .. " must return a function.")
+        dev_command.die("The file " .. path .. " must return a function.")
     end
     local done, code = pcall(runner, run)
     if not done then
-        verb.die(tostring(code))
+        dev_command.die(tostring(code))
     end
     if code == nil then
         return 0
     end
     if type(code) ~= "number" or code % 1 ~= 0 then
-        verb.die("The file " .. path .. " returned " .. tostring(code) .. ", not an exit code.")
+        dev_command.die(
+            "The file " .. path .. " returned " .. tostring(code) .. ", not an exit code."
+        )
     end
     return code % 256
 end
@@ -338,14 +340,14 @@ end
 ---@return integer code the runner's exit code
 function M.run(ctx, words, args, flags)
     if M.machine_local(words) then
-        verb.usage_error(ctx, "runs on this machine only, so --remote does not apply")
+        dev_command.usage_error(ctx, "runs on this machine only, so --remote does not apply")
     end
     if ctx.dashed and #ctx.args > #args then
         local shown = {}
         for i, word in ipairs(ctx.args) do
             shown[i] = (word == "" or word:find(UNSAFE_WORD)) and dev_os.quote(word) or word
         end
-        verb.usage_error(
+        dev_command.usage_error(
             ctx,
             "--remote takes arguments on one side of -- only. Run `dev --remote "
                 .. table.concat(words, " ")

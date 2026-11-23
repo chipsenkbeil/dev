@@ -4,7 +4,7 @@ local forge = require("dev.forge")
 local fs = require("dev.fs")
 local dev_text = require("dev.text")
 local vcs = require("dev.vcs")
-local verb = require("dev.verb")
+local dev_command = require("dev.command")
 
 ---@class dev.cmd.ws
 ---@field handlers table<string, fun(ctx: dev.Ctx): integer> the handlers of the `ws` subcommands
@@ -172,16 +172,16 @@ end
 local function parse(ctx)
     local name = ctx.args[1]
     if name == nil then
-        verb.usage_error(ctx, "needs a NAME")
+        dev_command.usage_error(ctx, "needs a NAME")
     end
     if name:sub(1, 1) == "-" then
-        verb.usage_error(ctx, "Unknown flag " .. name .. ".")
+        dev_command.usage_error(ctx, "Unknown flag " .. name .. ".")
     end
     if ctx.args[2] ~= nil then
-        verb.usage_error(ctx, "takes one NAME, got " .. ctx.args[2])
+        dev_command.usage_error(ctx, "takes one NAME, got " .. ctx.args[2])
     end
     if name == "" or name:find("/", 1, true) or name == "." or name == ".." then
-        verb.usage_error(ctx, "NAME is one folder name, got " .. name)
+        dev_command.usage_error(ctx, "NAME is one folder name, got " .. name)
     end
     return name
 end
@@ -217,7 +217,7 @@ local function fetch_trunk(ctx)
     else
         argv = vcs.with(argv, "fetch", found.remote)
     end
-    verb.show(ctx, argv)
+    dev_command.show(ctx, argv)
     local out, code = dev_os.capture(argv, { stderr = "stdout" })
     if code ~= 0 then
         return sentence(
@@ -376,43 +376,43 @@ M.handlers["ws new"] = function(ctx)
         marked = marked or fs.exists(ctx.root .. "/" .. marker)
     end
     if not marked then
-        verb.die(ctx.root .. " is not inside a project.")
+        dev_command.die(ctx.root .. " is not inside a project.")
     end
     local base = workspace_root()
     local path = fs.join(base, repo_name(base, ctx.root), name)
     if fs.exists(path) then
-        verb.die(path .. " already exists.")
+        dev_command.die(path .. " already exists.")
     end
     local failure, start = fetch_trunk(ctx)
     if failure then
-        verb.die(failure)
+        dev_command.die(failure)
     end
     local made, why = fs.mkdir(fs.dirname(path), { parents = true })
     if not made then
-        verb.die(mkdir_failure(fs.dirname(path), why))
+        dev_command.die(mkdir_failure(fs.dirname(path), why))
     end
     if vcs.backend(ctx.root) == vcs.JJ then
         local refresh = vcs.with(vcs.base(ctx.root, vcs.JJ), "workspace", "update-stale")
-        verb.show(ctx, refresh)
+        dev_command.show(ctx, refresh)
         local refreshed = dev_os.run(refresh) or 1
         if refreshed ~= 0 then
             return refreshed
         end
         local stuck = drop_own_record(ctx.root, path, function(shown)
-            verb.show(ctx, shown)
+            dev_command.show(ctx, shown)
         end)
         if stuck then
-            verb.die(stuck)
+            dev_command.die(stuck)
         end
     end
     local argv = plan(ctx.root, name, path, { start = start })
     if argv == nil then
         made, why = fs.mkdir(path)
         if not made then
-            verb.die(mkdir_failure(path, why))
+            dev_command.die(mkdir_failure(path, why))
         end
     else
-        verb.show(ctx, argv)
+        dev_command.show(ctx, argv)
         local code = dev_os.run(argv) or 1
         if code ~= 0 then
             return code
@@ -494,7 +494,7 @@ end
 ---@return integer code the exit code
 M.handlers["ws ls"] = function(ctx)
     if ctx.args[1] ~= nil then
-        verb.usage_error(ctx, "takes no arguments, got " .. ctx.args[1])
+        dev_command.usage_error(ctx, "takes no arguments, got " .. ctx.args[1])
     end
     local base = workspace_root()
     local dir = fs.join(base, repo_name(base, ctx.root))
@@ -939,20 +939,20 @@ M.handlers["ws rm"] = function(ctx)
         forgotten = discard,
         stray = true,
         show = function(argv)
-            verb.show(ctx, argv)
+            dev_command.show(ctx, argv)
         end,
-        warn = verb.note,
+        warn = dev_command.note,
     })
     if not result.ok then
         if result.code then
-            verb.note(M.describe(result))
+            dev_command.note(M.describe(result))
             return result.code
         end
-        verb.die(M.describe(result))
+        dev_command.die(M.describe(result))
     end
     print(result.message)
     for _, line in ipairs(result.purged) do
-        verb.say(line)
+        dev_command.say(line)
     end
     return 0
 end
@@ -961,7 +961,7 @@ local function jj_lines(root, ...)
     local argv = vcs.with(vcs.base(root, vcs.JJ, { quiet = true }), ...)
     local out, code = dev_os.capture(argv, { stderr = "null" })
     if code ~= 0 then
-        verb.die(sentence("The jj command failed in " .. root))
+        dev_command.die(sentence("The jj command failed in " .. root))
     end
     local lines = {}
     for line in out:gmatch("[^\n]+") do
@@ -994,7 +994,7 @@ local function git_worktrees(root)
     local argv = vcs.with(vcs.base(root, vcs.GIT), "worktree", "list", "--porcelain")
     local out, code = dev_os.capture(argv, { stderr = "null" })
     if code ~= 0 then
-        verb.die(sentence("git worktree list failed in " .. root))
+        dev_command.die(sentence("git worktree list failed in " .. root))
     end
     local found = {}
     local seen = 0
@@ -1044,7 +1044,7 @@ end
 
 local function leave_workspaces(label, leftover)
     for _, step in ipairs(leftover) do
-        verb.say(
+        dev_command.say(
             sentence(
                 "Left "
                     .. label
@@ -1110,7 +1110,7 @@ local function prune_workspaces(ctx, steps, opts)
             local result = M.remove(ctx.root, step.name, {
                 missing = step.kind == Step.GONE and step.path or nil,
                 show = function(argv)
-                    verb.show(ctx, argv)
+                    dev_command.show(ctx, argv)
                 end,
             })
             ok, message, purged, why = result.ok, result.message, result.purged, result
@@ -1125,13 +1125,13 @@ local function prune_workspaces(ctx, steps, opts)
             if step.kind == Step.DONE and not opts.dry then
                 line = line .. " " .. message
             end
-            verb.say(line)
+            dev_command.say(line)
             for _, purge_line in ipairs(purged or {}) do
-                verb.say(purge_line)
+                dev_command.say(purge_line)
             end
         else
             kept = kept + 1
-            verb.say(string.format("Kept %s %s. %s", label, step.name, M.describe(why)))
+            dev_command.say(string.format("Kept %s %s. %s", label, step.name, M.describe(why)))
         end
     end
     return pruned, kept, failure, freed
@@ -1174,15 +1174,17 @@ local function abandon_heads(ctx, heads, opts)
         for _, head in ipairs(heads) do
             argv[#argv + 1] = head.id
         end
-        verb.show(ctx, argv)
+        dev_command.show(ctx, argv)
         local code = dev_os.run(argv) or 1
         if code ~= 0 then
-            verb.say(sentence("Left the empty heads alone. The jj abandon command exited " .. code))
+            dev_command.say(
+                sentence("Left the empty heads alone. The jj abandon command exited " .. code)
+            )
             return 0, code
         end
     end
     for _, head in ipairs(heads) do
-        verb.say(
+        dev_command.say(
             sentence((dry and "Would abandon" or "Abandoned") .. " empty head " .. head_text(head))
         )
     end
@@ -1192,13 +1194,15 @@ end
 local function list_strays(root, freed)
     local left = 0
     for _, head in ipairs(jj_heads(root, unheld_heads(STRAY_HEADS, freed))) do
-        verb.say(sentence("Left non-empty head " .. head_text(head) .. " alone. Nothing holds it"))
+        dev_command.say(
+            sentence("Left non-empty head " .. head_text(head) .. " alone. Nothing holds it")
+        )
         left = left + 1
     end
     for _, name in
         ipairs(jj_lines(root, "bookmark", "list", "-r", STALE_BOOKMARKS, "-T", BOOKMARK_TEMPLATE))
     do
-        verb.say(sentence("Left bookmark " .. name .. " alone. It is not on trunk"))
+        dev_command.say(sentence("Left bookmark " .. name .. " alone. It is not on trunk"))
         left = left + 1
     end
     return left
@@ -1207,7 +1211,7 @@ end
 local function finished_cards(root)
     local finished, why = cmd_board.finished(root)
     if not finished then
-        verb.say(string.format("Skipped the card test. %s", sentence(why)))
+        dev_command.say(string.format("Skipped the card test. %s", sentence(why)))
     end
     return finished
 end
@@ -1236,11 +1240,11 @@ M.handlers["ws prune"] = function(ctx)
             break
         end
     end
-    verb.no_args(ctx)
+    dev_command.no_args(ctx)
 
     local backend = vcs.backend(ctx.root)
     if backend ~= vcs.JJ and backend ~= vcs.GIT then
-        verb.die(ctx.root .. " is not a jj or git project.")
+        dev_command.die(ctx.root .. " is not a jj or git project.")
     end
 
     local found = backend == vcs.JJ and jj_workspaces(ctx.root) or git_worktrees(ctx.root)
@@ -1257,10 +1261,10 @@ M.handlers["ws prune"] = function(ctx)
         failure = failure or code
         left = left + list_strays(ctx.root, freed)
     else
-        verb.say("Git keeps no empty heads, so only worktrees are pruned.")
+        dev_command.say("Git keeps no empty heads, so only worktrees are pruned.")
     end
 
-    verb.say(
+    dev_command.say(
         string.format(
             "%s %s and %s. Left %s alone.",
             dry and "Would prune" or "Pruned",
@@ -1424,28 +1428,28 @@ end
 M.handlers["ws adopt"] = function(ctx)
     local path = ctx.args[1]
     if path == nil then
-        verb.usage_error(ctx, "needs a PATH")
+        dev_command.usage_error(ctx, "needs a PATH")
     end
     if path:sub(1, 1) == "-" then
-        verb.usage_error(ctx, "Unknown flag " .. path .. ".")
+        dev_command.usage_error(ctx, "Unknown flag " .. path .. ".")
     end
     if ctx.args[2] ~= nil then
-        verb.usage_error(ctx, "takes one PATH, got " .. ctx.args[2])
+        dev_command.usage_error(ctx, "takes one PATH, got " .. ctx.args[2])
     end
     local result = M.adopt(ctx.root, path, {
         show = function(argv)
-            verb.show(ctx, argv)
+            dev_command.show(ctx, argv)
         end,
     })
     if not result.ok then
         if result.code and not result.stayed then
             return result.code
         end
-        verb.die(M.describe(result))
+        dev_command.die(M.describe(result))
     end
-    verb.say(result.message)
+    dev_command.say(result.message)
     for _, line in ipairs(result.purged) do
-        verb.say(line)
+        dev_command.say(line)
     end
     return 0
 end

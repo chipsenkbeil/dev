@@ -127,18 +127,18 @@ testing.test("dev_calls lists the modules and functions a template takes from de
         'local fs = require("dev.fs")',
         'local dev_os = require("dev.os")',
         'local standalone = require("dev.standalone")',
-        'local x = require("dev.verb").say',
+        'local x = require("dev.command").say',
         "return fs.exists(a) and dev_os.run(b) and self.fs.read(c) and other.run(d)",
         "",
     }, "\n")
     testing.eq(templates.dev_calls(text), {
+        "dev.command",
+        "dev.command.say",
         "dev.fs",
         "dev.fs.exists",
         "dev.os",
         "dev.os.run",
         "dev.standalone",
-        "dev.verb",
-        "dev.verb.say",
     })
 end)
 

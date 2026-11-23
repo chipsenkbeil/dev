@@ -4,7 +4,7 @@ local fs = require("dev.fs")
 local json = require("dev.json")
 local picker = require("dev.ui.picker")
 local ui = require("dev.ui")
-local verb = require("dev.verb")
+local dev_command = require("dev.command")
 local xdg = require("dev.xdg")
 
 local present = json.present
@@ -30,7 +30,7 @@ local M = { handlers = {} }
 ---Say why connecting stops.
 ---@param message string what is wrong, as a sentence
 local function say(message)
-    verb.note(message)
+    dev_command.note(message)
 end
 
 ---Say why a box cannot be connected to yet and exit.
@@ -87,7 +87,7 @@ end
 ---@return integer code the exit code of a command that could not start
 local function exec(argv)
     local _, message = dev_os.exec(argv)
-    verb.note("Cannot run " .. argv[1] .. ". " .. message)
+    dev_command.note("Cannot run " .. argv[1] .. ". " .. message)
     return dev_os.EXEC_FAILED
 end
 
@@ -223,7 +223,7 @@ local function connect_failed(raw)
     end
     message = shown
     if message ~= "" then
-        verb.note("Ci said: " .. message:gsub("[^\32-\126]", " "))
+        dev_command.note("Ci said: " .. message:gsub("[^\32-\126]", " "))
     end
 end
 
@@ -252,7 +252,7 @@ end
 local function capture_ci(argv)
     local errfile = fs.mktemp({ prefix = "dev-connect" })
     if not errfile then
-        verb.note("Cannot make a temporary path for the standard error of ci.")
+        dev_command.note("Cannot make a temporary path for the standard error of ci.")
         return dev_os.capture(argv)
     end
     local ok, out, code = pcall(dev_os.capture, argv, { stderr = errfile })
@@ -284,7 +284,7 @@ local function connectables(opts)
         raw, code = capture_ci({ "ci", "ssh", "ls", "--json" })
     end
     if code == NO_CONNECT or old_ci then
-        verb.note("This ci has no ssh command, so only the boxes are listed.")
+        dev_command.note("This ci has no ssh command, so only the boxes are listed.")
         return {}
     end
     if code ~= 0 then
@@ -296,11 +296,11 @@ local function connectables(opts)
     end
     local doc = json.decode((raw:gsub("\n+$", "")))
     if type(doc) ~= "table" then
-        verb.die("The `ci ssh ls` command printed no document.")
+        dev_command.die("The `ci ssh ls` command printed no document.")
     end
     for _, note in ipairs(type(doc.notes) == "table" and doc.notes or {}) do
         if type(note) == "string" then
-            verb.note("Ci said: " .. plain(note))
+            dev_command.note("Ci said: " .. plain(note))
         end
     end
     local found = {}
@@ -309,7 +309,7 @@ local function connectables(opts)
             if safe_name(entry.name) then
                 found[#found + 1] = entry
             else
-                verb.note("Skipping a connectable with an invalid name.")
+                dev_command.note("Skipping a connectable with an invalid name.")
             end
         end
     end
@@ -321,7 +321,7 @@ local function connectables(opts)
     for _, entry in ipairs(found) do
         local reached = alias(entry.name)
         if reached ~= entry.name and listed[reached] then
-            verb.note(
+            dev_command.note(
                 "Skipping "
                     .. entry.name
                     .. ", because its alias "
@@ -404,11 +404,11 @@ end
 local function choose(boxes, others, project)
     local items = items_for(boxes, others, project)
     if #items == 0 then
-        verb.note("There are no boxes. Create one with dev box create.")
+        dev_command.note("There are no boxes. Create one with dev box create.")
         os.exit(Exit.FAILED)
     end
     if not box.interactive() then
-        verb.usage_error(
+        dev_command.usage_error(
             { name = "box connect" },
             "No box given and no terminal to pick one. Pass a name, like dev box connect ci-abc."
         )
@@ -448,7 +448,7 @@ local function run(ctx)
     ctx.name = "box connect"
     local parsed = box.parse(ctx, { "--ssh" })
     if #parsed.pos > 1 then
-        verb.usage_error(ctx, "unexpected argument " .. parsed.pos[2])
+        dev_command.usage_error(ctx, "unexpected argument " .. parsed.pos[2])
     end
     local given
     if #parsed.pos == 1 then

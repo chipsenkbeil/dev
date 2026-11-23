@@ -6,7 +6,7 @@ local lib = require("dev.pkg.lib")
 local release = require("dev.pkg.release")
 local script = require("dev.pkg.script")
 local system = require("dev.pkg.system")
-local note = require("dev.verb").note
+local note = require("dev.command").note
 
 local stdout = io.stdout
 local Channel, Scope, NO_PROBE_BINARY = kinds.Channel, kinds.Scope, kinds.NO_PROBE_BINARY

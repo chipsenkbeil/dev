@@ -7,8 +7,8 @@ The luajit modules of `dev`, one per item.
 ### Commands and dispatch
 
 - `dev.cli`: dispatch.
-- `dev.verb`: the `.lua` verb contract (`chunk(ctx)`, `usage_error`, `no_args`,
-  `say`, `relay`, `note`, `die`, `show`, `need`).
+- `dev.command`: the `.lua` verb contract (`chunk(ctx)`, `usage_error`,
+  `no_args`, `say`, `relay`, `note`, `die`, `show`, `need`).
 - `dev.cmd.types`: the project type's built-ins and the command lines
   `dev help <verb>` prints for them.
 - `dev.cmd.misc`: `guide` and `bootstrap`.
@@ -307,7 +307,7 @@ card's bookmark.
   It detects the project type only for `lint`, `fmt`, `test`, `build`, `run`
   and `fetch`. The Lua check of `dev.project` is one `find` capped at 4 levels
   that skips dot directories, `node_modules` and `target` and does not follow
-  symlinks below the root. `dev.cli.guard` and `dev.verb` turn an
+  symlinks below the root. `dev.cli.guard` and `dev.command` turn an
   `interrupted!` error into exit 130 with nothing on standard error.
 - `dev.complete`: the hidden `__verbs`, `__subs`, `__flags` and `__args` that
   feed shell completion, and `__topics check`. `__args` reads a card cache and

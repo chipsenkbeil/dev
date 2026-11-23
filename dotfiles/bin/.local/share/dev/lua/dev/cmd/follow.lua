@@ -2,7 +2,7 @@ local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local text = require("dev.text")
 local vcs = require("dev.vcs")
-local verb = require("dev.verb")
+local dev_command = require("dev.command")
 
 local SHORT_CHARS = 12
 local MAIN_WORKSPACE = "default"
@@ -273,7 +273,7 @@ end
 function M.run(ctx)
     local main, err = M.main(ctx.root)
     if not main then
-        verb.note(main_refusal(ctx.root, err))
+        dev_command.note(main_refusal(ctx.root, err))
         return 1
     end
     local rev = os.getenv(REV_ENV)
@@ -281,11 +281,11 @@ function M.run(ctx)
         rev = nil
     end
     if rev and not rev:match("^%x+$") then
-        verb.note(text.sentence(REV_ENV .. " must be a commit id"))
+        dev_command.note(text.sentence(REV_ENV .. " must be a commit id"))
         return 2
     end
     local line, code = M.follow(main, rev)
-    verb.say(line)
+    dev_command.say(line)
     return code
 end
 

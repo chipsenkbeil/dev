@@ -3,7 +3,7 @@ local fs = require("dev.fs")
 local json = require("dev.json")
 local kinds = require("dev.pkg.kinds")
 local lib = require("dev.pkg.lib")
-local note = require("dev.verb").note
+local note = require("dev.command").note
 
 local stdout = io.stdout
 local Channel, Verb = kinds.Channel, kinds.Verb

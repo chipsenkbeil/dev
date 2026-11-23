@@ -1,7 +1,7 @@
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local toml = require("dev.toml")
-local verb = require("dev.verb")
+local dev_command = require("dev.command")
 
 ---Read dev's config files: `~/.config/dev/config.toml`, overridden key by key
 ---by `<project>/.dev/config.toml`.
@@ -67,7 +67,7 @@ local function find(root, key, opts)
             tree, err = read(path)
         end
         if not tree then
-            verb.die(err)
+            dev_command.die(err)
         end
         trees[index] = tree
     end
@@ -127,7 +127,7 @@ function M.user(key)
     end
     local tree, err = read(home .. "/.config/dev/config.toml")
     if not tree then
-        verb.die(err)
+        dev_command.die(err)
     end
     local parts = {}
     for part in key:gmatch("[^.]+") do

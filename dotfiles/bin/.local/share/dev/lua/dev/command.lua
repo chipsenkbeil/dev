@@ -15,7 +15,7 @@ local stdout = io.stdout
 ---@field verbose 0|1|2 the verbosity after the flags and `VERBOSE`
 ---@field interpreter string? the program dev runs under, as the launcher started it
 
----@class dev.verb
+---@class dev.command
 local M = {}
 
 ---Print `dev <name>: <msg>` and exit 2.

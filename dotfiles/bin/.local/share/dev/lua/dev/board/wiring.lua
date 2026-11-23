@@ -14,7 +14,7 @@ local standalone = require("dev.standalone")
 local store = require("dev.board.store")
 local turn = require("dev.board.turn")
 local vcs = require("dev.vcs")
-local verb = require("dev.verb")
+local dev_command = require("dev.command")
 
 ---The parsing, refusals and turn waits behind the `board` check and land verbs.
 ---@class dev.board.wiring
@@ -106,14 +106,14 @@ end
 local function renew_claim(backend, card, name, seconds)
     local why = runner.renew_claim(backend, card, name, seconds)
     if why then
-        verb.note("The claim was not renewed. " .. dev_text.sentence(why))
+        dev_command.note("The claim was not renewed. " .. dev_text.sentence(why))
     end
 end
 
 ---@param notes string[]? the sentences a rebase left about the workspaces it moved
 local function note_all(notes)
     for _, line in ipairs(notes or {}) do
-        verb.note(line)
+        dev_command.note(line)
     end
 end
 
@@ -140,7 +140,7 @@ local function run_shared(opts, plan, env)
     end
     local text = table.concat(places, ", ")
     local attach = opts.options.run
-    verb.note(
+    dev_command.note(
         attach
                 and string.format(
                     "Waiting on ci run %s for rows %s of %d.",
@@ -162,7 +162,7 @@ local function run_shared(opts, plan, env)
         env = { DEV_AGENT = label },
         attach = attach,
         on_run_id = function(run_id)
-            verb.note(string.format("rows %s run %s", text, run_id))
+            dev_command.note(string.format("rows %s run %s", text, run_id))
         end,
     })
     local rows = {}
@@ -208,7 +208,7 @@ local function mac_only_files(root)
         listed[path] = true
     end
     if bad then
-        verb.die("The `" .. key .. "` setting must be a list of file paths.")
+        dev_command.die("The `" .. key .. "` setting must be a list of file paths.")
     end
     return listed
 end
@@ -256,7 +256,7 @@ local function post_partial(opts, rows, commands, posted)
         { kind = board.NoteKind.STATUS }
     )
     if not ok then
-        verb.note("The rows that passed were not saved. " .. dev_text.sentence(message))
+        dev_command.note("The rows that passed were not saved. " .. dev_text.sentence(message))
         return posted
     end
     return count
@@ -299,7 +299,7 @@ local function start_rows(opts)
             })
             if run_id then
                 pending[i] = run_id
-                verb.note(
+                dev_command.note(
                     string.format(
                         "started row %d of %d as ci run %s: %s",
                         i,
@@ -353,7 +353,7 @@ local function settle_guests(settle)
     -- Run a guest on its own and say whether the hub refused it
     local function run_alone(place)
         renew_claim(backend, opts.card, opts.name, flags.seconds)
-        verb.note(string.format("running %d of %d: %s", place, #argvs, commands[place]))
+        dev_command.note(string.format("running %d of %d: %s", place, #argvs, commands[place]))
         rows[place] = check.run({
             root = backend.root,
             run = commands[place],
@@ -362,7 +362,7 @@ local function settle_guests(settle)
             expect_fail = flags.expect_fail,
             env = settle.env,
             on_run_id = function(run_id)
-                verb.note(string.format("row %d run %s", place, run_id))
+                dev_command.note(string.format("row %d run %s", place, run_id))
             end,
         })
         return rows[place].refused ~= nil
@@ -374,7 +374,7 @@ local function settle_guests(settle)
             local _, words = check.job_row(argvs[place])
             asked[k] = { run = commands[place], words = words }
         end
-        verb.note(
+        dev_command.note(
             string.format(
                 "reading rows %s from the test log of ci run %s",
                 table.concat(open, ", "),
@@ -424,7 +424,7 @@ local function check_rows(opts)
         return land.card_touched(backend.root)
     end, function(row, count)
         narrowed[row] = count
-        verb.note(string.format("Row %d narrowed to %d suites.", row, count))
+        dev_command.note(string.format("Row %d narrowed to %d suites.", row, count))
     end)
     ---@type table<integer, string[]> suites narrowing added per row, which `record` writes as ran=
     local ran = {}
@@ -516,7 +516,7 @@ local function check_rows(opts)
                 rows[i] =
                     { run = commands[i], run_id = row.run_id, result = row.result, ran = row.ran }
                 local where = row.run_id == "-" and "" or " in ci run " .. row.run_id
-                verb.note(
+                dev_command.note(
                     string.format(
                         "Row %d of %d passed%s at this commit, so it is skipped.",
                         i,
@@ -549,7 +549,7 @@ local function check_rows(opts)
             { kind = board.NoteKind.STATUS }
         )
         if not ok then
-            verb.note("The start of the check was not noted. " .. dev_text.sentence(why))
+            dev_command.note("The start of the check was not noted. " .. dev_text.sentence(why))
         end
     end
     local pending = start_rows({
@@ -562,7 +562,7 @@ local function check_rows(opts)
     })
     for i, argv in ipairs(argvs) do
         if mac[i] then
-            verb.note(
+            dev_command.note(
                 string.format(
                     "Not running row %d of %d. It is a mac-only test: %s",
                     i,
@@ -573,7 +573,7 @@ local function check_rows(opts)
             rows[i] = check.not_run(commands[i])
         elseif guest[i] then
             if not rows[i] then
-                verb.note(
+                dev_command.note(
                     string.format(
                         "Row %d of %d waits for the test log of row %d.",
                         i,
@@ -592,7 +592,7 @@ local function check_rows(opts)
             end
         elseif not rows[i] and not pending[i] then
             renew_claim(backend, card, opts.name, flags.seconds)
-            verb.note(string.format("running %d of %d: %s", i, #argvs, commands[i]))
+            dev_command.note(string.format("running %d of %d: %s", i, #argvs, commands[i]))
             rows[i] = check.run({
                 root = backend.root,
                 run = commands[i],
@@ -601,7 +601,7 @@ local function check_rows(opts)
                 expect_fail = flags.expect_fail,
                 env = env,
                 on_run_id = function(run_id)
-                    verb.note(string.format("row %d run %s", i, run_id))
+                    dev_command.note(string.format("row %d run %s", i, run_id))
                 end,
             })
         end
@@ -630,7 +630,7 @@ local function check_rows(opts)
     end
     for k, i in ipairs(waiting) do
         renew_claim(backend, card, opts.name, flags.seconds)
-        verb.note(string.format("waiting on row %d of %d, ci run %s", i, #argvs, pending[i]))
+        dev_command.note(string.format("waiting on row %d of %d, ci run %s", i, #argvs, pending[i]))
         local job = check.job_row(argvs[i])
         rows[i] = check.run_group({
             root = backend.root,
@@ -638,7 +638,7 @@ local function check_rows(opts)
             seconds = flags.seconds,
             attach = pending[i],
         })[1]
-        verb.note(string.format("row %d of %d ended: %s", i, #argvs, rows[i].result))
+        dev_command.note(string.format("row %d of %d ended: %s", i, #argvs, rows[i].result))
         if k < #waiting then
             posted = post_partial(opts, rows, commands, posted)
         end
@@ -762,7 +762,7 @@ end
 ---@return string? problem the refusal
 local function noted_run_problem(problem, seen)
     if seen then
-        verb.note(seen)
+        dev_command.note(seen)
     end
     return problem
 end
@@ -1031,7 +1031,7 @@ end
 local function release_landed(backend, card, held)
     local sent, stuck, reason, detail = claims.finish(backend, card.id, held)
     if sent == nil then
-        verb.note(
+        dev_command.note(
             string.format(
                 "Landed, and the card stays claimed by %s until the claim lapses "
                     .. "or its owner releases it.",
@@ -1039,7 +1039,7 @@ local function release_landed(backend, card, held)
             )
         )
     elseif not sent then
-        verb.note(
+        dev_command.note(
             "Landed, but the claim was not released. "
                 .. board.release_refusal(reason, stuck, detail, held.fence)
         )
@@ -1240,7 +1240,7 @@ local function land_prepare(opts)
             commit = carried,
             card = short,
             rows = config.get_text(backend.root, "board.land.recheck", trunk_text),
-            note = verb.note,
+            note = dev_command.note,
         })
     renew_claim(backend, card, name)
     if unchecked then

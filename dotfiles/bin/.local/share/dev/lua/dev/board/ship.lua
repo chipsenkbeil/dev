@@ -6,7 +6,7 @@ local guards = require("dev.board.guards")
 local land = require("dev.board.land")
 local revert = require("dev.board.revert")
 local templates = require("dev.templates")
-local verb = require("dev.verb")
+local dev_command = require("dev.command")
 local wiring = require("dev.board.wiring")
 
 local usage = guards.usage
@@ -80,7 +80,7 @@ local function ship_ran(backend, runs, name_suspects)
     local remote = require("dev.remote")
     local rows = {}
     for i, one in ipairs(runs) do
-        verb.note(string.format("Running row %d of %d with `%s`.", i, #runs, one.run))
+        dev_command.note(string.format("Running row %d of %d with `%s`.", i, #runs, one.run))
         rows[i] = check.run({
             root = backend.root,
             run = one.run,

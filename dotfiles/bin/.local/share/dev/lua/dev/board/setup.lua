@@ -4,7 +4,7 @@ local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local toml = require("dev.toml")
 local vcs = require("dev.vcs")
-local verb = require("dev.verb")
+local dev_command = require("dev.command")
 
 ---The settings and checks `dev board init` and the first board of a project share.
 ---@class dev.board.setup
@@ -25,17 +25,17 @@ function M.board_name(ctx, flags)
     local backend = config.get(ctx.root, "board.backend")
     local name = config.get(ctx.root, "board.name")
     if backend == nil and has_section(ctx.root) then
-        verb.die('The `[board]` section needs `backend = "pomb"` in `.dev/config.toml`.')
+        dev_command.die('The `[board]` section needs `backend = "pomb"` in `.dev/config.toml`.')
     end
     if backend ~= nil and backend ~= board.Backend.POMB then
-        verb.die(
+        dev_command.die(
             'The `backend` setting of `[board]` must be "pomb" or "local" in `.dev/config.toml`.'
         )
     end
     local asked = flags["--name"]
     if backend == nil then
         if not asked then
-            verb.die(
+            dev_command.die(
                 "This project has no `[board]` section. Pass `--name N` to make a board and write it."
             )
         end
@@ -43,7 +43,7 @@ function M.board_name(ctx, flags)
     else
         name = name or fs.basename(ctx.root)
         if asked and asked ~= name then
-            verb.usage_error(
+            dev_command.usage_error(
                 ctx,
                 "--name " .. asked .. " is not the [board] name " .. tostring(name)
             )
@@ -55,7 +55,7 @@ function M.board_name(ctx, flags)
         or #name > M.NAME_CHARS
         or not name:find(M.NAME_PATTERN)
     then
-        verb.die("The board's name must be 1 to 100 characters with no quote or backslash.")
+        dev_command.die("The board's name must be 1 to 100 characters with no quote or backslash.")
     end
     return name, backend == nil
 end
@@ -103,7 +103,7 @@ function M.config_lanes(ctx)
         ok = ok and type(lane) == "string" and lane ~= ""
     end
     if not ok then
-        verb.die(
+        dev_command.die(
             "The `lanes` setting of `[board]` must be a list of lane names in `.dev/config.toml`."
         )
     end
@@ -137,7 +137,7 @@ function M.ensure_board(ctx, init_board)
         return
     end
     if not private_project(ctx.root) then
-        verb.die(
+        dev_command.die(
             "This project has no board and is public or not known to be private. Ask the owner before it gets one. `dev board init --name N` makes it."
         )
     end

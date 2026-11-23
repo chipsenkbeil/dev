@@ -1,7 +1,7 @@
 local testing = require("dev.testing")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
-local verb = require("dev.verb")
+local dev_command = require("dev.command")
 local support = require("support")
 
 local STYLE = "dotfiles/claude/.claude/skills/style/lint"
@@ -193,14 +193,14 @@ testing.test("files says why when jj file list fails and still lists the files",
     assert(fs.write(root .. "/.dev/lint-ignore", "{a\n"), "fixture setup failed")
     assert(dev_os.run({ "jj", "git", "init", root }) == 0, "jj git init failed")
     local notes = {}
-    local note = verb.note
-    verb.note = function(text)
+    local note = dev_command.note
+    dev_command.note = function(text)
         notes[#notes + 1] = text
     end
     local ok, files = pcall(function()
         return lint_for(root):files({ "*.rs" })
     end)
-    verb.note = note
+    dev_command.note = note
     fs.remove(root, { recursive = true })
     assert(ok, files)
     testing.eq(notes, {
@@ -295,13 +295,13 @@ testing.test("finish names the failed checks and returns 1", function()
     local lint = lint_for("/")
     testing.eq(lint:finish(), 0)
     lint.failed = { "a", "b" }
-    local original = verb.note
+    local original = dev_command.note
     local notes = {}
-    verb.note = function(text)
+    dev_command.note = function(text)
         notes[#notes + 1] = text
     end
     local ok, code = pcall(lint.finish, lint)
-    verb.note = original
+    dev_command.note = original
     assert(ok, code)
     testing.eq(code, 1)
     testing.eq(notes, { "These checks failed: a, b." })
@@ -331,13 +331,13 @@ testing.test("the closing note names each failed check once", function()
 end)
 
 local function quiet_finish(lint)
-    local original = verb.note
+    local original = dev_command.note
     local notes = {}
-    verb.note = function(text)
+    dev_command.note = function(text)
         notes[#notes + 1] = text
     end
     local ok, code = pcall(lint.finish, lint)
-    verb.note = original
+    dev_command.note = original
     assert(ok, code)
     return code, notes
 end

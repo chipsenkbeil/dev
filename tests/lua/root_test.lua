@@ -5,7 +5,7 @@ local root = require("dev.root")
 local devproject = require("dev.project")
 local support = require("support")
 local tools = require("dev.cmd.tools")
-local verb = require("dev.verb")
+local dev_command = require("dev.command")
 
 local MAIN = dev_os.capture({ "pwd" }):gsub("\n$", "") .. "/dotfiles/bin/.local/share/dev/main.lua"
 local MAX = 262144
@@ -429,13 +429,13 @@ local function missing_mktemp(base)
 end
 
 local function noting(fn)
-    local note = verb.note
+    local note = dev_command.note
     local lines = {}
-    verb.note = function(text)
+    dev_command.note = function(text)
         lines[#lines + 1] = text
     end
     local ok, err = pcall(fn)
-    verb.note = note
+    dev_command.note = note
     if not ok then
         error(err, 0)
     end

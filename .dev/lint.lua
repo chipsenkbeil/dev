@@ -9,10 +9,10 @@ Exit non-zero when any of them reports a finding.
 local checks = require("dotfiles.checks")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
-local verb = require("dev.verb")
+local dev_command = require("dev.command")
 
 local ctx = ...
-verb.no_args(ctx)
+dev_command.no_args(ctx)
 
 local root = ctx.root
 local failed = false
@@ -37,13 +37,13 @@ end
 
 local function report(file, numbers, message)
     for _, number in ipairs(numbers) do
-        verb.note(string.format("%s:%d: %s", file, number, message))
+        dev_command.note(string.format("%s:%d: %s", file, number, message))
         failed = true
     end
 end
 
 local function missing(tool)
-    verb.note(
+    dev_command.note(
         "Tool "
             .. tool
             .. " not found. The "
@@ -57,12 +57,12 @@ end
 local have_shfmt = dev_os.which("shfmt") ~= nil
 
 local function lint_shell(file)
-    verb.say("> Linting " .. file)
+    dev_command.say("> Linting " .. file)
     local head = checks.first_line(root, file)
     if head:find("bash", 1, true) then
         run_checked({ "shellcheck", "-x", "-P", "SCRIPTDIR", file })
     elseif head:find("zsh", 1, true) then
-        verb.say("  skip (zsh)")
+        dev_command.say("  skip (zsh)")
         return
     else
         run_checked({ "shellcheck", "-x", "-P", "SCRIPTDIR", "-s", "sh", file })
@@ -91,7 +91,7 @@ local function lint_lua(files, templates)
         local targets = row[3] and formatted or files
         if #targets > 0 then
             if dev_os.which(tool) then
-                verb.say("> Linting lua with " .. tool)
+                dev_command.say("> Linting lua with " .. tool)
                 for _, word in ipairs(row[2]) do
                     prefix[#prefix + 1] = (word:gsub("^STYLE", style))
                 end
@@ -101,7 +101,7 @@ local function lint_lua(files, templates)
             end
         end
     end
-    verb.say("> Linting lua comments")
+    dev_command.say("> Linting lua comments")
     package.path = style .. "/../?.lua;" .. package.path
     local lintset = require("lintset")
     for _, file in ipairs(files) do
@@ -147,9 +147,9 @@ for _, file in ipairs(checks.doc_files(root)) do
 end
 
 if #dirty > 0 then
-    verb.note("\nshfmt -i 4 would change:")
+    dev_command.note("\nshfmt -i 4 would change:")
     for _, file in ipairs(dirty) do
-        verb.note("  " .. file)
+        dev_command.note("  " .. file)
     end
     failed = true
 end
@@ -157,16 +157,16 @@ end
 local lua_files = checks.lua_files(root)
 lint_lua(lua_files, checks.template_files(root))
 
-verb.say("> standalone shell")
+dev_command.say("> standalone shell")
 for _, line in ipairs(require("dev.standalone").problems(root)) do
-    verb.note(line)
+    dev_command.note(line)
     failed = true
 end
 
 if dev_os.which("ast-grep") then
     local sets = fs.join(root, checks.lint_dir, "..")
     for _, set in ipairs(RULE_TEST_SETS) do
-        verb.say("> Testing " .. set .. " ast-grep rules")
+        dev_command.say("> Testing " .. set .. " ast-grep rules")
         run_checked({
             "ast-grep",
             "test",

@@ -5,7 +5,7 @@ local term = require("dev.term")
 local text = require("dev.text")
 local ui = require("dev.ui")
 local picker = require("dev.ui.picker")
-local verb = require("dev.verb")
+local dev_command = require("dev.command")
 
 local present = json.present
 local stderr = io.stderr
@@ -300,7 +300,7 @@ end
 ---Refuse unless `ci` is on PATH.
 function M.need_ci()
     if not dev_os.which("ci") then
-        verb.die(MISSING_CI)
+        dev_command.die(MISSING_CI)
     end
 end
 
@@ -328,17 +328,17 @@ function M.parse(ctx, allowed)
         local arg = args[i]
         i = i + 1
         if #arg > 1 and arg:sub(1, 1) == "-" and not takes[arg] then
-            verb.usage_error(ctx, "Unknown flag " .. arg .. ".")
+            dev_command.usage_error(ctx, "Unknown flag " .. arg .. ".")
         end
         if VALUE_FLAGS[arg] then
             if i > #args then
-                verb.usage_error(ctx, arg .. " needs a value")
+                dev_command.usage_error(ctx, arg .. " needs a value")
             end
             local value = args[i]
             i = i + 1
             if arg == "--ttl" then
                 if not value:find("^[1-9]%d*$") then
-                    verb.usage_error(ctx, "--ttl is a whole number of hours, not " .. value)
+                    dev_command.usage_error(ctx, "--ttl is a whole number of hours, not " .. value)
                 end
                 parsed.ttl = value
             else
@@ -361,7 +361,7 @@ function M.parse(ctx, allowed)
         end
     end
     if parsed.ttl and parsed.keep then
-        verb.usage_error(ctx, "--ttl and --keep cannot be combined")
+        dev_command.usage_error(ctx, "--ttl and --keep cannot be combined")
     end
     return parsed
 end
@@ -378,7 +378,7 @@ end
 ---@param name string the name as typed
 local function check_name(ctx, name)
     if not valid_name(name) then
-        verb.usage_error(
+        dev_command.usage_error(
             ctx,
             "bad box name " .. name .. ", a name is 1 to " .. MAX_NAME .. " of a-z, 0-9 and -"
         )
@@ -391,10 +391,10 @@ end
 ---@return string name the box name
 function M.one_name(ctx, parsed)
     if #parsed.pos == 0 then
-        verb.usage_error(ctx, "needs a box name")
+        dev_command.usage_error(ctx, "needs a box name")
     end
     if #parsed.pos > 1 then
-        verb.usage_error(ctx, "unexpected argument " .. parsed.pos[2])
+        dev_command.usage_error(ctx, "unexpected argument " .. parsed.pos[2])
     end
     check_name(ctx, parsed.pos[1])
     return parsed.pos[1]
@@ -430,7 +430,7 @@ local function report_failure(sub, doc, out)
         message = first.error
     end
     if type(message) == "string" then
-        verb.note("dev box " .. sub .. ": " .. message)
+        dev_command.note("dev box " .. sub .. ": " .. message)
     elseif out ~= "" then
         stderr:write(out, "\n")
     end
@@ -463,7 +463,7 @@ function M.call(sub, args, opts)
         os.exit(code or Exit.FAILED)
     end
     if type(doc) ~= "table" or doc.ok ~= true then
-        verb.die("The command `ci box " .. args[1] .. "` printed no ok document.")
+        dev_command.die("The command `ci box " .. args[1] .. "` printed no ok document.")
     end
     return doc, raw
 end
@@ -506,7 +506,7 @@ function M.fleet(sub, opts)
     end
     for i = 1, FLEET_DOCS do
         if type(docs[i]) ~= "table" or docs[i].ok ~= true then
-            verb.die("The command `ci fleet targets --box` printed no ok document.")
+            dev_command.die("The command `ci fleet targets --box` printed no ok document.")
         end
     end
     return docs[1], docs[2], raw
@@ -520,7 +520,7 @@ end
 function M.one(sub, args, opts)
     local found = M.call(sub, args, opts).box
     if type(found) ~= "table" then
-        verb.die("The command `ci box " .. args[1] .. "` printed no box.")
+        dev_command.die("The command `ci box " .. args[1] .. "` printed no box.")
     end
     return found
 end
@@ -539,7 +539,7 @@ function M.default_project(root)
         return nil
     end
     if name:sub(1, 1) == "-" then
-        verb.note(
+        dev_command.note(
             "dev box: not using "
                 .. name
                 .. " as the default project, a project name cannot start with -"
@@ -583,7 +583,9 @@ local function requester(by)
             return "human:" .. logname
         end
     end
-    verb.die("Cannot tell who asks. Set DEV_AGENT or pass --by LABEL, such as --by human:$USER.")
+    dev_command.die(
+        "Cannot tell who asks. Set DEV_AGENT or pass --by LABEL, such as --by human:$USER."
+    )
     return ""
 end
 
@@ -809,7 +811,7 @@ end
 M.handlers["box ls"] = function(ctx)
     local parsed = M.parse(ctx, { "--all", "--json" })
     if #parsed.pos > 0 then
-        verb.usage_error(ctx, "unexpected argument " .. parsed.pos[1])
+        dev_command.usage_error(ctx, "unexpected argument " .. parsed.pos[1])
     end
     M.need_ci()
     local args = { "ls", "--json" }
@@ -995,7 +997,7 @@ end
 M.handlers["box targets"] = function(ctx)
     local parsed = M.parse(ctx, { "--json" })
     if #parsed.pos > 0 then
-        verb.usage_error(ctx, "unexpected argument " .. parsed.pos[1])
+        dev_command.usage_error(ctx, "unexpected argument " .. parsed.pos[1])
     end
     M.need_ci()
     local doc, shapes, raw = M.fleet("targets")
@@ -1063,7 +1065,7 @@ local function nothing_fits(opts)
             end
         end
     end
-    verb.note(
+    dev_command.note(
         "dev box create: "
             .. opts.what
             .. " fits now, "
@@ -1083,7 +1085,7 @@ end
 local function choose(items, opts)
     local ok, picked = pcall(picker.run, ui.context(), items, opts)
     if not ok then
-        verb.note("dev box create: " .. tostring(picked))
+        dev_command.note("dev box create: " .. tostring(picked))
         os.exit(Exit.FAILED)
     end
     if not picked or picked == "" then
@@ -1187,7 +1189,7 @@ local function pick_target(project)
     end
     local names = machines_of(targets)
     if #targets == 0 then
-        verb.note("dev box create: ci lists no targets")
+        dev_command.note("dev box create: ci lists no targets")
         os.exit(Exit.FAILED)
     end
     if enabled == 0 then
@@ -1332,13 +1334,13 @@ end
 local function pick_name(ctx, parsed, opts)
     if #parsed.pos > 0 then
         if not opts.rest and #parsed.pos > 1 then
-            verb.usage_error(ctx, "unexpected argument " .. parsed.pos[2])
+            dev_command.usage_error(ctx, "unexpected argument " .. parsed.pos[2])
         end
         check_name(ctx, parsed.pos[1])
         return parsed.pos[1]
     end
     if not M.interactive() then
-        verb.usage_error(
+        dev_command.usage_error(
             ctx,
             "No box given and no terminal to pick one. Pass a name, like dev "
                 .. ctx.name
@@ -1357,13 +1359,13 @@ local function pick_name(ctx, parsed, opts)
         end
     end
     if #items == 0 then
-        verb.note("dev " .. ctx.name .. ": " .. opts.none)
+        dev_command.note("dev " .. ctx.name .. ": " .. opts.none)
         os.exit(Exit.FAILED)
     end
     local ok, picked =
         pcall(picker.run, ui.context(), items, { title = opts.title, auto = opts.auto })
     if not ok then
-        verb.note("dev " .. ctx.name .. ": " .. tostring(picked))
+        dev_command.note("dev " .. ctx.name .. ": " .. tostring(picked))
         os.exit(Exit.FAILED)
     end
     if not picked or picked == "" then
@@ -1404,7 +1406,7 @@ M.handlers["box show"] = function(ctx)
     end
     local found = doc.box
     if type(found) ~= "table" then
-        verb.die("The command `ci box show` printed no box.")
+        dev_command.die("The command `ci box show` printed no box.")
     end
     local lines = {
         "name: " .. interp(found.name),
@@ -1474,7 +1476,7 @@ end
 M.handlers["box extend"] = function(ctx)
     local parsed = M.parse(ctx, { "--ttl", "--keep" })
     if not parsed.ttl and not parsed.keep then
-        verb.usage_error(ctx, "needs --ttl HOURS or --keep")
+        dev_command.usage_error(ctx, "needs --ttl HOURS or --keep")
     end
     local name = pick_name(ctx, parsed, {
         sub = "extend",
@@ -1493,13 +1495,13 @@ M.handlers["box retag"] = function(ctx)
     local parsed = M.parse(ctx, { "--target" })
     local name = M.one_name(ctx, parsed)
     if not parsed.target then
-        verb.usage_error(ctx, "needs --target TARGET")
+        dev_command.usage_error(ctx, "needs --target TARGET")
     end
     M.need_ci()
     local doc = M.call("retag", { "retag", name, "--target", parsed.target, "--json" })
     local first = first_retagged(doc)
     if first == nil then
-        verb.die("The command `ci box retag` printed no box.")
+        dev_command.die("The command `ci box retag` printed no box.")
     end
     print("retagged " .. interp(name) .. " to " .. interp(parsed.target))
     return 0
@@ -1598,7 +1600,7 @@ M.handlers["box delete"] = function(ctx)
     args[#args + 1] = "--json"
     if not parsed.yes then
         if not can_ask() then
-            verb.usage_error(ctx, "no terminal to ask on, pass -y to delete " .. name)
+            dev_command.usage_error(ctx, "no terminal to ask on, pass -y to delete " .. name)
         end
         M.need_ci()
         if not boxes then
@@ -1610,7 +1612,7 @@ M.handlers["box delete"] = function(ctx)
             M.delete_prompt(name, parsed.no_archive, is_attached(boxes, name))
         local screen = ui.context({ interactive = true, color = false })
         if not ui.confirm(screen, question, consequence) then
-            verb.note("not deleted")
+            dev_command.note("not deleted")
             return Exit.FAILED
         end
     end

@@ -3,7 +3,7 @@ local forge = require("dev.forge")
 local fs = require("dev.fs")
 local text = require("dev.text")
 local vcs = require("dev.vcs")
-local verb = require("dev.verb")
+local dev_command = require("dev.command")
 
 local REMOTE_NAMES = { "origin", "gerrit" }
 
@@ -140,7 +140,7 @@ local function check_tags(git, tags, remotes)
             { stderr = "null" }
         )
         if code ~= 0 then
-            verb.die("There is no local tag " .. tag .. ". No tag was pushed.")
+            dev_command.die("There is no local tag " .. tag .. ". No tag was pushed.")
         end
         shas[tag] = text.trim(sha)
     end
@@ -154,11 +154,13 @@ local function check_tags(git, tags, remotes)
                 { stderr = "stdout" }
             )
             if code ~= 0 then
-                verb.die("The tags of " .. remote .. " cannot be read. No tag was pushed.\n" .. out)
+                dev_command.die(
+                    "The tags of " .. remote .. " cannot be read. No tag was pushed.\n" .. out
+                )
             end
             local held = peeled(out, ref)
             if held and held ~= shas[tag] then
-                verb.die(
+                dev_command.die(
                     "The remote "
                         .. remote
                         .. " holds tag "
@@ -181,7 +183,7 @@ end
 local function push_tags(ctx, plan, tags, remotes)
     local guard, err = guard_path()
     if not guard then
-        verb.die(text.sentence(err))
+        dev_command.die(text.sentence(err))
     end
     local dir = store_dir(ctx.root, plan)
     local git = dir and { "git", "--git-dir=" .. dir } or { "git", "-C", ctx.root }
@@ -190,7 +192,7 @@ local function push_tags(ctx, plan, tags, remotes)
     for _, remote in ipairs(remotes) do
         for _, tag in ipairs(tags) do
             if not text.contains(todo[remote], tag) then
-                verb.say("Tag " .. tag .. " is already on " .. remote .. ".")
+                dev_command.say("Tag " .. tag .. " is already on " .. remote .. ".")
             end
         end
         if #todo[remote] > 0 then
@@ -202,13 +204,13 @@ local function push_tags(ctx, plan, tags, remotes)
             for _, tag in ipairs(todo[remote]) do
                 argv[#argv + 1] = "refs/tags/" .. tag .. ":refs/tags/" .. tag
             end
-            verb.show(ctx, argv)
+            dev_command.show(ctx, argv)
             local out, code = dev_os.capture(argv, { cwd = ctx.root, stderr = "stdout" })
             local shown = table.concat(todo[remote], " ")
             if code == 0 then
-                verb.say("Pushed tags " .. shown .. " to " .. remote .. ".")
+                dev_command.say("Pushed tags " .. shown .. " to " .. remote .. ".")
             else
-                verb.say("The push of tags " .. shown .. " to " .. remote .. " failed.")
+                dev_command.say("The push of tags " .. shown .. " to " .. remote .. " failed.")
                 status = 1
             end
             out = out:gsub("\n+$", "")
@@ -249,7 +251,7 @@ function M.run(ctx)
     while i <= #ctx.args do
         if ctx.args[i] == "--tag" then
             if not ctx.args[i + 1] then
-                verb.usage_error(ctx, "--tag needs a tag name")
+                dev_command.usage_error(ctx, "--tag needs a tag name")
             end
             if not text.contains(tags, ctx.args[i + 1]) then
                 tags[#tags + 1] = ctx.args[i + 1]
@@ -262,14 +264,14 @@ function M.run(ctx)
     end
     local plan, err = resolve(ctx.root, #tags > 0)
     if not plan then
-        verb.die(text.sentence(err))
+        dev_command.die(text.sentence(err))
     end
     local remotes = plan.remotes
     if #names > 0 then
         remotes = {}
         for _, name in ipairs(names) do
             if not text.contains(plan.named, name) then
-                verb.usage_error(
+                dev_command.usage_error(
                     ctx,
                     "no remote "
                         .. name
@@ -296,12 +298,12 @@ function M.run(ctx)
     local status = 0
     for _, remote in ipairs(remotes) do
         local argv = argv_for(ctx.root, plan, remote)
-        verb.show(ctx, argv)
+        dev_command.show(ctx, argv)
         local out, code = dev_os.capture(argv, { cwd = ctx.root, stderr = "stdout" })
         if code == 0 then
-            verb.say("Pushed " .. plan.ref .. " to " .. remote .. ".")
+            dev_command.say("Pushed " .. plan.ref .. " to " .. remote .. ".")
         else
-            verb.say("The push of " .. plan.ref .. " to " .. remote .. " failed.")
+            dev_command.say("The push of " .. plan.ref .. " to " .. remote .. " failed.")
             status = 1
         end
         out = out:gsub("\n+$", "")

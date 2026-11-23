@@ -9,7 +9,7 @@ local project = require("dev.project")
 local sync = require("dev.cmd.sync")
 local templates = require("dev.templates")
 local vcs = require("dev.vcs")
-local verb = require("dev.verb")
+local dev_command = require("dev.command")
 
 local Kind = project.Kind
 local TYPES = {
@@ -52,7 +52,7 @@ local function parse(ctx, reg)
         local arg = args[i]
         if arg == "--type" or arg == "--name" then
             if i == #args then
-                verb.usage_error(ctx, arg .. " needs a value")
+                dev_command.usage_error(ctx, arg .. " needs a value")
             end
             opts[arg:sub(3)] = args[i + 1]
             i = i + 1
@@ -83,11 +83,11 @@ local function leave(run, item)
 end
 
 local function die(message)
-    verb.die(tostring(message))
+    dev_command.die(tostring(message))
 end
 
 local function run_or_exit(run, argv, opts)
-    verb.show(run.ctx, argv)
+    dev_command.show(run.ctx, argv)
     local code = dev_os.run(argv, opts)
     if code ~= 0 then
         os.exit(code or 1)
@@ -203,7 +203,7 @@ local function init_workspace_lints(run, dir)
         end
         if dev_os.which("cargo-sort") then
             local argv = { "cargo", "sort", "--workspace" }
-            verb.show(run.ctx, argv)
+            dev_command.show(run.ctx, argv)
             dev_os.run(argv, { cwd = run.root, stdout = "null", stderr = "null" })
         end
     end
@@ -306,7 +306,7 @@ local function remote_names(run)
         return {}
     end
     if backend == vcs.JJ then
-        verb.need("jj", "brew install jj")
+        dev_command.need("jj", "brew install jj")
     end
     return vcs.remotes(run.root, backend)
 end
@@ -355,11 +355,11 @@ local function init_gerrit(run, gerrit)
         return
     end
     local list = vcs.with(gerrit, "ls-projects")
-    verb.show(run.ctx, list)
+    dev_command.show(run.ctx, list)
     local out, code = dev_os.capture(list, { stderr = "stdout" })
     if code ~= 0 then
-        verb.note("Gerrit ls-projects failed.")
-        verb.note(trimmed(out))
+        dev_command.note("Gerrit ls-projects failed.")
+        dev_command.note(trimmed(out))
         leave(
             run,
             "create the Gerrit project and remote: "
@@ -381,7 +381,7 @@ local function init_gerrit(run, gerrit)
         skipped(run, "gerrit project " .. name .. " exists")
     else
         local create = vcs.with(gerrit, "create-project", name)
-        verb.show(run.ctx, create)
+        dev_command.show(run.ctx, create)
         if dev_os.run(create) == 0 then
             created(run, "gerrit project " .. name)
         else
@@ -509,10 +509,10 @@ function M.run(ctx, reg)
     if kind == nil or kind == "" then
         kind = project.detect_type(root) or Kind.NONE
     elseif not TYPES[kind] then
-        verb.usage_error(ctx, "--type takes rust, love2d, lua, godot or node")
+        dev_command.usage_error(ctx, "--type takes rust, love2d, lua, godot or node")
     end
     if kind == Kind.RUST and fs.is_file(root .. "/Cargo.toml") then
-        verb.need("yq", NEEDS_YQ)
+        dev_command.need("yq", NEEDS_YQ)
     end
     local run = {
         ctx = ctx,

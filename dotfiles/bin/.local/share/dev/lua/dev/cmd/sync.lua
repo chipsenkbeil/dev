@@ -4,7 +4,7 @@ local fs = require("dev.fs")
 local project = require("dev.project")
 local templates = require("dev.templates")
 local ui = require("dev.ui")
-local verb = require("dev.verb")
+local dev_command = require("dev.command")
 
 local README = "/.dev/README.md"
 
@@ -34,7 +34,7 @@ local function entry_opts(kind, entry, channel)
 end
 
 local function die(message)
-    verb.die(message)
+    dev_command.die(message)
 end
 
 ---Write why a template lookup or read failed.
@@ -136,7 +136,7 @@ end
 
 local function sync_readme(root, kind, text, check, yes)
     if not text then
-        verb.say("There are no lint templates for " .. kind .. " projects.")
+        dev_command.say("There are no lint templates for " .. kind .. " projects.")
         return 0
     end
     if check then
@@ -152,7 +152,7 @@ local function sync_readme(root, kind, text, check, yes)
     end
     local ok, err = fs.write(root .. README, text)
     if not ok then
-        verb.note("Dev sync could not write .dev/README.md: " .. tostring(err) .. ".")
+        dev_command.note("Dev sync could not write .dev/README.md: " .. tostring(err) .. ".")
         return 1
     end
     io.write("synced\n")
@@ -200,7 +200,7 @@ function M.run(ctx)
     end
     local has_cargo = fs.is_file(root .. "/Cargo.toml")
     if has_cargo then
-        verb.need("yq", "brew install yq")
+        dev_command.need("yq", "brew install yq")
     end
     local channel = templates.channel(root)
     local drifted = false
@@ -225,7 +225,7 @@ function M.run(ctx)
         end
         if entry.dest == ".dev/lint.lua" then
             for _, use in ipairs(templates.lint_unbound(text)) do
-                verb.say("undefined: " .. entry.dest .. ":" .. use.line .. ": " .. use.name)
+                dev_command.say("undefined: " .. entry.dest .. ":" .. use.line .. ": " .. use.name)
                 unbound = true
                 drifted = true
             end
@@ -333,7 +333,7 @@ function M.run(ctx)
     end
     local code = unbound and 1 or 0
     local function failed(err)
-        verb.note(tostring(err))
+        dev_command.note(tostring(err))
         code = 1
     end
     for _, entry in ipairs(entries) do

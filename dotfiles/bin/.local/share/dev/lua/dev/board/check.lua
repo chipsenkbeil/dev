@@ -7,7 +7,7 @@ local json = require("dev.json")
 local registry = require("dev.registry")
 local review = require("dev.board.review")
 local vcs = require("dev.vcs")
-local verb = require("dev.verb")
+local dev_command = require("dev.command")
 
 ---@class dev.board.check
 local M = {}
@@ -37,7 +37,7 @@ function M.row_seconds(root)
         or value < 1
         or value > M.MAX_SECONDS
     then
-        verb.die(
+        dev_command.die(
             "The `" .. key .. "` setting must be a whole number from 1 to " .. M.MAX_SECONDS .. "."
         )
     end

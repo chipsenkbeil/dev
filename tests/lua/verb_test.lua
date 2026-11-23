@@ -4,7 +4,7 @@ local support = require("support")
 
 testing.test("note writes the message and a newline to standard error", function()
     local script = string.format(
-        "package.path = %q; require('dev.verb').note('dev sync: nothing to pull')",
+        "package.path = %q; require('dev.command').note('dev sync: nothing to pull')",
         support.absolute_path()
     )
     local out, code = dev_os.capture({ "luajit", "-e", script }, { stderr = "stdout" })
@@ -14,7 +14,7 @@ end)
 
 local function relayed(text)
     local script = string.format(
-        "package.path = %q; require('dev.verb').relay(%q)",
+        "package.path = %q; require('dev.command').relay(%q)",
         support.absolute_path(),
         text
     )
@@ -38,7 +38,7 @@ end)
 
 testing.test("no_args refuses a stray argument with one message", function()
     local script = string.format(
-        "package.path = %q; require('dev.verb').no_args({ name = 'lint', args = { 'extra' } })",
+        "package.path = %q; require('dev.command').no_args({ name = 'lint', args = { 'extra' } })",
         support.absolute_path()
     )
     local out, code = dev_os.capture({ "luajit", "-e", script }, { stderr = "stdout" })
@@ -48,7 +48,7 @@ end)
 
 testing.test("say writes the message and a newline to standard output", function()
     local script = string.format(
-        "package.path = %q; require('dev.verb').say('dev sync: nothing to pull')",
+        "package.path = %q; require('dev.command').say('dev sync: nothing to pull')",
         support.absolute_path()
     )
     local out, code = dev_os.capture({ "luajit", "-e", script })

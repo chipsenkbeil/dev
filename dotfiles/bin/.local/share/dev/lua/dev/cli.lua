@@ -24,7 +24,7 @@ local registry = require("dev.registry")
 local remote = require("dev.remote")
 local root = require("dev.root")
 local vcs = require("dev.vcs")
-local verb = require("dev.verb")
+local dev_command = require("dev.command")
 local version = require("dev.version")
 
 local stderr = io.stderr
@@ -155,7 +155,7 @@ end
 local function default_is_remote(project_root)
     local setting = config.prefer_user(project_root, "remote.default")
     if setting ~= nil and setting ~= "remote" and setting ~= "local" then
-        verb.die(
+        dev_command.die(
             'The `remote.default` setting must be "remote" or "local", not '
                 .. tostring(setting)
                 .. "."
@@ -173,14 +173,16 @@ local function require_min_version(project_root)
     if not current then
         local what = why == version.Reason.UNREADABLE and " cannot be read."
             or " holds " .. detail .. "."
-        verb.die("The version file of this dev" .. what)
+        dev_command.die("The version file of this dev" .. what)
     end
     local order, _, bad = version.compare(current, wanted)
     if order == nil then
-        verb.die("The `dev.min_version` setting must be MAJOR.MINOR.PATCH, not " .. bad .. ".")
+        dev_command.die(
+            "The `dev.min_version` setting must be MAJOR.MINOR.PATCH, not " .. bad .. "."
+        )
     end
     if order < 0 then
-        verb.die(
+        dev_command.die(
             "This project needs dev " .. wanted .. " or newer, and this dev is " .. current .. "."
         )
     end
@@ -290,11 +292,11 @@ local function repo_guarded(project_root)
         .. project_root
         .. "/.dev/config.toml must be a list of verb names."
     if type(names) ~= "table" then
-        verb.die(malformed)
+        dev_command.die(malformed)
     end
     for _, name in ipairs(names) do
         if type(name) ~= "string" then
-            verb.die(malformed)
+            dev_command.die(malformed)
         end
         listed[name] = true
     end
@@ -420,7 +422,7 @@ local function run_script(row, ctx, rest)
     end
     package.path = ctx.root .. "/.dev/lua/?.lua;" .. package.path
     dev_os.defaults.show = ctx.verbose >= 1
-    local code = verb.run(row.script, ctx)
+    local code = dev_command.run(row.script, ctx)
     os.exit(code)
 end
 
@@ -520,7 +522,7 @@ local function refuse_undeclared(reg, ctx, rest, after)
         local word = rest[i]
         local flag = word:match("^(%-%-?[^=]*)")
         if flag and word ~= "-" and not is_help(flag) and not declared[flag] then
-            verb.usage_error(ctx, "Unknown flag " .. flag .. UNDECLARED_HINT)
+            dev_command.usage_error(ctx, "Unknown flag " .. flag .. UNDECLARED_HINT)
         end
     end
 end

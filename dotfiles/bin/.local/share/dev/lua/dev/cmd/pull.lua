@@ -1,7 +1,7 @@
 local dev_os = require("dev.os")
 local text = require("dev.text")
 local vcs = require("dev.vcs")
-local verb = require("dev.verb")
+local dev_command = require("dev.command")
 
 ---@class dev.cmd.pull
 local M = {}
@@ -60,10 +60,10 @@ end
 function M.run(ctx)
     local steps, err = resolve(ctx.root)
     if not steps then
-        verb.die(text.sentence(err))
+        dev_command.die(text.sentence(err))
     end
     for _, argv in ipairs(steps) do
-        verb.show(ctx, argv)
+        dev_command.show(ctx, argv)
         local code = dev_os.run(argv) or 1
         if code ~= 0 then
             return code

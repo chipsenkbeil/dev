@@ -4,7 +4,7 @@ local fs = require("dev.fs")
 local help = require("dev.help")
 local project = require("dev.project")
 local root = require("dev.root")
-local verb = require("dev.verb")
+local dev_command = require("dev.command")
 
 local stderr = io.stderr
 local ROOT_ENV = {
@@ -45,13 +45,13 @@ local function bad_argument(ctx, reg, arg)
 end
 
 local function fail(message)
-    verb.note(message)
+    dev_command.note(message)
     return 1
 end
 
 local function exec(argv, opts)
     local _, message = dev_os.exec(argv, opts)
-    verb.note("Cannot run " .. argv[1] .. ". " .. message)
+    dev_command.note("Cannot run " .. argv[1] .. ". " .. message)
     return dev_os.EXEC_FAILED
 end
 
@@ -120,7 +120,7 @@ local function run_driver(ctx, sub, manifest, args)
     local luajit = interpreter(ctx, is_root)
     if not is_root then
         local argv = { luajit, pkg, sub, "--manifest", manifest, unpack(args) }
-        verb.show(ctx, argv)
+        dev_command.show(ctx, argv)
         return exec(argv, { cwd = ctx.root })
     end
     local copy, _, reason, detail = root.manifest_copy(ctx.root, manifest)
@@ -135,7 +135,7 @@ local function run_driver(ctx, sub, manifest, args)
     for _, word in ipairs({ luajit, pkg, sub, "--manifest", copy, unpack(args) }) do
         driver[#driver + 1] = word
     end
-    verb.show(ctx, driver)
+    dev_command.show(ctx, driver)
     local argv = { "sh", "-c", REMOVE_COPY, "sh", copy }
     for _, word in ipairs(driver) do
         argv[#argv + 1] = word

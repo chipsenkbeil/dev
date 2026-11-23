@@ -46,17 +46,17 @@ another code, return it, or call `os.exit`.
 
 ### The verb helpers
 
-`require("dev.verb")` holds the helpers a verb needs:
+`require("dev.command")` holds the helpers a verb needs:
 
-- `verb.usage_error(ctx, msg)`: print `dev <name>: <msg>` and exit 2
-- `verb.no_args(ctx)`: refuse any positional argument, for a verb that takes
-  no positional arguments
-- `verb.note(msg)`: write `msg` and a newline to standard error
-- `verb.die(msg)`: print `msg` and exit 1
-- `verb.show(ctx, argv)`: print `+ <argv>` on standard error when `ctx.verbose`
-  is 1 or more
-- `verb.need(binary, install)`: exit 1 with one warning when `binary` is not on
-  `PATH`
+- `dev_command.usage_error(ctx, msg)`: print `dev <name>: <msg>` and exit 2
+- `dev_command.no_args(ctx)`: refuse any positional argument, for a verb that
+  takes no positional arguments
+- `dev_command.note(msg)`: write `msg` and a newline to standard error
+- `dev_command.die(msg)`: print `msg` and exit 1
+- `dev_command.show(ctx, argv)`: print `+ <argv>` on standard error when
+  `ctx.verbose` is 1 or more
+- `dev_command.need(binary, install)`: exit 1 with one warning when `binary` is
+  not on `PATH`
 
 ### Cleanup on exit
 
@@ -131,7 +131,7 @@ A verb runs under CI, in a box and from agents, where no terminal is attached.
   and `TERM` is not `dumb`. Print plain text and let `dev.ui` decide.
 - dev refuses to run any project script as root, and `dev.config` reads no file
   as root.
-- A verb that takes only `KEY=value` calls `verb.no_args(ctx)` first.
+- A verb that takes only `KEY=value` calls `dev_command.no_args(ctx)` first.
 
 ## Standalone shell
 
@@ -221,10 +221,10 @@ and the same verb in Lua:
 hidden
 Print the installable default targets.
 ]]
-local verb = require("dev.verb")
+local dev_command = require("dev.command")
 
 local ctx = ...
-verb.no_args(ctx)
+dev_command.no_args(ctx)
 for _, pkg in ipairs({ "git", "nvim", "zsh" }) do
     print("+ " .. pkg)
 end

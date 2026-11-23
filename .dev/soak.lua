@@ -10,7 +10,7 @@ fails. The verb exits 1 when any run failed. N is 50 by default.
 ]]
 local dev_os = require("dev.os")
 local remote = require("dev.remote")
-local verb = require("dev.verb")
+local dev_command = require("dev.command")
 
 local ctx = ...
 
@@ -69,7 +69,7 @@ local function runs_wanted()
     local count = given and given:match("^%d+$") and tonumber(given)
     local words = args[1] == "--runs" and 2 or 1
     if #args ~= words or not count or count < 1 then
-        verb.usage_error(ctx, "--runs takes a whole number of 1 or more")
+        dev_command.usage_error(ctx, "--runs takes a whole number of 1 or more")
     end
     return count
 end
@@ -91,7 +91,7 @@ local function run_case(case, number, runs)
     local load_line = output:match("load: [^\n]*\n?$") or "load: not recorded"
     local ran = count_ran(output)
     local passed = code == 0 and ran > 0
-    verb.say(
+    dev_command.say(
         string.format(
             "%s %s %d/%d (%d cases) %s",
             passed and "PASS" or "FAIL",
@@ -103,7 +103,7 @@ local function run_case(case, number, runs)
         )
     )
     if not passed then
-        verb.say(output)
+        dev_command.say(output)
     end
     stdout:flush()
     return passed
@@ -111,9 +111,9 @@ end
 
 local runs = runs_wanted()
 if not remote.is_remote_host() then
-    verb.die("dev soak loads the host it runs on, so run it on ci: dev --remote soak")
+    dev_command.die("dev soak loads the host it runs on, so run it on ci: dev --remote soak")
 end
-verb.need("bats", "pacman -S bats")
+dev_command.need("bats", "pacman -S bats")
 
 local failed = 0
 for _, case in ipairs(CASES) do
@@ -124,7 +124,7 @@ for _, case in ipairs(CASES) do
         end
     end
     failed = failed + (runs - passed)
-    verb.say(string.format("%s: %d of %d runs passed", case.name, passed, runs))
+    dev_command.say(string.format("%s: %d of %d runs passed", case.name, passed, runs))
 end
-verb.say(string.format("\n%d runs failed", failed))
+dev_command.say(string.format("\n%d runs failed", failed))
 return failed == 0 and 0 or 1

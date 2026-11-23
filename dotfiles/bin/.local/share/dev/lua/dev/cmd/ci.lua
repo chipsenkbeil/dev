@@ -1,6 +1,6 @@
 local box = require("dev.cmd.box")
 local dev_os = require("dev.os")
-local verb = require("dev.verb")
+local dev_command = require("dev.command")
 
 ---@class dev.cmd.ci
 ---@field handlers table<string, fun(ctx: dev.Ctx): integer> the handlers of the `ci` subcommands
@@ -16,20 +16,20 @@ M.handlers["ci logs"] = function(ctx)
         i = i + 1
         if arg == "--job" then
             if i > #args then
-                verb.usage_error(ctx, "Flag --job needs a value.")
+                dev_command.usage_error(ctx, "Flag --job needs a value.")
             end
             job = args[i]
             i = i + 1
         elseif #arg > 1 and arg:sub(1, 1) == "-" then
-            verb.usage_error(ctx, "Unknown flag " .. arg .. ".")
+            dev_command.usage_error(ctx, "Unknown flag " .. arg .. ".")
         elseif run then
-            verb.usage_error(ctx, "Unexpected argument " .. arg .. ".")
+            dev_command.usage_error(ctx, "Unexpected argument " .. arg .. ".")
         else
             run = arg
         end
     end
     if not run then
-        verb.usage_error(ctx, "Missing RUN.")
+        dev_command.usage_error(ctx, "Missing RUN.")
     end
 
     -- Refuse to go on without ci

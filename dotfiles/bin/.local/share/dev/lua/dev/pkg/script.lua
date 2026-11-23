@@ -1,7 +1,7 @@
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local lib = require("dev.pkg.lib")
-local note = require("dev.verb").note
+local note = require("dev.command").note
 
 local stdout = io.stdout
 

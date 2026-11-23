@@ -2,7 +2,7 @@ local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local json = require("dev.json")
 local project = require("dev.project")
-local verb = require("dev.verb")
+local dev_command = require("dev.command")
 
 local Kind = project.Kind
 
@@ -306,7 +306,7 @@ function M.commands(root, kind, verb_name)
 end
 
 local function unsupported(verb_name, kind)
-    verb.note(no_built_in(verb_name, kind))
+    dev_command.note(no_built_in(verb_name, kind))
     return 1
 end
 
@@ -315,7 +315,7 @@ local function probe_fails(step)
     if code == 0 then
         return false
     end
-    verb.note(step.probe.warning)
+    dev_command.note(step.probe.warning)
     return true
 end
 
@@ -337,17 +337,17 @@ function M.run(ctx, verb_name)
         return unsupported(verb_name, kind)
     end
     if #steps == 0 then
-        verb.note(reason)
+        dev_command.note(reason)
         return 0
     end
     for _, step in ipairs(steps) do
         for _, need in ipairs(step.needs or {}) do
-            verb.need(need[1], need[2])
+            dev_command.need(need[1], need[2])
         end
         if step.probe and probe_fails(step) then
             return 1
         end
-        verb.show(ctx, step.argv)
+        dev_command.show(ctx, step.argv)
         local code = dev_os.run(step.argv, { cwd = step.cwd }) or 1
         if code ~= 0 then
             return code

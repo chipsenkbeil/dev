@@ -6,7 +6,7 @@ local guards = require("dev.board.guards")
 local pomb = require("dev.board.pomb")
 local store = require("dev.board.store")
 local turn = require("dev.board.turn")
-local verb = require("dev.verb")
+local dev_command = require("dev.command")
 
 local usage = guards.usage
 local failure = guards.failure
@@ -515,7 +515,7 @@ function M.wait(backend, args, opts)
     end
     local nap = opts.nap or dev_os.nap
     local random = opts.random or turn.entropy
-    local notice = opts.notice or verb.note
+    local notice = opts.notice or dev_command.note
     local limited = 0
     local told = false
     local clock = opts.now or store.now

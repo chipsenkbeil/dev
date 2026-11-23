@@ -1,5 +1,5 @@
 local board = require("dev.board")
-local verb = require("dev.verb")
+local dev_command = require("dev.command")
 
 ---The standard board: the nine columns, the size palette and names without
 ---size words, laid out one step at a time. Each step adds or fixes what is
@@ -553,7 +553,7 @@ function M.run(layout, name, say, opts)
         stages = opts.stages or board.stages(),
         wanted_lanes = opts.lanes or {},
         warn_first_lane = opts.warn_first_lane or false,
-        warn = opts.warn or verb.note,
+        warn = opts.warn or dev_command.note,
     }
     local found, message = layout:find()
     if found == nil then

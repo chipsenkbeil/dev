@@ -227,7 +227,7 @@ for pair in sh:bash lua:lua; do
     chmod +x "$TMP/port-$ext/.dev/list.$ext"
 done
 assert_contains "the topic holds a bash verb" "$(cat "$TMP/port-sh/.dev/list.sh")" "set -eo pipefail"
-assert_contains "the topic holds a Lua verb" "$(cat "$TMP/port-lua/.dev/list.lua")" 'require("dev.verb")'
+assert_contains "the topic holds a Lua verb" "$(cat "$TMP/port-lua/.dev/list.lua")" 'require("dev.command")'
 port_run() {
     (
         cd "$TMP/port-$1" && DOTFILES="$REPO" "$DEV" list "${@:2}" 2>&1

@@ -29,7 +29,7 @@ local text_width = dev_text.width
 local turn = require("dev.board.turn")
 local ui = require("dev.ui")
 local vcs = require("dev.vcs")
-local verb = require("dev.verb")
+local dev_command = require("dev.command")
 local board_wait = require("dev.board.wait")
 local wiring = require("dev.board.wiring")
 
@@ -1308,7 +1308,7 @@ end
 local function claimed_view(backend, card, result)
     local view, err = card_view(backend, card)
     if not view then
-        verb.note(
+        dev_command.note(
             "Took card "
                 .. card.id:sub(1, board.MIN_PREFIX)
                 .. ", but its view failed. "
@@ -2021,7 +2021,7 @@ local function move_once(backend, args, opts)
         end
         if last then
             local short = card.id:sub(1, board.MIN_PREFIX)
-            verb.note(
+            dev_command.note(
                 string.format(
                     "Moved without a claim: the last claimant of %s is %s. "
                         .. "Take it with `dev board take %s`.",
@@ -2075,7 +2075,7 @@ local function move_once(backend, args, opts)
     if own_claim then
         local reason, detail = role_clock.follow(backend, card, column, claimant((agent_name())))
         if reason then
-            verb.note(clock_note("Moved, but its clock did not follow.", reason, detail))
+            dev_command.note(clock_note("Moved, but its clock did not follow.", reason, detail))
         end
     end
     if own_claim and column ~= stages.progress and column ~= stages.blocked then
@@ -2083,7 +2083,7 @@ local function move_once(backend, args, opts)
         local release_fence = held and held.fence
         local released, why, why_reason, why_detail = backend:release(card.id, release_fence)
         if not released then
-            verb.note(
+            dev_command.note(
                 "Moved, but the claim was not released. "
                     .. board.release_refusal(why_reason, why, why_detail, release_fence)
             )
@@ -2681,7 +2681,7 @@ function commands.ask(backend, args)
         claims.stop(card.id)
         local released, why, why_reason, why_detail = backend:release(card.id, held.fence)
         if not released then
-            verb.note(
+            dev_command.note(
                 "Asked, but the claim was not released. "
                     .. board.release_refusal(why_reason, why, why_detail, held.fence)
             )
@@ -3468,7 +3468,7 @@ function commands.check(backend, args)
     end
     local stack = land.stack_note(backend.root)
     if stack then
-        verb.note(stack)
+        dev_command.note(stack)
     end
     local exempt = opts.expect_fail or board.labelled(card, board.NO_CHANGE)
     local empty = not exempt and check.empty_refusal(backend.root)
@@ -3479,14 +3479,14 @@ function commands.check(backend, args)
     if name then
         local hold, held_why = turn.held(backend, name, short)
         if not hold and held_why then
-            verb.note(held_why)
+            dev_command.note(held_why)
         end
         if hold then
             local released, reason = turn.release(backend, hold)
             if not released then
                 return failure(reason)
             end
-            verb.note(
+            dev_command.note(
                 "A check never holds the landing turn. It was given back, and dev board land takes it again."
             )
         end
@@ -3989,7 +3989,7 @@ function commands.land(backend, args)
         if not hold.hold then
             turn.release(backend, hold)
         end
-        verb.note("Trunk moved while the card was rechecked. Rebasing and rechecking again.")
+        dev_command.note("Trunk moved while the card was rechecked. Rebasing and rechecking again.")
     end
     return failure(
         "Card "
@@ -5150,7 +5150,7 @@ local function take_once(backend, args)
     end
     local reason, detail = role_clock.follow(backend, card, card.column, claimant(name))
     if reason then
-        verb.note(
+        dev_command.note(
             clock_note("Took card " .. short .. ", but its clock did not follow.", reason, detail)
         )
     end
@@ -5162,7 +5162,9 @@ local function take_once(backend, args)
             { kind = board.NoteKind.STATUS }
         )
         if not ok then
-            verb.note("Took card " .. short .. ", but the handoff note was not posted. " .. message)
+            dev_command.note(
+                "Took card " .. short .. ", but the handoff note was not posted. " .. message
+            )
         end
     end
     return claimed_view(backend, card, result)
@@ -5221,7 +5223,7 @@ function commands.release(backend, args)
     claims.stop(card.id)
     local stuck, cause = role_clock.follow(backend, card, nil, "")
     if stuck then
-        verb.note(clock_note("Released, but the clock did not stop.", stuck, cause))
+        dev_command.note(clock_note("Released, but the clock did not stop.", stuck, cause))
     end
     return {
         output = string.format(
@@ -5336,10 +5338,10 @@ end
 local function settings(ctx)
     local backend = config.get(ctx.root, "board.backend")
     if backend == nil then
-        verb.die(NO_BOARD)
+        dev_command.die(NO_BOARD)
     end
     if backend ~= board.Backend.POMB and backend ~= board.Backend.LOCAL then
-        verb.die(
+        dev_command.die(
             'The `backend` setting of `[board]` must be "pomb" or "local" in `.dev/config.toml`.'
         )
     end
@@ -5348,14 +5350,14 @@ local function settings(ctx)
         name = fs.basename(ctx.root)
     end
     if type(name) ~= "string" or name == "" then
-        verb.die(
+        dev_command.die(
             "The `name` setting of `[board]` must be a non-empty string in `.dev/config.toml`."
         )
     end
     local path = config.get(ctx.root, "board.path")
     if path ~= nil then
         if backend ~= board.Backend.LOCAL then
-            verb.die('The `path` setting of `[board]` only applies to `backend = "local"`.')
+            dev_command.die('The `path` setting of `[board]` only applies to `backend = "local"`.')
         end
         if
             type(path) ~= "string"
@@ -5363,7 +5365,7 @@ local function settings(ctx)
             or path:find("..", 1, true)
             or path:find("//", 1, true)
         then
-            verb.die(
+            dev_command.die(
                 "The `path` setting of `[board]` must be a relative path inside the project, such as `.dev/board.json`."
             )
         end
@@ -5372,7 +5374,7 @@ local function settings(ctx)
     local columns = column_map(ctx.root)
     local collision = board.column_collision(columns)
     if collision then
-        verb.die(collision)
+        dev_command.die(collision)
     end
     return {
         backend = backend,
@@ -5414,33 +5416,33 @@ local function init_warning(line, detail, reason)
     if line == init.Warning.ROLES_UNREADABLE then
         line = "Agent roles were not checked. The roles list could not be read. " .. detail
     end
-    verb.note(reason and init_refusal(line, reason) or line)
+    dev_command.note(reason and init_refusal(line, reason) or line)
 end
 
 local function init_local(ctx, flags, admin)
     if admin then
-        verb.usage_error(ctx, "--admin applies to a Pomb board, not a local one")
+        dev_command.usage_error(ctx, "--admin applies to a Pomb board, not a local one")
     end
     local found = settings(ctx)
     if flags["--name"] and flags["--name"] ~= found.name then
-        verb.usage_error(
+        dev_command.usage_error(
             ctx,
             "--name " .. flags["--name"] .. " is not the [board] name " .. found.name
         )
     end
     local backend, message = M.open(found)
     if not backend then
-        verb.die(message)
+        dev_command.die(message)
     end
     local changes, reason
-    changes, message, reason = init.run(backend, found.name, verb.say, {
+    changes, message, reason = init.run(backend, found.name, dev_command.say, {
         stages = backend.stages,
         lanes = board_setup.config_lanes(ctx),
         warn_first_lane = false,
         warn = init_warning,
     })
     if not changes then
-        verb.die(init_refusal(message, reason))
+        dev_command.die(init_refusal(message, reason))
     end
     print(
         changes == 0
@@ -5502,15 +5504,15 @@ M.handlers["board init"] = function(ctx)
     end
     local flags, extra = parse(rest, { ["--name"] = true })
     if not flags then
-        verb.usage_error(ctx, extra.message)
+        dev_command.usage_error(ctx, extra.message)
     elseif #extra > 0 then
-        verb.usage_error(ctx, "unknown argument " .. extra[1])
+        dev_command.usage_error(ctx, "unknown argument " .. extra[1])
     end
     if config.get(ctx.root, "board.backend") == board.Backend.LOCAL then
         return init_local(ctx, flags, admin)
     end
     if not admin and guards.delete_refusal() == guards.Refusal.NOT_LEAD then
-        verb.die(not_lead_message("initializes a board"))
+        dev_command.die(not_lead_message("initializes a board"))
     end
     local name, missing = board_setup.board_name(ctx, flags)
     local opts = {
@@ -5520,14 +5522,14 @@ M.handlers["board init"] = function(ctx)
         lead = not admin,
     }
     if not admin and opts.token == nil then
-        verb.die(
+        dev_command.die(
             "The `lead_token` setting of `[board.pomb]` is not set in `~/.config/dev/config.toml`. "
                 .. "Set it to `pass:<entry>` or run with `--admin`."
         )
     end
     local backend, reason = pomb.new(opts)
     if not backend then
-        verb.die(POMB_REFUSALS[reason])
+        dev_command.die(POMB_REFUSALS[reason])
     end
     backend.stages = board.stages(column_map(ctx.root))
     local message
@@ -5539,29 +5541,29 @@ M.handlers["board init"] = function(ctx)
             say = print,
         })
         if not secret then
-            verb.die(sign_in_refusal(sign_in_reason, detail))
+            dev_command.die(sign_in_refusal(sign_in_reason, detail))
         end
         backend:authorize(secret)
         local ok
         ok, message = backend:admin()
         if not ok then
-            verb.die(message)
+            dev_command.die(message)
         end
     end
     local changes, init_reason
-    changes, message, init_reason = init.run(backend, name, verb.say, {
+    changes, message, init_reason = init.run(backend, name, dev_command.say, {
         stages = backend.stages,
         lanes = board_setup.config_lanes(ctx),
         warn_first_lane = true,
         warn = init_warning,
     })
     if not changes then
-        verb.die(init_refusal(message, init_reason))
+        dev_command.die(init_refusal(message, init_reason))
     end
     if missing then
         local written, failed = board_setup.write_section(ctx.root, name)
         if not written then
-            verb.die(
+            dev_command.die(
                 "Cannot write " .. ctx.root .. "/.dev/config.toml. " .. dev_text.sentence(failed)
             )
         end
@@ -5643,7 +5645,7 @@ local function replay(backend, pending, say)
 end
 
 local function stderr_line(line)
-    verb.note(line)
+    dev_command.note(line)
 end
 
 local function stderr_news(line)
@@ -5681,7 +5683,7 @@ local function open_board(ctx)
     local found = settings(ctx)
     local backend, message = M.open(found)
     if not backend then
-        verb.die(message)
+        dev_command.die(message)
     end
     local pending
     if found.backend == board.Backend.POMB then
@@ -5700,14 +5702,14 @@ end
 
 local function open_lead(ctx, action, permission)
     if guards.delete_refusal() == guards.Refusal.NOT_LEAD then
-        verb.die(not_lead_message(action))
+        dev_command.die(not_lead_message(action))
     end
     local found = settings(ctx)
     if found.backend ~= board.Backend.POMB then
-        verb.die(NO_BIN)
+        dev_command.die(NO_BIN)
     end
     if config.user("board.pomb." .. LEAD_TOKEN_KEY) == nil then
-        verb.die(
+        dev_command.die(
             "The `lead_token` setting of `[board.pomb]` is not set in `~/.config/dev/config.toml`."
                 .. (
                     permission
@@ -5718,7 +5720,7 @@ local function open_lead(ctx, action, permission)
     end
     local backend, message = M.open(found, { token_key = LEAD_TOKEN_KEY })
     if not backend then
-        verb.die(message)
+        dev_command.die(message)
     end
     return backend
 end
@@ -5729,17 +5731,20 @@ M.handlers["board token mint"] = function(ctx)
         { ["--role"] = true, ["--as"] = true, ["--hours"] = true, ["--renew"] = SWITCH }
     )
     if not flags then
-        verb.usage_error(ctx, extra.message)
+        dev_command.usage_error(ctx, extra.message)
     elseif #extra > 0 then
-        verb.usage_error(ctx, "unknown argument " .. extra[1])
+        dev_command.usage_error(ctx, "unknown argument " .. extra[1])
     elseif not flags["--role"] or not flags["--as"] or flags["--as"] == "" then
-        verb.usage_error(ctx, "needs --role ROLE and --as NAME")
+        dev_command.usage_error(ctx, "needs --role ROLE and --as NAME")
     end
     local hours = flags["--hours"]
         and flags["--hours"]:match("^%d+$")
         and tonumber(flags["--hours"])
     if flags["--hours"] and (not hours or hours < 1 or hours > pomb.MAX_TOKEN_HOURS) then
-        verb.usage_error(ctx, "--hours takes a whole number from 1 to " .. pomb.MAX_TOKEN_HOURS)
+        dev_command.usage_error(
+            ctx,
+            "--hours takes a whole number from 1 to " .. pomb.MAX_TOKEN_HOURS
+        )
     end
     local backend = open_lead(ctx, "mints a role token")
     local issued, message = backend:mint(
@@ -5748,7 +5753,7 @@ M.handlers["board token mint"] = function(ctx)
         { hours = hours, renew = flags["--renew"] ~= nil }
     )
     if not issued then
-        verb.die(message)
+        dev_command.die(message)
     end
     local stamp = issued.expires > 0 and os.date("!%Y-%m-%dT%H:%M:%SZ", issued.expires) or "never"
     print(
@@ -5766,16 +5771,16 @@ end
 M.handlers["board token revoke"] = function(ctx)
     local flags, extra = parse(ctx.args, { ["--as"] = true })
     if not flags then
-        verb.usage_error(ctx, extra.message)
+        dev_command.usage_error(ctx, extra.message)
     elseif #extra > 0 then
-        verb.usage_error(ctx, "unknown argument " .. extra[1])
+        dev_command.usage_error(ctx, "unknown argument " .. extra[1])
     elseif not flags["--as"] or flags["--as"] == "" then
-        verb.usage_error(ctx, "needs --as NAME")
+        dev_command.usage_error(ctx, "needs --as NAME")
     end
     local backend = open_lead(ctx, "revokes a role token")
     local done, message = backend:revoke(flags["--as"])
     if not done then
-        verb.die(message)
+        dev_command.die(message)
     end
     print(
         done.revoked and ("revoked the role token of " .. flags["--as"])
@@ -5787,32 +5792,32 @@ end
 function Owner.print_needs_human(found)
     local backend, message = M.open(found)
     if not backend then
-        verb.die(message)
+        dev_command.die(message)
     end
     local rows, unreadable = backend:needs_human()
     if not rows then
-        verb.die(unreadable)
+        dev_command.die(unreadable)
     end
     if #rows == 0 then
-        verb.say("No cards.")
+        dev_command.say("No cards.")
     else
         local cells = {}
         for i, row in ipairs(rows) do
             cells[i] = { row.board, row.id:sub(1, board.MIN_PREFIX), row.epic, row.name }
         end
-        verb.say(table.concat(board.table_lines(cells), "\n"))
+        dev_command.say(table.concat(board.table_lines(cells), "\n"))
     end
     if #unreadable > 0 then
-        verb.say("unreadable: " .. table.concat(unreadable, ", "))
+        dev_command.say("unreadable: " .. table.concat(unreadable, ", "))
     end
 end
 
 M.handlers["board status"] = function(ctx)
     local flags, extra = parse(ctx.args, { ["--all"] = SWITCH })
     if not flags then
-        verb.usage_error(ctx, extra.message)
+        dev_command.usage_error(ctx, extra.message)
     elseif #extra > 0 then
-        verb.usage_error(ctx, "unknown argument " .. extra[1])
+        dev_command.usage_error(ctx, "unknown argument " .. extra[1])
     end
     local found = settings(ctx)
     print("backend: " .. found.backend)
@@ -5837,7 +5842,9 @@ M.handlers["board status"] = function(ctx)
     end
     local soon, expired = tokenfile.expiring(os.time())
     if soon > 0 or expired > 0 then
-        verb.say(string.format("tokens: %d expire within an hour, %d expired", soon, expired))
+        dev_command.say(
+            string.format("tokens: %d expire within an hour, %d expired", soon, expired)
+        )
     end
     if flags["--all"] then
         Owner.print_needs_human(found)
@@ -5850,30 +5857,32 @@ M.wait = board_wait.wait
 M.handlers["board wait"] = function(ctx)
     local found = settings(ctx)
     if found.backend ~= board.Backend.POMB then
-        verb.die("A local board has nothing to wait on.")
+        dev_command.die("A local board has nothing to wait on.")
     end
     local backend = open_board(ctx)
     local result = M.wait(backend, ctx.args, { stem = board_wait.cursor_path(found.name) })
     if result.message then
         if result.code == USAGE then
-            verb.usage_error(ctx, result.message)
+            dev_command.usage_error(ctx, result.message)
         end
-        verb.die(result.message)
+        dev_command.die(result.message)
     end
     print(result.output)
     return 0
 end
 
 M.handlers["board sync"] = function(ctx)
-    verb.no_args(ctx)
+    dev_command.no_args(ctx)
     local found = settings(ctx)
     if found.backend ~= board.Backend.POMB then
-        verb.die("A local board has nothing to sync.")
+        dev_command.die("A local board has nothing to sync.")
     end
     local pending = queue.new(found.name)
     local waiting, message, reason = pending:count()
     if not waiting then
-        verb.die(queue_unreadable(pending.path, reason, message) .. " The queue is left in place.")
+        dev_command.die(
+            queue_unreadable(pending.path, reason, message) .. " The queue is left in place."
+        )
     end
     if waiting == 0 then
         print("Nothing is queued.")
@@ -5882,12 +5891,14 @@ M.handlers["board sync"] = function(ctx)
     local backend
     backend, message = M.open(found)
     if not backend then
-        verb.die(message)
+        dev_command.die(message)
     end
     local left
     left, message, reason = replay(backend, pending, print)
     if not left then
-        verb.die(queue_unreadable(pending.path, reason, message) .. " The queue is left in place.")
+        dev_command.die(
+            queue_unreadable(pending.path, reason, message) .. " The queue is left in place."
+        )
     end
     if left > 0 then
         print("queued: " .. left)
@@ -5907,9 +5918,9 @@ for sub in pairs(commands) do
             local _, refused = runcard.precheck(ctx.args, board_setup.NAME_CHARS)
             if refused then
                 if refused.code == USAGE then
-                    verb.usage_error(ctx, refused.message)
+                    dev_command.usage_error(ctx, refused.message)
                 end
-                verb.note(refused.message)
+                dev_command.note(refused.message)
                 return refused.code or FAILURE
             end
             board_setup.ensure_board(ctx, function(making)
@@ -5921,7 +5932,7 @@ for sub in pairs(commands) do
             local why
             args, why = description_args(ctx.args)
             if not args then
-                verb.usage_error(ctx, why)
+                dev_command.usage_error(ctx, why)
             end
         end
         if sub == "ship" and ctx.dashed then
@@ -5937,7 +5948,7 @@ for sub in pairs(commands) do
         if sub == "lint" then
             local strict = config.get(ctx.root, "board.lint.strict")
             if strict ~= nil and type(strict) ~= "boolean" then
-                verb.die("The `strict` setting of `[board.lint]` must be true or false.")
+                dev_command.die("The `strict` setting of `[board.lint]` must be true or false.")
             end
             if strict and not index_of(args, STRICT_FLAG) then
                 args = { unpack(args) }
@@ -5996,7 +6007,7 @@ for sub in pairs(commands) do
                 for _, entry in ipairs(queued) do
                     local ok, why, reason = pending:push(entry.sub, entry.args)
                     if not ok then
-                        verb.die(
+                        dev_command.die(
                             result.message
                                 .. " The change could not be queued. "
                                 .. queue_unreadable(pending.path, reason, why)
@@ -6007,9 +6018,9 @@ for sub in pairs(commands) do
                 return 0
             end
             if result.code == USAGE then
-                verb.usage_error(ctx, result.message)
+                dev_command.usage_error(ctx, result.message)
             end
-            verb.note(result.message)
+            dev_command.note(result.message)
             return result.code or FAILURE
         end
         if result.page then

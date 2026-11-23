@@ -2,7 +2,7 @@ local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local json = require("dev.json")
 local remote = require("dev.remote")
-local verb = require("dev.verb")
+local dev_command = require("dev.command")
 
 ---@class dev.fetch
 local M = {}
@@ -24,7 +24,7 @@ function M.platform()
     local out, code = dev_os.capture({ "uname", "-sm" }, { stderr = "null" })
     local kernel, machine = out:match("^(%S+)%s+(%S+)")
     if code ~= 0 or not kernel then
-        verb.die("The command `uname -sm` failed, so dev cannot tell this host's platform.")
+        dev_command.die("The command `uname -sm` failed, so dev cannot tell this host's platform.")
     end
     return kernel, machine
 end
@@ -99,7 +99,7 @@ local function start(root, spec, opts)
         { stderr = "null" }
     )
     if listed ~= 0 then
-        verb.die("The command `ci run --list --all` failed. " .. LOCAL_HINT)
+        dev_command.die("The command `ci run --list --all` failed. " .. LOCAL_HINT)
     end
     local pipeline, target, arch, platform
     if opts.patch then
@@ -112,7 +112,7 @@ local function start(root, spec, opts)
         platform = kernel .. " " .. machine
     end
     if not pipeline or (not opts.patch and not arch) then
-        verb.die(
+        dev_command.die(
             "The ci job "
                 .. spec.job
                 .. " has no matrix entry for "
@@ -139,7 +139,7 @@ local function start(root, spec, opts)
     local started, code = dev_os.capture(argv, { env = ci_env(root), stderr = "stdout" })
     local run = started:match("(%w+)%s*$")
     if code ~= 0 or not run then
-        verb.die(
+        dev_command.die(
             "The ci job "
                 .. spec.job
                 .. " could not start on "
@@ -170,7 +170,7 @@ local function await(root, spec, run, target)
             return entry.index
         end
     end
-    verb.die(
+    dev_command.die(
         "The ci run "
             .. run
             .. " of job "
@@ -188,7 +188,9 @@ end
 ---@return string run the ci run id
 local function download(root, spec, opts)
     if not dev_os.which("ci") then
-        verb.die("The ci client is not found. Install it with `dev install` from the ci repo.")
+        dev_command.die(
+            "The ci client is not found. Install it with `dev install` from the ci repo."
+        )
     end
     local run, target = start(root, spec, opts)
     local index = await(root, spec, run, target)
@@ -196,7 +198,7 @@ local function download(root, spec, opts)
     local artifact = table.concat({ spec.job, index, target }, ".") .. "/" .. spec.file
     local pulled = dev_os.run({ "ci", "-C", root, "cp", run .. ":" .. artifact, dest, "--force" })
     if pulled ~= 0 then
-        verb.die("The command `ci cp " .. run .. ":" .. artifact .. "` failed.")
+        dev_command.die("The command `ci cp " .. run .. ":" .. artifact .. "` failed.")
     end
     return dest .. "/" .. fs.basename(spec.file), run
 end
@@ -228,7 +230,7 @@ function M.apply(root, spec)
     local text = fs.read(path)
     if not text or not text:find("%S") then
         fs.remove(dir, { recursive = true })
-        verb.say("No file changed.")
+        dev_command.say("No file changed.")
         return 0
     end
     local opts = {
@@ -242,7 +244,7 @@ function M.apply(root, spec)
         failure, code = dev_os.capture({ "git", "apply", path }, opts)
     end
     if code ~= 0 then
-        verb.die(
+        dev_command.die(
             "The patch of ci run "
                 .. run
                 .. " does not apply and no file changed. It is kept at "
@@ -252,7 +254,7 @@ function M.apply(root, spec)
         )
     end
     fs.remove(dir, { recursive = true })
-    verb.relay(numstat)
+    dev_command.relay(numstat)
     return 0
 end
 

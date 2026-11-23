@@ -10,15 +10,15 @@ The suites that drive a terminal or compare help snapshots run one at a time.
 local checks = require("dotfiles.checks")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
-local verb = require("dev.verb")
+local dev_command = require("dev.command")
 
 local ctx = ...
 for _, arg in ipairs(ctx.args) do
     if arg:sub(1, 1) == "-" then
-        verb.usage_error(ctx, "Unknown flag " .. arg .. ".")
+        dev_command.usage_error(ctx, "Unknown flag " .. arg .. ".")
     end
 end
-verb.need("bats", "brew install bats-core")
+dev_command.need("bats", "brew install bats-core")
 
 local root = ctx.root
 local stdout = io.stdout
@@ -46,13 +46,13 @@ local SERIAL = {
 
 local function record_result(name, code)
     if code == 0 then
-        verb.say("PASS " .. name)
+        dev_command.say("PASS " .. name)
         passed = passed + 1
     elseif code == SKIPPED then
-        verb.say("SKIP " .. name .. " (every case skipped)")
+        dev_command.say("SKIP " .. name .. " (every case skipped)")
         skipped = skipped + 1
     else
-        verb.say("FAIL " .. name)
+        dev_command.say("FAIL " .. name)
         failed = failed + 1
     end
 end
@@ -71,7 +71,7 @@ local function job_count()
     if set and set ~= "" then
         local jobs = set:match("^%d+$") and tonumber(set)
         if not jobs or jobs < 1 then
-            verb.die("DEV_TEST_JOBS must be a whole number of 1 or more, got " .. set)
+            dev_command.die("DEV_TEST_JOBS must be a whole number of 1 or more, got " .. set)
         end
         return jobs
     end
@@ -114,7 +114,7 @@ if dev_os.which("luajit") then
         suites[#suites + 1] = script_suite(file, { "luajit", "tests/lua/run.lua", file })
     end
 else
-    verb.say("SKIP tests/lua (needs luajit)")
+    dev_command.say("SKIP tests/lua (needs luajit)")
     unavailable[#unavailable + 1] = { dir = "tests/lua", why = "needs luajit" }
 end
 
@@ -127,7 +127,7 @@ if dev_os.which("neomutt") and dev_os.which("tmux") then
     local colors = "dotfiles/neomutt/.config/neomutt/colors.mutt"
     suites[#suites + 1] = script_suite(parse, { "bash", parse, colors })
 else
-    verb.say("SKIP tests/neomutt/*.sh (needs neomutt and tmux on PATH)")
+    dev_command.say("SKIP tests/neomutt/*.sh (needs neomutt and tmux on PATH)")
     unavailable[#unavailable + 1] =
         { dir = "tests/neomutt", why = "needs neomutt and tmux on PATH" }
 end
@@ -146,10 +146,10 @@ if #ctx.args > 0 then
         if not found then
             for _, skip in ipairs(unavailable) do
                 if under(path, skip.dir) then
-                    verb.usage_error(ctx, arg .. " is skipped here. It " .. skip.why .. ".")
+                    dev_command.usage_error(ctx, arg .. " is skipped here. It " .. skip.why .. ".")
                 end
             end
-            verb.usage_error(ctx, "no suite at " .. arg)
+            dev_command.usage_error(ctx, "no suite at " .. arg)
         end
     end
     local kept = {}
@@ -272,9 +272,9 @@ end
 
 local function report(suite, code)
     local output = fs.read(suite.out) or ""
-    verb.say("> " .. suite.name)
+    dev_command.say("> " .. suite.name)
     if suite.bats or output ~= "" then
-        verb.say((output:gsub("\n$", "")))
+        dev_command.say((output:gsub("\n$", "")))
     end
     if suite.bats and code == 0 and not ran_a_case(output) then
         code = SKIPPED
@@ -331,10 +331,10 @@ if not ok then
     error(err, 0)
 end
 
-verb.say(string.format("\n%d passed, %d failed, %d skipped", passed, failed, skipped))
+dev_command.say(string.format("\n%d passed, %d failed, %d skipped", passed, failed, skipped))
 stdout:flush()
 if dev_os.getuid() ~= 0 or dev_os.name() ~= "Linux" then
-    verb.note(
+    dev_command.note(
         "The real-root cases of tests/dev/root_test.sh and tests/dev/tools_test.sh "
             .. "were skipped. Run `dev --remote test` for them."
     )
