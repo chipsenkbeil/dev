@@ -509,6 +509,40 @@ commit or an earlier one, so the dev change lands first and the template
 commit adds the entries after the rebuild. The runner blocks the template card
 on the card for that rebuild.
 
+### Modules a command may require
+
+A project or global command (`.dev/*.lua` or `~/.config/dev/commands/*.lua`)
+may `require` these modules and call the functions listed under each. The list
+is what `.dev` and `dotfiles/dev` call today, and the test
+`tests/lua/modules_contract_test.lua` reads it, so it fails when a listed
+module or function goes away.
+
+- `dev.command`: `die`, `need`, `no_args`, `note`, `say`, `show`,
+  `usage_error`.
+- `dev.config`: `get`, `user`.
+- `dev.fs`: `basename`, `dirname`, `exists`, `is_dir`, `is_exec`, `is_file`,
+  `is_link`, `join`, `list`, `mkdir`, `mktemp`, `read`, `readlink`, `realpath`,
+  `remove`, `symlink`, `write`.
+- `dev.help`: `bad_argument`, `overview_text`, `page`, `topic_text`,
+  `usage_error`.
+- `dev.json`: `decode`, `encode`.
+- `dev.os`: `capture`, `capture_input`, `capture_timed`, `command`, `exec`,
+  `getpid`, `getuid`, `isatty`, `name`, `nap`, `quote`, `run`, `which`.
+- `dev.pipelines`: `jobs`.
+- `dev.project`: `detect_type`, `root`.
+- `dev.registry`: `load`.
+- `dev.release`: `env`.
+- `dev.remote`: `ci_runner`, `is_remote_host`.
+- `dev.standalone`: `problems`.
+- `dev.text`: `fit`, `words`, `wrap`.
+- `dev.ui`: `confirm`, `context`, `table`.
+- `dev.ui.picker`: `run`.
+- `dev.vcs`: `backend`, `base`, `branches`, `files`, `remotes`, `require`,
+  `with`.
+- `dev.xdg`: `state_home`.
+
+Every other module under `dev` is internal and may change without notice.
+
 ## .dev scripts
 
 There is one script per command (`install.lua`, `uninstall.lua`, `restow.lua`,
