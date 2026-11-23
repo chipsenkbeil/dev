@@ -162,14 +162,19 @@ local function init_remotes(run)
     if has(remotes, "origin") then
         skipped(run, "remote origin exists")
     else
+        local owner = config.user("github.owner")
+        if type(owner) ~= "string" or owner == "" then
+            owner = "OWNER"
+        end
+        local remote = "git@github.com:" .. owner .. "/" .. run.name .. ".git"
         io.write(
             "remote origin is missing, create the GitHub repo and run: ",
             run.hint,
-            " origin hub:",
-            run.name,
+            " origin ",
+            remote,
             "\n"
         )
-        leave(run, "create the GitHub repo, then run: " .. run.hint .. " origin hub:" .. run.name)
+        leave(run, "create the GitHub repo, then run: " .. run.hint .. " origin " .. remote)
     end
 end
 

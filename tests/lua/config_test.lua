@@ -138,6 +138,12 @@ testing.test("dev config asks a required key again after a blank answer", functi
     testing.eq(assert(toml.parse(body)).gerrit, { host = "host.example" })
 end)
 
+testing.test("dev config exits 0 with no gerrit.host when the required keys are set", function()
+    local out, code = wizard(lines({ "[board.pomb]", 'url = "u"', 'token = "pass:a"', "" }), false)
+    testing.eq(code, 0)
+    testing.ok(out:find("gerrit.host: unset\n", 1, true), out)
+end)
+
 testing.test(
     "dev config lists each key without a terminal and exits 1 for a required one",
     function()

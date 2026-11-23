@@ -141,7 +141,7 @@ function M.ensure_board(ctx, init_board)
     end
     if not private_project(ctx.root) then
         dev_command.die(
-            "This project has no board and is public or not known to be private. Ask the owner before it gets one. `dev board init --name N` makes it."
+            "This project has no board and is public or not known to be private, so dev makes none. Once it is known to be private, `dev board init --name N` makes one."
         )
     end
     local name = fs.basename(ctx.root)

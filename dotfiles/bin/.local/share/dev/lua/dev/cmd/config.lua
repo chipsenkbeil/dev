@@ -34,7 +34,7 @@ M.KEYS = {
         required = true,
         ask = "Pomb token reference, as pass:<entry>",
     },
-    { name = "gerrit.host", kind = Kind.STRING, required = true, ask = "Gerrit host" },
+    { name = "gerrit.host", kind = Kind.STRING, required = false, ask = "Gerrit host" },
     {
         name = "board.pomb.field_prefix",
         kind = Kind.STRING,

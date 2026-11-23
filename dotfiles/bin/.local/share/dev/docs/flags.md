@@ -411,7 +411,7 @@ value in a project's `.dev/config.toml` leaves a key unset to the wizard.
 |---|---|---|
 | `board.pomb.url` | required | the Pomb URL |
 | `board.pomb.token` | required | a `pass:<entry>` reference, never the token |
-| `gerrit.host` | required | the Gerrit host name |
+| `gerrit.host` | optional | the Gerrit host name |
 | `board.pomb.field_prefix` | optional | the prefix of the board's custom field keys |
 | `gerrit.port` | optional | the Gerrit SSH port, a whole number from 1 to 65535 |
 | `board.ship.source_roots` | optional | a comma separated list of source folders |
@@ -428,6 +428,9 @@ value in a project's `.dev/config.toml` leaves a key unset to the wizard.
   echo what is typed for it, and any other answer is refused with a sentence
   that does not repeat the answer, and nothing is written for that key. The
   wizard never runs `pass`, never reads a token and never prints one.
+- The wizard does not ask for `github.owner`. Set it in the user file to name
+  the owner in the remote that `dev init` prints, and `OWNER` is printed when
+  it is unset.
 
 ## The launcher
 

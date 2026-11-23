@@ -409,12 +409,18 @@ if command -v jj >/dev/null 2>&1; then
     printf '[package]\nname = "init"\nversion = "0.1.0"\nedition = "2024"\n' >"$init/Cargo.toml"
     git -C "$init" init -q
 
-    out="$(ginit "$init" --dry-run)"
+    ownerless="$(project ownerless)"
+    out="$(HOME="$ownerless" ginit "$init" --dry-run)"
     assert_contains "init --dry-run plans the lint script" "$out" "would create: .dev/lint.lua"
     assert_contains "init --dry-run plans the pipeline" "$out" "would create: .ci/jobs.lua"
     assert_not_contains "init --dry-run plans no workflow" "$out" ".github/workflows"
     assert_contains "init --dry-run plans the style guide" "$out" "would create: docs/STYLE.md"
-    assert_contains "init --dry-run prints the origin command" "$out" "jj git remote add origin hub:init"
+    assert_contains "init --dry-run prints the origin command" "$out" "jj git remote add origin git@github.com:OWNER/init.git"
+    ownerhome="$(project ownerhome)"
+    mkdir -p "$ownerhome/.config/dev"
+    printf '[github]\nowner = "chip"\n' >"$ownerhome/.config/dev/config.toml"
+    out="$(HOME="$ownerhome" ginit "$init" --dry-run)"
+    assert_contains "init prints the GitHub remote with the owner" "$out" "jj git remote add origin git@github.com:chip/init.git"
     assert_eq "init --dry-run writes nothing" "$(find "$init" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')" "2"
     out="$(ginit "$init" --dry-run -v 2>/dev/null)"
     assert_contains "init --dry-run -v still dry-runs" "$out" "would create: .dev/lint.lua"
@@ -641,10 +647,10 @@ assert_not_contains "init plans no jj colocate in a git worktree" "$out" "jj git
 if ! PATH=/usr/bin:/bin command -v jj >/dev/null 2>&1; then
     nojj="$(project nojj)"
     git -C "$nojj" init -q
-    out="$(cd "$nojj" && env PATH="$LUABIN:/usr/bin:/bin" bash "$DEV" builtin:init 2>&1)"
+    out="$(cd "$nojj" && env HOME="$nojj" PATH="$LUABIN:/usr/bin:/bin" bash "$DEV" builtin:init 2>&1)"
     assert_eq "init without jj exits 0" "$?" "0"
     assert_contains "init without jj skips jj and says why" "$out" "skipped: .jj (jj not installed, git only)"
-    assert_contains "init without jj prints the git remote command" "$out" "run: git remote add origin hub:nojj"
+    assert_contains "init without jj prints the git remote command" "$out" "run: git remote add origin git@github.com:OWNER/nojj.git"
     assert_eq "init without jj creates no .jj" "$([ -e "$nojj/.jj" ] || echo absent)" "absent"
 else
     printf 'skip - init without jj (jj is in /usr/bin or /bin)\n'
