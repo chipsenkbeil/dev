@@ -298,7 +298,7 @@ if [ "$REAL_ROOT" = 0 ]; then
     out="$(cd "$proj" && PATH="$STUBS:$PATH" "$DEV" help)"
     assert_not_contains "dev help does not mark the noun as an override" "$out" "(override)"
     out="$(cd "$proj" && PATH="$STUBS:$PATH" "$DEV" help tools install)"
-    assert_contains "dev help tools install is an override while a project script replaces it" "$out" "(override)"
+    assert_contains "dev help tools install names the built-in a project script replaces" "$out" "(project over builtin)"
     out="$(FAKE_UID=1000 tools "$proj" extra 2>&1)"
     assert_eq "a project-only tools subcommand runs as a user" "$out" "extra ran"
 else

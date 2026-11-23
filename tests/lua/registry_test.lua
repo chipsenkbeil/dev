@@ -188,6 +188,31 @@ testing.test("a global script replaces a built-in subcommand", function()
     fs.remove(root, { recursive = true })
 end)
 
+testing.test("the override row names the replaced source", function()
+    local root = make_project()
+    scripted(root, ".dev/lint.sh", "#!/usr/bin/env bash\n# My lint.\n")
+    scripted(root, ".dev/tools/install.sh", "#!/usr/bin/env bash\n# Project install.\n")
+    scripted(root, ".dev/shared.sh", "#!/usr/bin/env bash\n# Project shared.\n")
+    scripted(root, ".dev/own.sh", "#!/usr/bin/env bash\n# Own.\n")
+    with_global({
+        ["fmt.sh"] = "#!/usr/bin/env bash\n# Global fmt.\n",
+        ["shared.sh"] = "#!/usr/bin/env bash\n# Global shared.\n",
+        ["tools/check.sh"] = "#!/usr/bin/env bash\n# Global check.\n",
+    }, function()
+        local reg = registry.load(root)
+        testing.eq(reg:find({ "lint" }).replaces, "builtin")
+        testing.eq(reg:find({ "fmt" }).replaces, "builtin")
+        testing.eq(reg:find({ "fmt" }).source, "global")
+        testing.eq(reg:find({ "tools", "install" }).replaces, "builtin")
+        testing.eq(reg:find({ "tools", "check" }).replaces, "builtin")
+        testing.eq(reg:find({ "shared" }).replaces, "global")
+        testing.eq(reg:find({ "shared" }).source, "project")
+        testing.eq(reg:find({ "own" }).replaces, nil)
+        testing.eq(reg:find({ "test" }).replaces, nil)
+    end)
+    fs.remove(root, { recursive = true })
+end)
+
 testing.test("a script replaces a built-in subcommand but not a built-in noun", function()
     local root = make_project()
     scripted(root, ".dev/box.sh", "#!/usr/bin/env bash\n# Fake box.\n")

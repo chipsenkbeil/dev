@@ -33,6 +33,7 @@ end
 ---@field path string path of the script
 ---@field lang "sh"|"lua" language of the script
 ---@field source dev.Source the folder the script sits in, `global` or `project`
+---@field replaces dev.Source? `global` when a project script has a global script of its name
 
 ---@class dev.Row
 ---@field words string[] the command words, with a noun first in a subcommand's
@@ -41,6 +42,7 @@ end
 ---   script that replaces a built-in verb
 ---@field source dev.Source which layer answers, a global or project script beating a built-in
 ---   row
+---@field replaces dev.Source? the source a script row replaces, `builtin` or `global`
 ---@field noun boolean whether the row is a noun
 ---@field handler string? the built-in handler, nil for a noun, a local verb or the project type's
 ---   builtin
@@ -257,6 +259,9 @@ local function merge_dirs(project, global)
             local hidden = part == global and project_subs[script]
             if not (dir.scripts[script] or hidden) then
                 dir.scripts[script] = part.scripts[script]
+                if part == project and global.scripts[script] then
+                    part.scripts[script].replaces = Source.GLOBAL
+                end
                 dir.order[#dir.order + 1] = script
             end
         end
@@ -416,7 +421,7 @@ function Registry:__verb(name)
         row.kind, row.source = "builtin", Source.BUILTIN
         if script and not builtin.noun then
             row.kind, row.script, row.lang = "override", script.path, script.lang
-            row.source = script.source
+            row.source, row.replaces = script.source, script.replaces or Source.BUILTIN
             local h = self:__header(script.path, script.lang)
             row.desc = h.desc ~= "" and h.desc or builtin.desc
             declare(row, h)
@@ -426,6 +431,7 @@ function Registry:__verb(name)
             words = { name },
             kind = "local",
             source = script.source,
+            replaces = script.replaces,
             script = script.path,
             lang = script.lang,
         }
@@ -474,7 +480,7 @@ function Registry:__sub(noun, sub)
         row.source, row.group, row.hidden = Source.BUILTIN, noun.group, false
         if script and not builtin.noun then
             row.kind, row.script, row.lang = "override", script.path, script.lang
-            row.source = script.source
+            row.source, row.replaces = script.source, script.replaces or Source.BUILTIN
             local h = self:__header(script.path, script.lang)
             row.desc = h.desc ~= "" and h.desc or builtin.desc
             declare(row, h)
@@ -488,6 +494,7 @@ function Registry:__sub(noun, sub)
             name = name,
             kind = "local",
             source = script.source,
+            replaces = script.replaces,
             noun = false,
             script = script.path,
             lang = script.lang,

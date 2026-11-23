@@ -73,7 +73,7 @@ testing.test(
         out = dev(root, { "help", "-a" })
         testing.ok(out:find("\nHidden\n", 1, true), out)
         testing.ok(out:find("  __topics check ", 1, true), out)
-        testing.ok(out:find("\n  q +Quiet%.\n"), out)
+        testing.ok(out:find("\n  q +project +Quiet%.\n"), out)
         testing.eq(dev(root, { "help", "-k", "t" }), "# t: A topic: with a colon\n\nbody\n")
         testing.eq(
             dev(root, { "help", "--topics" }):find("\nt\tA topic: with a colon\n", 1, true) ~= nil,
@@ -296,4 +296,57 @@ testing.test("every global flag description starts at one column", function()
         end
     end
     testing.ok(seen > 0, out)
+end)
+
+local function global_config(files)
+    local home = support.tempdir()
+    for name, source in pairs(files) do
+        local path = home .. "/dev/commands/" .. name
+        assert(fs.mkdir(fs.dirname(path), { parents = true }))
+        assert(fs.write(path, source))
+        assert(dev_os.run({ "chmod", "755", path }) == 0, "chmod failed")
+    end
+    return home
+end
+
+local function sourced_fixture()
+    local root = project({
+        ["a.sh"] = "#!/usr/bin/env bash\n# A verb.\n",
+        ["lint.sh"] = "#!/usr/bin/env bash\n# My lint.\n",
+        ["shared.sh"] = "#!/usr/bin/env bash\n# Project shared.\n",
+    })
+    local home = global_config({
+        ["hello.sh"] = "#!/usr/bin/env bash\n# Say hello.\n",
+        ["fmt.sh"] = "#!/usr/bin/env bash\n# Global fmt.\n",
+        ["shared.sh"] = "#!/usr/bin/env bash\n# Global shared.\n",
+    })
+    return root, { XDG_CONFIG_HOME = home }
+end
+
+testing.test("help -a names the source of each command", function()
+    local root, env = sourced_fixture()
+    local out = dev(root, { "help", "-a" }, env)
+    testing.ok(out:find("\n  a +project +A verb%.\n"), out)
+    testing.ok(out:find("\n  hello +global +Say hello%.\n"), out)
+    testing.ok(out:find("\n  test +builtin +"), out)
+    testing.ok(out:find("\n  __topics check +builtin +"), out)
+    testing.ok(not out:find("(override)", 1, true), out)
+    testing.ok(dev(root, { "help" }, env):find("\n  lint +%(override%) +My lint%.\n"))
+end)
+
+testing.test("help -a names the source an override replaces", function()
+    local root, env = sourced_fixture()
+    local out = dev(root, { "help", "-a" }, env)
+    testing.ok(out:find("\n  lint +project over builtin +My lint%.\n"), out)
+    testing.ok(out:find("\n  fmt +global over builtin +Global fmt%.\n"), out)
+    testing.ok(out:find("\n  shared +project over global +Project shared%.\n"), out)
+end)
+
+testing.test("help of one command names its source and the one it replaces", function()
+    local root, env = sourced_fixture()
+    testing.ok(dev(root, { "help", "lint" }, env):find("^dev lint %(project over builtin%)\n"))
+    testing.ok(dev(root, { "lint", "-h" }, env):find("^dev lint %(project over builtin%)\n"))
+    testing.ok(dev(root, { "help", "fmt" }, env):find("^dev fmt %(global over builtin%)\n"))
+    testing.ok(dev(root, { "help", "shared" }, env):find("^dev shared %(project over global%)\n"))
+    testing.ok(dev(root, { "help", "hello" }, env):find("^dev hello\n"))
 end)

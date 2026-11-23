@@ -20,6 +20,8 @@ cp -R "$FIXTURES/help-project" "$PROJ"
 cp -R "$FIXTURES/help-dotfiles" "$FIXDOT"
 PROJ="$(cd "$PROJ" && pwd -P)"
 FIXDOT="$(cd "$FIXDOT" && pwd -P)"
+FIXCONFIG="$TMP/help-global"
+cp -R "$FIXTURES/help-global" "$FIXCONFIG"
 FIXHOME="$TMP/help-home"
 cp -R "$REPO/dotfiles/bin/.local" "$FIXHOME"
 rm -r "$FIXHOME/share/dev/docs"
@@ -52,7 +54,7 @@ assert_contains() {
 # fixture_dev <args...>: run dev in the fixture project against the fixture dotfiles, with the temp paths named.
 fixture_dev() {
     (
-        cd "$PROJ" && DOTFILES="$FIXDOT" "$FIXDEV" "$@" 2>&1
+        cd "$PROJ" && XDG_CONFIG_HOME="$FIXCONFIG" DOTFILES="$FIXDOT" "$FIXDEV" "$@" 2>&1
         printf 'exit %s\n' "$?"
     ) |
         sed -e "s|$PROJ|<root>|g" -e "s|$FIXDOT|<dotfiles>|g"

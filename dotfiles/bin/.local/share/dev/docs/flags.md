@@ -175,9 +175,15 @@ Each view reads the terminal like this.
 - The closing pointer line draws its backticked spans in cyan without the
   backticks and is cut to the width with `…`. Piped, it keeps the backticks
   and is not cut.
-- `dev help -a` adds the hidden verbs and dev's own `__` helpers.
+- `dev help -a` adds the hidden verbs and dev's own `__` helpers. Its mark
+  column names the source of each command, `builtin`, `global` or `project`,
+  and `project over builtin`, `global over builtin` or `project over global`
+  for a script that replaces another. The curated view marks such a script
+  `(override)` and has no source column.
 - `dev help <verb>` and `dev <verb> --help` print the long form, and
-  `dev <verb> -h` prints the description, usage and flags.
+  `dev <verb> -h` prints the description, usage and flags. The heading of a
+  script that replaces another names its source and what it replaces, as in
+  `dev lint (project over builtin)`.
 - `dev help <topic>`, `dev help -k <topic>` and `dev help --topics` read
   topics.
 

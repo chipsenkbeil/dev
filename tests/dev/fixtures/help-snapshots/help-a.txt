@@ -1,55 +1,56 @@
 dev: rust project at <root>
 
 Check your work
-  lint            (override)  Lint the fixture.
-  fmt                         Format the source for the project type
-  test                        Run the project's tests
-  build                       Build the project
-  run                         Run the project
-  fetch                       Download the crates and advisory data for offline lint and test
+  lint            project over builtin  Lint the fixture.
+  fmt             builtin               Format the source for the project type
+  test            builtin               Run the project's tests
+  build           builtin               Build the project
+  run             builtin               Run the project
+  fetch           builtin               Download the crates and advisory data for offline lint and test
 
 Share it
-  push                        Push the trunk or current branch to the remote of record
-  abandon                     Abandon an open Gerrit change by its number or Change-Id
-  pull                        Fetch the remote and rebase local work onto it
-  follow                      Move the main checkout onto trunk
-  land                        Land the workspace's card, or its change with no board
-  board                       Read and update the project's board
+  push            builtin               Push the trunk or current branch to the remote of record
+  abandon         builtin               Abandon an open Gerrit change by its number or Change-Id
+  pull            builtin               Fetch the remote and rebase local work onto it
+  follow          builtin               Move the main checkout onto trunk
+  land            builtin               Land the workspace's card, or its change with no board
+  board           builtin               Read and update the project's board
 
 Set up a machine or project
-  sync                        Compare the copied lint files with the dotfiles templates
-  init                        Seed a project with lint, CI and remotes
-  tools                       Install and check the tools in .dev/tools.tsv
-  ws                          Make, list and remove workspaces under one central root
+  sync            builtin               Compare the copied lint files with the dotfiles templates
+  init            builtin               Seed a project with lint, CI and remotes
+  tools           builtin               Install and check the tools in .dev/tools.tsv
+  ws              builtin               Make, list and remove workspaces under one central root
 
 Boxes
-  connect                     Attach to a box or machine, creating a box if needed
-  box                         Create, show, stop, resume, extend, retag and delete dev boxes
-  ci                          Read what ci recorded
+  connect         builtin               Attach to a box or machine, creating a box if needed
+  box             builtin               Create, show, stop, resume, extend, retag and delete dev boxes
+  ci              builtin               Read what ci recorded
 
 Greeting
-  greet                       Say hello.
+  greet           project               Say hello.
 
 help-project
-  seed                        Seed the fixture data.
+  seed            project               Seed the fixture data.
 
 Widgets
-  widget                      Manage the widget.
+  widget          project               Manage the widget.
 
 Hidden
-  bootstrap                   Run bootstrap.sh from the dotfiles clone
-  help                        Show the commands, the details of one command or a topic
-  plumbing                    Internal helper for the other commands.
-  __commands                  List the commands with their descriptions, for shell completion
-  __subs                      List the subcommands of a command, for shell completion
-  __flags                     List the flags of a command, for shell completion
-  __args                      List the values the next word can take, for shell completion
-  __topics check              Check the built-in and project topics against the real commands and flags
+  bootstrap       global over builtin   Bootstrap the fixture machine.
+  help            builtin               Show the commands, the details of one command or a topic
+  plumbing        project               Internal helper for the other commands.
+  hello           global                Greet from the global commands.
+  __commands      builtin               List the commands with their descriptions, for shell completion
+  __subs          builtin               List the subcommands of a command, for shell completion
+  __flags         builtin               List the flags of a command, for shell completion
+  __args          builtin               List the values the next word can take, for shell completion
+  __topics check  builtin               Check the built-in and project topics against the real commands and flags
 
 Topics
-  commands                    How the fixture commands work
-  flags                       The global flags of the fixture
-  overview                    What the fixture project is for and where to start
+  commands                              How the fixture commands work
+  flags                                 The global flags of the fixture
+  overview                              What the fixture project is for and where to start
 
 Run `dev help <command>` for one command and `dev help <topic>` for a topic.
 exit 0

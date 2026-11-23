@@ -62,9 +62,7 @@ local function widths(rows)
     local width, markw = 0, 0
     for _, row in ipairs(rows) do
         width = math.max(width, text.width(row.name))
-        if row.origin == "override" then
-            markw = text.width(OVERRIDE)
-        end
+        markw = math.max(markw, text.width(row.mark or ""))
     end
     return width, markw
 end
@@ -85,7 +83,7 @@ end
 
 ---@class dev.help.Row
 ---@field name string the command, subcommand or topic
----@field origin string? where it comes from
+---@field mark string? the text of the mark column, `(override)` or the source
 ---@field desc string the description
 
 ---@class dev.help.Section
@@ -116,8 +114,7 @@ local function section(c, out, spec)
         local name = pad(row.name, width)
         local line = "  " .. ui.paint(c, name, compact and Style.BOLD or Style.CYAN) .. text.GAP
         if markw > 0 then
-            local mark = row.origin == "override" and OVERRIDE or ""
-            line = line .. ui.paint(c, pad(mark, markw), Style.DIM) .. text.GAP
+            line = line .. ui.paint(c, pad(row.mark or "", markw), Style.DIM) .. text.GAP
         end
         if compact then
             out[#out + 1] = fit_line(c, line .. row.desc) .. "\n"
@@ -136,7 +133,6 @@ local function topic_rows(ctx)
             local cut = first:find(": ", 1, true)
             rows[#rows + 1] = {
                 name = file.name,
-                origin = "topic",
                 desc = cut and first:sub(cut + 2) or first,
             }
         end
@@ -188,6 +184,10 @@ local function project_type(ctx)
     return project.detect_type(ctx.root) or project.Kind.NONE
 end
 
+local function source_label(row)
+    return row.replaces and row.source .. " over " .. row.replaces or row.source
+end
+
 ---@class dev.help.verb_rows.Opts
 ---@field all boolean? whether the hidden commands and dev's helpers are listed too
 
@@ -195,18 +195,17 @@ local function verb_rows(reg, opts)
     local all = opts.all
     local rows = {}
     for _, row in ipairs(reg:commands()) do
+        local mark = all and source_label(row) or row.kind == "override" and OVERRIDE or ""
         if not row.hidden then
-            rows[#rows + 1] =
-                { group = row.group, name = row.name, origin = row.kind, desc = row.desc }
+            rows[#rows + 1] = { group = row.group, name = row.name, mark = mark, desc = row.desc }
         elseif all then
-            rows[#rows + 1] =
-                { group = HIDDEN, name = row.name, origin = row.kind, desc = row.desc }
+            rows[#rows + 1] = { group = HIDDEN, name = row.name, mark = mark, desc = row.desc }
         end
     end
     if all then
         for _, helper in ipairs(HELPERS) do
             rows[#rows + 1] =
-                { group = HIDDEN, name = helper[1], origin = "builtin", desc = helper[2] }
+                { group = HIDDEN, name = helper[1], mark = "builtin", desc = helper[2] }
         end
     end
     return rows
@@ -297,7 +296,11 @@ function M.noun_text(reg, c, words)
     out[#out + 1] = ui.paint(c, "dev " .. noun, Style.BOLD) .. "\n  " .. row.desc .. "\n"
     local subs = {}
     for _, sub in ipairs(reg:subs(words)) do
-        subs[#subs + 1] = { name = sub.words[#sub.words], origin = sub.kind, desc = sub.desc }
+        subs[#subs + 1] = {
+            name = sub.words[#sub.words],
+            mark = sub.kind == "override" and OVERRIDE or "",
+            desc = sub.desc,
+        }
     end
     section(c, out, { title = "subcommands", rows = subs })
     out[#out + 1] = "\nRun `dev help " .. noun .. " <sub>` for a subcommand's flags and header.\n"
@@ -342,7 +345,7 @@ local function verb_text(ctx, reg, c, opts)
     end
     local out = {}
     out[#out + 1] = ui.paint(c, "dev " .. name, Style.BOLD)
-        .. (row.kind == "override" and " " .. OVERRIDE or "")
+        .. (row.replaces and " (" .. source_label(row) .. ")" or "")
         .. "\n  "
         .. row.desc
         .. "\n"

@@ -1,4 +1,4 @@
-dev lint (override)
+dev lint (project over builtin)
   Lint the fixture.
 
 usage
