@@ -91,14 +91,14 @@ testing.test("a project verb's declared flags are accepted in a topic", function
     fs.remove(root, { recursive = true })
 end)
 
-testing.test("a topic accepts a flag of the built-in verb a project script replaces", function()
+testing.test("a topic accepts a flag of the built-in command a project script replaces", function()
     local root = project({
-        ["sync.lua"] = "--[[\nSync.\n]]\nreturn 0\n",
-        ["topics/b.md"] = "# b: A topic\n\n`dev sync --check` and `dev sync --bad`\n",
+        ["push.lua"] = "--[[\nPush.\n]]\nreturn 0\n",
+        ["topics/b.md"] = "# b: A topic\n\n`dev push --tag` and `dev push --bad`\n",
     })
     testing.eq(
         problems(root),
-        { ".dev/topics/b.md:3: `dev sync --bad`: dev sync takes no flag --bad" }
+        { ".dev/topics/b.md:3: `dev push --bad`: dev push takes no flag --bad" }
     )
     fs.remove(root, { recursive = true })
 end)
