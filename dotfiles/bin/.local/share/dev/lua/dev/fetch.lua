@@ -188,9 +188,7 @@ end
 ---@return string run the ci run id
 local function download(root, spec, opts)
     if not dev_os.which("ci") then
-        dev_command.die(
-            "The ci client is not found. Install it with `dev install` from the ci repo."
-        )
+        dev_command.die("The ci client is not found. Install it and put it on PATH.")
     end
     local run, target = start(root, spec, opts)
     local index = await(root, spec, run, target)

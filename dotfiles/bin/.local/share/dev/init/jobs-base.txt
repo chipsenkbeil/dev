@@ -3,7 +3,7 @@
 --   ci run --local
 --   ci run --local --job test
 
-local LINUX = { target = "linux-x86-dev" }
+local LINUX = { target = "@TARGET@" }
 
 return {
     jobs = {

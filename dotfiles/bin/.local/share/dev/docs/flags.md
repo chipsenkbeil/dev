@@ -431,6 +431,9 @@ value in a project's `.dev/config.toml` leaves a key unset to the wizard.
 - The wizard does not ask for `github.owner`. Set it in the user file to name
   the owner in the remote that `dev init` prints, and `OWNER` is printed when
   it is unset.
+- `ci.target` and `ci.rust_target` name the ci target that `dev init` writes
+  into `.ci/jobs.lua`, and `TARGET` is written when the key is unset. The
+  wizard does not ask for them.
 
 ## The launcher
 

@@ -355,7 +355,7 @@ assert_eq "tools install passes ci's message on" "$out" "dev box tools install: 
 reset
 out="$(box box tools install 2>&1)"
 assert_eq "tools install needs a box name" "$?" "2"
-assert_eq "tools install says to pass a name" "$out" "dev box tools install: No box given and no terminal to pick one. Pass a name, like dev box tools install ci-abc."
+assert_eq "tools install says to pass a name" "$out" "dev box tools install: No box given and no terminal to pick one. Pass a name, like dev box tools install ci-example."
 assert_eq "ci is not called for tools install without a name" "$(calls)" ""
 
 reset
@@ -463,7 +463,7 @@ out="$(DEV_AGENT=dotfiles/runner/x box box create 2>&1 >/dev/null)"
 assert_eq "ci's progress lines reach stderr" "$out" "ci: cloning myproject"
 out="$(cd "$NOPROJ" && PATH="$BASE_PATH" "$DEV" box ls 2>&1)"
 assert_eq "a missing ci is an error" "$?" "1"
-assert_contains "the missing ci is named" "$out" "The ci client is not found on PATH"
+assert_contains "the missing ci is named" "$out" "The ci client is not found. Install it and put it on PATH"
 
 # --- connect ---
 

@@ -13,8 +13,7 @@ local MAX_NAME = 40
 local SECONDS_PER_MINUTE = 60
 local SECONDS_PER_HOUR = 3600
 local SECONDS_PER_DAY = 86400
-local MISSING_CI =
-    "The ci client is not found on PATH. `dev box` runs `ci box`, so install it from the ci repo."
+local MISSING_CI = "The ci client is not found. Install it and put it on PATH."
 local VALUE_FLAGS = {
     ["--target"] = true,
     ["--shape"] = true,
@@ -1344,7 +1343,7 @@ local function pick_name(ctx, parsed, opts)
             ctx,
             "No box given and no terminal to pick one. Pass a name, like dev "
                 .. ctx.name
-                .. " ci-abc"
+                .. " ci-example"
                 .. (opts.example or "")
                 .. "."
         )

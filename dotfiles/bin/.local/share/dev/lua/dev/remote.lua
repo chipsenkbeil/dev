@@ -216,9 +216,7 @@ function M.ci_runner(run, opts)
         )
     end
     if not dev_os.which("ci") then
-        stderr:write(
-            "The ci client is not found. Install it with `dev install` from the ci repo.\n"
-        )
+        stderr:write("The ci client is not found. Install it and put it on PATH.\n")
         return 1
     end
     if not M.has_job(run.root, job, pipeline) then

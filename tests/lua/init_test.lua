@@ -320,7 +320,7 @@ testing.test("init plans no GitHub workflow for any type", function()
 end)
 
 testing.test("the base pipeline runs on the image that ships dev", function()
-    local text = pipelines.jobs(false)
+    local text = pipelines.jobs(false, "linux-x86-dev")
     testing.ok(text:find('target = "linux-x86-dev"', 1, true), text)
     testing.ok(not text:find("linux-x86-base", 1, true), text)
 end)

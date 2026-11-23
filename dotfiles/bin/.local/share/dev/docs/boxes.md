@@ -122,7 +122,7 @@ only the boxes the command can act on: running ones for `stop`, `extend` and
 `tools install`, stopped ones for `resume`.
 
 Without a terminal a missing name exits 2 and says to pass a name, with an
-example command such as `dev box delete ci-abc -y`.
+example command such as `dev box delete ci-example -y`.
 
 ### show
 
@@ -394,7 +394,7 @@ like this, in the command's own words, with `-y` only for `delete`:
 
 ```
 No box given and no terminal to pick one. Pass a name,
-like dev box delete ci-abc -y.
+like dev box delete ci-example -y.
 ```
 
 ### Errors and data

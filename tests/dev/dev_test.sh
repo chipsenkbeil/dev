@@ -426,7 +426,10 @@ if command -v jj >/dev/null 2>&1; then
     assert_contains "init --dry-run -v still dry-runs" "$out" "would create: .dev/lint.lua"
     assert_eq "init --dry-run -v writes nothing" "$(find "$init" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')" "2"
 
-    out="$(ginit "$init")"
+    targethome="$(project targethome)"
+    mkdir -p "$targethome/.config/dev"
+    printf '[ci]\ntarget = "linux-x86-dev"\nrust_target = "linux-x86-rust"\n' >"$targethome/.config/dev/config.toml"
+    out="$(HOME="$targethome" ginit "$init")"
     assert_contains "init creates the lint script" "$out" "created: .dev/lint.lua"
     assert_eq "init writes the lint verb" "$([ -f "$init/.dev/lint.lua" ] && echo yes)" "yes"
     assert_contains "init writes the lint verb on the shared library" "$(cat "$init/.dev/lint.lua")" 'require("lintset")'
@@ -443,7 +446,12 @@ if command -v jj >/dev/null 2>&1; then
     assert_contains "init writes the pipeline" "$(cat "$init/.ci/jobs.lua")" "dev lint"
     assert_contains "init seeds a lint job" "$(cat "$init/.ci/jobs.lua")" "    lint = {"
     assert_contains "init seeds a test job" "$(cat "$init/.ci/jobs.lua")" "    test = {"
-    assert_contains "init runs the jobs on the rust runner target" "$(cat "$init/.ci/jobs.lua")" "local LINUX = { target = \"linux-x86-rust\" }"
+    assert_contains "init writes the configured ci target to jobs.lua" "$(cat "$init/.ci/jobs.lua")" "local LINUX = { target = \"linux-x86-rust\" }"
+    placeholder="$(project placeholder)"
+    printf '[package]\nname = "placeholder"\nversion = "0.1.0"\nedition = "2024"\n' >"$placeholder/Cargo.toml"
+    git -C "$placeholder" init -q
+    out="$(HOME="$ownerless" ginit "$placeholder")"
+    assert_contains "init writes a TARGET placeholder when no ci target is set" "$(cat "$placeholder/.ci/jobs.lua")" "local LINUX = { target = \"TARGET\" }"
     assert_contains "init's pipeline creates ~/.cargo/bin before installing nextest" "$(cat "$init/.ci/jobs.lua")" "mkdir -p \$HOME/.cargo/bin && curl"
     assert_contains "init's pipeline reads the channel from rust-toolchain.toml at run time" "$(cat "$init/.ci/jobs.lua")" 'io.open("rust-toolchain.toml")'
     assert_eq "init writes no workflow" "$([ -e "$init/.github" ] && echo yes)" ""
