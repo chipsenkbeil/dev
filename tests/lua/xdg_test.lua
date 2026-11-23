@@ -3,6 +3,7 @@ local ffi = require("ffi")
 local testing = require("dev.testing")
 local claims = require("dev.board.claims")
 local store = require("dev.board.store")
+local support = require("support")
 local xdg = require("dev.xdg")
 
 ffi.cdef([[int unsetenv(const char *name);]])
@@ -22,6 +23,18 @@ local function with_state(value, body)
     end
     assert(ok, err)
 end
+
+testing.test("config_home takes an absolute XDG_CONFIG_HOME, else HOME/.config", function()
+    support.with_env("XDG_CONFIG_HOME", "/srv/config", function()
+        testing.eq(xdg.config_home(), "/srv/config")
+    end)
+    local home = os.getenv("HOME") or ""
+    for _, value in ipairs({ "config", "" }) do
+        support.with_env("XDG_CONFIG_HOME", value, function()
+            testing.eq(xdg.config_home(), home .. "/.config", value)
+        end)
+    end
+end)
 
 testing.test("state-dir-absolute uses an absolute XDG_STATE_HOME as given", function()
     with_state("/srv/state", function()

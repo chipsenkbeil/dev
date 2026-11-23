@@ -408,7 +408,7 @@ local function prepare(ctx)
 end
 
 local function run_script(row, ctx, rest)
-    local relative = row.script:sub(#ctx.root + 2)
+    local relative = registry.relative(row, ctx.root)
     prepare(ctx)
     if ctx.verbose >= 1 then
         stderr:write("+ ", relative, #rest > 0 and " " or "", table.concat(rest, " "), "\n")
@@ -420,7 +420,9 @@ local function run_script(row, ctx, rest)
         end
         exec_or_exit(argv)
     end
-    package.path = ctx.root .. "/.dev/lua/?.lua;" .. package.path
+    local global = row.source == registry.Source.GLOBAL
+    local lua_dir = global and registry.global_dir() or ctx.root .. "/.dev"
+    package.path = lua_dir .. "/lua/?.lua;" .. package.path
     dev_os.defaults.show = ctx.verbose >= 1
     local code = dev_command.run(row.script, ctx)
     os.exit(code)

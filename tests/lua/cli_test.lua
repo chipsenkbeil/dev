@@ -27,7 +27,7 @@ local function dev(root, args, env)
     for _, word in ipairs(args) do
         argv[#argv + 1] = word
     end
-    local merged = { CI = "", DEV_REMOTE = "0" }
+    local merged = { CI = "", DEV_REMOTE = "0", XDG_CONFIG_HOME = support.tempdir() }
     for key, value in pairs(env or {}) do
         merged[key] = value
     end
@@ -115,6 +115,24 @@ testing.test("a .lua verb finds modules under .dev/lua", function()
         )
     )
     testing.eq(dev(root, { "helper" }), "HI\n")
+end)
+
+testing.test("a global Lua command requires from its own lua folder", function()
+    local config = support.tempdir()
+    local commands = config .. "/dev/commands"
+    assert(fs.mkdir(commands .. "/lua/tools", { parents = true }))
+    assert(
+        fs.write(
+            commands .. "/lua/tools/shout.lua",
+            "return { shout = function(s) return s:upper() end }\n"
+        )
+    )
+    assert(fs.write(commands .. "/helper.lua", assert(fs.read(FIXTURES .. "helper.lua"))))
+    local root = project({})
+    local env = { XDG_CONFIG_HOME = config }
+    testing.eq(dev(root, { "helper" }, env), "HI\n")
+    local out = dev(root, { "-v", "helper" }, env)
+    testing.ok(out:find("+ helper.lua\n", 1, true), out)
 end)
 
 testing.test("the root gate refuses a verb other than tools install and check", function()

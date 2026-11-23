@@ -204,7 +204,7 @@ function M.check(reg)
     end
     for _, script in ipairs(reg:scripts()) do
         local parsed = header.parse(fs.read(script.path) or "", script.lang, script.path)
-        if #parsed.warnings > 0 then
+        if script.source == registry.Source.PROJECT and #parsed.warnings > 0 then
             out[#out + 1] = {
                 file = shown_path(reg.root, script.path),
                 line = 1,

@@ -27,9 +27,10 @@ of executable scripts is a command with subcommands, unless a flat
 `.dev/<command>.sh` takes the whole name, and dev then warns once that the
 script shadows the directory.
 
-A built-in command with subcommands (`dev tools`) keeps its subcommands. A
-project script never replaces them, but it can add new ones. Such a command
-run with no subcommand, or an unknown one, exits 2 and lists the subcommands.
+A built-in command with subcommands (`dev tools`) is never replaced by a
+script, but a script replaces one of its subcommands, as it does a built-in
+command, and a script can add new ones. Such a command run with no
+subcommand, or an unknown one, exits 2 and lists the subcommands.
 
 Subcommands nest to any depth. `.dev/<command>/<sub>/<sub2>.sh` runs as
 `dev <command> <sub> <sub2>`, and a directory of scripts inside a command with
@@ -42,6 +43,20 @@ keep their hyphens.
 
 The first line of `.dev/<command>/DESCRIPTION` describes the command. Without
 it, `dev help` lists the subcommand names.
+
+## Global commands
+
+The folder `dev/commands` under the user config folder holds commands for
+every project. The config folder is `XDG_CONFIG_HOME` when that is an absolute
+path, else `~/.config`, so the usual folder is `~/.config/dev/commands/`. It
+has the layout of `.dev/`: scripts, folders of subcommands, `DESCRIPTION`
+files, the `lua` folder and the reserved folders below.
+
+For one command, and for each subcommand of a command with subcommands, a
+project script beats a global script, which beats a built-in. A global script
+runs with the project you are in as its root. A global Lua command finds its
+modules in the `lua` folder of the global folder, not in the project's
+`.dev/lua`. `-v` prints its path relative to the global folder.
 
 ## Reserved folders
 

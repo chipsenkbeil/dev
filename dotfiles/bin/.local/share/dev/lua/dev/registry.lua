@@ -2,6 +2,7 @@ local builtins = require("dev.builtins")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local header = require("dev.header")
+local xdg = require("dev.xdg")
 
 local WORD = "^[A-Za-z0-9_-]+$"
 local stderr = io.stderr
@@ -10,6 +11,9 @@ local HIDDEN_GROUP = "hidden"
 local BARE_FLAGS = { "-v", "--verbose", "-vv", "--remote", "--local", "--detach", "--priority" }
 local VALUE_FLAGS = { "-C", "--agent", "--job-timeout" }
 local GLOBAL_FLAGS = {}
+
+---@enum dev.Source
+local Source = { BUILTIN = "builtin", GLOBAL = "global", PROJECT = "project" }
 
 ---The global flags that take no value, keyed by flag
 local BARE_SET = {}
@@ -28,12 +32,15 @@ end
 ---@class dev.Script
 ---@field path string path of the script
 ---@field lang "sh"|"lua" language of the script
+---@field source dev.Source the folder the script sits in, `global` or `project`
 
 ---@class dev.Row
 ---@field words string[] the command words, with a noun first in a subcommand's
 ---@field name string the words joined by a space
 ---@field kind "builtin"|"override"|"local" where the row comes from, `override` for a project
 ---   script that replaces a built-in verb
+---@field source dev.Source which layer answers, a global or project script beating a built-in
+---   row
 ---@field noun boolean whether the row is a noun
 ---@field handler string? the built-in handler, nil for a noun, a local verb or the project type's
 ---   builtin
@@ -52,6 +59,7 @@ end
 
 ---@class dev.Registry
 ---@field root string project root
+---@field global string the global commands folder
 ---@field warn fun(message: string) receives each warning about a script's header
 ---@field private builtin table<string, dev.Builtin> built-in rows by name
 ---@field private builtin_subs table<string, dev.Builtin[]> built-in rows by the name of their
@@ -65,6 +73,8 @@ Registry.__index = Registry
 
 ---@class dev.registry
 local M = {}
+
+M.Source = Source
 
 ---The flags dev takes before any verb's own, in the order completion lists them.
 M.GLOBAL_FLAGS = GLOBAL_FLAGS
@@ -110,7 +120,22 @@ local function glob_names(dir)
     return names
 end
 
-local function scripts_in(dir)
+---Find the folder of the user's global commands.
+---@return string dir `dev/commands` under the user config folder
+function M.global_dir()
+    return fs.join(xdg.config_home(), "dev", "commands")
+end
+
+---Show a script's path the way `-v` prints it.
+---@param row dev.Row a row with a script
+---@param root string project root
+---@return string path relative to the project root, or to the global folder for a global script
+function M.relative(row, root)
+    local base = row.source == Source.GLOBAL and M.global_dir() or root
+    return row.script:sub(#base + 2)
+end
+
+local function scripts_in(dir, source)
     local by_name, order = {}, {}
     for _, file in ipairs(glob_names(dir)) do
         local path = fs.join(dir, file)
@@ -123,7 +148,7 @@ local function scripts_in(dir)
                 order[#order + 1] = name
             end
             if lang == "lua" or not by_name[name] then
-                by_name[name] = { path = path, lang = lang }
+                by_name[name] = { path = path, lang = lang, source = source }
             end
         end
     end
@@ -164,6 +189,7 @@ end
 function M.load(root, opts)
     local self = setmetatable({
         root = root,
+        global = M.global_dir(),
         warn = opts and opts.warn or stderr_warn,
         builtin = {},
         builtin_subs = {},
@@ -183,27 +209,66 @@ function M.load(root, opts)
     return self
 end
 
-function Registry:__dir(name)
-    local cached = self.dirs[name]
-    if cached ~= nil then
-        return cached or nil
+local function read_dir(path, name, source)
+    if not fs.is_dir(path) then
+        return nil
     end
-    local path = fs.join(self.root, ".dev", (name:gsub(" ", "/")))
-    if RESERVED_DIRS[name:match("^%S+")] or not fs.is_dir(path) then
-        local empty = name == "" and { scripts = {}, order = {}, subs = {} }
-        self.dirs[name] = empty or false
-        return empty
-    end
-    local scripts, order = scripts_in(path)
+    local scripts, order = scripts_in(path, source)
     local subs = {}
     for _, word in ipairs(glob_names(path)) do
         if fs.is_dir(fs.join(path, word)) and not (name == "" and RESERVED_DIRS[word]) then
             subs[#subs + 1] = word
         end
     end
-    local dir = { scripts = scripts, order = order, subs = subs }
-    self.dirs[name] = dir
+    return { scripts = scripts, order = order, subs = subs, source = source }
+end
+
+local function merge_dirs(project, global)
+    if not (project and global) then
+        return project or global
+    end
+    local dir = { scripts = {}, order = {}, subs = {}, source = Source.PROJECT }
+    local project_subs = {}
+    for _, sub in ipairs(project.subs) do
+        project_subs[sub] = true
+    end
+    for _, part in ipairs({ project, global }) do
+        for _, script in ipairs(part.order) do
+            local hidden = part == global and project_subs[script]
+            if not (dir.scripts[script] or hidden) then
+                dir.scripts[script] = part.scripts[script]
+                dir.order[#dir.order + 1] = script
+            end
+        end
+    end
+    local seen = {}
+    for _, part in ipairs({ project, global }) do
+        for _, sub in ipairs(part.subs) do
+            if not seen[sub] then
+                seen[sub] = true
+                dir.subs[#dir.subs + 1] = sub
+            end
+        end
+    end
     return dir
+end
+
+function Registry:__dir(name)
+    local cached = self.dirs[name]
+    if cached ~= nil then
+        return cached or nil
+    end
+    local rel = (name:gsub(" ", "/"))
+    local dir
+    if not RESERVED_DIRS[name:match("^%S+")] then
+        dir = merge_dirs(
+            read_dir(fs.join(self.root, ".dev", rel), name, Source.PROJECT),
+            read_dir(fs.join(self.global, rel), name, Source.GLOBAL)
+        )
+    end
+    dir = dir or name == "" and { scripts = {}, order = {}, subs = {}, source = Source.PROJECT }
+    self.dirs[name] = dir or false
+    return dir or nil
 end
 
 function Registry:__flat(name)
@@ -240,10 +305,13 @@ function Registry:__noun_desc(noun)
     if builtin and builtin.desc ~= "" then
         return builtin.desc
     end
-    local first = fs.read(fs.join(self.root, ".dev", (noun:gsub(" ", "/")), "DESCRIPTION"))
-    local line = first and first:match("^[^\n]*") or ""
-    if line ~= "" then
-        return line
+    local rel = noun:gsub(" ", "/")
+    for _, base in ipairs({ fs.join(self.root, ".dev"), self.global }) do
+        local first = fs.read(fs.join(base, rel, "DESCRIPTION"))
+        local line = first and first:match("^[^\n]*") or ""
+        if line ~= "" then
+            return line
+        end
     end
     return table.concat(self:__sub_names(noun), ", ")
 end
@@ -325,26 +393,37 @@ function Registry:__verb(name)
     local row
     if builtin then
         row = copy(builtin)
-        row.kind = "builtin"
+        row.kind, row.source = "builtin", Source.BUILTIN
         if script and not builtin.noun then
             row.kind, row.script, row.lang = "override", script.path, script.lang
+            row.source = script.source
             row.desc = self:__header(script.path, script.lang).desc
             row.desc = row.desc ~= "" and row.desc or builtin.desc
         end
     elseif script then
-        row = { words = { name }, kind = "local", script = script.path, lang = script.lang }
+        row = {
+            words = { name },
+            kind = "local",
+            source = script.source,
+            script = script.path,
+            lang = script.lang,
+        }
         row.desc = self:__header(script.path, script.lang).desc
         if self:__has_subs(name) then
+            local shadowed = fs.join(self.root, ".dev", (name:gsub(" ", "/")))
+            if not fs.is_dir(shadowed) then
+                shadowed = fs.join(self.global, (name:gsub(" ", "/")))
+            end
             self.warn(
                 "The script "
                     .. script.path
                     .. " shadows the directory "
-                    .. fs.join(self.root, ".dev", (name:gsub(" ", "/")))
+                    .. shadowed
                     .. ". Its subcommands never run."
             )
         end
     elseif self:__has_subs(name) then
-        row = { words = { name }, kind = "local", noun = true }
+        row = { words = { name }, kind = "local", noun = true, source = self:__dir(name).source }
         row.desc = self:__noun_desc(name)
     end
     if row then
@@ -364,19 +443,26 @@ function Registry:__sub(noun, sub)
     end
     words[#words + 1] = sub
     local builtin = self.builtin[name]
+    local dir = self:__dir(noun.name)
+    local script = dir and dir.scripts[sub]
     if builtin then
         local row = copy(builtin)
         row.name, row.kind, row.noun = name, "builtin", builtin.noun or false
-        row.group, row.hidden = noun.group, false
+        row.source, row.group, row.hidden = Source.BUILTIN, noun.group, false
+        if script and not builtin.noun then
+            row.kind, row.script, row.lang = "override", script.path, script.lang
+            row.source = script.source
+            local desc = self:__header(script.path, script.lang).desc
+            row.desc = desc ~= "" and desc or builtin.desc
+        end
         return row
     end
-    local dir = self:__dir(noun.name)
-    local script = dir and dir.scripts[sub]
     if script then
         return {
             words = words,
             name = name,
             kind = "local",
+            source = script.source,
             noun = false,
             script = script.path,
             lang = script.lang,
@@ -390,6 +476,7 @@ function Registry:__sub(noun, sub)
             words = words,
             name = name,
             kind = "local",
+            source = self:__dir(name).source,
             noun = true,
             desc = self:__noun_desc(name),
             group = noun.group,
@@ -400,9 +487,11 @@ end
 
 ---Find the row for a command.
 ---
----A project script replaces a built-in verb, never a built-in noun or a
----built-in subcommand, and a script `.dev/<verb>.<ext>` beats a directory of
----the same name. A `__` script is found here though `verbs` and `subs` list it.
+---A project script beats a global script, which beats a built-in verb or
+---subcommand, though no script replaces a built-in noun. A script
+---`.dev/<verb>.<ext>` beats a directory of the same name, but a project
+---directory beats a global script of that name. A `__` script is found here
+---though `verbs` and `subs` list it.
 ---@param words string[] one word for a verb or noun, then one for each level of subcommand
 ---@return dev.Row? row nil when nothing answers to the words
 function Registry:find(words)

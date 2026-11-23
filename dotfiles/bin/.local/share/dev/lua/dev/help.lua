@@ -372,7 +372,7 @@ local function verb_text(ctx, reg, c, opts)
     end
     if header then
         out[#out + 1] = "\n"
-            .. ui.paint(c, row.script:sub(#ctx.root + 2) .. " header", Style.BOLD)
+            .. ui.paint(c, registry.relative(row, ctx.root) .. " header", Style.BOLD)
             .. "\n"
         for _, line in ipairs(header.long) do
             out[#out + 1] = "  " .. line .. "\n"

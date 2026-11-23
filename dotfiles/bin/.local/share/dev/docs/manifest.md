@@ -328,10 +328,11 @@ command's output, indented, under its failure line (`dev.pkg.lib` `run` and
 
 ### Overrides
 
-`.dev/tools.sh` and `.dev/tools/install.sh` cannot override the `tools`
-subcommands. The driver never runs a project script, so the root step of a box
-build never executes project-controlled code. `dev --remote` refuses every
-`tools` subcommand.
+`.dev/tools.sh` cannot override the `tools` command. A script such as
+`.dev/tools/install.sh` replaces that subcommand for a user, as it does any
+built-in subcommand. As root, dev skips the registry and the driver never runs
+a project script, so the root step of a box build never executes
+project-controlled code. `dev --remote` refuses every `tools` subcommand.
 
 ## As root
 

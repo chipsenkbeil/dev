@@ -105,7 +105,90 @@ testing.test("a hidden header and a group header place a local verb", function()
     fs.remove(root, { recursive = true })
 end)
 
-testing.test("a script named like a builtin noun or builtin subcommand replaces neither", function()
+local function with_global(files, run)
+    local home = support.tempdir()
+    local dir = home .. "/dev/commands"
+    for rel, text in pairs(files) do
+        scripted(dir, rel, text)
+    end
+    support.with_env("XDG_CONFIG_HOME", home, function()
+        run(dir)
+    end)
+    fs.remove(home, { recursive = true })
+end
+
+testing.test("a global script answers a command the project lacks", function()
+    local root = make_project()
+    with_global({
+        ["hello.sh"] = "#!/usr/bin/env bash\n# Say hello.\n",
+        ["g/sub.sh"] = "#!/usr/bin/env bash\n# Global sub.\n",
+        ["lua/helper.lua"] = "return {}\n",
+    }, function(dir)
+        local reg = registry.load(root)
+        local row = reg:find({ "hello" })
+        testing.eq(row.source, "global")
+        testing.eq(row.kind, "local")
+        testing.eq(row.script, dir .. "/hello.sh")
+        testing.eq(row.desc, "Say hello.")
+        testing.eq(reg:find({ "g", "sub" }).source, "global")
+        testing.eq(reg:is_noun("g"), true)
+        testing.eq(reg:find({ "lua" }), nil)
+        testing.eq(reg:find({ "a" }).source, "project")
+        testing.eq(reg:find({ "lint" }).source, "builtin")
+        testing.eq(registry.relative(row, root), "hello.sh")
+    end)
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("a project script beats a global script", function()
+    local root = make_project()
+    scripted(root, ".dev/lint.sh", "#!/usr/bin/env bash\n# Project lint.\n")
+    scripted(root, ".dev/both.sh", "#!/usr/bin/env bash\n# Project both.\n")
+    scripted(root, ".dev/deploy/up.sh", "#!/usr/bin/env bash\n# Project up.\n")
+    with_global({
+        ["deploy.sh"] = "#!/usr/bin/env bash\n# Global deploy.\n",
+        ["lint.sh"] = "#!/usr/bin/env bash\n# Global lint.\n",
+        ["both.sh"] = "#!/usr/bin/env bash\n# Global both.\n",
+        ["n/x.sh"] = "#!/usr/bin/env bash\n# Global x.\n",
+        ["n/more.sh"] = "#!/usr/bin/env bash\n# Global more.\n",
+    }, function()
+        local reg = registry.load(root)
+        testing.eq(reg:is_noun("deploy"), true)
+        testing.eq(reg:find({ "deploy", "up" }).source, "project")
+        testing.eq(reg:find({ "both" }).desc, "Project both.")
+        testing.eq(reg:find({ "both" }).source, "project")
+        testing.eq(reg:find({ "lint" }).desc, "Project lint.")
+        testing.eq(reg:find({ "n", "x" }).desc, "Sub x.")
+        testing.eq(reg:find({ "n", "x" }).source, "project")
+        testing.eq(reg:find({ "n", "more" }).source, "global")
+        testing.eq(words(reg:subs("n")), { "n x", "n more" })
+    end)
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("a global script replaces a built-in subcommand", function()
+    local root = make_project()
+    with_global({
+        ["tools/install.sh"] = "#!/usr/bin/env bash\n# Global install.\n# flags: --mine\n",
+        ["box.sh"] = "#!/usr/bin/env bash\n# Global box.\n",
+    }, function()
+        local reg = registry.load(root)
+        local row = reg:find({ "tools", "install" })
+        testing.eq(row.kind, "override")
+        testing.eq(row.source, "global")
+        testing.eq(row.desc, "Global install.")
+        testing.eq(reg:flags({ "tools", "install" }), { "--mine" })
+        testing.eq(reg:shadowed_flags({ "tools", "install" })[1], "--dry-run")
+        testing.eq(reg:find({ "box" }).kind, "builtin")
+        scripted(root, ".dev/tools/install.sh", "#!/usr/bin/env bash\n# Project install.\n")
+        local project_row = registry.load(root):find({ "tools", "install" })
+        testing.eq(project_row.source, "project")
+        testing.eq(project_row.desc, "Project install.")
+    end)
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("a script replaces a built-in subcommand but not a built-in noun", function()
     local root = make_project()
     scripted(root, ".dev/box.sh", "#!/usr/bin/env bash\n# Fake box.\n")
     scripted(
@@ -117,11 +200,8 @@ testing.test("a script named like a builtin noun or builtin subcommand replaces 
     local reg = registry.load(root)
     testing.eq(reg:find({ "box" }).kind, "builtin")
     testing.eq(reg:is_noun("box"), true)
-    testing.eq(reg:find({ "tools", "install" }).kind, "builtin")
-    testing.eq(
-        reg:flags({ "tools", "install" }),
-        { "--dry-run", "--force", "--group", "--system", "--user" }
-    )
+    testing.eq(reg:find({ "tools", "install" }).kind, "override")
+    testing.eq(reg:flags({ "tools", "install" }), { "--fake" })
     testing.eq(reg:flags({ "tools" }), {})
     testing.eq(reg:find({ "tools", "extra" }).kind, "local")
     testing.eq(reg:find({ "tools" }).desc, "Install and check the tools in .dev/tools.tsv")

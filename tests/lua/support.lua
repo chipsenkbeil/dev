@@ -107,6 +107,18 @@ function M.tempdir()
     return assert(fs.mktemp({ prefix = "test", dir = true }))
 end
 
+---Run `run` with an environment variable set, then put the variable back.
+---@param name string the variable
+---@param value string? the value, empty when nil
+---@param run fun() the body to run
+function M.with_env(name, value, run)
+    local previous = os.getenv(name)
+    ffi.C.setenv(name, value or "", 1)
+    local ok, err = pcall(run)
+    ffi.C.setenv(name, previous or "", 1)
+    assert(ok, err)
+end
+
 ---Run `run` with HOME pointing at a temporary home whose user config holds `text`.
 ---@param text string the content of `~/.config/dev/config.toml`
 ---@param run fun() the body to run
@@ -212,8 +224,12 @@ local function invocation(root, args, opts)
     for _, word in ipairs(args) do
         argv[#argv + 1] = word
     end
-    local env =
-        { DEV_SELF = SELF, DEV_BOARD_TOKEN = "", PATH = root .. "/bin:" .. os.getenv("PATH") }
+    local env = {
+        DEV_SELF = SELF,
+        DEV_BOARD_TOKEN = "",
+        PATH = root .. "/bin:" .. os.getenv("PATH"),
+        XDG_CONFIG_HOME = M.tempdir(),
+    }
     env.STUB_CODE = opts.code
     for name, value in pairs(opts.env or {}) do
         env[name] = value
@@ -749,5 +765,7 @@ esac
 printf '%s\n%s' "$body" "$status"
 ]]
 end
+
+ffi.C.setenv("XDG_CONFIG_HOME", M.tempdir(), 1)
 
 return M
