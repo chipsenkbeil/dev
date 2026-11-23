@@ -98,15 +98,6 @@ return {
         group = "Share it",
     },
     {
-        words = { "sync" },
-        remote = false,
-        requires = { "workspace" },
-        handler = "lua",
-        flags = "--check --yes -y",
-        desc = "Compare the copied lint files with the dotfiles templates",
-        group = "Set up a machine or project",
-    },
-    {
         words = { "init" },
         remote = false,
         requires = { "workspace" },

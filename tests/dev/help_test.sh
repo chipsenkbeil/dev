@@ -102,7 +102,7 @@ snapshot help-a help -a
 snapshot help-topics help --topics
 snapshot topic-overview help overview
 snapshot topic-flags help -k flags
-for verb in lint fmt test build run fetch push pull sync init tools help greet seed plumbing widget; do
+for verb in lint fmt test build run fetch push pull init tools help greet seed plumbing widget; do
     snapshot "help-$verb" help "$verb"
     snapshot "$verb-h" "$verb" -h
 done

@@ -493,7 +493,6 @@ Other modules serve these commands.
   slow or failing `ci` prints nothing and exits 0.
 - `dev.cmd.types`: the project-type built-ins `lint`, `fmt`, `test`, `build`,
   `run` and `fetch`, in process.
-- `dev.cmd.sync`, over `dev.templates`: `sync`.
 - `dev.cmd.push` and `dev.cmd.pull`: `push` and `pull`, with the backend and
   the forge setting in `dev.vcs` and `dev.forge`. `dev help push` and
   `dev help pull` print their commands from the same code.

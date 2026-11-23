@@ -33,18 +33,6 @@ The luajit modules of `dev`, one per item.
   owner. The board hint reads
   `[board.pomb] url` (after `POMB_URL`) and `token` from the user config and
   is skipped when either is unset. None of the keys has a default.
-- `dev.cmd.sync`: the lint-template `sync` with `--check`, `--yes` and `-y`.
-  It prints the `missing:` and `differs:` lines, `up to date` and the diffs,
-  asks for confirmation through `dev.ui`, and ends with `synced` or `aborted`.
-  `--check` and `--yes` together are a usage error. The skip setting of sync,
-  `sync.skip` in `.dev/config.toml`, is a list of dest paths that `--check`
-  and `sync` leave alone, and a value that is not a list of strings exits 1.
-  It also rewrites the head of `.dev/README.md` above
-  `## Commands in this repo` for every project type, in the same diff and
-  confirm flow, and leaves a file with no marker line alone. A project's own
-  lint checks below the marker are scanned too, and
-  `undefined: .dev/lint.lua:LINE: NAME` names a table name they use that
-  nothing in the file defines, which exits 1.
 
 ### Board
 
@@ -265,20 +253,6 @@ card's bookmark.
 
 ### Project setup and configuration
 
-- `dev.templates`: the lint set directory and its manifest. The manifest
-  names the Lua lint, fmt and test verbs and the shared
-  `.dev/lua/lintset.lua`, and for Rust the shared `stylua.toml`. It also
-  holds `skip_pending`, which leaves a
-  project's Lua verbs unwritten while any of its bash verbs exists, the
-  rendering that keeps the project's text below the `lint.lua` and `deny.toml`
-  markers, the `[workspace.lints]` block, the library-register attribute and
-  the guide part of `docs/STYLE.md`. It holds `EDITORCONFIG`, the text of the
-  `.editorconfig` that `init` writes. It also holds `render_readme`, which
-  keeps the project's text from the `## Commands in this repo` line of
-  `.dev/README.md` and takes everything above it from the template that
-  `readme_template` names. `sync` and `init` both call it, and
-  `dev.pipelines` reads the `.ci/jobs.lua` texts `init` writes from
-  `dotfiles/bin/.local/share/dev/init/`.
 - `dev.toml`: a small TOML reader. It takes tables and dotted tables, basic
   strings, integers, booleans, arrays of scalars that may span lines and
   comments, and names the line of an error for anything else.
@@ -513,7 +487,7 @@ through `FAKE_UID` or `FAKE_OS`) still passes.
 
 ### The lint-set template rule
 
-The rule covers `dev.templates` and `dev.cmd.sync`. A change making a synced
+The rule covers the synced lint templates. A change making a synced
 template call a dev module or function the deployed dev lacks lands only after
 the ci images are rebuilt from a rev that holds it.
 
@@ -576,10 +550,9 @@ and takes no argument.
 
 ### dev sync
 
-`.dev/sync.lua` is the project's `dev sync`. It wins over the built-in
-lint-template `dev sync`, so `dev __flags sync` offers none of `--check` and
-`--yes`. The topic check still accepts those built-in flags
-(`Registry:shadowed_flags`), so a topic can name `dev sync --check`.
+`.dev/sync.lua` is the project's `dev sync`. It wins over the dotfiles global
+lint-template `dev global:sync`, so `dev __flags sync` offers none of
+`--check` and `--yes`.
 
 It takes `SYNC_DST` (`user@host`) and `SYNC_PATH` (the remote folder,
 `dotfiles` by default) from the `KEY=value` arguments, then the environment.

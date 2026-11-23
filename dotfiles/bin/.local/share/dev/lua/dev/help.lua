@@ -4,7 +4,6 @@ local markdown = require("dev.ui.markdown")
 local project = require("dev.project")
 local pull = require("dev.cmd.pull")
 local push = require("dev.cmd.push")
-local sync = require("dev.cmd.sync")
 local registry = require("dev.registry")
 local types = require("dev.cmd.types")
 local term = require("dev.term")
@@ -24,7 +23,7 @@ local LESS = "less -R"
 local FILTER_HINT = "& filters · / searches · q quits"
 local HELP_CTX = { name = "help" }
 local ONE_COMMAND = "`dev help <command>` for one command and `dev help <topic>` for a topic."
-local LISTED = { push = push, pull = pull, sync = sync, follow = follow }
+local LISTED = { push = push, pull = pull, follow = follow }
 local HELPERS = {
     { "__commands", "List the commands with their descriptions, for shell completion" },
     { "__subs", "List the subcommands of a command, for shell completion" },

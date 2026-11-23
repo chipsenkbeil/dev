@@ -10,7 +10,6 @@ local init = require("dev.cmd.init")
 local land = require("dev.cmd.land")
 local pull = require("dev.cmd.pull")
 local push = require("dev.cmd.push")
-local sync = require("dev.cmd.sync")
 local tools = require("dev.cmd.tools")
 local types = require("dev.cmd.types")
 local ws = require("dev.cmd.ws")
@@ -36,11 +35,10 @@ local VCS_HANDLERS = {
     abandon = abandon.run,
     push = push.run,
     pull = pull.run,
-    sync = sync.run,
     follow = follow.run,
     land = land.run,
 }
-local NOT_TAKEN = {
+local REFUSED_ARGS = {
     push = function(arg)
         return arg:sub(1, 1) == "-" and arg ~= "--tag"
     end,
@@ -50,11 +48,7 @@ local NOT_TAKEN = {
     follow = function()
         return true
     end,
-    sync = function(arg)
-        return arg ~= "--check" and arg ~= "--yes" and arg ~= "-y"
-    end,
 }
-local EXCLUSIVE = { sync = true }
 local HIDDEN_HELPERS = {
     __commands = complete.commands,
     __subs = complete.subs,
@@ -479,24 +473,13 @@ local function hidden_helper(args, project_root, reg)
 end
 
 local function refuse_untaken(ctx, reg)
-    local not_taken = NOT_TAKEN[ctx.name]
-    if not not_taken then
+    local refused = REFUSED_ARGS[ctx.name]
+    if not refused then
         return
     end
     for _, arg in ipairs(ctx.args) do
-        if not_taken(arg) then
+        if refused(arg) then
             help.bad_argument(ctx, reg, arg)
-        end
-    end
-    local exclusive = EXCLUSIVE[ctx.name]
-    if exclusive then
-        local has_check, has_yes = false, false
-        for _, arg in ipairs(ctx.args) do
-            has_check = has_check or arg == "--check"
-            has_yes = has_yes or arg == "--yes" or arg == "-y"
-        end
-        if has_check and has_yes then
-            help.usage_error(ctx, reg, "sync takes --check or --yes, not both")
         end
     end
 end

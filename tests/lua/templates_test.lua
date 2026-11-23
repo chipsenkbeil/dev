@@ -5,7 +5,39 @@ local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local templates = require("dotfiles.templates")
 local project = require("dev.project")
-local support = require("support")
+local base = require("support")
+
+local function global_env()
+    local home = base.tempdir()
+    local config = home .. "/.config"
+    assert(fs.mkdir(config .. "/dev", { parents = true }), "mkdir failed")
+    assert(fs.write(config .. "/dev/config.toml", ""), "write failed")
+    for _, name in ipairs({ "commands", "lua" }) do
+        local target = assert(fs.realpath("dotfiles/dev/.config/dev/" .. name))
+        assert(fs.symlink(target, config .. "/dev/" .. name), "symlink failed")
+    end
+    return { HOME = home, XDG_CONFIG_HOME = config }
+end
+
+local GLOBAL_ENV = global_env()
+
+local support = setmetatable({
+    dev = function(root, args, opts)
+        local env = {}
+        for name, value in pairs(GLOBAL_ENV) do
+            env[name] = value
+        end
+        for name, value in pairs(opts and opts.env or {}) do
+            env[name] = value
+        end
+        local merged = {}
+        for name, value in pairs(opts or {}) do
+            merged[name] = value
+        end
+        merged.env = env
+        return base.dev(root, args, merged)
+    end,
+}, { __index = base })
 
 local Kind = project.Kind
 local MARKER = "-- --- project-specific checks below ---"

@@ -17,7 +17,6 @@ Share it
   board                 Read and update the project's board
 
 Set up a machine or project
-  sync                  Compare the copied lint files with the dotfiles templates
   init                  Set up a project's version control and remotes
   tools                 Install and check the tools in .dev/tools.tsv
   ws                    Make, list and remove workspaces under one central root

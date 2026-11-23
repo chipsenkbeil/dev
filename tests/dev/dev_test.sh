@@ -88,6 +88,12 @@ ginit() {
     XDG_CONFIG_HOME="$ginit_config" run_dev "$dir" init "$@"
 }
 
+gsync() {
+    local dir="$1"
+    shift
+    XDG_CONFIG_HOME="$ginit_config" run_dev "$dir" sync "$@"
+}
+
 log() {
     cat "$STUB_LOG"
 }
@@ -180,13 +186,6 @@ chmod +x "$rust/.dev/lint.sh"
 out="$(run_dev "$rust" lint --flag)"
 assert_eq "override runs with args" "$out" "override --flag"
 assert_eq "override skips the built-in" "$(log)" ""
-
-printf '#!/usr/bin/env bash\necho "sync override $*"\n' >"$rust/.dev/sync.sh"
-chmod +x "$rust/.dev/sync.sh"
-out="$(run_dev "$rust" sync SYNC_DST=host)"
-assert_eq "local sync.sh wins over the template sync" "$out" "sync override SYNC_DST=host"
-assert_eq "an overridden sync without a flags line offers no flags" "$(run_dev "$rust" __flags sync | grep -c '^--check$')" "0"
-rm "$rust/.dev/sync.sh"
 
 printf '#!/usr/bin/env bash\n# flags: --dry-run\necho "init override $*"\n' >"$rust/.dev/init.sh"
 chmod +x "$rust/.dev/init.sh"
@@ -335,7 +334,7 @@ for flag in --name --dry-run; do
 done
 help_out="$(run_dev "$rust" help -a)"
 commands_out="$(run_dev "$rust" __commands)"
-for verb in lint fmt test build run push pull sync init help; do
+for verb in lint fmt test build run push pull init help; do
     assert_contains "help lists built-in $verb" "$help_out" "  $verb "
     assert_contains "__commands lists built-in $verb" "$commands_out" "$verb	"
 done
@@ -352,24 +351,8 @@ assert_eq "__flags reads the flags line of a script and adds the global flags" "
 -C
 --agent
 --job-timeout"
-out="$(run_dev "$rust" __flags sync)"
-assert_eq "__flags sync" "$out" "--check
---yes
--y
--v
---verbose
--vv
---remote
---local
---detach
---priority
--C
---agent
---job-timeout"
-out="$(run_dev "$rust" help sync)"
-assert_contains "help sync lists --yes" "$out" "--yes"
-assert_contains "help <verb> mentions the global flags" "$out" "Global flags:"
 out="$(run_dev "$rust" help install)"
+assert_contains "help <verb> mentions the global flags" "$out" "Global flags:"
 assert_contains "help <verb> shows the script header" "$out" ".dev/install.sh header"
 out="$(run_dev "$rust" help build)"
 assert_contains "help <verb> shows the built-in command" "$out" "cargo build --release"
@@ -401,7 +384,7 @@ touch "$sync/Cargo.toml"
 tpl="$REPO/dotfiles/claude/.claude/skills/style/lint/rust"
 cp "$tpl/rustfmt.toml" "$sync/rustfmt.toml"
 printf '# drifted\n' >"$sync/clippy.toml"
-out="$(run_dev "$sync" sync --check)"
+out="$(gsync "$sync" --check)"
 assert_eq "sync --check exits 1 on drift" "$?" "1"
 assert_contains "sync --check reports a drifted file" "$out" "differs: clippy.toml"
 assert_contains "sync --check reports a missing file" "$out" "missing: deny.toml"
@@ -409,23 +392,16 @@ assert_contains "sync --check reports the missing shared lint library" "$out" "m
 assert_not_contains "sync --check ignores a matching file" "$out" "rustfmt.toml"
 mkdir -p "$sync/.dev"
 printf '.dev/evidence/**\n' >"$sync/.dev/lint-ignore"
-out="$(run_dev "$sync" sync --check)"
+out="$(gsync "$sync" --check)"
 assert_not_contains "sync --check leaves a project-owned lint-ignore alone" "$out" "lint-ignore"
-out="$(run_dev "$sync" sync 2>&1 </dev/null)"
+out="$(gsync "$sync" 2>&1 </dev/null)"
 assert_contains "sync refuses without a terminal" "$out" "needs a terminal"
 assert_contains "the sync refusal names --yes" "$out" "pass --yes to apply without asking"
-run_dev "$sync" sync --yes --check >/dev/null 2>&1
+gsync "$sync" --yes --check >/dev/null 2>&1
 assert_eq "sync --yes --check exits 2" "$?" "2"
-out="$(run_dev "$sync" sync --bogus 2>&1)"
+out="$(gsync "$sync" --bogus 2>&1)"
 assert_eq "sync with a bad flag exits 2" "$?" "2"
 assert_contains "sync names the bad flag" "$out" "dev sync: Unknown flag --bogus"
-if [ -x /usr/bin/yq ] || [ -x /bin/yq ]; then
-    printf 'skip - rust sync without yq (yq is in /usr/bin or /bin)\n'
-else
-    out="$(cd "$sync" && env PATH="$STUBS:$LUABIN:/usr/bin:/bin" bash "$DEV" sync --check 2>&1)"
-    assert_eq "rust sync without yq exits 1" "$?" "1"
-    assert_contains "rust sync without yq names it" "$out" "yq not found"
-fi
 
 # init
 if command -v jj >/dev/null 2>&1; then
@@ -470,14 +446,14 @@ if command -v jj >/dev/null 2>&1; then
     assert_contains "init ends docs/STYLE.md with a project section" "$(tail -n 3 "$init/docs/STYLE.md")" "Rules that apply only to this project"
     assert_contains "init tells project authors to number their rules with a P prefix" "$(tail -n 3 "$init/docs/STYLE.md")" "Number them P1, P2"
     assert_eq "init creates .jj" "$([ -d "$init/.jj" ] && echo yes)" "yes"
-    out="$(run_dev "$init" sync --check)"
+    out="$(gsync "$init" --check)"
     assert_eq "sync --check is clean after init" "$out" "up to date"
     sd 'return lint:finish\(\)' 'lint:step("project extra")\n\nreturn lint:finish()' "$init/.dev/lint.lua"
-    out="$(run_dev "$init" sync --check)"
+    out="$(gsync "$init" --check)"
     assert_eq "sync --check keeps the project checks below the lint.lua marker" "$out" "up to date"
     printf -- '-- drifted above the marker\n' | cat - "$init/.dev/lint.lua" >"$init/.dev/lint.lua.new"
     mv "$init/.dev/lint.lua.new" "$init/.dev/lint.lua"
-    out="$(run_dev "$init" sync --check)"
+    out="$(gsync "$init" --check)"
     assert_contains "sync --check still sees drift above the marker" "$out" "differs: .dev/lint.lua"
     tail -n +2 "$init/.dev/lint.lua" >"$init/.dev/lint.lua.new"
     mv "$init/.dev/lint.lua.new" "$init/.dev/lint.lua"
@@ -486,27 +462,27 @@ if command -v jj >/dev/null 2>&1; then
     assert_contains "init writes the deny.toml marker" "$(cat "$init/deny.toml")" "$marker"
     assert_eq "init writes no tail below the deny.toml marker" "$(sed -n "/^${marker}\$/,\$p" "$init/deny.toml" | wc -l | tr -d ' ')" "1"
     printf '\n[[licenses.exceptions]]\nname = "webpki-roots"\nallow = ["CDLA-Permissive-2.0"]\n' >>"$init/deny.toml"
-    out="$(run_dev "$init" sync --check)"
+    out="$(gsync "$init" --check)"
     assert_eq "sync --check ignores a tail below the deny.toml marker" "$out" "up to date"
     sd 'allow-git = \[\]' 'allow-git = ["x"]' "$init/deny.toml"
-    out="$(run_dev "$init" sync --check)"
+    out="$(gsync "$init" --check)"
     assert_contains "sync --check reports drift above the deny.toml marker" "$out" "differs: deny.toml"
-    run_dev "$init" sync --yes >/dev/null
+    gsync "$init" --yes >/dev/null
     assert_contains "sync keeps the deny.toml tail" "$(cat "$init/deny.toml")" 'name = "webpki-roots"'
     assert_contains "sync restores the template above the deny.toml marker" "$(cat "$init/deny.toml")" "allow-git = []"
-    out="$(run_dev "$init" sync --check)"
+    out="$(gsync "$init" --check)"
     assert_eq "sync --check is clean after keeping the deny.toml tail" "$out" "up to date"
 
     cp "$init/docs/STYLE.md" "$TMP/STYLE.md.orig"
     printf 'Name every lock after what it guards.\n' >>"$init/docs/STYLE.md"
-    out="$(run_dev "$init" sync --check)"
+    out="$(gsync "$init" --check)"
     assert_eq "sync --check keeps the project rules in docs/STYLE.md" "$out" "up to date"
     printf '# drifted guide\n' | cat - "$init/docs/STYLE.md" >"$init/docs/STYLE.md.new"
     mv "$init/docs/STYLE.md.new" "$init/docs/STYLE.md"
-    out="$(run_dev "$init" sync --check)"
+    out="$(gsync "$init" --check)"
     assert_contains "sync --check reports a drifted guide in docs/STYLE.md" "$out" 'differs: docs/STYLE.md above "## This project"'
     printf '# Our own style\n\nA ratified project guide.\n' >"$init/docs/STYLE.md"
-    out="$(run_dev "$init" sync --check)"
+    out="$(gsync "$init" --check)"
     assert_eq "sync --check ignores a docs/STYLE.md the project wrote itself" "$out" "up to date"
     cp "$TMP/STYLE.md.orig" "$init/docs/STYLE.md"
 
@@ -543,10 +519,10 @@ if command -v jj >/dev/null 2>&1; then
     assert_contains "love2d init relocates the ast-grep rule tests" "$(cat "$game/sgconfig.yml")" ".dev/ast-grep/rule-test"
     assert_contains "love2d init picks the love std" "$(cat "$game/selene.toml")" 'std = "love"'
     assert_contains "love2d init seeds docs/STYLE.md from the lua guide" "$(cat "$game/docs/STYLE.md")" "# Lua style"
-    out="$(run_dev "$game" sync --check)"
+    out="$(gsync "$game" --check)"
     assert_eq "love2d sync --check is clean after init" "$out" "up to date"
     printf 'column_width = 80\n' >>"$game/stylua.toml"
-    out="$(run_dev "$game" sync --check)"
+    out="$(gsync "$game" --check)"
     assert_eq "love2d sync --check exits 1 on a drifted stylua.toml" "$?" "1"
     assert_contains "love2d sync --check reports the drifted stylua.toml" "$out" "differs: stylua.toml"
     assert_not_contains "love2d sync --check ignores a matching file" "$out" "selene.toml"
@@ -578,7 +554,7 @@ if command -v jj >/dev/null 2>&1; then
     assert_contains "lua init picks the luajit std" "$(cat "$lib/selene.toml")" 'std = "luajit"'
     assert_eq "lua init ships no love.yml" "$([ -e "$lib/love.yml" ] || echo absent)" "absent"
     assert_eq "lua init ships luajit.yml" "$([ -f "$lib/luajit.yml" ] && echo yes)" "yes"
-    out="$(run_dev "$lib" sync --check)"
+    out="$(gsync "$lib" --check)"
     assert_eq "lua sync --check is clean after init" "$out" "up to date"
 else
     printf 'skip - rust, love2d and lua init (needs jj)\n'
@@ -613,12 +589,12 @@ assert_contains "init rerun skips the attribute" "$out" "skipped: crates/lib/src
 assert_not_contains "init rerun creates no attribute" "$out" "library-register attribute
 created"
 assert_eq "init rerun keeps one attribute" "$(grep -c 'missing_errors_doc' "$reg/crates/lib/src/lib.rs")" "1"
-out="$(run_dev "$reg" sync --check)"
+out="$(gsync "$reg" --check)"
 assert_eq "sync --check is clean after init in a workspace" "$out" "up to date"
 
 sd 'missing_safety_doc = "deny"' 'missing_safety_doc = "warn"' "$reg/Cargo.toml"
 sd -F "$attr" '' "$reg/crates/lib/src/lib.rs"
-out="$(run_dev "$reg" sync --check)"
+out="$(gsync "$reg" --check)"
 assert_eq "sync --check exits 1 on a modified lints block" "$?" "1"
 assert_contains "sync --check reports the lints block" "$out" "differs: [workspace.lints] block in Cargo.toml"
 assert_contains "sync --check reports the removed attribute" "$out" "missing: library-register attribute in crates/lib/src/lib.rs"
@@ -626,11 +602,11 @@ assert_not_contains "sync --check ignores the application crate" "$out" "crates/
 sd 'return lint:finish\(\)' 'lint:step("project extra")\n\nreturn lint:finish()' "$reg/.dev/lint.lua"
 printf '# drifted guide\n' | cat - "$reg/docs/STYLE.md" >"$reg/docs/STYLE.md.new"
 mv "$reg/docs/STYLE.md.new" "$reg/docs/STYLE.md"
-out="$(run_dev "$reg" sync --yes </dev/null 2>&1)"
+out="$(gsync "$reg" --yes </dev/null 2>&1)"
 assert_eq "sync --yes without a terminal exits 0" "$?" "0"
 assert_contains "sync --yes prints the diffs it applies" "$out" "would insert into crates/lib/src/lib.rs"
 assert_contains "sync --yes applies without asking" "$out" "synced"
-out="$(run_dev "$reg" sync --check)"
+out="$(gsync "$reg" --check)"
 assert_eq "sync --yes restores the lints block, the attribute and the guide" "$out" "up to date"
 assert_contains "sync --yes keeps the project checks below the lint.lua marker" "$(cat "$reg/.dev/lint.lua")" 'lint:step("project extra")'
 on_tty() {
@@ -642,12 +618,12 @@ on_tty() {
 }
 if command -v script >/dev/null 2>&1; then
     sd 'missing_safety_doc = "deny"' 'missing_safety_doc = "warn"' "$reg/Cargo.toml"
-    (cd "$reg" && on_tty env PATH="$STUBS:$PATH" "$DEV" sync < <(
+    (cd "$reg" && on_tty env XDG_CONFIG_HOME="$ginit_config" PATH="$STUBS:$PATH" "$DEV" sync < <(
         printf 'y\n'
         sleep 30
     ) >"$TMP/sync.out" 2>&1)
     assert_contains "sync asks on a terminal" "$(cat "$TMP/sync.out")" "[y/N]"
-    out="$(run_dev "$reg" sync --check)"
+    out="$(gsync "$reg" --check)"
     assert_eq "sync on a terminal applies a y answer" "$out" "up to date"
 else
     printf 'skip - sync on a terminal (needs script)\n'
@@ -1028,7 +1004,7 @@ for verb in install uninstall restow setup clean purge list skills stow; do
     printf '#!/usr/bin/env bash\n# remote: false\necho x\n' >"$cip/.dev/$verb.sh"
     chmod +x "$cip/.dev/$verb.sh"
 done
-for verb in install uninstall restow sync setup fmt fetch help init push pull clean purge list skills stow; do
+for verb in install uninstall restow setup fmt fetch help init push pull clean purge list skills stow; do
     out="$(cirun "$cip" --remote "$verb" 2>&1)"
     assert_eq "--remote refuses $verb with 2" "$?" "2"
     assert_contains "--remote names the refused verb $verb" "$out" "dev $verb: runs on this machine only, so --remote does not apply"

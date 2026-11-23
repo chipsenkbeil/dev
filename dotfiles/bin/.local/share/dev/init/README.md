@@ -161,25 +161,6 @@ for _, name in ipairs(vcs.branches(ctx.root, backend)) do
 end
 ```
 
-### dev.templates
-
-The lint set directory and its manifest. `set_for(kind)` names the set for a
-project type, `dir(kind)` returns its directory, and `manifest(dir, kind)`
-lists the files the set copies into a project.
-
-```lua
-local project = require("dev.project")
-local templates = require("dev.templates")
-
-local kind = project.detect_type(ctx.root)
-local dir = kind and templates.dir(kind)
-if dir then
-    for _, entry in ipairs(templates.manifest(dir, kind)) do
-        print(entry.dest)
-    end
-end
-```
-
 ## Adding a verb, a subcommand or a flag in Lua
 
 ### A verb
