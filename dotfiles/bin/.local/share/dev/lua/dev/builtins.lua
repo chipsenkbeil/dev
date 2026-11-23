@@ -88,7 +88,8 @@ return {
         words = { "branch", "archive" },
         requires = { "workspace" },
         handler = "lua",
-        usage = "dev branch archive REV",
+        flags = "--to",
+        usage = "dev branch archive REV [--to NAME]",
         desc = "Push a revision to refs/archive/DATE/NAME on every remote",
     },
     {

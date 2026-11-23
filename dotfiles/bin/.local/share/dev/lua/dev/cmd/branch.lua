@@ -8,6 +8,7 @@ local vcs = require("dev.vcs")
 ---Branch names that count as the trunk, in the order dev prefers them
 local TRUNK_NAMES = { "master", "main" }
 local ARCHIVE = "refs/archive/"
+local TO_FLAG = "--to"
 local ANONYMOUS_HEADS = "heads(mutable() ~ empty()) ~ bookmarks() ~ remote_bookmarks()"
 local HEAD_TEMPLATE =
     'commit_id ++ "\\t" ++ change_id.short(12) ++ "\\t" ++ description.first_line() ++ "\\n"'
@@ -319,14 +320,51 @@ local function resolve(repo, rev)
     return sha, named and rev or change
 end
 
----Push a revision to `refs/archive/DATE/NAME` on every remote and confirm each remote holds it.
----@param ctx dev.Ctx the command's context, whose one argument names a revision
+---Parse the revision and the optional `--to NAME` of `dev branch archive`.
+---@param ctx dev.Ctx the command's context
+---@return string rev the revision to archive
+---@return string? remote the one remote `--to` names, nil for every remote
+local function archive_arguments(ctx)
+    local usage = "dev branch archive takes one revision and an optional --to NAME"
+    local rev, remote
+    local i = 1
+    while i <= #ctx.args do
+        local word = ctx.args[i]
+        if word == TO_FLAG then
+            remote = ctx.args[i + 1]
+            if remote == nil or remote:sub(1, 1) == "-" then
+                dev_command.usage_error(ctx, "--to needs a remote name")
+            end
+            i = i + 2
+        elseif rev == nil and word:sub(1, 1) ~= "-" then
+            rev = word
+            i = i + 1
+        else
+            dev_command.usage_error(ctx, usage)
+        end
+    end
+    if rev == nil then
+        dev_command.usage_error(ctx, usage)
+    end
+    return rev, remote
+end
+
+---Push a revision to `refs/archive/DATE/NAME` on every remote, or on the one `--to` names,
+---and confirm each remote it pushed to holds it.
+---@param ctx dev.Ctx the command's context, whose arguments name a revision and `--to NAME`
 ---@return integer code 0, or 1 when a push failed or a remote lacks the ref afterwards
 M.handlers["branch archive"] = function(ctx)
-    local rev = one_argument(ctx, "dev branch archive takes one revision")
+    local rev, only = archive_arguments(ctx)
     local repo = open(ctx)
     if #repo.remotes == 0 then
         dev_command.die("The project has no remote to archive to.")
+    end
+    local remotes = repo.remotes
+    if only then
+        if not text.contains(repo.remotes, only) then
+            dev_command.die("There is no remote " .. only .. " to archive to.")
+        end
+        remotes = { only }
     end
     local guard, err = push.guard_path()
     if not guard then
@@ -335,7 +373,7 @@ M.handlers["branch archive"] = function(ctx)
     local sha, name = resolve(repo, rev)
     local ref = ARCHIVE .. os.date("%Y-%m-%d") .. "/" .. name
     local status = 0
-    for _, remote in ipairs(repo.remotes) do
+    for _, remote in ipairs(remotes) do
         local argv = guarded(repo, guard, remote, sha .. ":" .. ref)
         dev_command.show(ctx, argv)
         local out, code = dev_os.capture(argv, { cwd = ctx.root, stderr = "stdout" })
@@ -344,7 +382,7 @@ M.handlers["branch archive"] = function(ctx)
             indent(out)
         end
     end
-    for _, remote in ipairs(repo.remotes) do
+    for _, remote in ipairs(remotes) do
         local held = remote_refs(repo, remote, ref)[1]
         if held and held.sha == sha then
             dev_command.say(

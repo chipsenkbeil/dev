@@ -73,6 +73,9 @@ short commit id (git). It never uses `refs/tags`, which jj treats as immutable
 heads that would freeze the archived commits. Then it reads each remote with
 `git ls-remote` and exits 1 naming a remote that lacks the ref.
 
+The flag --to NAME pushes to the one remote NAME and reads only that remote
+back. A NAME the project has no remote for refuses before anything is pushed.
+
 `dev branch prune NAME` deletes the local branch and the remote branches named
 `NAME`. It refuses, deleting nothing, while any of them is neither landed by
 content nor held by an archive ref of `NAME` on every remote, at that commit or
@@ -86,6 +89,7 @@ permissions, makes the command fail and say which remote refused.
 ```
 dev branch ls
 dev branch archive my-topic
+dev branch archive my-topic --to gerrit
 dev branch archive kkmpptxzrspx
 dev branch prune my-topic
 ```
