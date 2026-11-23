@@ -11,7 +11,7 @@ The luajit modules of `dev`, one per item.
   `no_args`, `say`, `relay`, `note`, `die`, `show`, `need`).
 - `dev.cmd.types`: the project type's built-ins and the command lines
   `dev help <verb>` prints for them.
-- `dev.cmd.misc`: `guide` and `bootstrap`.
+- `dev.cmd.misc`: `bootstrap`.
 - `dev.cmd.tools`: `tools install` and `tools check`.
 - `dev.cmd.land`: `land`, which reads the card from the workspace name through
   `dev.scm` and `dev.board`, refuses it through the card's `land_problem`,
@@ -594,9 +594,11 @@ log and a failed one keeps it (`sync failed; log kept at <path>`, exit 1).
 
 ### dev guide
 
-`dev guide` is a built-in verb in the "Set up a machine or project" group. It
-is machine-local: `--remote` refuses it, and it refuses to run as root. Only
-the form with a question needs the `guide` package installed.
+`dev guide` is a global command of the dotfiles repo, not a built-in. The `dev`
+package links `dotfiles/dev/.config/dev/commands/guide.lua` into
+`~/.config/dev/commands`, where it sits in the "Set up a machine or project"
+group. Its `remote: false` header line makes `--remote` refuse it. Only the
+form with a question needs the `guide` package installed.
 
 With no question it prints the project's `overview` topic when
 `.dev/topics/overview.md` exists (rendered like any topic), then the curated

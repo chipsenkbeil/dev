@@ -1,8 +1,0 @@
-dev guide
-  Show the overview or answer a question about dev
-
-usage
-  dev guide [question...]
-
-Run `dev guide --help` for the script header and the command it runs.
-exit 0

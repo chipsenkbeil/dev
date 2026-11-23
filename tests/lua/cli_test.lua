@@ -528,7 +528,6 @@ testing.test(
             "pull",
             "follow",
             "land",
-            "guide",
             "connect",
             { "tools", "check" },
             { "box", "ls" },

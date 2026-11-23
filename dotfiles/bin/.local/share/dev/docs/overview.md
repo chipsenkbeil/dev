@@ -45,13 +45,5 @@ dev follow
 `dev help forge` says which remote `dev push` picks and why. `dev follow` moves
 the main checkout onto trunk.
 
-## Ask
-
-```
-dev guide "how do I add a new package"
-```
-
-`dev guide` with no question prints this page and the curated `dev help`.
-
 `dev help layout` and `dev help modules` hold the rules for each package and
 module. `AGENTS.md` at the repo root maps every topic.

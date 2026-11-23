@@ -245,13 +245,6 @@ out="$(cd "$PROJ" && PATH="$CIPATH" DOTFILES="$FAKE_DOTFILES" DEV_REMOTE=0 "$DEV
 assert_eq "DEV_REMOTE=0 dev bootstrap still runs bootstrap.sh" "$([ -e "$BOOT_MARK" ] && echo ran || echo absent)" "ran"
 rm -f "$CILOG" "$BOOT_MARK"
 
-PATH="$RECORDER:$NOLUA" "$DEV" guide how to use -C src >/dev/null 2>&1
-out="$(cat "$ARGS_OUT")"
-assert_contains "a -C after the verb guide stays in the question" "$out" "guide how to use -C src"
-PATH="$RECORDER:$NOLUA" "$DEV" -C "$TMP" guide how >/dev/null 2>&1
-out="$(cat "$ARGS_OUT")"
-assert_eq "a -C before the verb guide is taken out" "${out#* }" "guide how"
-
 out="$(cd "$TMP" && PATH="$NOLUA" "$DEV" -C nope lint 2>&1)"
 assert_eq "-C with a relative directory it cannot enter exits 2" "$?" "2"
 assert_eq "-C names a relative directory as it was given" "$out" "The flag \`-C\` cannot enter nope."

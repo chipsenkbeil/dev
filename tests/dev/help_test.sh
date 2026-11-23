@@ -100,7 +100,7 @@ snapshot help-a help -a
 snapshot help-topics help --topics
 snapshot topic-overview help overview
 snapshot topic-flags help -k flags
-for verb in lint fmt test build run fetch push pull sync init tools help guide greet seed plumbing widget; do
+for verb in lint fmt test build run fetch push pull sync init tools help greet seed plumbing widget; do
     snapshot "help-$verb" help "$verb"
     snapshot "$verb-h" "$verb" -h
 done
@@ -138,7 +138,7 @@ for root in "$PROJ" "$REPO"; do
 done
 
 # The topic check
-out="$(cd "$REPO" && DOTFILES="$REPO" "$DEV" __topics check 2>&1)"
+out="$(cd "$REPO" && XDG_CONFIG_HOME="$REPO/dotfiles/dev/.config" DOTFILES="$REPO" "$DEV" __topics check 2>&1)"
 assert_eq "__topics check passes on the real topics" "$?" "0"
 assert_eq "__topics check is silent when the topics pass" "$out" ""
 out="$(cd "$PROJ" && DOTFILES="$FIXDOT" "$FIXDEV" __topics check 2>&1)"

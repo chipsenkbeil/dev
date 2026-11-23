@@ -139,14 +139,6 @@ return {
         desc = "Report which of the manifest's tools are missing from PATH",
     },
     {
-        words = { "guide" },
-        remote = false,
-        handler = "lua",
-        usage = "dev guide [question...]",
-        desc = "Show the overview or answer a question about dev",
-        group = "Set up a machine or project",
-    },
-    {
         words = { "ws" },
         remote = false,
         noun = true,

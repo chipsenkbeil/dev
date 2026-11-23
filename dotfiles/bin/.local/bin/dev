@@ -7,7 +7,6 @@ root_refusal="As root, dev runs only \`dev tools install\` and \`dev tools check
 
 args=()
 chdirs=()
-verb=""
 while [ "$#" -gt 0 ]; do
     case "$1" in
     --)
@@ -38,14 +37,8 @@ while [ "$#" -gt 0 ]; do
         fi
         ;;
     *)
-        if [ -z "$verb" ] && [[ "$1" != -* ]]; then
-            verb=$1
-        fi
         args+=("$1")
         shift
-        if [ "$verb" = guide ]; then
-            break
-        fi
         ;;
     esac
 done

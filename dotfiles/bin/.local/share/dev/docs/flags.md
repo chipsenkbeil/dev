@@ -33,7 +33,7 @@ A missing `DIR` or an empty word after `-C` is a usage error (exit 2), and so is
 a missing or empty `NAME` after `--agent`. The launcher passes the word after
 `--job-timeout` on with it, and the Lua parser refuses a missing duration.
 Repeated `-C` flags apply in turn, a relative one from the directory before.
-After the verb `guide` a `-C` or `--agent` is part of the question.
+Every `-C` or `--agent` is a global flag wherever it stands.
 
 `-v` and `-vv` also stack as `-vvv`, and the count is capped at 2. Setting
 `VERBOSE` in the environment counts the same: empty, `no` and `false` mean
@@ -509,7 +509,7 @@ Other modules serve these commands.
   slow or failing `ci` prints nothing and exits 0.
 - `dev.cmd.types`: the project-type built-ins `lint`, `fmt`, `test`, `build`,
   `run` and `fetch`, in process.
-- `dev.cmd.misc`: `guide` and `bootstrap`.
+- `dev.cmd.misc`: `bootstrap`.
 - `dev.cmd.sync`, over `dev.templates`: `sync`.
 - `dev.cmd.push` and `dev.cmd.pull`: `push` and `pull`, with the backend and
   the forge setting in `dev.vcs` and `dev.forge`. `dev help push` and

@@ -20,7 +20,6 @@ Set up a machine or project
   sync                  Compare the copied lint files with the dotfiles templates
   init                  Seed a project with lint, CI and remotes
   tools                 Install and check the tools in .dev/tools.tsv
-  guide                 Show the overview or answer a question about dev
   ws                    Make, list and remove workspaces under one central root
 
 Boxes
