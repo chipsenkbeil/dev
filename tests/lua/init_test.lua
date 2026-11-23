@@ -74,6 +74,48 @@ testing.test("the built-in init writes no lint file and takes no type", function
     fs.remove(root, { recursive = true })
 end)
 
+testing.test("the built-in init plans the board section and writes none in a dry run", function()
+    local root = project()
+    local out, code = support.dev(root, { "builtin:init", "--name", "zz", "--dry-run" })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("would create: .dev/config.toml [board]", 1, true), out)
+    testing.ok(not fs.exists(root .. "/.dev/config.toml"), out)
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("the built-in init leaves the board section to the owner for a bad name", function()
+    local root = project()
+    local out, code = support.dev(root, { "builtin:init", "--name", 'a"b', "--dry-run" })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("is not a board name", 1, true), out)
+    testing.ok(not out:find("would create: .dev/config.toml", 1, true), out)
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("the built-in init writes the board section of the project config", function()
+    if not dev_os.which("git") then
+        print("skip - git is not installed")
+        return
+    end
+    local root = project()
+    local out, code = support.dev(root, { "builtin:init", "--name", "zz" })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("created: .dev/config.toml [board]", 1, true), out)
+    testing.eq(fs.read(root .. "/.dev/config.toml"), '[board]\nbackend = "pomb"\nname = "zz"\n')
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("the built-in init keeps the board section a project config already has", function()
+    local root = project()
+    local config = '[board]\nbackend = "pomb"\nname = "kept"\n'
+    assert(fs.write(root .. "/.dev/config.toml", config), "write failed")
+    local out, code = support.dev(root, { "builtin:init", "--name", "zz" })
+    testing.eq(code, 0, out)
+    testing.ok(out:find("skipped: .dev/config.toml [board] exists", 1, true), out)
+    testing.eq(fs.read(root .. "/.dev/config.toml"), config)
+    fs.remove(root, { recursive = true })
+end)
+
 testing.test("a second init skips every file the first one created", function()
     if not dev_os.which("git") then
         print("skip - git is not installed")

@@ -10,7 +10,10 @@ local dev_command = require("dev.command")
 ---@class dev.board.setup
 local M = { NAME_CHARS = 100, NAME_PATTERN = '^[^%c"\\]+$' }
 
-local function has_section(root)
+---Report whether the project's config has a `[board]` section.
+---@param root string the project root
+---@return boolean has true when the section exists
+function M.has_section(root)
     local text = fs.exists(root .. "/.dev/config.toml") and fs.read(root .. "/.dev/config.toml")
     local tree = text and toml.parse(text)
     return type(tree) == "table" and tree.board ~= nil
@@ -24,7 +27,7 @@ end
 function M.board_name(ctx, flags)
     local backend = config.get(ctx.root, "board.backend")
     local name = config.get(ctx.root, "board.name")
-    if backend == nil and has_section(ctx.root) then
+    if backend == nil and M.has_section(ctx.root) then
         dev_command.die('The `[board]` section needs `backend = "pomb"` in `.dev/config.toml`.')
     end
     if backend ~= nil and backend ~= board.Backend.POMB then

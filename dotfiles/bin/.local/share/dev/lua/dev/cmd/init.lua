@@ -6,6 +6,8 @@ local help = require("dev.help")
 local json = require("dev.json")
 local vcs = require("dev.vcs")
 local dev_command = require("dev.command")
+local dev_text = require("dev.text")
+local setup = require("dev.board.setup")
 
 local BOARD_SECONDS = "5"
 local BOARD_REFUSED = "401"
@@ -113,6 +115,37 @@ local function init_vcs(run)
     end
 end
 
+local function init_board_section(run)
+    if setup.has_section(run.root) then
+        skipped(run, ".dev/config.toml [board] exists")
+        return
+    end
+    local valid = #run.name > 0
+        and #run.name <= setup.NAME_CHARS
+        and run.name:find(setup.NAME_PATTERN)
+    if not valid then
+        leave(
+            run,
+            "add a [board] section to .dev/config.toml, since "
+                .. run.name
+                .. " is not a board name"
+        )
+        return
+    end
+    if not run.dry then
+        local ok, wrote, message = pcall(setup.write_section, run.root, run.name)
+        if not ok then
+            message = wrote
+        end
+        if not (ok and wrote) then
+            dev_command.die(
+                "Cannot write .dev/config.toml. " .. dev_text.sentence(tostring(message))
+            )
+        end
+    end
+    created(run, ".dev/config.toml [board]")
+end
+
 local function remote_names(run)
     local backend = vcs.backend(run.root)
     if not backend then
@@ -193,7 +226,10 @@ local function init_board_hint(run)
             return
         end
     end
-    leave(run, "No Pomb board for " .. run.name .. ", create one in " .. url)
+    leave(
+        run,
+        "No Pomb board for " .. run.name .. ". Run `dev board init` to create one in " .. url .. "."
+    )
 end
 
 local function summarize(run)
@@ -232,6 +268,7 @@ function M.run(ctx, reg)
     }
     io.write("init ", run.name, ": dry run ", opts.dry and "1" or "0", "\n")
     init_vcs(run)
+    init_board_section(run)
     init_remotes(run)
     init_board_hint(run)
     summarize(run)

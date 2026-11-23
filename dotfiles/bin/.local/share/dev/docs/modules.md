@@ -20,9 +20,10 @@ The luajit modules of `dev`, one per item.
   call.
 - `dev.cmd.connect`: `connect` and `box connect`.
 - `dev.cmd.init`: `init` with `--name` and `--dry-run`. It sets up version
-  control and the `origin` remote hint, prints the `would create:`,
-  `created:` and `skipped:` lines and the summary, then the Pomb board hint
-  and its note that Pomb refused the token, and skips what exists. It writes
+  control, the `[board]` section of `.dev/config.toml` named for the project
+  and the `origin` remote hint, prints the `would create:`, `created:` and
+  `skipped:` lines and the summary, then the Pomb board hint and its note that
+  Pomb refused the token, and skips what exists. It writes
   no lint file, style guide, README, CI jobs file or `.editorconfig`, takes
   no `--type` and sets up no Gerrit project: the dotfiles global `init` takes
   `--type`, runs it as `builtin:init`, then writes those files in a `Files`
