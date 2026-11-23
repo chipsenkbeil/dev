@@ -117,7 +117,7 @@ dev reads the comment block under the shebang of each script.
 
 A Lua command (`.lua`) takes the same lines in one leading `--[[ ... ]]`
 block, with no `# ` prefix. The `group:` line comes first and the description
-on the line after it, as `.dev/antinote/diff.lua` has it. The bare `hidden`,
+on the line after it, as every Lua command in `.dev` has it. The bare `hidden`,
 `local` and `positional` lines and the `flags:` line sit in the same block.
 
 Project scripts named `__*.sh` or `__*.lua` never appear in any listing.

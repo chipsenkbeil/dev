@@ -275,17 +275,9 @@ The archive must hold these paths and keep the execute bit on `dev`:
 - `.dev/tools.tsv`
 - `.dev/releases.tsv`
 - `scripts/prelude/mac.sh`
-- `scripts/install-bats.lua`
-- `scripts/install-jjui.lua`
-- `scripts/install-muchsync.lua`
-- `scripts/install-pi.lua`
-- `scripts/install-rust-darwin-targets.sh`
-- `scripts/install-rustfmt-nightly.lua`
-- `scripts/install-rustup-darwin.lua`
-- `scripts/install-stow.lua`
+- every local `script:` source in the manifest, cut at the first comma
 
-The script paths are every local `script:` source in the manifest, cut at the
-first comma. Regenerate them after a manifest change.
+List the script paths with this command after a manifest change.
 
 ```
 rg -o --no-filename 'script:scripts/[^ ",]+' .dev/tools.tsv | sort -u
@@ -317,8 +309,8 @@ modules on `package.path`. Any other source runs as `bash <path> <args>`. The
 dry-run line prints whichever was chosen.
 
 The arguments split on blanks and are never glob-expanded, and no shell sees
-them. This repo's rows for jjui, pi, muchsync, rustfmt-nightly, bats and stow
-name `scripts/install-*.lua`. `script.lua` gives each the pins file as
+them. A row for a pinned tool, such as stow or bats, names
+`scripts/install-*.lua`. `script.lua` gives each the pins file as
 `PKG_RELEASES`.
 
 ### Logs

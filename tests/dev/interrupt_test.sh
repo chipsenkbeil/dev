@@ -43,12 +43,9 @@ assert_eq() {
     fi
 }
 
-mkdir -p "$TMP/.dev/lua/dotfiles" "$TMP/tests/a" "$TMP/tests/neomutt" "$TMP/run"
-cp "$REPO/.dev/test.lua" "$TMP/.dev/"
+mkdir -p "$TMP/.dev/lua/dotfiles" "$TMP/tests/a" "$TMP/run"
+sed 's/which("tmux")/which("tmux-not-installed")/' "$REPO/.dev/test.lua" >"$TMP/.dev/test.lua"
 cp "$REPO/.dev/lua/dotfiles/checks.lua" "$TMP/.dev/lua/dotfiles/"
-for name in filter-bytes pager-passthrough parse-check; do
-    printf 'exit 0\n' >"$TMP/tests/neomutt/$name.sh"
-done
 for n in 1 2 3; do
     cat >"$TMP/tests/a/slow${n}_test.sh" <<'SUITE'
 printf '%s\n' "$$" >>"$PIDS"
@@ -99,7 +96,7 @@ assert_eq "the scratch directory is removed" "$([ -d "$scratch" ] && echo presen
 assert_eq "no suite process is left running" "$(count_alive "$PIDS")" "0"
 
 mkdir -p "$TMP/shim" "$TMP/b/tests/a" "$TMP/b/.dev/lua/dotfiles"
-cp "$REPO/.dev/test.lua" "$TMP/b/.dev/"
+sed 's/which("tmux")/which("tmux-not-installed")/' "$REPO/.dev/test.lua" >"$TMP/b/.dev/test.lua"
 cp "$REPO/.dev/lua/dotfiles/checks.lua" "$TMP/b/.dev/lua/dotfiles/"
 cp "$TMP/tests/a/slow1_test.sh" "$TMP/b/tests/a/"
 REAL_SH="$(command -v sh)"
@@ -139,7 +136,7 @@ assert_eq "the scratch directory is removed after the late INT" "$([ -d "$scratc
 assert_eq "a suite launched at the moment of INT is stopped" "$(count_alive "$PIDS")" "0"
 
 mkdir -p "$TMP/c/tests/a" "$TMP/c/.dev/lua/dotfiles"
-cp "$REPO/.dev/test.lua" "$TMP/c/.dev/"
+sed 's/which("tmux")/which("tmux-not-installed")/' "$REPO/.dev/test.lua" >"$TMP/c/.dev/test.lua"
 cp "$REPO/.dev/lua/dotfiles/checks.lua" "$TMP/c/.dev/lua/dotfiles/"
 cp "$TMP/tests/a/slow1_test.sh" "$TMP/c/tests/a/"
 

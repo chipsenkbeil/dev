@@ -245,13 +245,13 @@ STUB
 
     out="$(tools "$REPO" install --dry-run 2>&1)"
     assert_eq "dotfiles' own .dev/tools.tsv installs" "$?" "0"
-    assert_contains "dotfiles' manifest plans its muchsync row" "$out" "muchsync"
+    assert_contains "the repo manifest plans its stow row" "$out" "stow"
 else
     skip_user
 fi
 if [ -x /usr/bin/pacman ] && [ "$EUID" -eq 0 ]; then
     out="$(FAKE_UID=0 tools "$REPO" install --system --dry-run 2>&1)"
-    assert_not_contains "dotfiles' --system skips its script rows" "$out" "install-muchsync.lua"
+    assert_not_contains "dotfiles' --system skips its script rows" "$out" "install-stow.lua"
     assert_contains "dotfiles' --system names its AUR rows" "$out" "skipped third-party"
 else
     printf 'SKIP real-root - root package driver runs need the real /usr/bin/pacman and real root with a root-owned project chain\n'

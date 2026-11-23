@@ -305,26 +305,3 @@ These are the project commands in `.dev/`. Each lists the flags and
 - `dev sync [SYNC_DST=user@host] [SYNC_PATH=dir]`: rsync the tracked files to
   a remote host and run `dev install` there. `SYNC_PATH` defaults to
   `dotfiles`.
-
-### Settings in step with the repo
-
-- `dev pi install`: merge the repo's pi settings over the live
-  `settings.json`.
-- `dev pi save`: capture the current pi settings back into the repo.
-- `dev pi diff`: show how the live pi settings differ from the repo.
-- `dev pi check [CONFIG_ONLY=1]`: verify the pi setup. `CONFIG_ONLY=1` skips
-  the live model round-trips.
-- `dev antinote export`: capture the current Antinote settings back into the
-  repo.
-- `dev antinote import [--skip-if-running]`: merge the repo's Antinote settings
-  into the app. Flag: `--skip-if-running`.
-- `dev antinote diff`: show how the live Antinote settings differ from the
-  repo.
-- `dev zen link`: link the repo's `user.js` into Zen's default profile.
-
-### Hidden
-
-- `dev gpgkeys`: list the legacy GPG key files. It shows in `dev help -a`.
-- `dev waits`: list the shells that run an `until` or `while` loop, with each
-  one's pid, age, cpu time and nearest `claude` ancestor, and `cwd gone` when
-  its directory no longer exists. It shows in `dev help -a`.

@@ -1,6 +1,6 @@
 # overview: What this repo is for and where to start
 
-This repo holds the owner's dotfiles. Each directory under `dotfiles/` is a
+This repo holds a set of app configs. Each directory under `dotfiles/` is a
 GNU Stow package whose files mirror `$HOME`, so `dotfiles/git/.gitconfig`
 links to `~/.gitconfig`. `dev` is the only entry point for working on it.
 

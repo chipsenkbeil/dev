@@ -34,16 +34,9 @@ assert_line() {
     esac
 }
 
-mkdir -p "$TMP/.dev/lua/dotfiles" "$TMP/tests/a" "$TMP/tests/neomutt"
-cp "$REPO/.dev/test.lua" "$TMP/.dev/"
+mkdir -p "$TMP/.dev/lua/dotfiles" "$TMP/tests/a"
+sed 's/which("tmux")/which("tmux-not-installed")/' "$REPO/.dev/test.lua" >"$TMP/.dev/test.lua"
 cp "$REPO/.dev/lua/dotfiles/checks.lua" "$TMP/.dev/lua/dotfiles/"
-for name in filter-bytes pager-passthrough parse-check; do
-    printf 'exit 0\n' >"$TMP/tests/neomutt/$name.sh"
-done
-extra=0
-if command -v neomutt >/dev/null 2>&1 && command -v tmux >/dev/null 2>&1; then
-    extra=3
-fi
 printf 'exit 0\n' >"$TMP/tests/a/pass_test.sh"
 printf 'exit 1\n' >"$TMP/tests/a/fail_test.sh"
 printf 'exit 3\n' >"$TMP/tests/a/skip_test.sh"
@@ -62,13 +55,13 @@ assert_line "an exit 4 script is FAIL" "$out" "FAIL tests/a/four_test.sh"
 assert_line "a script that kills itself is FAIL" "$out" "FAIL tests/a/killed_test.sh"
 assert_line "a bats file whose only case skips is SKIP" "$out" "SKIP tests/a/skips.bats (every case skipped)"
 assert_line "a bats file with a passing case is PASS" "$out" "PASS tests/a/runs.bats"
-assert_line "the summary counts every suite" "$out" "$((2 + extra)) passed, 3 failed, 2 skipped"
+assert_line "the summary counts every suite" "$out" "2 passed, 3 failed, 2 skipped"
 
 rm "$TMP/tests/a/fail_test.sh" "$TMP/tests/a/four_test.sh" "$TMP/tests/a/killed_test.sh"
 out="$(cd "$TMP" && "$DEV" test 2>&1)"
 rc=$?
 assert_eq "no failing suite makes dev test exit 0" "$rc" "0"
-assert_line "the summary has no failure" "$out" "$((2 + extra)) passed, 0 failed, 2 skipped"
+assert_line "the summary has no failure" "$out" "2 passed, 0 failed, 2 skipped"
 
 out="$(cd "$TMP" && "$DEV" test tests/a/pass_test.sh 2>&1)"
 rc=$?
@@ -107,15 +100,6 @@ out="$(cd "$TMP" && "$DEV" test -- -x 2>&1)"
 rc=$?
 assert_eq "a dash flag after the double dash is refused with exit 2" "$rc" "2"
 assert_line "a dash flag after the double dash is refused by the verb" "$out" "dev test: Unknown flag -x."
-
-if [ "$extra" -eq 0 ]; then
-    out="$(cd "$TMP" && "$DEV" test tests/neomutt/parse-check.sh 2>&1)"
-    rc=$?
-    assert_eq "a suite skipped here exits 2" "$rc" "2"
-    assert_line "a suite skipped here is named as skipped here" "$out" "dev test: tests/neomutt/parse-check.sh is skipped here. It needs neomutt and tmux on PATH."
-else
-    printf 'skip - neomutt and tmux are on PATH, so no suite is skipped here\n'
-fi
 
 NOLUA="$TMP/nolua"
 mkdir -p "$NOLUA/.dev/lua/dotfiles" "$NOLUA/tests/lua"

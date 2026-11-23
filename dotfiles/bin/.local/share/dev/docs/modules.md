@@ -428,9 +428,8 @@ stops the case and its busy loops at once.
 
 `dev test PATH...` runs only the suites at each path under `tests/` and
 refuses a path that names no suite with exit 2. A path under a group skipped on
-this machine (`tests/lua` without luajit, `tests/neomutt` without neomutt and
-tmux) is also exit 2. The message reads `PATH is skipped here. It needs
-luajit.` or names neomutt and tmux. A leading `./` and a trailing slash are
+this machine (`tests/lua` without luajit) is also exit 2. The message reads
+`PATH is skipped here. It needs luajit.` A leading `./` and a trailing slash are
 dropped from a path first. `dev test` alone runs every bats file, `*_test.sh`
 and `test-*.sh` script and `*_test.lua` suite.
 
@@ -477,7 +476,6 @@ These suites run one at a time beside the pool:
 - `tests/lua/help_test.lua`
 - `tests/tmux/conf_test.sh`
 - `tests/jj/land.bats`
-- the neomutt scripts
 
 `dev test` prints each suite's output whole with its `PASS`, `FAIL` or `SKIP`
 line in discovery order, then a summary line. When the uid is not 0 or the OS
@@ -549,14 +547,6 @@ There is one script per command (`install.lua`, `uninstall.lua`, `restow.lua`,
 `purge.lua`, `clean.lua`, `list.lua`, `stow.lua`, `sync.lua`, `setup.lua`,
 `skills.lua`, ...), run through `dev <command>`.
 
-The subdirectories hold the Lua subcommands of three commands:
-
-- `pi/`: `dev pi` with `install`, `save`, `diff` and `check`, over
-  `.dev/lua/dotfiles/pi.lua`.
-- `antinote/`: `dev antinote` with `export`, `import` and `diff`, over
-  `.dev/lua/dotfiles/antinote.lua`.
-- `zen/`: `dev zen` with `link`, over `.dev/lua/dotfiles/zen.lua`.
-
 `lint.lua`, `fmt.lua`, `test.lua`, `soak.lua` and `skills.lua` are Lua commands
 that run in the dev process (see the `dev.*` items above).
 
@@ -569,15 +559,13 @@ The install family is `.dev/lua/dotfiles/packages.lua`:
 - `ensure_stow`: runs `scripts/install-stow.lua`, the pinned build, into
   `DEV_TOOLS_PREFIX` else `~/.local` when stow is not on `PATH`. The stow
   calls after it use that prefix's binary.
-- the stow flag table: `--no-folding` for `gpg`, `ssh`, `bin` and `pi`, plus
-  `--ignore='settings\.json'` for `pi`.
-- the per-package hooks: `bin`, `gpg`, `ssh`, `antinote`, `pi`, `claude` and
-  `jj`. The `bin` hook publishes dev's snapshot with `dotfiles.snapshot`, which
-  copies `share/dev` to a new version directory under
-  `$XDG_STATE_HOME/dev/snapshot/versions` and renames a link over `current`.
+- the stow flag table: `--no-folding` and `--ignore` flags per package.
+- the per-package hooks, such as `bin`. The `bin` hook publishes dev's
+  snapshot with `dotfiles.snapshot`, which copies `share/dev` to a new version
+  directory under `$XDG_STATE_HOME/dev/snapshot/versions` and renames a link
+  over `current`.
 
-Any `dotfiles/<app>/` directory is automatically installable. The `pi` and
-`antinote` hooks call `dotfiles.pi` and `dotfiles.antinote` in process.
+Any `dotfiles/<app>/` directory is automatically installable.
 `tests/lua/packages_test.lua` pins the module.
 
 `SRC_DIR` (default `<repo>/dotfiles`) and `TARGET_DIR` (default `$HOME`) come
@@ -632,8 +620,7 @@ The curated `dev help` has no cap on the number of commands. It is
 curated by purpose and fits a 50-line screen. `board` is shown under "Share it".
 
 The hidden commands are `bootstrap` (machine-local setup run once), `help`,
-`gpgkeys` (the legacy GPG key listing), `waits` (the leftover shell wait-loop
-listing) and dev's own `__` helpers.
+the commands marked `# hidden` and dev's own `__` helpers.
 `tests/dev/guide_test.sh` pins that exact list, and `dev help -a` still lists
 them.
 
