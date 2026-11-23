@@ -5,9 +5,12 @@ set -o pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$DIR/../.." && pwd)"
-DEV="$REPO/dotfiles/bin/.local/bin/dev"
+DEV="$REPO/bin/dev"
 FIXTURES="$DIR/fixtures"
 SNAPSHOTS="$FIXTURES/help-snapshots"
+
+# shellcheck source=tests/dev/stage.bash
+source "$DIR/stage.bash"
 unset VERBOSE CI
 export DEV_REMOTE=0
 export NO_COLOR=1
@@ -23,7 +26,9 @@ FIXDOT="$(cd "$FIXDOT" && pwd -P)"
 FIXCONFIG="$TMP/help-global"
 cp -R "$FIXTURES/help-global" "$FIXCONFIG"
 FIXHOME="$TMP/help-home"
-cp -R "$REPO/dotfiles/bin/.local" "$FIXHOME"
+mkdir -p "$FIXHOME/bin"
+cp "$REPO/bin/dev" "$FIXHOME/bin/dev"
+stage_share "$FIXHOME/share/dev"
 rm -r "$FIXHOME/share/dev/docs"
 cp -R "$FIXTURES/help-dotfiles/docs" "$FIXHOME/share/dev/docs"
 FIXDEV="$FIXHOME/bin/dev"
@@ -125,22 +130,22 @@ assert_contains "help commands prints the commands topic" "$(fixture_dev help co
 
 # Every non-hidden verb sits in exactly one group
 for root in "$PROJ" "$REPO"; do
-    listing="$(cd "$root" && XDG_CONFIG_HOME="$REPO/dotfiles/dev/.config" DOTFILES="$REPO" "$DEV" help -a)"
+    listing="$(cd "$root" && XDG_CONFIG_HOME="$FIXCONFIG" DOTFILES="$REPO" "$DEV" help -a)"
     hidden=" $(hidden_names "$listing" | tr '\n' ' ')"
     while IFS= read -r verb; do
         want=1
         case "$hidden" in *" $verb "*) want=0 ;; esac
         assert_eq "$(basename "$root"): $verb is in $want group" "$(group_count "$listing" "$verb")" "$want"
-    done < <(cd "$root" && XDG_CONFIG_HOME="$REPO/dotfiles/dev/.config" DOTFILES="$REPO" "$DEV" __commands | cut -f1)
+    done < <(cd "$root" && XDG_CONFIG_HOME="$FIXCONFIG" DOTFILES="$REPO" "$DEV" __commands | cut -f1)
     if [ "$root" = "$PROJ" ]; then
         assert_contains "the fixture hides plumbing" "$hidden" " plumbing "
     else
-        assert_contains "the repo hides bootstrap" "$hidden" " bootstrap "
+        assert_contains "the repo hides the global hello" "$hidden" " hello "
     fi
 done
 
 # The topic check
-out="$(cd "$REPO" && XDG_CONFIG_HOME="$REPO/dotfiles/dev/.config" DOTFILES="$REPO" "$DEV" __topics check 2>&1)"
+out="$(cd "$REPO" && XDG_CONFIG_HOME="$FIXCONFIG" DOTFILES="$REPO" "$DEV" __topics check 2>&1)"
 assert_eq "__topics check passes on the real topics" "$?" "0"
 assert_eq "__topics check is silent when the topics pass" "$out" ""
 out="$(cd "$PROJ" && DOTFILES="$FIXDOT" "$FIXDEV" __topics check 2>&1)"
@@ -220,7 +225,7 @@ fence() {
         $0 == "```" lang { on = 1; next }
         $0 == "```" { on = 0 }
         on { print }
-    ' "$REPO/dotfiles/bin/.local/share/dev/docs/porting.md"
+    ' "$REPO/docs/porting.md"
 }
 for pair in sh:bash lua:lua; do
     ext=${pair%%:*}

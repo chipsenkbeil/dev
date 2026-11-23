@@ -1,0 +1,72 @@
+id: private-underscore
+snapshots:
+  "function Coordinator:_broadcastRetire(slot) end\n":
+    labels:
+    - source: Coordinator:_broadcastRetire
+      style: primary
+      start: 9
+      end: 37
+    - source: _broadcastRetire
+      style: secondary
+      start: 21
+      end: 37
+  "function M._helper() end\n":
+    labels:
+    - source: M._helper
+      style: primary
+      start: 9
+      end: 18
+    - source: _helper
+      style: secondary
+      start: 11
+      end: 18
+  "local function _helper() end\n":
+    labels:
+    - source: local function _helper() end
+      style: primary
+      start: 0
+      end: 28
+    - source: _helper
+      style: secondary
+      start: 15
+      end: 22
+  "local t = { _x = 1 }\n":
+    labels:
+    - source: _x = 1
+      style: primary
+      start: 12
+      end: 18
+    - source: _x
+      style: secondary
+      start: 12
+      end: 14
+  "local v = other._speed\n":
+    labels:
+    - source: other._speed
+      style: primary
+      start: 10
+      end: 22
+    - source: _speed
+      style: secondary
+      start: 16
+      end: 22
+  "self._speed = opts.speed\n":
+    labels:
+    - source: self._speed
+      style: primary
+      start: 0
+      end: 11
+    - source: _speed
+      style: secondary
+      start: 5
+      end: 11
+  "self:_retire(slot)\n":
+    labels:
+    - source: self:_retire
+      style: primary
+      start: 0
+      end: 12
+    - source: _retire
+      style: secondary
+      start: 5
+      end: 12

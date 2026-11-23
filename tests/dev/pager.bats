@@ -1,15 +1,17 @@
 #!/usr/bin/env bats
 
 load pty
+load stage
 
-DEV="${BATS_TEST_DIRNAME}/../../dotfiles/bin/.local/bin/dev"
+DEV="${BATS_TEST_DIRNAME}/../../bin/dev"
 
 setup() {
     require_pty
-    cp -R "${BATS_TEST_DIRNAME}/../../dotfiles/bin/.local" "$BATS_TEST_TMPDIR/home"
+    mkdir -p "$BATS_TEST_TMPDIR/home/bin"
+    cp "${BATS_TEST_DIRNAME}/../../bin/dev" "$BATS_TEST_TMPDIR/home/bin/dev"
+    stage_share "$BATS_TEST_TMPDIR/home/share/dev"
     rm "$BATS_TEST_TMPDIR/home/share/dev/docs/overview.md"
     DEV="$BATS_TEST_TMPDIR/home/bin/dev"
-    GUIDE_CONFIG="${BATS_TEST_DIRNAME}/../../dotfiles/dev/.config"
     OUT="$BATS_TEST_TMPDIR/out"
     PAGED="$BATS_TEST_TMPDIR/paged"
     PROJ="$BATS_TEST_TMPDIR/proj"
@@ -78,22 +80,6 @@ in_pty() {
     grep -q 'line 120' "$OUT.pty"
 }
 
-@test "dev guide with no question pages the overview and the curated help" {
-    printf '# overview: Intro\n\nintro text\n' >"$PROJ/.dev/topics/overview.md"
-    in_pty "XDG_CONFIG_HOME=$GUIDE_CONFIG bash $DEV guide"
-    [ "$(cat "$OUT.status")" = 0 ]
-    grep -q 'intro text' "$PAGED"
-    grep -q 'Topics' "$PAGED"
-}
-
-@test "DEV_PAGER=0 prints dev guide directly" {
-    printf '# overview: Intro\n\nintro text\n' >"$PROJ/.dev/topics/overview.md"
-    in_pty "DEV_PAGER=0 XDG_CONFIG_HOME=$GUIDE_CONFIG bash $DEV guide"
-    [ "$(cat "$OUT.status")" = 0 ]
-    [ ! -e "$PAGED" ]
-    grep -q 'intro text' "$OUT.pty"
-}
-
 @test "the curated help goes through a less pager with -+F and ends in the hint" {
     PAGER_CMD="$BATS_TEST_TMPDIR/bin/less" in_pty "bash $DEV help"
     [ "$(cat "$OUT.status")" = 0 ]
@@ -116,15 +102,6 @@ in_pty() {
     [ ! -e "$PAGED" ]
     grep -q 'Topics' "$OUT.pty"
     ! grep -q 'filters' "$OUT.pty"
-}
-
-@test "dev guide with no question pages once, through less, with the hint" {
-    printf '# overview: Intro\n\nintro text\n' >"$PROJ/.dev/topics/overview.md"
-    PAGER_CMD="$BATS_TEST_TMPDIR/bin/less" in_pty "XDG_CONFIG_HOME=$GUIDE_CONFIG bash $DEV guide"
-    [ "$(cat "$OUT.status")" = 0 ]
-    [ "$(grep -c 'intro text' "$PAGED")" = 1 ]
-    [ "$(grep -c 'Topics' "$PAGED")" = 1 ]
-    [ "$(tail -n 1 "$PAGED" | tr -d '\r')" = '& filters · / searches · q quits' ]
 }
 
 @test "a failing less pager falls back to the text without the hint" {

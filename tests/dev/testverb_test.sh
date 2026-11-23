@@ -4,7 +4,7 @@ set -o pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$DIR/../.." && pwd)"
-DEV="$REPO/dotfiles/bin/.local/bin/dev"
+DEV="$REPO/bin/dev"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
@@ -34,9 +34,9 @@ assert_line() {
     esac
 }
 
-mkdir -p "$TMP/.dev/lua/dotfiles" "$TMP/tests/a"
+mkdir -p "$TMP/.dev/lua/devrepo" "$TMP/tests/a"
 sed 's/which("tmux")/which("tmux-not-installed")/' "$REPO/.dev/test.lua" >"$TMP/.dev/test.lua"
-cp "$REPO/.dev/lua/dotfiles/checks.lua" "$TMP/.dev/lua/dotfiles/"
+cp "$REPO/.dev/lua/devrepo/checks.lua" "$TMP/.dev/lua/devrepo/"
 printf 'exit 0\n' >"$TMP/tests/a/pass_test.sh"
 printf 'exit 1\n' >"$TMP/tests/a/fail_test.sh"
 printf 'exit 3\n' >"$TMP/tests/a/skip_test.sh"
@@ -102,8 +102,8 @@ assert_eq "a dash flag after the double dash is refused with exit 2" "$rc" "2"
 assert_line "a dash flag after the double dash is refused by the verb" "$out" "dev test: Unknown flag -x."
 
 NOLUA="$TMP/nolua"
-mkdir -p "$NOLUA/.dev/lua/dotfiles" "$NOLUA/tests/lua"
-cp "$REPO/.dev/lua/dotfiles/checks.lua" "$NOLUA/.dev/lua/dotfiles/"
+mkdir -p "$NOLUA/.dev/lua/devrepo" "$NOLUA/tests/lua"
+cp "$REPO/.dev/lua/devrepo/checks.lua" "$NOLUA/.dev/lua/devrepo/"
 sed 's/which("luajit")/which("luajit-not-installed")/' "$REPO/.dev/test.lua" >"$NOLUA/.dev/test.lua"
 printf 'return\n' >"$NOLUA/tests/lua/some_test.lua"
 out="$(cd "$NOLUA" && "$DEV" test tests/lua/some_test.lua 2>&1)"

@@ -1,0 +1,21 @@
+id: opts-not-o
+valid:
+  - |
+    function M.new(opts) end
+  - |
+    opts = vim.deepcopy(opts)
+  - |
+    local obj = o.value
+  - |
+    for _, o in ipairs(list) do end
+  - |
+    local o = setmetatable({}, M)
+invalid:
+  - |
+    function M.new(o) end
+  - |
+    local o = vim.deepcopy(opts)
+  - |
+    local o = opts or {}
+  - |
+    local f = function(name, o) end

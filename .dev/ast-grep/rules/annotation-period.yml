@@ -1,0 +1,8 @@
+id: annotation-period
+language: lua
+severity: error
+message: End a `@param`, `@return` or `@field` description without a period.
+note: "style/references/lua.md, Parameters and returns, and Field docs. The description is a noun phrase, not a sentence."
+rule:
+  kind: comment
+  regex: '^---\s*@(param|return|field)\b.*[^.]\.\s*$'

@@ -1,0 +1,8 @@
+id: comment-period
+language: lua
+severity: error
+message: Write a `--` comment with no trailing period. A `---` doc summary keeps its period.
+note: "style/references/lua.md, Inline comments. A one-liner is imperative, sentence-capitalized, with no trailing period."
+rule:
+  kind: comment
+  regex: '^--[^-\[].*[^.]\.\s*$'

@@ -1,5 +1,5 @@
 local here = debug.getinfo(1, "S").source:match("^@(.*)/tests/lua/[^/]*$") or "."
-package.path = here .. "/dotfiles/bin/.local/share/dev/lua/?.lua;" .. package.path
+package.path = here .. "/lua/?.lua;" .. package.path
 local dev_os = require("dev.os")
 
 local uid = os.getenv("FAKE_UID")

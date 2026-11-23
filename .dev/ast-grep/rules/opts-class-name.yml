@@ -1,0 +1,8 @@
+id: opts-class-name
+language: lua
+severity: error
+message: Name an opts class `<owner>.Opts`, never in the `RemoveOpts` form. A function's opts are `<module>.<function>.Opts`.
+note: "style/references/lua.md, Signatures. Correct: `---@class dev.cmd.ws.remove.Opts`."
+rule:
+  kind: comment
+  regex: '^---\s*@class\s+(\(exact\)\s+)?\S*[a-z]Opts\b'

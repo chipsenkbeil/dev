@@ -1,0 +1,66 @@
+id: opts-not-o
+snapshots:
+  "function M.new(o) end\n":
+    labels:
+    - source: o
+      style: primary
+      start: 15
+      end: 16
+    - source: (o)
+      style: secondary
+      start: 14
+      end: 17
+  "local f = function(name, o) end\n":
+    labels:
+    - source: o
+      style: primary
+      start: 25
+      end: 26
+    - source: (name, o)
+      style: secondary
+      start: 18
+      end: 27
+  "local o = opts or {}\n":
+    labels:
+    - source: o
+      style: primary
+      start: 6
+      end: 7
+    - source: local o = opts or {}
+      style: secondary
+      start: 0
+      end: 20
+    - source: opts or {}
+      style: secondary
+      start: 10
+      end: 20
+    - source: o = opts or {}
+      style: secondary
+      start: 6
+      end: 20
+    - source: o
+      style: secondary
+      start: 6
+      end: 7
+  "local o = vim.deepcopy(opts)\n":
+    labels:
+    - source: o
+      style: primary
+      start: 6
+      end: 7
+    - source: local o = vim.deepcopy(opts)
+      style: secondary
+      start: 0
+      end: 28
+    - source: vim.deepcopy(opts)
+      style: secondary
+      start: 10
+      end: 28
+    - source: o = vim.deepcopy(opts)
+      style: secondary
+      start: 6
+      end: 28
+    - source: o
+      style: secondary
+      start: 6
+      end: 7

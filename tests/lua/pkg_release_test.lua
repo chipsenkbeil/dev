@@ -6,7 +6,7 @@ local release = require("dev.pkg.release")
 local support = require("support")
 
 local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
-local MODULES = REPO .. "/dotfiles/bin/.local/share/dev/lua"
+local MODULES = REPO .. "/lua"
 local ZIP_FIXTURE = REPO .. "/tests/lua/fixtures/release/tool.zip"
 local TOOL_TEXT = "#!/bin/sh\necho tool-ok\n"
 local URL_BASE = "https://example.test/dl/"

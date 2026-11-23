@@ -4,7 +4,7 @@ local fs = require("dev.fs")
 local support = require("support")
 
 local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
-local MODULES = REPO .. "/dotfiles/bin/.local/share/dev/lua"
+local MODULES = REPO .. "/lua"
 local VERSION = "9.9.9"
 local URL_BASE = "https://example.test/dl/"
 local SYSTEM_TOOLS = {
@@ -143,8 +143,8 @@ local function run(dir, tool, args, extra)
     for key, value in pairs(extra or {}) do
         env[key] = value
     end
-    local argv =
-        { assert(dev_os.which("luajit")), REPO .. "/scripts/install-" .. tool.name .. ".lua" }
+    local script = REPO .. "/tests/pkg/fixtures/install-" .. tool.name .. ".lua"
+    local argv = { assert(dev_os.which("luajit")), script }
     for _, arg in ipairs(args or {}) do
         argv[#argv + 1] = arg
     end

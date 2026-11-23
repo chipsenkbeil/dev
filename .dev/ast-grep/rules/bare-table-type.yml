@@ -1,0 +1,12 @@
+id: bare-table-type
+language: lua
+severity: error
+message: Write the table type precisely, such as `table<string, integer>` or `Foo[]`, never bare `table`.
+note: "style/references/lua.md, Types."
+rule:
+  kind: comment
+  any:
+    - regex: '^---\s*@param\s+\S+\s+(\S*\|)?table(\?|\[\])*(\|\S*)?(\s|$)'
+    - regex: '^---\s*@(return|type)\s+(\S*\|)?table(\?|\[\])*(\|\S*)?(\s|$)'
+    - regex: '^---\s*@alias\s+\S+\s+(\S*\|)?table(\?|\[\])*(\|\S*)?(\s|$)'
+    - regex: '^---\s*@field\s+((private|protected|public|package)\s+)?\S+\s+(\S*\|)?table(\?|\[\])*(\|\S*)?(\s|$)'

@@ -15,7 +15,7 @@ local ID_A = "aaaaaaaa-1111-4aaa-8aaa-aaaaaaaaaaaa"
 local ID_B = "bbbbbbbb-1111-4bbb-8bbb-bbbbbbbbbbbb"
 local ID_C = "cccccccc-1111-4ccc-8ccc-cccccccccccc"
 local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
-local MAIN = REPO .. "/dotfiles/bin/.local/share/dev/main.lua"
+local MAIN = REPO .. "/main.lua"
 
 local PLANNED = support.READY_DESCRIPTION
 local JUDGED = "done (reviewer judgement)"
@@ -2812,7 +2812,7 @@ testing.test("six processes writing at once lose no card", function()
             HOME = home,
             XDG_STATE_HOME = home .. "/state",
             PATH = root .. "/bin:" .. os.getenv("PATH"),
-            DEV_SELF = REPO .. "/dotfiles/bin/.local/bin/dev",
+            DEV_SELF = REPO .. "/bin/dev",
         },
     })
     testing.eq(code, 0, out)
@@ -2844,7 +2844,7 @@ testing.test("six simultaneous run --orders calls leave one open run card", func
             XDG_STATE_HOME = home .. "/state",
             DEV_AGENT = "dotfiles/one",
             PATH = root .. "/bin:" .. os.getenv("PATH"),
-            DEV_SELF = REPO .. "/dotfiles/bin/.local/bin/dev",
+            DEV_SELF = REPO .. "/bin/dev",
         },
     })
     testing.eq(code, 0, out)

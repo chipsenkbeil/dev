@@ -4,9 +4,9 @@ Run the signal tests in a loop beside CPU burners, on a ci host only.
 usage: dev --remote soak [-- --runs N]
 flags: --runs
 Each run starts two busy loops per core, runs one case, prints the load it ran under and stops the
-loops. The cases are the pkg_script TERM test, the confirm and spin ctrl-c tests and the guide
-interrupt tests. A case that fails keeps its output in the report, and a case that ran no test
-fails. The command exits 1 when any run failed. N is 50 by default.
+loops. The cases are the pkg_script TERM test and the confirm and spin ctrl-c tests. A case that
+fails keeps its output in the report, and a case that ran no test fails. The command exits 1 when
+any run failed. N is 50 by default.
 ]]
 local dev_os = require("dev.os")
 local remote = require("dev.remote")
@@ -47,16 +47,6 @@ local CASES = {
     {
         name = "confirm and spin ctrl-c",
         argv = { "bats", "--tap", "--filter", "ctrl-c", "tests/dev/confirm.bats" },
-    },
-    {
-        name = "guide interrupt",
-        argv = {
-            "bats",
-            "--tap",
-            "--filter",
-            "Ctrl-C removes|interrupted run on a terminal|TERM to the launcher alone",
-            "tests/guide/guide.bats",
-        },
     },
 }
 

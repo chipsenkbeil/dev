@@ -1,0 +1,20 @@
+id: rawget-other
+snapshots:
+  "function M.get(t, k)\n  return rawget(t, k)\nend\n":
+    labels:
+    - source: rawget(t, k)
+      style: primary
+      start: 30
+      end: 42
+  "local g = rawget(_G, name)\n":
+    labels:
+    - source: rawget(_G, name)
+      style: primary
+      start: 10
+      end: 26
+  "local v = rawget(other, \"__slots\")\n":
+    labels:
+    - source: rawget(other, "__slots")
+      style: primary
+      start: 10
+      end: 34

@@ -1,0 +1,34 @@
+id: or-zero-guard
+valid:
+  - |
+    if pad and pad > 0 then
+      draw(pad)
+    end
+  - |
+    local width = base + (pad or 0)
+  - |
+    if ready then
+      local wide = (pad or 0) > 0
+    end
+  - |
+    while count > 0 do
+      count = count - 1
+    end
+invalid:
+  - |
+    if (pad or 0) > 0 then
+      draw(pad)
+    end
+  - |
+    if ready then
+    elseif (pad or 0) >= 1 then
+      draw(pad)
+    end
+  - |
+    while (n or 0) < 3 do
+      n = step(n)
+    end
+  - |
+    if 0 < (pad or 0) and ready then
+      draw(pad)
+    end

@@ -1,0 +1,25 @@
+id: rawget-other
+valid:
+  - |
+    local v = rawget(self, "__slots")
+  - |
+    local first = rawget(val, 1)
+  - |
+    function M.__index(t, k)
+      return rawget(t, k) or rawget(M, k)
+    end
+  - |
+    M.__index = function(t, k)
+      return rawget(t, k)
+    end
+  - |
+    setmetatable(M, { __index = function(t, k) return rawget(t, k) end })
+invalid:
+  - |
+    local v = rawget(other, "__slots")
+  - |
+    function M.get(t, k)
+      return rawget(t, k)
+    end
+  - |
+    local g = rawget(_G, name)

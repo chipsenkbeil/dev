@@ -4,7 +4,7 @@ set -o pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$DIR/../.." && pwd)"
-DEV="$REPO/dotfiles/bin/.local/bin/dev"
+DEV="$REPO/bin/dev"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
@@ -43,9 +43,9 @@ assert_eq() {
     fi
 }
 
-mkdir -p "$TMP/.dev/lua/dotfiles" "$TMP/tests/a" "$TMP/run"
+mkdir -p "$TMP/.dev/lua/devrepo" "$TMP/tests/a" "$TMP/run"
 sed 's/which("tmux")/which("tmux-not-installed")/' "$REPO/.dev/test.lua" >"$TMP/.dev/test.lua"
-cp "$REPO/.dev/lua/dotfiles/checks.lua" "$TMP/.dev/lua/dotfiles/"
+cp "$REPO/.dev/lua/devrepo/checks.lua" "$TMP/.dev/lua/devrepo/"
 for n in 1 2 3; do
     cat >"$TMP/tests/a/slow${n}_test.sh" <<'SUITE'
 printf '%s\n' "$$" >>"$PIDS"
@@ -95,9 +95,9 @@ assert_eq "the scratch directory is removed" "$([ -d "$scratch" ] && echo presen
 
 assert_eq "no suite process is left running" "$(count_alive "$PIDS")" "0"
 
-mkdir -p "$TMP/shim" "$TMP/b/tests/a" "$TMP/b/.dev/lua/dotfiles"
+mkdir -p "$TMP/shim" "$TMP/b/tests/a" "$TMP/b/.dev/lua/devrepo"
 sed 's/which("tmux")/which("tmux-not-installed")/' "$REPO/.dev/test.lua" >"$TMP/b/.dev/test.lua"
-cp "$REPO/.dev/lua/dotfiles/checks.lua" "$TMP/b/.dev/lua/dotfiles/"
+cp "$REPO/.dev/lua/devrepo/checks.lua" "$TMP/b/.dev/lua/devrepo/"
 cp "$TMP/tests/a/slow1_test.sh" "$TMP/b/tests/a/"
 REAL_SH="$(command -v sh)"
 cat >"$TMP/shim/sh" <<'SHIM'
@@ -135,9 +135,9 @@ scratch2="$(dirname "$(head -n 1 "$TMPDIRS")")"
 assert_eq "the scratch directory is removed after the late INT" "$([ -d "$scratch2" ] && echo present || echo gone)" "gone"
 assert_eq "a suite launched at the moment of INT is stopped" "$(count_alive "$PIDS")" "0"
 
-mkdir -p "$TMP/c/tests/a" "$TMP/c/.dev/lua/dotfiles"
+mkdir -p "$TMP/c/tests/a" "$TMP/c/.dev/lua/devrepo"
 sed 's/which("tmux")/which("tmux-not-installed")/' "$REPO/.dev/test.lua" >"$TMP/c/.dev/test.lua"
-cp "$REPO/.dev/lua/dotfiles/checks.lua" "$TMP/c/.dev/lua/dotfiles/"
+cp "$REPO/.dev/lua/devrepo/checks.lua" "$TMP/c/.dev/lua/devrepo/"
 cp "$TMP/tests/a/slow1_test.sh" "$TMP/c/tests/a/"
 
 export HOLD=7 PIDS="$TMP/run/pids3" TMPDIRS="$TMP/run/tmpdirs3"

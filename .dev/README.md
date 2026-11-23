@@ -288,20 +288,7 @@ These are the project commands in `.dev/`. Each lists the flags and
 - `dev --remote soak [-- --runs N]`: run the signal tests in a loop beside CPU
   burners, on a ci host only. Flag: `--runs` (default 50).
 
-### Set up a machine or project
+### Set up
 
-- `dev install [pkg...]`: symlink packages into `TARGET_DIR`. No arguments
-  installs the defaults for this OS.
-- `dev uninstall [pkg...]`: remove packages' symlinks.
-- `dev restow [pkg...]`: restow packages' symlinks.
-- `dev purge [pkg...]`: force-remove every file a package would link.
-- `dev clean`: uninstall the default configs for this system.
-- `dev list`: print the installable default targets for the current OS.
-- `dev stow`: install the pinned GNU Stow into `~/.local` when it is not on
-  `PATH`.
-- `dev setup [STEPS="--install-brew ..."] [DRY_RUN=1] [VERBOSE=1] [NO_LOG=1]`:
-  run the interactive OS setup.
-- `dev skills`: refetch the Pomb skills.
-- `dev sync [SYNC_DST=user@host] [SYNC_PATH=dir]`: rsync the tracked files to
-  a remote host and run `dev install` there. `SYNC_PATH` defaults to
-  `dotfiles`.
+- `dev install`: publish this checkout as dev's snapshot and link
+  `~/.local/bin/dev` and `~/.local/share/dev` into it. No flags.

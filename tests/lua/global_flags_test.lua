@@ -5,7 +5,7 @@ local registry = require("dev.registry")
 local support = require("support")
 
 local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
-local DEV_DIR = REPO .. "/dotfiles/bin/.local/share/dev"
+local DEV_DIR = REPO
 
 local function source(path)
     return assert(fs.read(path), path)
@@ -40,7 +40,7 @@ local function wrapped(flags, left, right)
 end
 
 testing.test("the launcher consumes each value flag and reads each remote flag", function()
-    local text = source(REPO .. "/dotfiles/bin/.local/bin/dev")
+    local text = source(REPO .. "/bin/dev")
     local value = {}
     for _, flag in ipairs(registry.GLOBAL_FLAGS) do
         if registry.VALUE_FLAGS[flag] then
@@ -105,14 +105,8 @@ testing.test("help names each global flag as a table row", function()
     testing.eq(unmatched(help, flags, '{%s*"', '[ "]'), {})
 end)
 
-testing.test("the completion names each global flag", function()
-    local completion = source(REPO .. "/dotfiles/zsh/.config/zsh/completions/_dev")
-    local flags = without(registry.GLOBAL_FLAGS, { ["-vv"] = true })
-    testing.eq(unmatched(completion, flags, "[^%w%-]", "[^%w%-]"), {})
-end)
-
 testing.test("flags.md lists each global flag as a bullet", function()
-    local docs = source(REPO .. "/dotfiles/bin/.local/share/dev/docs/flags.md")
+    local docs = source(REPO .. "/docs/flags.md")
     local listed = {}
     for head in docs:gmatch("\n%- ([^\n]-):") do
         for flag in head:gmatch("`(%-[%w%-]+)") do

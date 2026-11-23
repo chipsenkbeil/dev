@@ -105,7 +105,7 @@ printf '%s\n%s' "$body" "$status"
 ]]
 
 local PASS = string.format(
-    '#!/bin/sh\ncase "$*" in *Lead*) echo "%s" ;; *) echo "%s" ;; esac\n',
+    '#!/bin/sh\ncase "$*" in */lead/*) echo "%s" ;; *) echo "%s" ;; esac\n',
     LEAD_SECRET,
     TOKEN
 )

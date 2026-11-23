@@ -5,7 +5,7 @@
 # that record their arguments.
 
 REPO="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
-PKG="$REPO/dotfiles/bin/.local/share/dev/pkg.lua"
+PKG="$REPO/pkg.lua"
 LUAJIT="$(command -v luajit)"
 
 setup() {

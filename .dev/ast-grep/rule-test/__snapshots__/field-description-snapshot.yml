@@ -1,0 +1,20 @@
+id: field-description
+snapshots:
+  "---@field lanes? render.Lane[]\n":
+    labels:
+    - source: ---@field lanes? render.Lane[]
+      style: primary
+      start: 0
+      end: 30
+  "---@field private __retry_count integer\n":
+    labels:
+    - source: ---@field private __retry_count integer
+      style: primary
+      start: 0
+      end: 39
+  "---@field ttl integer\n":
+    labels:
+    - source: ---@field ttl integer
+      style: primary
+      start: 0
+      end: 21

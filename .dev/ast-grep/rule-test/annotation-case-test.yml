@@ -1,0 +1,25 @@
+id: annotation-case
+valid:
+  - |
+    ---@param base integer the numeric base
+  - |
+    ---@param opts widget.grid.Opts the grid options
+  - |
+    ---@param x number X coordinate of the origin
+  - |
+    ---@return boolean
+  - |
+    ---@return integer id newly allocated entity id
+  - |
+    ---@return app.Entry? entry nil when nothing is registered under name
+  - |
+    ---@param font love.Font LÖVE font
+  - |
+    ---@param map table<string, Foo> the map
+invalid:
+  - |
+    ---@param base integer The numeric base
+  - |
+    ---@return boolean True when the slot is free
+  - |
+    ---@return integer id Newly allocated entity id

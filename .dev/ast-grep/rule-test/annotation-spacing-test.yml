@@ -1,0 +1,17 @@
+id: annotation-spacing
+valid:
+  - |
+    ---@param hash integer running hash to add our value
+  - |
+    --- @type vim.ui.img
+  - |
+    ---@field private __retry_count integer number of times the send was retried
+  - |
+    ---@class app.render.Camera
+invalid:
+  - |
+    ---@param hash  integer  running hash to add our value
+  - |
+    ---@field stages string[]   pipeline stage names in execution order
+  - |
+    ---@return integer	id	the id

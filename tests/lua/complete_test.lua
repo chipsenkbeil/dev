@@ -4,8 +4,8 @@ local fs = require("dev.fs")
 local support = require("support")
 
 local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
-local MAIN = REPO .. "/dotfiles/bin/.local/share/dev/main.lua"
-local SELF = REPO .. "/dotfiles/bin/.local/bin/dev"
+local MAIN = REPO .. "/main.lua"
+local SELF = REPO .. "/bin/dev"
 local GLOBAL_TAIL =
     "-v\n--verbose\n-vv\n--remote\n--local\n--detach\n--priority\n-C\n--agent\n--job-timeout\n"
 
@@ -94,11 +94,8 @@ testing.test("__topics check reports a .lua flags line with -h and exits 1", fun
 end)
 
 local function share_copy(dir)
-    assert(
-        dev_os.run({ "cp", "-R", REPO .. "/dotfiles/bin/.local/share/dev", dir }) == 0,
-        "cp failed"
-    )
     local share = dir .. "/dev"
+    support.stage_share(share)
     assert(fs.remove(share .. "/docs", { recursive = true }))
     assert(fs.mkdir(share .. "/docs"))
     assert(fs.write(share .. "/docs/bad.md", "# bad: A topic\n\n`dev nope`\n"))

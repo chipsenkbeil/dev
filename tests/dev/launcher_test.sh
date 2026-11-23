@@ -5,8 +5,11 @@ set -o pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$DIR/../.." && pwd -P)"
-DEV="$REPO/dotfiles/bin/.local/bin/dev"
-SHARE_MAIN="$(cd -P "$REPO/dotfiles/bin/.local/share/dev" && pwd -P)/main.lua"
+DEV="$REPO/bin/dev"
+SHARE_MAIN="$REPO/main.lua"
+
+# shellcheck source=tests/dev/stage.bash
+source "$DIR/stage.bash"
 unset DOTFILES VERBOSE DEV_UID DEV_OS LUA_INIT LUA_PATH LUA_CPATH CI
 export DEV_REMOTE=0
 
@@ -58,7 +61,8 @@ system_launcher() {
     mkdir -p "$dir/bin"
     sed "s|^SYSTEM_BIN_DIRS=.*|SYSTEM_BIN_DIRS=($2)|" "$DEV" >"$dir/bin/dev"
     chmod +x "$dir/bin/dev"
-    ln -s "$REPO/dotfiles/bin/.local/share" "$dir/share"
+    mkdir -p "$dir/share"
+    ln -s "$REPO" "$dir/share/dev"
     printf "%s\n" "$dir/bin/dev"
 }
 LC_REC="$(system_launcher rec "$RECORDER")"
@@ -71,14 +75,6 @@ missing="Luajit is not found. Install it with \`brew install luajit\`, \`pacman 
 out="$(PATH="$NOLUA" "$DEV" lint 2>&1)"
 assert_eq "no luajit exits 1" "$?" "1"
 assert_eq "no luajit prints the one line" "$out" "$missing"
-
-scribe_missing='scribe: luajit not found. Install it with brew install luajit, pacman -S luajit, dnf install luajit or apt install luajit'
-out="$(PATH="$NOLUA" "$REPO/dotfiles/scribe/.local/bin/scribe" 2>&1)"
-assert_eq "scribe without luajit prints the hint" "$out" "$scribe_missing"
-
-guide_missing='guide: luajit not found. Install it with brew install luajit, pacman -S luajit, dnf install luajit or apt install luajit'
-out="$(PATH="$NOLUA" "$REPO/dotfiles/guide/.local/bin/guide" 2>&1)"
-assert_eq "guide without luajit prints the hint" "$out" "$guide_missing"
 
 for name in BASH_ENV ENV LUA_PATH LUA_CPATH LUA_INIT LUA_PATH_5_1 LUA_CPATH_5_1 LUA_INIT_5_1 LUA_PATH_5_2 LUA_CPATH_5_2 LUA_INIT_5_2 DEV_UID DEV_OS; do
     rm -f "$ENV_OUT"
@@ -153,10 +149,10 @@ out="$(cd "$NOPROJ" && PATH="$TMP/realjit:$NOLUA:/usr/bin:/bin" "$TMP/with space
 assert_contains "the symlinked launcher finds the built-in topics" "$out" "remote"
 
 CLONE="$TMP/a clone"
-mkdir -p "$CLONE/dotfiles/bin/.local/bin" "$CLONE/dotfiles/bin/.local/share"
-cp "$DEV" "$CLONE/dotfiles/bin/.local/bin/dev"
-cp -R "$REPO/dotfiles/bin/.local/share/dev" "$CLONE/dotfiles/bin/.local/share/dev"
-out="$(cd "$NOPROJ" && PATH="$TMP/realjit:$NOLUA:/usr/bin:/bin" "$CLONE/dotfiles/bin/.local/bin/dev" help --topics 2>&1)"
+mkdir -p "$CLONE/bin"
+cp "$DEV" "$CLONE/bin/dev"
+stage_share "$CLONE"
+out="$(cd "$NOPROJ" && PATH="$TMP/realjit:$NOLUA:/usr/bin:/bin" "$CLONE/bin/dev" help --topics 2>&1)"
 assert_contains "a clone under a path with a space finds the built-in topics" "$out" "remote"
 
 CIBIN="$TMP/cibin"
@@ -262,7 +258,7 @@ rm -f "$ARGS_OUT"
 snap_rec DEV_FROM=checkout "$DEV" help >/dev/null 2>&1
 assert_eq "DEV_FROM=checkout runs the checkout copy" "$(cat "$ARGS_OUT")" "$SHARE_MAIN help"
 
-LC_CHECKOUT="$(cd "$(dirname "$LC_REC")/../../../.." && pwd -P)"
+LC_CHECKOUT="$(cd "$(dirname "$LC_REC")/.." && pwd -P)"
 printf '%s\n' "$LC_CHECKOUT" >"$SNAP/versions/v1/ORIGIN"
 rm -f "$ARGS_OUT"
 env -u XDG_STATE_HOME -u DEV_FROM HOME="$SNAPHOME" PATH="$RECORDER:$NOLUA" "$LC_REC" help >/dev/null 2>&1

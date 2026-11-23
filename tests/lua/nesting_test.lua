@@ -4,8 +4,8 @@ local fs = require("dev.fs")
 local support = require("support")
 
 local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
-local MAIN = REPO .. "/dotfiles/bin/.local/share/dev/main.lua"
-local SELF = REPO .. "/dotfiles/bin/.local/bin/dev"
+local MAIN = REPO .. "/main.lua"
+local SELF = REPO .. "/bin/dev"
 local RAN = '#!/usr/bin/env bash\n# flags: --now\n# Run x.\necho ran-x "$@"\n'
 
 local function project(files)

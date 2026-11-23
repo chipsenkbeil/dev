@@ -1,0 +1,20 @@
+id: annotation-case
+snapshots:
+  "---@param base integer The numeric base\n":
+    labels:
+    - source: ---@param base integer The numeric base
+      style: primary
+      start: 0
+      end: 39
+  "---@return boolean True when the slot is free\n":
+    labels:
+    - source: ---@return boolean True when the slot is free
+      style: primary
+      start: 0
+      end: 45
+  "---@return integer id Newly allocated entity id\n":
+    labels:
+    - source: ---@return integer id Newly allocated entity id
+      style: primary
+      start: 0
+      end: 47

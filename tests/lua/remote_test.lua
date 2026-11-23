@@ -6,7 +6,7 @@ local fs = require("dev.fs")
 local support = require("support")
 
 local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
-local MAIN = REPO .. "/dotfiles/bin/.local/share/dev/main.lua"
+local MAIN = REPO .. "/main.lua"
 
 local STUB = [[#!/usr/bin/env bash
 root=""
@@ -510,31 +510,6 @@ testing.test("arguments after -- reach the job untouched", function()
     testing.ok(log:find("[--] [--anything]", 1, true), log)
 end)
 
-testing.test(
-    "the project's __remote.lua sends bootstrap to the bootstrap pipeline and the rest to the default one",
-    function()
-        local override = assert(fs.read(REPO .. "/.dev/__remote.lua"))
-        local root, base = setup({ ["__remote.lua"] = override })
-        local _, code, log = dev(root, base, { "--remote", "bootstrap", "--", "a b" })
-        testing.eq(code, 0)
-        testing.eq(
-            log,
-            "ci -C "
-                .. root
-                .. " [run] [bootstrap] [--local] [--follow] [--job] [bootstrap] [--] [a b]\n"
-        )
-        _, code, log = dev(root, base, { "--remote", "--detach", "bootstrap" })
-        testing.eq(code, 0)
-        testing.eq(
-            log,
-            "ci -C " .. root .. " [run] [bootstrap] [--local] [--detach] [--job] [bootstrap] [--]\n"
-        )
-        _, code, log = dev(root, base, { "--remote", "test", "--", "x" })
-        testing.eq(code, 0)
-        testing.eq(log, "ci -C " .. root .. " [run] [--local] [--follow] [--job] [test] [--] [x]\n")
-    end
-)
-
 testing.test("the project's __remote.lua sends soak to the soak pipeline", function()
     local override = assert(fs.read(REPO .. "/.dev/__remote.lua"))
     local root, base = setup({ ["__remote.lua"] = override })
@@ -544,7 +519,21 @@ testing.test("the project's __remote.lua sends soak to the soak pipeline", funct
         log,
         "ci -C " .. root .. " [run] [soak] [--local] [--follow] [--job] [soak] [--] [--runs] [5]\n"
     )
+    _, code, log = dev(root, base, { "--remote", "--detach", "soak" })
+    testing.eq(code, 0)
+    testing.eq(log, "ci -C " .. root .. " [run] [soak] [--local] [--detach] [--job] [soak] [--]\n")
 end)
+
+testing.test(
+    "the project's __remote.lua sends every other command to the default pipeline",
+    function()
+        local override = assert(fs.read(REPO .. "/.dev/__remote.lua"))
+        local root, base = setup({ ["__remote.lua"] = override })
+        local _, code, log = dev(root, base, { "--remote", "test", "--", "x" })
+        testing.eq(code, 0)
+        testing.eq(log, "ci -C " .. root .. " [run] [--local] [--follow] [--job] [test] [--] [x]\n")
+    end
+)
 
 testing.test("the project's __remote.lua keeps the default runner's job-not-found error", function()
     local override = assert(fs.read(REPO .. "/.dev/__remote.lua"))
@@ -559,13 +548,9 @@ testing.test("the project's __remote.lua keeps -v and -vv for the ci echo", func
     local override = assert(fs.read(REPO .. "/.dev/__remote.lua"))
     local root, base = setup({ ["__remote.lua"] = override })
     for _, flag in ipairs({ "-v", "-vv" }) do
-        local out = dev(root, base, { flag, "--remote", "bootstrap" })
+        local out = dev(root, base, { flag, "--remote", "soak" })
         testing.ok(
-            out:find(
-                "+ ci -C " .. root .. " run bootstrap --local --follow --job bootstrap --\n",
-                1,
-                true
-            ),
+            out:find("+ ci -C " .. root .. " run soak --local --follow --job soak --\n", 1, true),
             out
         )
         out = dev(root, base, { flag, "--remote", "test" })

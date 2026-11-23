@@ -23,7 +23,7 @@ local function git(root, ...)
 end
 
 local function with_push_env(fn)
-    local self = dev_os.capture({ "pwd" }):gsub("\n$", "") .. "/dotfiles/bin/.local/bin/dev"
+    local self = dev_os.capture({ "pwd" }):gsub("\n$", "") .. "/bin/dev"
     local before = os.getenv("DEV_SELF") or ""
     ffi.C.setenv("DEV_SELF", self, 1)
     local ok, err = pcall(fn)

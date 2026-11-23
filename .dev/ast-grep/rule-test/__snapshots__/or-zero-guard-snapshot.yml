@@ -1,0 +1,133 @@
+id: or-zero-guard
+snapshots:
+  "if (pad or 0) > 0 then\n  draw(pad)\nend\n":
+    labels:
+    - source: (pad or 0) > 0
+      style: primary
+      start: 3
+      end: 17
+    - source: ">"
+      style: secondary
+      start: 14
+      end: 15
+    - source: or
+      style: secondary
+      start: 8
+      end: 10
+    - source: "0"
+      style: secondary
+      start: 11
+      end: 12
+    - source: pad or 0
+      style: secondary
+      start: 4
+      end: 12
+    - source: (pad or 0)
+      style: secondary
+      start: 3
+      end: 13
+    - source: |-
+        if (pad or 0) > 0 then
+          draw(pad)
+        end
+      style: secondary
+      start: 0
+      end: 38
+  "if 0 < (pad or 0) and ready then\n  draw(pad)\nend\n":
+    labels:
+    - source: 0 < (pad or 0)
+      style: primary
+      start: 3
+      end: 17
+    - source: <
+      style: secondary
+      start: 5
+      end: 6
+    - source: or
+      style: secondary
+      start: 12
+      end: 14
+    - source: "0"
+      style: secondary
+      start: 15
+      end: 16
+    - source: pad or 0
+      style: secondary
+      start: 8
+      end: 16
+    - source: (pad or 0)
+      style: secondary
+      start: 7
+      end: 17
+    - source: |-
+        if 0 < (pad or 0) and ready then
+          draw(pad)
+        end
+      style: secondary
+      start: 0
+      end: 48
+  "if ready then\nelseif (pad or 0) >= 1 then\n  draw(pad)\nend\n":
+    labels:
+    - source: (pad or 0) >= 1
+      style: primary
+      start: 21
+      end: 36
+    - source: ">="
+      style: secondary
+      start: 32
+      end: 34
+    - source: or
+      style: secondary
+      start: 26
+      end: 28
+    - source: "0"
+      style: secondary
+      start: 29
+      end: 30
+    - source: pad or 0
+      style: secondary
+      start: 22
+      end: 30
+    - source: (pad or 0)
+      style: secondary
+      start: 21
+      end: 31
+    - source: |-
+        elseif (pad or 0) >= 1 then
+          draw(pad)
+      style: secondary
+      start: 14
+      end: 53
+  "while (n or 0) < 3 do\n  n = step(n)\nend\n":
+    labels:
+    - source: (n or 0) < 3
+      style: primary
+      start: 6
+      end: 18
+    - source: <
+      style: secondary
+      start: 15
+      end: 16
+    - source: or
+      style: secondary
+      start: 9
+      end: 11
+    - source: "0"
+      style: secondary
+      start: 12
+      end: 13
+    - source: n or 0
+      style: secondary
+      start: 7
+      end: 13
+    - source: (n or 0)
+      style: secondary
+      start: 6
+      end: 14
+    - source: |-
+        while (n or 0) < 3 do
+          n = step(n)
+        end
+      style: secondary
+      start: 0
+      end: 39

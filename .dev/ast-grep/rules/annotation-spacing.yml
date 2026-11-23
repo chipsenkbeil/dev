@@ -1,0 +1,8 @@
+id: annotation-spacing
+language: lua
+severity: error
+message: Separate the parts of an annotation with exactly one space. Never pad to align columns.
+note: "style/references/lua.md, Parameters and returns."
+rule:
+  kind: comment
+  regex: '^---\s*@\w+.*\S([ \t]{2,}|\t)\S'

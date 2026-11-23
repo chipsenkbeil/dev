@@ -6,7 +6,7 @@ local support = require("support")
 local version = require("dev.version")
 
 local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
-local MAIN = REPO .. "/dotfiles/bin/.local/share/dev/main.lua"
+local MAIN = REPO .. "/main.lua"
 local FIXTURES = REPO .. "/tests/lua/fixtures/commands/"
 
 local function project(files)
@@ -420,7 +420,7 @@ end)
 testing.test("root-tests and bootstrap-arch are unknown commands", function()
     for _, name in ipairs({ "root-tests", "bootstrap-arch" }) do
         local out, code = dev_os.capture(
-            { REPO .. "/dotfiles/bin/.local/bin/dev", name },
+            { REPO .. "/bin/dev", name },
             { cwd = REPO, stderr = "stdout" }
         )
         testing.eq(code, 2)
@@ -575,14 +575,6 @@ testing.test(
         local reg = registry.load(REPO, { warn = function() end })
         local never = {
             "install",
-            "uninstall",
-            "restow",
-            "stow",
-            "setup",
-            "clean",
-            "purge",
-            "skills",
-            "list",
             "fmt",
             "fetch",
             "help",
@@ -597,14 +589,6 @@ testing.test(
             { "ci", "logs" },
             { "board", "status" },
             { "ws", "new" },
-            { "pi", "check" },
-            { "pi", "diff" },
-            { "pi", "install" },
-            { "pi", "save" },
-            { "antinote", "diff" },
-            { "antinote", "export" },
-            { "antinote", "import" },
-            { "zen", "link" },
         }
         for _, entry in ipairs(never) do
             local words = words_of(entry)
@@ -613,10 +597,6 @@ testing.test(
         end
         local guarded = {
             "install",
-            "uninstall",
-            "restow",
-            "stow",
-            "setup",
             "fmt",
             "init",
             "push",
@@ -624,9 +604,6 @@ testing.test(
             "follow",
             "land",
             "abandon",
-            "clean",
-            "purge",
-            "skills",
             { "tools", "install" },
             { "board", "land" },
         }

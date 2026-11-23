@@ -1,0 +1,8 @@
+id: field-description
+language: lua
+severity: error
+message: Give this `@field` a description, a short phrase after the type.
+note: "style/references/lua.md, Field docs. Every field, public and private, carries a description."
+rule:
+  kind: comment
+  regex: '^---\s*@field\s+((private|protected|public|package)\s+)?\S+\s+\S+\s*$'

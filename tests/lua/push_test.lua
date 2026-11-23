@@ -9,8 +9,7 @@ dev_os.defaults.env = {
     JJ_CONFIG = "/dev/null",
 }
 
-local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
-local GUARD = REPO .. "/dotfiles/bin/.local/bin/commit-guard"
+local GUARD = support.fake_guard()
 
 local function git(root, ...)
     local out, code = dev_os.capture(

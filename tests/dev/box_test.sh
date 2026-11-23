@@ -6,7 +6,7 @@ set -o pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$DIR/../.." && pwd)"
-DEV="$REPO/dotfiles/bin/.local/bin/dev"
+DEV="$REPO/bin/dev"
 unset DOTFILES VERBOSE CI LOGNAME DEV_AGENT
 export DEV_REMOTE=0
 export USER=tester

@@ -1,0 +1,21 @@
+id: opts-class-name
+valid:
+  - |
+    ---@class dev.cmd.ws.remove.Opts
+  - |
+    ---@class widget.grid.Opts
+  - |
+    ---@class (exact) app.sync.Opts
+  - |
+    ---@class dev.ui.page.Opts
+  - |
+    ---@param opts widget.grid.Opts the grid options
+  - |
+    ---@class dev.cmd.ws.Remover
+invalid:
+  - |
+    ---@class dev.cmd.ws.RemoveOpts
+  - |
+    ---@class (exact) RemoveOpts
+  - |
+    ---@class dev.ui.PageOpts

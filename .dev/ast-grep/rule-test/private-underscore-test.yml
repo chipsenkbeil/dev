@@ -1,0 +1,31 @@
+id: private-underscore
+valid:
+  - |
+    function Coordinator:__broadcastRetire(slot) end
+  - |
+    self.__speed = opts.speed
+  - |
+    for _, _ev in ipairs(events) do end
+  - |
+    local _id = f()
+  - |
+    M.__index = M
+  - |
+    local t = { __x = 1 }
+  - |
+    local function helper() end
+invalid:
+  - |
+    function Coordinator:_broadcastRetire(slot) end
+  - |
+    function M._helper() end
+  - |
+    self._speed = opts.speed
+  - |
+    local v = other._speed
+  - |
+    self:_retire(slot)
+  - |
+    local t = { _x = 1 }
+  - |
+    local function _helper() end

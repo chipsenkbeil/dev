@@ -1,0 +1,35 @@
+id: rawget-other
+language: lua
+severity: error
+message: Never `rawget` another object to reach around its privacy. Redesign the boundary instead.
+note: "style/references/lua.md, Visibility. The sanctioned uses are `rawget(self, ...)` inside the class, any `rawget` inside an `__index` implementation, and a number-literal array probe such as `rawget(t, 1)`."
+rule:
+  pattern: rawget($T, $$$)
+  not:
+    any:
+      - all:
+          - pattern: rawget($T, $N)
+          - has:
+              field: arguments
+              has:
+                kind: number
+                nthChild: 2
+      - inside:
+          stopBy: end
+          any:
+            - kind: function_declaration
+              has:
+                field: name
+                regex: '__index$'
+            - kind: field
+              has:
+                field: name
+                regex: '^__index$'
+            - kind: assignment_statement
+              has:
+                kind: variable_list
+                regex: '__index$'
+constraints:
+  T:
+    not:
+      regex: '^self$'

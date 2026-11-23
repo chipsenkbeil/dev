@@ -6,7 +6,7 @@ set -o pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$DIR/../.." && pwd)"
-DEV="$REPO/dotfiles/bin/.local/bin/dev"
+DEV="$REPO/bin/dev"
 unset DOTFILES VERBOSE
 
 TMP="$(mktemp -d)"
@@ -117,7 +117,8 @@ if [ "$REAL_ROOT" = 1 ]; then
     mkdir -p "$TMP/lc/bin"
     sed "s|^SYSTEM_BIN_DIRS=.*|SYSTEM_BIN_DIRS=($TMP/nowhere)|" "$DEV" >"$TMP/lc/bin/dev"
     chmod +x "$TMP/lc/bin/dev"
-    ln -s "$REPO/dotfiles/bin/.local/share" "$TMP/lc/share"
+    mkdir -p "$TMP/lc/share"
+    ln -s "$REPO" "$TMP/lc/share/dev"
     printf 'return function() io.open("%s", "w"):close() return 0 end\n' "$TMP/remote-marker" >"$proj/.dev/__remote.lua"
     out="$(cd "$proj/a" && "$TMP/lc/bin/dev" --remote tools install --dry-run 2>&1)"
     assert_eq "root without luajit, dev --remote tools install exits 2" "$?" "2"
@@ -262,8 +263,8 @@ if [ "$REAL_ROOT" = 1 ]; then
     assert_contains "the manifest variable is undefined for the package driver" "$out" "is undefined"
 
     evil="$TMP/evil"
-    mkdir -p "$evil/dotfiles/bin/.local/share/dev"
-    printf 'io.write("EVIL-RAN\\n")\n' >"$evil/dotfiles/bin/.local/share/dev/pkg.lua"
+    mkdir -p "$evil"
+    printf 'io.write("EVIL-RAN\\n")\n' >"$evil/pkg.lua"
     out="$(DOTFILES="$evil" dev "$nojj" tools check 2>&1)"
     assert_not_contains "root does not run a package driver from DOTFILES" "$out" "EVIL-RAN"
 
@@ -272,7 +273,7 @@ if [ "$REAL_ROOT" = 1 ]; then
     printf 'name binary pacman\nsh-tool sh sh\n' >"$good/.dev/tools.tsv"
     out="$(BASH_ENV=/tmp/evil-bash-env PS4=evil-ps4 dev "$good" -vv tools check 2>&1)"
     assert_eq "root tools check -vv exits 0" "$?" "0"
-    assert_contains "-vv gives the driver dev's own trace file" "$out" "BASH_ENV=$REPO/dotfiles/bin/.local/share/dev/xtrace.bash"
+    assert_contains "-vv gives the driver dev's own trace file" "$out" "BASH_ENV=$REPO/xtrace.bash"
     assert_not_contains "-vv keeps the caller's BASH_ENV out of the driver" "$out" "evil-bash-env"
     assert_not_contains "-vv keeps the caller's PS4 out of the driver" "$out" "evil-ps4"
     out="$(dev "$good" tools check 2>&1)"

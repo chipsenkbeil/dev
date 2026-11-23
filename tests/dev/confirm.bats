@@ -260,7 +260,7 @@ confirm_lines() {
 
 @test "dev box delete on a terminal shows the Deleting label and the Deleted line" {
     local stubs="$BATS_TEST_TMPDIR/stubs" inner="$BATS_TEST_TMPDIR/inner.sh"
-    local dev="${BATS_TEST_DIRNAME}/../../dotfiles/bin/.local/bin/dev" out
+    local dev="${BATS_TEST_DIRNAME}/../../bin/dev" out
     mkdir -p "$stubs"
     cat >"$stubs/ci" <<'STUB'
 #!/bin/sh

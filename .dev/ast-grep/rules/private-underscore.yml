@@ -1,0 +1,25 @@
+id: private-underscore
+language: lua
+severity: error
+message: A private name takes a double underscore, `__x`, never a single `_x`.
+note: "style/references/lua.md, Visibility. A leading underscore on an unused local binding (`_ev`, `_id`) is a discard marker and is fine."
+rule:
+  any:
+    - kind: dot_index_expression
+      has:
+        field: field
+        regex: '^_[A-Za-z0-9]'
+    - kind: method_index_expression
+      has:
+        field: method
+        regex: '^_[A-Za-z0-9]'
+    - kind: field
+      has:
+        field: name
+        kind: identifier
+        regex: '^_[A-Za-z0-9]'
+    - kind: function_declaration
+      has:
+        field: name
+        kind: identifier
+        regex: '^_[A-Za-z0-9]'

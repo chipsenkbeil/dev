@@ -7,7 +7,7 @@ local support = require("support")
 local tools = require("dev.cmd.tools")
 local dev_command = require("dev.command")
 
-local MAIN = dev_os.capture({ "pwd" }):gsub("\n$", "") .. "/dotfiles/bin/.local/share/dev/main.lua"
+local MAIN = dev_os.capture({ "pwd" }):gsub("\n$", "") .. "/main.lua"
 local MAX = 262144
 
 local function line_of(length)
@@ -280,7 +280,7 @@ testing.test("the driver runs under env -i with only the fixed variables, from t
     local driver = driver_of(argv)
     testing.eq({ unpack(driver, 1, 5) }, FIXED_ENV)
     testing.eq(driver[6], INTERPRETER)
-    testing.ok(driver[7]:find("/dotfiles/bin/%.local/share/dev/pkg%.lua$"), driver[7])
+    testing.eq(driver[7], devproject.share .. "/pkg.lua")
     testing.eq({ driver[8], driver[9], driver[10] }, { "check", "--manifest", copy })
     testing.eq(#driver, 10)
     testing.eq(seen.opts.cwd, dir)

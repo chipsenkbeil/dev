@@ -4,7 +4,7 @@ local fs = require("dev.fs")
 local support = require("support")
 
 local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
-local MODULES = REPO .. "/dotfiles/bin/.local/share/dev/lua"
+local MODULES = REPO .. "/lua"
 
 local DRIVE = 'package.path = arg[1] .. "/?.lua"\n'
     .. 'local driver = require("dev.pkg." .. arg[2])\n'

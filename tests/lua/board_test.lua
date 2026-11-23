@@ -7146,7 +7146,7 @@ testing.test("a locked store fails at once and curl never runs", function()
     testing.eq(read(root, "calls"):find("curl", 1, true), nil)
 end)
 
-local SHARE = dev_os.capture({ "pwd" }):gsub("\n$", "") .. "/dotfiles/bin/.local/share/dev/board/"
+local SHARE = dev_os.capture({ "pwd" }):gsub("\n$", "") .. "/board/"
 
 local function occurrences(text, word)
     return select(2, text:gsub(word, ""))
@@ -7874,7 +7874,7 @@ local ISSUED_SECRET = "pomb_ISSUEDtoken0123456789"
 local function two_tokens(root)
     executable(
         root .. "/bin/pass",
-        '#!/bin/sh\nprintf "pass %s\\n" "$*" >>"$ROOT/calls"\ncase "$*" in\n*Lead*) echo '
+        '#!/bin/sh\nprintf "pass %s\\n" "$*" >>"$ROOT/calls"\ncase "$*" in\n*/lead/*) echo '
             .. LEAD_SECRET
             .. " ;;\n*) echo "
             .. WORK_SECRET

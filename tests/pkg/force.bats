@@ -7,7 +7,7 @@
 bats_require_minimum_version 1.5.0
 
 REPO="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
-PKG="$REPO/dotfiles/bin/.local/share/dev/pkg.lua"
+PKG="$REPO/pkg.lua"
 
 setup() {
     STUBS="$BATS_TEST_TMPDIR/stubs"
@@ -63,13 +63,16 @@ stub() {
     [ ! -s "$LOG" ]
 }
 
-@test "dev tools install --force plans the muchsync rebuild even when muchsync is on PATH" {
+@test "dev tools install --force plans a script rebuild even when the tool is on PATH" {
     stub muchsync 'exit 0'
-    cd "$REPO"
-    run "$REPO/dotfiles/bin/.local/bin/dev" tools install --dry-run muchsync
+    proj="$BATS_TEST_TMPDIR/proj"
+    mkdir -p "$proj/.dev"
+    printf 'name binary brew\nmuchsync muchsync script:scripts/install-muchsync.lua\n' >"$proj/.dev/tools.tsv"
+    cd "$proj"
+    run "$REPO/bin/dev" tools install --dry-run muchsync
     [ "$status" -eq 0 ]
     [[ "$output" == *"muchsync already on PATH, skipping"* ]] || false
-    run "$REPO/dotfiles/bin/.local/bin/dev" tools install --force --dry-run muchsync
+    run "$REPO/bin/dev" tools install --force --dry-run muchsync
     [ "$status" -eq 0 ]
     [[ "$output" == *"luajit scripts/install-muchsync.lua"* ]] || false
     [[ "$output" != *"skipping"* ]] || false
@@ -91,7 +94,7 @@ require("dev.pkg.dnf").install(row("d", "d-pkg"), opts)
 require("dev.pkg.cargo").install(row("c", "c-crate"), opts)
 require("dev.pkg.luarocks").install(row("l", "rock"), opts)
 LUA
-    out="$(luajit "$BATS_TEST_TMPDIR/drive.lua" "$REPO/dotfiles/bin/.local/share/dev/lua" 2>&1)"
+    out="$(luajit "$BATS_TEST_TMPDIR/drive.lua" "$REPO/lua" 2>&1)"
     [[ "$out" == *"pacman -S --noconfirm -- p-pkg"* ]] || false
     [[ "$out" == *"dnf reinstall -y -- d-pkg"* ]] || false
     [[ "$out" == *"--force c-crate"* ]] || false

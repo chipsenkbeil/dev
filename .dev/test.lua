@@ -3,11 +3,10 @@ Run every test suite under tests/ and report each by name.
 Each argument is a suite file or a directory under tests/ and narrows the run to the suites at that path.
 A path that names no suite is a usage error, and one under a group skipped on this machine says it is skipped here.
 A suite is a .bats file, a *_test.sh or test-*.sh script, or a *_test.lua file run with luajit.
-The neomutt scripts run only when neomutt and tmux are both on PATH.
 Suites run in parallel, DEV_TEST_JOBS at a time (the core count by default, 1 for one after another).
 The suites that drive a terminal or compare help snapshots run one at a time.
 ]]
-local checks = require("dotfiles.checks")
+local checks = require("devrepo.checks")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local dev_command = require("dev.command")
@@ -34,14 +33,8 @@ local SERIAL = {
     ["tests/dev/picker.bats"] = true,
     ["tests/dev/confirm.bats"] = true,
     ["tests/dev/pager.bats"] = true,
-    ["tests/dev/sync_test.sh"] = true,
     ["tests/dev/help_test.sh"] = true,
     ["tests/lua/help_test.lua"] = true,
-    ["tests/tmux/conf_test.sh"] = true,
-    ["tests/jj/land.bats"] = true,
-    ["tests/neomutt/filter-bytes.sh"] = true,
-    ["tests/neomutt/pager-passthrough.sh"] = true,
-    ["tests/neomutt/parse-check.sh"] = true,
 }
 
 local function record_result(name, code)
@@ -116,20 +109,6 @@ if dev_os.which("luajit") then
 else
     dev_command.say("SKIP tests/lua (needs luajit)")
     unavailable[#unavailable + 1] = { dir = "tests/lua", why = "needs luajit" }
-end
-
-if dev_os.which("neomutt") and dev_os.which("tmux") then
-    for _, name in ipairs({ "filter-bytes", "pager-passthrough" }) do
-        local file = "tests/neomutt/" .. name .. ".sh"
-        suites[#suites + 1] = script_suite(file, { "bash", file })
-    end
-    local parse = "tests/neomutt/parse-check.sh"
-    local colors = "dotfiles/neomutt/.config/neomutt/colors.mutt"
-    suites[#suites + 1] = script_suite(parse, { "bash", parse, colors })
-else
-    dev_command.say("SKIP tests/neomutt/*.sh (needs neomutt and tmux on PATH)")
-    unavailable[#unavailable + 1] =
-        { dir = "tests/neomutt", why = "needs neomutt and tmux on PATH" }
 end
 
 if #ctx.args > 0 then

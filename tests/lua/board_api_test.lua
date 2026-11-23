@@ -121,7 +121,7 @@ local function dev(root, home, args)
             HOME = home,
             XDG_STATE_HOME = home .. "/state",
             DEV_AGENT = "dotfiles/lander",
-            DEV_SELF = dev_os.capture({ "pwd" }):gsub("\n$", "") .. "/dotfiles/bin/.local/bin/dev",
+            DEV_SELF = dev_os.capture({ "pwd" }):gsub("\n$", "") .. "/bin/dev",
         },
     })
 end

@@ -4,6 +4,7 @@ local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local json = require("dev.json")
 local board = require("dev.board")
+local snapshot = require("devrepo.snapshot")
 
 ---@class support
 local M = {}
@@ -167,8 +168,8 @@ function M.rev(dir, name)
 end
 
 local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
-local MAIN = REPO .. "/dotfiles/bin/.local/share/dev/main.lua"
-local SELF = REPO .. "/dotfiles/bin/.local/bin/dev"
+local MAIN = REPO .. "/main.lua"
+local SELF = REPO .. "/bin/dev"
 local STUB = '#!/bin/sh\necho "$(basename "$0") $* cwd=$PWD"\nexit "${STUB_CODE:-0}"\n'
 local ASYNC_WAIT_SECONDS = 120
 ---Make a project directory with a `.dev` directory and stub tools in `bin`.
@@ -190,6 +191,46 @@ function M.sandbox(files, tools)
         assert(dev_os.run({ "chmod", "755", root .. "/bin/" .. tool }) == 0, "chmod failed")
     end
     return root
+end
+
+---Copy the files an install ships out of the repo root into a directory.
+---@param dest string the directory to fill, made when missing
+function M.stage_share(dest)
+    assert(fs.mkdir(dest, { parents = true }))
+    local argv = { "cp", "-R" }
+    for _, name in ipairs(snapshot.SHARE) do
+        argv[#argv + 1] = REPO .. "/" .. name
+    end
+    argv[#argv + 1] = dest .. "/"
+    assert(dev_os.run(argv) == 0, "cp failed")
+end
+
+local GUARD = [[
+#!/bin/sh
+if [ "$1" = --git-dir ]; then
+    export GIT_DIR="$2"
+    shift 2
+fi
+shift 2
+remote=$1
+shift
+for spec in "$@"; do
+    if git log -1 --format=%B "${spec%%:*}" | grep -qiE '^(co-authored-by|claude-session):'; then
+        echo "commit-guard: refusing to push to $remote" >&2
+        exit 1
+    fi
+done
+exec git push -- "$remote" "$@"
+]]
+
+---Write a `commit-guard` that `push.guard` can name: it refuses a commit with an attribution line
+---and runs the push otherwise.
+---@return string path the guard, in a new temp directory
+function M.fake_guard()
+    local path = assert(fs.realpath(M.tempdir())) .. "/commit-guard"
+    assert(fs.write(path, GUARD))
+    assert(dev_os.run({ "chmod", "755", path }) == 0, "chmod failed")
+    return path
 end
 
 ---Write the fake `ci` into a sandbox's `bin`.

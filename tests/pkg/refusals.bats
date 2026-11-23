@@ -8,7 +8,7 @@
 bats_require_minimum_version 1.5.0
 
 REPO="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
-PKG="$REPO/dotfiles/bin/.local/share/dev/pkg.lua"
+PKG="$REPO/pkg.lua"
 
 setup() {
     STUBS="$BATS_TEST_TMPDIR/stubs"

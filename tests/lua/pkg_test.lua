@@ -8,6 +8,7 @@ local support = require("support")
 
 local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local VARS = assert(fs.read(REPO .. "/tests/pkg/fixtures/vars.tsv"))
+local GROUPS = assert(fs.read(REPO .. "/tests/pkg/fixtures/groups.tsv"))
 
 local function cell_of(selected, name)
     for _, row in ipairs(selected) do
@@ -19,7 +20,7 @@ end
 
 local PROBE = 'package.path = "'
     .. REPO
-    .. '/dotfiles/bin/.local/share/dev/lua/?.lua"\n'
+    .. '/lua/?.lua"\n'
     .. [=[
 local manifest = require("dev.pkg.manifest")
 local selected, err = manifest.select(manifest.parse(arg[1]), { column = tonumber(arg[2]) })
@@ -62,7 +63,7 @@ local function select_all(rows, column, group)
 end
 
 testing.test("the driver refuses a run without --manifest", function()
-    local driver = REPO .. "/dotfiles/bin/.local/share/dev/pkg.lua"
+    local driver = REPO .. "/pkg.lua"
     for _, sub in ipairs({ "check", "install" }) do
         local out, code = dev_os.capture({ "luajit", driver, sub }, { stderr = "stdout" })
         testing.eq(code, 2)
@@ -70,9 +71,9 @@ testing.test("the driver refuses a run without --manifest", function()
     end
 end)
 
-testing.test("parse reads every row of the real manifest and finds its groups", function()
-    local rows = manifest.parse(assert(fs.read(REPO .. "/.dev/tools.tsv")))
-    testing.ok(#rows > 10, "the real manifest should hold many rows")
+testing.test("parse reads every row of a manifest and finds its groups", function()
+    local rows = manifest.parse(GROUPS)
+    testing.eq(#rows, 6)
     testing.eq(rows.header[1], "name")
     testing.eq(rows.header[#rows.header], "groups")
     local seen = {}
@@ -81,7 +82,7 @@ testing.test("parse reads every row of the real manifest and finds its groups", 
             seen[group] = true
         end
     end
-    testing.ok(seen.base and seen.rust, "the real manifest should have the base and rust groups")
+    testing.ok(seen.base and seen.rust, "the fixture should have the base and rust groups")
     testing.ok(manifest.column(rows, "brew") ~= nil)
     testing.eq(manifest.column(rows, "groups"), nil)
     testing.eq(manifest.column(rows, "nope"), nil)
@@ -250,8 +251,8 @@ testing.test("groups is never a manager column and a group name never lands in a
     end
 end)
 
-testing.test("the real manifest puts exactly the base and rust rows in their groups", function()
-    local rows = manifest.parse(assert(fs.read(REPO .. "/.dev/tools.tsv")))
+testing.test("a group keeps exactly the rows that name it", function()
+    local rows = manifest.parse(GROUPS)
     local function names(group)
         local out = {}
         for _, row in ipairs(assert(select_all(rows, 1, group))) do
@@ -260,14 +261,8 @@ testing.test("the real manifest puts exactly the base and rust rows in their gro
         table.sort(out)
         return table.concat(out, " ")
     end
-    testing.eq(
-        names("base"),
-        "ast-grep bats dash difftastic fd gh git hyperfine jq jujutsu luajit ripgrep sd selene shellcheck shfmt stow stylua tokei watchexec yq zsh"
-    )
-    testing.eq(
-        names("rust"),
-        "build-tools cargo-binstall cargo-deny cargo-nextest cargo-sort cargo-zigbuild rust-darwin-targets rustfmt-nightly rustup sccache zig"
-    )
+    testing.eq(names("base"), "jq ripgrep sd")
+    testing.eq(names("rust"), "rustup sccache sd")
 end)
 
 testing.test(
@@ -276,7 +271,7 @@ testing.test(
         local dir = assert(fs.realpath(support.tempdir()))
         local probe = 'package.path = "'
             .. REPO
-            .. '/dotfiles/bin/.local/share/dev/lua/?.lua;" .. package.path\n'
+            .. '/lua/?.lua;" .. package.path\n'
             .. 'local lib = require("dev.pkg.lib")\n'
             .. "local opts = { log_file = arg[1] }\n"
             .. 'assert(lib.run({ "echo", "earlier" }, opts) == 0)\n'

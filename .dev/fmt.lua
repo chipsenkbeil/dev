@@ -1,8 +1,8 @@
 --[[
-Format the Lua roots and the style skill's lint templates.
+Format the Lua roots.
 It uses the config that dev lint checks against.
 ]]
-local checks = require("dotfiles.checks")
+local checks = require("devrepo.checks")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local dev_command = require("dev.command")
@@ -11,9 +11,6 @@ local ctx = ...
 dev_command.no_args(ctx)
 
 local files = checks.lua_files(ctx.root)
-for _, file in ipairs(checks.template_files(ctx.root)) do
-    files[#files + 1] = file
-end
 if #files == 0 then
     return 0
 end

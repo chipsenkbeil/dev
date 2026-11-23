@@ -1,0 +1,19 @@
+id: comment-period
+valid:
+  - |
+    -- Advance generation to invalidate handles to the dead entity
+  - |
+    ---Route `packet` by age.
+  - |
+    local x = 1 -- Seconds
+  - |
+    --[[ Block comment. ]]
+  - |
+    -- Wait for the rest...
+invalid:
+  - |
+    -- Advance generation to invalidate handles.
+  - |
+    local x = 1 -- Seconds.
+  - |
+    -- @TODO: route handler iteration through a method that guarantees sorted order.

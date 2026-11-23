@@ -5,7 +5,10 @@ set -o pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$DIR/../.." && pwd)"
-DEV="$REPO/dotfiles/bin/.local/bin/dev"
+DEV="$REPO/bin/dev"
+
+# shellcheck source=tests/dev/stage.bash
+source "$DIR/stage.bash"
 export DOTFILES="$REPO"
 unset VERBOSE CI DEV_AGENT
 export DEV_REMOTE=0
@@ -74,24 +77,6 @@ run_dev() {
     shift
     : >"$STUB_LOG"
     (cd "$dir" && PATH="$STUBS:$PATH" "$DEV" "$@")
-}
-
-ginit_config="$TMP/ginit-config"
-mkdir -p "$ginit_config/dev"
-ln -s "$REPO/dotfiles/dev/.config/dev/commands" "$ginit_config/dev/commands"
-ln -s "$REPO/dotfiles/dev/.config/dev/lua" "$ginit_config/dev/lua"
-: >"$ginit_config/dev/config.toml"
-
-ginit() {
-    local dir="$1"
-    shift
-    XDG_CONFIG_HOME="$ginit_config" run_dev "$dir" init "$@"
-}
-
-gsync() {
-    local dir="$1"
-    shift
-    XDG_CONFIG_HOME="$ginit_config" run_dev "$dir" sync "$@"
 }
 
 log() {
@@ -252,8 +237,7 @@ printf 'false\necho survived\n' >"$vp/grandchild.sh"
 assert_eq "-vv leaks no errexit into a grandchild script" "$(run_dev "$vp" -vv chain 2>/dev/null)" "survived"
 mkdir -p "$TMP/bare"
 cp "$DEV" "$TMP/bare/dev"
-mkdir -p "$TMP/share"
-cp -R "$REPO/dotfiles/bin/.local/share/dev" "$TMP/share/dev"
+stage_share "$TMP/share/dev"
 rm "$TMP/share/dev/xtrace.bash"
 out="$(cd "$vp" && "$TMP/bare/dev" -vv lint 2>"$TMP/err")"
 assert_eq "-vv without the trace file falls back to level 1" "$out" "args= verbose=1"
@@ -295,17 +279,12 @@ bounded_dev() {
     fi
     BOUNDED_OUT=$(cat "$TMP/bounded.out")
 }
-out="$(ginit "$rust" --type 2>&1)"
-assert_eq "init --type with no value exits 2" "$?" "2"
-assert_contains "init names the --type with no value" "$out" "dev init: --type needs a value"
 bounded_dev "$rust" builtin:init --name
 assert_eq "init --name with no value exits 2" "$BOUNDED_RC" "2"
 assert_contains "init names the --name with no value" "$BOUNDED_OUT" "dev init: --name needs a value"
 out="$(run_dev "$rust" builtin:init --bogus 2>&1)"
 assert_eq "init with a bad flag exits 2" "$?" "2"
 assert_contains "init names the bad flag" "$out" "dev init: Unknown flag --bogus"
-out="$(ginit "$rust" --type cobol 2>&1)"
-assert_eq "init with an unknown type exits 2" "$?" "2"
 out="$(run_dev "$rust")"
 assert_eq "no verb exits 0" "$?" "0"
 assert_contains "bare dev names the project type" "$out" "rust project at"
@@ -378,271 +357,6 @@ if ! PATH=/usr/bin:/bin command -v cargo >/dev/null 2>&1; then
     assert_contains "missing cargo prints one install hint" "$out" "Tool cargo not found. Install it with"
 fi
 
-# sync --check
-sync="$(project sync)"
-touch "$sync/Cargo.toml"
-tpl="$REPO/dotfiles/claude/.claude/skills/style/lint/rust"
-cp "$tpl/rustfmt.toml" "$sync/rustfmt.toml"
-printf '# drifted\n' >"$sync/clippy.toml"
-out="$(gsync "$sync" --check)"
-assert_eq "sync --check exits 1 on drift" "$?" "1"
-assert_contains "sync --check reports a drifted file" "$out" "differs: clippy.toml"
-assert_contains "sync --check reports a missing file" "$out" "missing: deny.toml"
-assert_contains "sync --check reports the missing shared lint library" "$out" "missing: .dev/lua/lintset.lua"
-assert_not_contains "sync --check ignores a matching file" "$out" "rustfmt.toml"
-mkdir -p "$sync/.dev"
-printf '.dev/evidence/**\n' >"$sync/.dev/lint-ignore"
-out="$(gsync "$sync" --check)"
-assert_not_contains "sync --check leaves a project-owned lint-ignore alone" "$out" "lint-ignore"
-out="$(gsync "$sync" 2>&1 </dev/null)"
-assert_contains "sync refuses without a terminal" "$out" "needs a terminal"
-assert_contains "the sync refusal names --yes" "$out" "pass --yes to apply without asking"
-gsync "$sync" --yes --check >/dev/null 2>&1
-assert_eq "sync --yes --check exits 2" "$?" "2"
-out="$(gsync "$sync" --bogus 2>&1)"
-assert_eq "sync with a bad flag exits 2" "$?" "2"
-assert_contains "sync names the bad flag" "$out" "dev sync: Unknown flag --bogus"
-
-# init
-if command -v jj >/dev/null 2>&1; then
-    init="$(project init)"
-    printf '[package]\nname = "init"\nversion = "0.1.0"\nedition = "2024"\n' >"$init/Cargo.toml"
-    git -C "$init" init -q
-
-    ownerless="$(project ownerless)"
-    out="$(HOME="$ownerless" ginit "$init" --dry-run)"
-    assert_contains "init --dry-run plans the lint script" "$out" "would create: .dev/lint.lua"
-    assert_contains "init --dry-run plans the pipeline" "$out" "would create: .ci/jobs.lua"
-    assert_not_contains "init --dry-run plans no workflow" "$out" ".github/workflows"
-    assert_contains "init --dry-run plans the style guide" "$out" "would create: docs/STYLE.md"
-    assert_contains "init --dry-run prints the origin command" "$out" "jj git remote add origin git@github.com:OWNER/init.git"
-    ownerhome="$(project ownerhome)"
-    mkdir -p "$ownerhome/.config/dev"
-    printf '[github]\nowner = "chip"\n' >"$ownerhome/.config/dev/config.toml"
-    out="$(HOME="$ownerhome" ginit "$init" --dry-run)"
-    assert_contains "init prints the GitHub remote with the owner" "$out" "jj git remote add origin git@github.com:chip/init.git"
-    assert_eq "init --dry-run writes nothing" "$(find "$init" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')" "2"
-    out="$(ginit "$init" --dry-run -v 2>/dev/null)"
-    assert_contains "init --dry-run -v still dry-runs" "$out" "would create: .dev/lint.lua"
-    assert_eq "init --dry-run -v writes nothing" "$(find "$init" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')" "2"
-
-    targethome="$(project targethome)"
-    mkdir -p "$targethome/.config/dev"
-    printf '[ci]\ntarget = "linux-x86-dev"\nrust_target = "linux-x86-rust"\n' >"$targethome/.config/dev/config.toml"
-    out="$(HOME="$targethome" ginit "$init")"
-    assert_contains "init creates the lint script" "$out" "created: .dev/lint.lua"
-    assert_eq "init writes the lint verb" "$([ -f "$init/.dev/lint.lua" ] && echo yes)" "yes"
-    assert_contains "init writes the lint verb on the shared library" "$(cat "$init/.dev/lint.lua")" 'require("lintset")'
-    assert_contains "init points ast-grep at the root sgconfig.yml" "$(cat "$init/.dev/lint.lua")" "sgconfig.yml"
-    assert_contains "init copies the shared lint library" "$out" "created: .dev/lua/lintset.lua"
-    assert_eq "init writes the shared lint library" "$([ -f "$init/.dev/lua/lintset.lua" ] && echo yes)" "yes"
-    assert_eq "init does not create .dev/lint-ignore" "$([ -e "$init/.dev/lint-ignore" ] && echo yes)" ""
-    assert_contains "init copies the rust fmt verb" "$out" "created: .dev/fmt.lua"
-    assert_contains "init copies the rust test verb" "$out" "created: .dev/test.lua"
-    assert_eq "init writes no shell verb" "$(find "$init/.dev" -name '*.sh' | wc -l | tr -d ' ')" "0"
-    assert_contains "init relocates the ast-grep rules" "$(cat "$init/sgconfig.yml")" ".dev/ast-grep/rules"
-    assert_contains "init pins the lint set channel" "$(cat "$init/rust-toolchain.toml")" "$(grep "^channel = " "$REPO/dotfiles/claude/.claude/skills/style/lint/rust/rust-toolchain.toml")"
-    assert_contains "init appends the workspace lints" "$(cat "$init/Cargo.toml")" "[workspace.lints.rust]"
-    assert_contains "init writes the pipeline" "$(cat "$init/.ci/jobs.lua")" "dev lint"
-    assert_contains "init seeds a lint job" "$(cat "$init/.ci/jobs.lua")" "    lint = {"
-    assert_contains "init seeds a test job" "$(cat "$init/.ci/jobs.lua")" "    test = {"
-    assert_contains "init writes the configured ci target to jobs.lua" "$(cat "$init/.ci/jobs.lua")" "local LINUX = { target = \"linux-x86-rust\" }"
-    placeholder="$(project placeholder)"
-    printf '[package]\nname = "placeholder"\nversion = "0.1.0"\nedition = "2024"\n' >"$placeholder/Cargo.toml"
-    git -C "$placeholder" init -q
-    out="$(HOME="$ownerless" ginit "$placeholder")"
-    assert_contains "init writes a TARGET placeholder when no ci target is set" "$(cat "$placeholder/.ci/jobs.lua")" "local LINUX = { target = \"TARGET\" }"
-    assert_contains "init's pipeline creates ~/.cargo/bin before installing nextest" "$(cat "$init/.ci/jobs.lua")" "mkdir -p \$HOME/.cargo/bin && curl"
-    assert_contains "init's pipeline reads the channel from rust-toolchain.toml at run time" "$(cat "$init/.ci/jobs.lua")" 'io.open("rust-toolchain.toml")'
-    assert_eq "init writes no workflow" "$([ -e "$init/.github" ] && echo yes)" ""
-    assert_contains "init seeds docs/STYLE.md from the rust guide" "$out" "created: docs/STYLE.md"
-    assert_contains "init copies the rust guide" "$(cat "$init/docs/STYLE.md")" "# Rust style"
-    assert_contains "init ends docs/STYLE.md with a project section" "$(tail -n 3 "$init/docs/STYLE.md")" "Rules that apply only to this project"
-    assert_contains "init tells project authors to number their rules with a P prefix" "$(tail -n 3 "$init/docs/STYLE.md")" "Number them P1, P2"
-    assert_eq "init creates .jj" "$([ -d "$init/.jj" ] && echo yes)" "yes"
-    out="$(gsync "$init" --check)"
-    assert_eq "sync --check is clean after init" "$out" "up to date"
-    sd 'return lint:finish\(\)' 'lint:step("project extra")\n\nreturn lint:finish()' "$init/.dev/lint.lua"
-    out="$(gsync "$init" --check)"
-    assert_eq "sync --check keeps the project checks below the lint.lua marker" "$out" "up to date"
-    printf -- '-- drifted above the marker\n' | cat - "$init/.dev/lint.lua" >"$init/.dev/lint.lua.new"
-    mv "$init/.dev/lint.lua.new" "$init/.dev/lint.lua"
-    out="$(gsync "$init" --check)"
-    assert_contains "sync --check still sees drift above the marker" "$out" "differs: .dev/lint.lua"
-    tail -n +2 "$init/.dev/lint.lua" >"$init/.dev/lint.lua.new"
-    mv "$init/.dev/lint.lua.new" "$init/.dev/lint.lua"
-
-    marker='# --- project-specific entries below (dev sync keeps them) ---'
-    assert_contains "init writes the deny.toml marker" "$(cat "$init/deny.toml")" "$marker"
-    assert_eq "init writes no tail below the deny.toml marker" "$(sed -n "/^${marker}\$/,\$p" "$init/deny.toml" | wc -l | tr -d ' ')" "1"
-    printf '\n[[licenses.exceptions]]\nname = "webpki-roots"\nallow = ["CDLA-Permissive-2.0"]\n' >>"$init/deny.toml"
-    out="$(gsync "$init" --check)"
-    assert_eq "sync --check ignores a tail below the deny.toml marker" "$out" "up to date"
-    sd 'allow-git = \[\]' 'allow-git = ["x"]' "$init/deny.toml"
-    out="$(gsync "$init" --check)"
-    assert_contains "sync --check reports drift above the deny.toml marker" "$out" "differs: deny.toml"
-    gsync "$init" --yes >/dev/null
-    assert_contains "sync keeps the deny.toml tail" "$(cat "$init/deny.toml")" 'name = "webpki-roots"'
-    assert_contains "sync restores the template above the deny.toml marker" "$(cat "$init/deny.toml")" "allow-git = []"
-    out="$(gsync "$init" --check)"
-    assert_eq "sync --check is clean after keeping the deny.toml tail" "$out" "up to date"
-
-    cp "$init/docs/STYLE.md" "$TMP/STYLE.md.orig"
-    printf 'Name every lock after what it guards.\n' >>"$init/docs/STYLE.md"
-    out="$(gsync "$init" --check)"
-    assert_eq "sync --check keeps the project rules in docs/STYLE.md" "$out" "up to date"
-    printf '# drifted guide\n' | cat - "$init/docs/STYLE.md" >"$init/docs/STYLE.md.new"
-    mv "$init/docs/STYLE.md.new" "$init/docs/STYLE.md"
-    out="$(gsync "$init" --check)"
-    assert_contains "sync --check reports a drifted guide in docs/STYLE.md" "$out" 'differs: docs/STYLE.md above "## This project"'
-    printf '# Our own style\n\nA ratified project guide.\n' >"$init/docs/STYLE.md"
-    out="$(gsync "$init" --check)"
-    assert_eq "sync --check ignores a docs/STYLE.md the project wrote itself" "$out" "up to date"
-    cp "$TMP/STYLE.md.orig" "$init/docs/STYLE.md"
-
-    before="$(cat "$init/Cargo.toml")"
-    out="$(ginit "$init")"
-    assert_not_contains "init rerun creates nothing" "$out" "created:"
-    assert_contains "init rerun skips an existing docs/STYLE.md" "$out" "skipped: docs/STYLE.md exists"
-    assert_contains "init rerun skips existing files" "$out" "skipped: .dev/lint.lua exists"
-    assert_eq "init rerun leaves Cargo.toml alone" "$(cat "$init/Cargo.toml")" "$before"
-
-    # love2d gets the Lua lint set with the love std
-    game="$(project game)"
-    mkdir -p "$game/src"
-    printf 'function love.load() end\n' >"$game/main.lua"
-    printf 'function love.conf(t)\n    t.window.title = "game"\nend\n' >"$game/conf.lua"
-    printf 'local M = {}\n\nreturn M\n' >"$game/src/mod.lua"
-    git -C "$game" init -q
-    out="$(ginit "$game" --dry-run)"
-    assert_contains "love2d init --dry-run plans the lint script" "$out" "would create: .dev/lint.lua"
-    assert_contains "love2d init --dry-run plans selene.toml" "$out" "would create: selene.toml"
-    assert_eq "love2d init --dry-run writes nothing" "$(find "$game" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')" "4"
-    out="$(ginit "$game")"
-    for f in .dev/lint.lua .dev/fmt.lua .dev/lua/lintset.lua selene.toml stylua.toml luajit.yml love.yml sgconfig.yml .dev/ast-grep/rules/comment-period.yml; do
-        assert_contains "love2d init creates $f" "$out" "created: $f"
-        assert_eq "love2d init writes $f" "$([ -f "$game/$f" ] && echo yes)" "yes"
-    done
-    assert_contains "love2d init seeds .dev/README.md" "$out" "created: .dev/README.md"
-    assert_eq "love2d init writes the lint verb" "$([ -f "$game/.dev/lint.lua" ] && echo yes)" "yes"
-    assert_eq "love2d init writes the shared lint library" "$([ -f "$game/.dev/lua/lintset.lua" ] && echo yes)" "yes"
-    assert_eq "love2d init writes no shell verb" "$(find "$game/.dev" -name '*.sh' | wc -l | tr -d ' ')" "0"
-    assert_contains "love2d init writes the lint verb on the shared library" "$(cat "$game/.dev/lint.lua")" 'require("lintset")'
-    assert_contains "love2d init points ast-grep at the root sgconfig.yml" "$(cat "$game/.dev/lint.lua")" "sgconfig.yml"
-    assert_contains "love2d init relocates the ast-grep rules" "$(cat "$game/sgconfig.yml")" ".dev/ast-grep/rules"
-    assert_contains "love2d init relocates the ast-grep rule tests" "$(cat "$game/sgconfig.yml")" ".dev/ast-grep/rule-test"
-    assert_contains "love2d init picks the love std" "$(cat "$game/selene.toml")" 'std = "love"'
-    assert_contains "love2d init seeds docs/STYLE.md from the lua guide" "$(cat "$game/docs/STYLE.md")" "# Lua style"
-    out="$(gsync "$game" --check)"
-    assert_eq "love2d sync --check is clean after init" "$out" "up to date"
-    printf 'column_width = 80\n' >>"$game/stylua.toml"
-    out="$(gsync "$game" --check)"
-    assert_eq "love2d sync --check exits 1 on a drifted stylua.toml" "$?" "1"
-    assert_contains "love2d sync --check reports the drifted stylua.toml" "$out" "differs: stylua.toml"
-    assert_not_contains "love2d sync --check ignores a matching file" "$out" "selene.toml"
-    cp "$REPO/dotfiles/claude/.claude/skills/style/lint/lua/stylua.toml" "$game/stylua.toml"
-    out="$(ginit "$game")"
-    assert_not_contains "love2d init rerun creates nothing" "$out" "created:"
-    assert_contains "love2d init rerun skips an existing lint script" "$out" "skipped: .dev/lint.lua exists"
-
-    if command -v stylua >/dev/null 2>&1 && command -v selene >/dev/null 2>&1 && command -v ast-grep >/dev/null 2>&1; then
-        out="$(cd "$game" && "$DEV" lint 2>&1)"
-        assert_eq "installed lint verb passes on a clean love2d project" "$?" "0"
-        printf -- '-- Advance generation to invalidate handles.\nlocal M = {}\n\nreturn M\n' >"$game/src/mod.lua"
-        out="$(cd "$game" && "$DEV" lint 2>&1)"
-        assert_eq "installed lint verb exits 1 on a violation" "$?" "1"
-        assert_contains "installed lint verb names the ast-grep rule" "$out" "error[comment-period]"
-        assert_contains "installed lint verb lists the failed check" "$out" "These checks failed: ast-grep scan"
-    else
-        printf 'skip - installed lua lint verb on a love2d project (needs stylua, selene and ast-grep)\n'
-    fi
-
-    # Plain lua gets the same set with the luajit std and no love.yml
-    lib="$(project lib)"
-    mkdir -p "$lib/src"
-    printf 'local M = {}\n\nreturn M\n' >"$lib/src/mod.lua"
-    git -C "$lib" init -q
-    out="$(ginit "$lib")"
-    assert_contains "lua init reports the type" "$out" "type lua"
-    assert_contains "lua init creates the lint script" "$out" "created: .dev/lint.lua"
-    assert_contains "lua init picks the luajit std" "$(cat "$lib/selene.toml")" 'std = "luajit"'
-    assert_eq "lua init ships no love.yml" "$([ -e "$lib/love.yml" ] || echo absent)" "absent"
-    assert_eq "lua init ships luajit.yml" "$([ -f "$lib/luajit.yml" ] && echo yes)" "yes"
-    out="$(gsync "$lib" --check)"
-    assert_eq "lua sync --check is clean after init" "$out" "up to date"
-else
-    printf 'skip - rust, love2d and lua init (needs jj)\n'
-fi
-
-# Library register: the doc lints go to crates without publish = false
-reg="$(project register)"
-mkdir -p "$reg/crates/lib/src" "$reg/crates/app/src" "$reg/crates/bin/src"
-printf '[workspace]\nmembers = ["crates/*"]\nresolver = "3"\n' >"$reg/Cargo.toml"
-printf '[package]\nname = "lib"\nversion = "0.1.0"\nedition = "2024"\n' >"$reg/crates/lib/Cargo.toml"
-printf '[package]\nname = "app"\nversion = "0.1.0"\nedition = "2024"\npublish = false\n' >"$reg/crates/app/Cargo.toml"
-printf '[package]\nname = "bin"\nversion = "0.1.0"\nedition = "2024"\n' >"$reg/crates/bin/Cargo.toml"
-printf '//! Lib docs.\n\npub fn f() {}\n' >"$reg/crates/lib/src/lib.rs"
-printf 'pub fn g() {}\n' >"$reg/crates/app/src/lib.rs"
-printf 'fn main() {}\n' >"$reg/crates/bin/src/main.rs"
-attr='#![deny(clippy::missing_errors_doc, clippy::missing_panics_doc)]'
-out="$(ginit "$reg" --dry-run)"
-assert_contains "init --dry-run plans the attribute" "$out" "would create: crates/lib/src/lib.rs library-register attribute"
-assert_not_contains "init --dry-run leaves lib.rs alone" "$(cat "$reg/crates/lib/src/lib.rs")" "missing_errors_doc"
-out="$(ginit "$reg")"
-assert_contains "init adds the attribute to the library crate" "$out" "created: crates/lib/src/lib.rs library-register attribute"
-assert_contains "init writes the attribute line" "$(cat "$reg/crates/lib/src/lib.rs")" "$attr"
-assert_eq "init puts the attribute after the //! block" "$(sed -n 1p "$reg/crates/lib/src/lib.rs")" "//! Lib docs."
-assert_eq "init leaves a blank line after the //! block" "$(sed -n 2p "$reg/crates/lib/src/lib.rs")" ""
-assert_contains "init lists the publish = false crate" "$out" "application register, no doc lints: crates/app"
-assert_not_contains "init skips the publish = false crate" "$(cat "$reg/crates/app/src/lib.rs")" "missing_errors_doc"
-assert_eq "init leaves the binary crate alone" "$(cat "$reg/crates/bin/src/main.rs")" "fn main() {}"
-assert_not_contains "workspace lints omit the library-only lints" "$(cat "$reg/Cargo.toml")" 'missing_errors_doc = '
-assert_contains "workspace lints keep missing_safety_doc" "$(cat "$reg/Cargo.toml")" 'missing_safety_doc = "deny"'
-out="$(ginit "$reg")"
-assert_contains "init rerun skips the attribute" "$out" "skipped: crates/lib/src/lib.rs has the library-register attribute"
-assert_not_contains "init rerun creates no attribute" "$out" "library-register attribute
-created"
-assert_eq "init rerun keeps one attribute" "$(grep -c 'missing_errors_doc' "$reg/crates/lib/src/lib.rs")" "1"
-out="$(gsync "$reg" --check)"
-assert_eq "sync --check is clean after init in a workspace" "$out" "up to date"
-
-sd 'missing_safety_doc = "deny"' 'missing_safety_doc = "warn"' "$reg/Cargo.toml"
-sd -F "$attr" '' "$reg/crates/lib/src/lib.rs"
-out="$(gsync "$reg" --check)"
-assert_eq "sync --check exits 1 on a modified lints block" "$?" "1"
-assert_contains "sync --check reports the lints block" "$out" "differs: [workspace.lints] block in Cargo.toml"
-assert_contains "sync --check reports the removed attribute" "$out" "missing: library-register attribute in crates/lib/src/lib.rs"
-assert_not_contains "sync --check ignores the application crate" "$out" "crates/app"
-sd 'return lint:finish\(\)' 'lint:step("project extra")\n\nreturn lint:finish()' "$reg/.dev/lint.lua"
-printf '# drifted guide\n' | cat - "$reg/docs/STYLE.md" >"$reg/docs/STYLE.md.new"
-mv "$reg/docs/STYLE.md.new" "$reg/docs/STYLE.md"
-out="$(gsync "$reg" --yes </dev/null 2>&1)"
-assert_eq "sync --yes without a terminal exits 0" "$?" "0"
-assert_contains "sync --yes prints the diffs it applies" "$out" "would insert into crates/lib/src/lib.rs"
-assert_contains "sync --yes applies without asking" "$out" "synced"
-out="$(gsync "$reg" --check)"
-assert_eq "sync --yes restores the lints block, the attribute and the guide" "$out" "up to date"
-assert_contains "sync --yes keeps the project checks below the lint.lua marker" "$(cat "$reg/.dev/lint.lua")" 'lint:step("project extra")'
-on_tty() {
-    if sv=$(script --version 2>&1) && grep -q util-linux <<<"$sv"; then
-        script -qec "$(printf '%q ' "$@")" /dev/null
-    else
-        script -q /dev/null "$@"
-    fi
-}
-if command -v script >/dev/null 2>&1; then
-    sd 'missing_safety_doc = "deny"' 'missing_safety_doc = "warn"' "$reg/Cargo.toml"
-    (cd "$reg" && on_tty env XDG_CONFIG_HOME="$ginit_config" PATH="$STUBS:$PATH" "$DEV" sync < <(
-        printf 'y\n'
-        sleep 30
-    ) >"$TMP/sync.out" 2>&1)
-    assert_contains "sync asks on a terminal" "$(cat "$TMP/sync.out")" "[y/N]"
-    out="$(gsync "$reg" --check)"
-    assert_eq "sync on a terminal applies a y answer" "$out" "up to date"
-else
-    printf 'skip - sync on a terminal (needs script)\n'
-fi
-
 wtmain="$(project wtmain)"
 git -C "$wtmain" init -q
 git -C "$wtmain" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
@@ -682,8 +396,18 @@ assert_eq "git push exits 0" "$?" "0"
 assert_contains "git push names the remote and branch" "$out" "Pushed main to origin."
 assert_contains "git push -v shows plain git when push.guard is unset" "$out" "+ git push -- origin $(git -C "$gp" rev-parse HEAD):refs/heads/main"
 guard_home="$TMP/guardhome"
-mkdir -p "$guard_home/.config/dev"
-printf '[push]\nguard = "%s/dotfiles/bin/.local/bin/commit-guard"\n' "$REPO" >"$guard_home/.config/dev/config.toml"
+mkdir -p "$guard_home/.config/dev" "$guard_home/bin"
+cat >"$guard_home/bin/commit-guard" <<'STUB'
+#!/usr/bin/env bash
+shift 2
+if git log -1 --format=%B "${2%%:*}" | grep -q '^Claude-Session:'; then
+    echo "commit-guard: refusing to push to $1" >&2
+    exit 1
+fi
+exec git push -- "$@"
+STUB
+chmod +x "$guard_home/bin/commit-guard"
+printf '[push]\nguard = "%s/bin/commit-guard"\n' "$guard_home" >"$guard_home/.config/dev/config.toml"
 out="$(HOME="$guard_home" run_dev "$gp" -v push 2>&1)"
 assert_contains "git push -v shows the configured guard" "$out" "commit-guard push -- origin $(git -C "$gp" rev-parse HEAD):refs/heads/main"
 assert_eq "git push puts the commit on the remote" "$(git -C "$gremote" rev-parse main)" "$(git -C "$gp" rev-parse HEAD)"

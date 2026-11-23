@@ -2212,7 +2212,7 @@ esac
         function()
             local project = template_project()
             trunk_moves(project, {
-                ["dotfiles/bin/.local/share/dev/lua/dev/fs.lua"] = "return {}\n",
+                ["lua/dev/fs.lua"] = "return {}\n",
                 [".dev/baked.txt"] = "dev.fs\n",
             })
             local id = template_ready(project, { template = CALLS_EXISTS })

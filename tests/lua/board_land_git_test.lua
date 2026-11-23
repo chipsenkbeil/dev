@@ -431,7 +431,7 @@ testing.test("a malformed recheck row prints its reason with one period", functi
 end)
 
 local function landing_env(fn)
-    local self = dev_os.capture({ "pwd" }):gsub("\n$", "") .. "/dotfiles/bin/.local/bin/dev"
+    local self = dev_os.capture({ "pwd" }):gsub("\n$", "") .. "/bin/dev"
     local set = {
         DEV_SELF = self,
         GIT_COMMITTER_NAME = "t",

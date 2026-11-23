@@ -1,0 +1,20 @@
+id: annotation-period
+snapshots:
+  "---@field ttl integer Ticks until expiry.\n":
+    labels:
+    - source: ---@field ttl integer Ticks until expiry.
+      style: primary
+      start: 0
+      end: 41
+  "---@param base integer the numeric base.\n":
+    labels:
+    - source: ---@param base integer the numeric base.
+      style: primary
+      start: 0
+      end: 40
+  "---@return app.Entry? entry nil when nothing is registered under name.\n":
+    labels:
+    - source: ---@return app.Entry? entry nil when nothing is registered under name.
+      style: primary
+      start: 0
+      end: 70

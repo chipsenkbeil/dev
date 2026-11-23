@@ -9,8 +9,8 @@ local registry = require("dev.registry")
 local ui = require("dev.ui")
 
 local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
-local MAIN = REPO .. "/dotfiles/bin/.local/share/dev/main.lua"
-local SELF = REPO .. "/dotfiles/bin/.local/bin/dev"
+local MAIN = REPO .. "/main.lua"
+local SELF = REPO .. "/bin/dev"
 
 local function project(files)
     local root = support.tempdir()
@@ -260,7 +260,7 @@ testing.test("parent command help keeps a short subcommand description on one li
     )
 end)
 
-local BOARD_SOURCE = REPO .. "/dotfiles/bin/.local/share/dev/lua/dev/cmd/board.lua"
+local BOARD_SOURCE = REPO .. "/lua/dev/cmd/board.lua"
 
 local function board_rows()
     local rows = {}

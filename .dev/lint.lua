@@ -1,12 +1,11 @@
 --[[
 Run the shell, bats and Lua checks over the repo.
 Shellcheck, shfmt and comment spacing cover the bash roots, and the bare-assertion check covers
-the bats files. Stylua, selene, ast-grep and the comment checks cover the Lua roots, .dev included.
-The style skill's lint templates get the formatter check too, and the rule tests of the Lua and
-Rust lint sets run once.
+the bats files. Stylua, selene, ast-grep and the comment checks cover the Lua roots, .dev included,
+and the ast-grep rule tests run once.
 Exit non-zero when any of them reports a finding.
 ]]
-local checks = require("dotfiles.checks")
+local checks = require("devrepo.checks")
 local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local dev_command = require("dev.command")
@@ -19,12 +18,11 @@ local failed = false
 local dirty = {}
 
 local LUA_TOOLS = {
-    { "stylua", { "--config-path", "STYLE/stylua.toml", "--check" }, true },
+    { "stylua", { "--config-path", "STYLE/stylua.toml", "--check" } },
     { "selene", { "--no-exclude", "--config", "STYLE/selene.toml" } },
-    { "ast-grep", { "scan", "--config", "STYLE/ast-grep/sgconfig.yml" } },
+    { "ast-grep", { "scan", "--config", "STYLE/sgconfig.yml" } },
 }
 
-local RULE_TEST_SETS = { "lua", "rust" }
 local DOC_COLUMNS = 80
 
 local function run_checked(argv, opts)
@@ -83,26 +81,23 @@ local function lint_shell(file)
     )
 end
 
-local function lint_lua(files, templates)
+local function lint_lua(files)
     local style = fs.join(root, checks.lint_dir)
-    local formatted = checks.with_files(checks.with_files({}, files), templates)
     for _, row in ipairs(LUA_TOOLS) do
         local tool, prefix = row[1], { row[1] }
-        local targets = row[3] and formatted or files
-        if #targets > 0 then
+        if #files > 0 then
             if dev_os.which(tool) then
                 dev_command.say("> Linting lua with " .. tool)
                 for _, word in ipairs(row[2]) do
                     prefix[#prefix + 1] = (word:gsub("^STYLE", style))
                 end
-                run_checked(checks.with_files(prefix, targets))
+                run_checked(checks.with_files(prefix, files))
             else
                 missing(tool)
             end
         end
     end
     dev_command.say("> Linting lua comments")
-    package.path = style .. "/../?.lua;" .. package.path
     local lintset = require("lintset")
     for _, file in ipairs(files) do
         local text = fs.read(fs.join(root, file)) or ""
@@ -155,7 +150,7 @@ if #dirty > 0 then
 end
 
 local lua_files = checks.lua_files(root)
-lint_lua(lua_files, checks.template_files(root))
+lint_lua(lua_files)
 
 dev_command.say("> standalone shell")
 for _, line in ipairs(require("dev.standalone").problems(root)) do
@@ -164,16 +159,8 @@ for _, line in ipairs(require("dev.standalone").problems(root)) do
 end
 
 if dev_os.which("ast-grep") then
-    local sets = fs.join(root, checks.lint_dir, "..")
-    for _, set in ipairs(RULE_TEST_SETS) do
-        dev_command.say("> Testing " .. set .. " ast-grep rules")
-        run_checked({
-            "ast-grep",
-            "test",
-            "--config",
-            fs.join(sets, set, "ast-grep", "sgconfig.yml"),
-        })
-    end
+    dev_command.say("> Testing the ast-grep rules")
+    run_checked({ "ast-grep", "test", "--config", fs.join(root, checks.lint_dir, "sgconfig.yml") })
 end
 
 return failed and 1 or 0

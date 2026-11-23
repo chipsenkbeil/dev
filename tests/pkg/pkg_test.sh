@@ -3,7 +3,7 @@
 set -o pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PKG="$(cd "$DIR/../../dotfiles/bin/.local/share/dev" && pwd)/pkg.lua"
+PKG="$(cd "$DIR/../.." && pwd)/pkg.lua"
 
 fails=0
 

@@ -53,7 +53,7 @@ testing.test("soak loops every case and reports the load of each run", function(
         out:find("PASS pkg_script TERM 2/2 (1 cases) load: 2 burners, 1 cores", 1, true),
         out
     )
-    testing.ok(out:find("guide interrupt: 2 of 2 runs passed", 1, true), out)
+    testing.ok(out:find("confirm and spin ctrl-c: 2 of 2 runs passed", 1, true), out)
     testing.ok(out:find("0 runs failed", 1, true), out)
 end)
 
@@ -64,18 +64,18 @@ testing.test("soak fails a run whose case exits non-zero and keeps its output", 
     testing.ok(out:find("FAIL confirm and spin ctrl-c 1/1", 1, true), out)
     testing.ok(out:find("not ok 1 case", 1, true), out)
     testing.ok(out:find("PASS pkg_script TERM 1/1", 1, true), out)
-    testing.ok(out:find("2 runs failed", 1, true), out)
+    testing.ok(out:find("1 runs failed", 1, true), out)
 end)
 
 testing.test("soak fails a run in which no case ran", function()
     local root = project("echo 1..0")
     local out, code = support.dev(root, { "soak", "--runs", "1" }, { env = ON_CI })
     testing.eq(code, 1)
-    testing.ok(out:find("FAIL guide interrupt 1/1 (0 cases)", 1, true), out)
+    testing.ok(out:find("FAIL confirm and spin ctrl-c 1/1 (0 cases)", 1, true), out)
 end)
 
-local MAIN = REPO .. "/dotfiles/bin/.local/share/dev/main.lua"
-local SELF = REPO .. "/dotfiles/bin/.local/bin/dev"
+local MAIN = REPO .. "/main.lua"
+local SELF = REPO .. "/bin/dev"
 
 local DRIVER = [[
 luajit "$MAIN" soak --runs 1 >/dev/null 2>&1 &

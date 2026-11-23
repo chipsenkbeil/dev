@@ -2,7 +2,7 @@ local testing = require("dev.testing")
 local board_select = require("dev.board.select")
 local support = require("support")
 
-local LIB = "dotfiles/bin/.local/share/dev/lua/dev/"
+local LIB = "lua/dev/"
 
 local function sources()
     return {

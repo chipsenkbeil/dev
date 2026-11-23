@@ -1,0 +1,10 @@
+id: annotation-case
+language: lua
+severity: error
+message: Start a `@param` or `@return` description in lowercase. It is a noun phrase, not a sentence.
+note: "style/references/lua.md, Parameters and returns. Correct: `---@param base integer the numeric base`."
+rule:
+  kind: comment
+  any:
+    - regex: '^---\s*@param\s+\S+\s+[^\s<(,{:]+\s+[A-Z][a-z]'
+    - regex: '^---\s*@return\s+[^\s<(,{:]+\s+([a-z_]\w*\s+)?[A-Z][a-z]'

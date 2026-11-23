@@ -1,0 +1,17 @@
+id: field-description
+valid:
+  - |
+    ---@field ttl integer ticks until this entry expires, starting at 60
+  - |
+    ---@field private __retry_count integer number of times the send was retried
+  - |
+    ---@field on_disconnect? fun(reason: string) called after a peer connection drops
+  - |
+    ---@field lanes render.Lane[] lanes in draw order
+invalid:
+  - |
+    ---@field ttl integer
+  - |
+    ---@field private __retry_count integer
+  - |
+    ---@field lanes? render.Lane[]

@@ -2,7 +2,7 @@ local testing = require("dev.testing")
 local fs = require("dev.fs")
 local support = require("support")
 
-local DOC = "dotfiles/bin/.local/share/dev/docs/modules.md"
+local DOC = "docs/modules.md"
 local HEADING = "### Modules a command may require"
 
 local PROBE = [=[--[[

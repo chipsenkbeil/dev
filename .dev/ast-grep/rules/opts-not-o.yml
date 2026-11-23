@@ -1,0 +1,21 @@
+id: opts-not-o
+language: lua
+severity: error
+message: Name an options table `opts`, never `o`. A canonical copy reassigns the parameter, `opts = vim.deepcopy(opts)`.
+note: "style/references/lua.md, Signatures."
+rule:
+  kind: identifier
+  regex: '^o$'
+  any:
+    - inside:
+        kind: parameters
+    - inside:
+        kind: variable_list
+        inside:
+          kind: assignment_statement
+          all:
+            - inside:
+                kind: variable_declaration
+            - has:
+                kind: expression_list
+                regex: '\bopts\b'

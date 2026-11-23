@@ -4,7 +4,7 @@ local fs = require("dev.fs")
 local support = require("support")
 
 local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
-local PKG = REPO .. "/dotfiles/bin/.local/share/dev/pkg.lua"
+local PKG = REPO .. "/pkg.lua"
 local SHA = string.rep("a", 64)
 
 local UNAME = '#!/bin/sh\ncase "$1" in -m) echo "$FAKE_ARCH" ;; *) echo "$FAKE_KERNEL" ;; esac\n'

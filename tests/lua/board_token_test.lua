@@ -88,11 +88,11 @@ local function sandbox()
     executable(
         root .. "/bin/pass",
         '#!/bin/sh\nprintf "pass %s\\n" "$*" >>"$ROOT/calls"\n'
-            .. 'case "$*" in *Lead*) echo "'
+            .. 'case "$*" in */lead/*) echo "'
             .. LEAD
-            .. '" ;; *Reviewer*) echo "'
+            .. '" ;; */reviewer/*) echo "'
             .. STANDING
-            .. '" ;; *Verifier*) echo "'
+            .. '" ;; */verifier/*) echo "'
             .. VERIFIER_STANDING
             .. '" ;; *) echo "'
             .. WORKER
@@ -817,18 +817,13 @@ testing.test("token mint without renew still refuses a live name and deletes not
     testing.eq(fs.read(path), RAW .. "\n" .. EXPIRES .. "\n")
 end)
 
-local REVIEWERS = {
-    "dotfiles/code-examiner/bff0e010",
-    "dotfiles/style-examiner/bff0e010",
-    "dotfiles/recheck-examiner/bff0e010",
-}
+local REVIEWERS = {}
+for _, seat in ipairs(board_init.SEATS) do
+    REVIEWERS[#REVIEWERS + 1] = "dotfiles/" .. seat .. "-reviewer/bff0e010"
+end
 local VERIFIER = "dotfiles/verifier/bff0e010"
-local SEATS = {
-    "dotfiles/code-examiner/bff0e010",
-    "dotfiles/style-examiner/bff0e010",
-    "dotfiles/recheck-examiner/bff0e010",
-    VERIFIER,
-}
+local SEATS = { unpack(REVIEWERS) }
+SEATS[#SEATS + 1] = VERIFIER
 
 local function standing(home, verifier)
     local lines = USER .. 'reviewer_token = "pass:secrets/reviewer/token/pomb"\n'
@@ -892,7 +887,7 @@ testing.test("a verifier name never sends the standing reviewer token", function
     testing.ok(sent:find("Bearer " .. RAW, 1, true), sent)
     testing.eq(sent:find(STANDING, 1, true), nil, sent)
     testing.eq(sent:find(VERIFIER_STANDING, 1, true), nil, sent)
-    testing.eq(occurrences(read(root, "calls"), "Reviewer"), 0)
+    testing.eq(occurrences(read(root, "calls"), "/reviewer/"), 0)
 end)
 
 testing.test("a reviewer name with no standing token reads its own file", function()
@@ -904,7 +899,7 @@ testing.test("a reviewer name with no standing token reads its own file", functi
         local sent = read(root, "stdin")
         testing.ok(sent:find("Bearer " .. RAW, 1, true), name .. "\n" .. sent)
         testing.eq(sent:find(STANDING, 1, true), nil, sent)
-        testing.eq(occurrences(read(root, "calls"), "Reviewer"), 0)
+        testing.eq(occurrences(read(root, "calls"), "/reviewer/"), 0)
     end
 
     local root, home = sandbox()
@@ -912,7 +907,7 @@ testing.test("a reviewer name with no standing token reads its own file", functi
     testing.ok(code == 0, out)
     testing.ok(read(root, "stdin"):find("Bearer " .. WORKER, 1, true), read(root, "stdin"))
     testing.eq(read(root, "stdin"):find(STANDING, 1, true), nil)
-    testing.eq(occurrences(read(root, "calls"), "Reviewer"), 0)
+    testing.eq(occurrences(read(root, "calls"), "/reviewer/"), 0)
 end)
 
 testing.test("reviewer roles follow the board seats", function()
@@ -935,7 +930,7 @@ testing.test("a role outside the seats sends no standing token", function()
         testing.ok(code == 0, name .. "\n" .. out)
         local sent = read(root, "stdin")
         testing.eq(sent:find(STANDING, 1, true), nil, name .. "\n" .. sent)
-        testing.eq(occurrences(read(root, "calls"), "Reviewer"), 0, name)
+        testing.eq(occurrences(read(root, "calls"), "/reviewer/"), 0, name)
     end
 end)
 
@@ -955,6 +950,6 @@ testing.test("a runner name never sends the standing reviewer token", function()
         testing.ok(code == 0, name .. "\n" .. out)
         local sent = read(root, "stdin")
         testing.eq(sent:find(STANDING, 1, true), nil, name .. "\n" .. sent)
-        testing.eq(occurrences(read(root, "calls"), "Reviewer"), 0, name)
+        testing.eq(occurrences(read(root, "calls"), "/reviewer/"), 0, name)
     end
 end)

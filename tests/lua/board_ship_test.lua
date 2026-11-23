@@ -246,9 +246,9 @@ if dev_os.which("jj") then
 
     local SYNC_TEMPLATES = table.concat({
         "\n[sync]\ntemplates = [",
-        '"dotfiles/claude/.claude/skills/style/lint",',
-        '"dotfiles/claude/.claude/skills/style/lintset.lua",',
-        '"dotfiles/bin/.local/share/dev/init/README.md"]\n',
+        '"tools/style/lint",',
+        '"tools/style/lintset.lua",',
+        '"init/README.md"]\n',
     }, " ")
 
     local function ship_template_run(path, sync)
@@ -264,17 +264,17 @@ if dev_os.which("jj") then
     end
 
     testing.test("ship.names.a.changed.lint.template", function()
-        local path = "dotfiles/claude/.claude/skills/style/lint/lua/stylua.toml"
+        local path = "tools/style/lint/lua/stylua.toml"
         local out = ship_template_run(path)
         testing.ok(out:find("The dev sync templates changed.", 1, true), out)
         testing.ok(out:find(path, 1, true), out)
         testing.ok(out:find("Synced repos run dev sync", 1, true), out)
-        local lib = "dotfiles/claude/.claude/skills/style/lintset.lua"
+        local lib = "tools/style/lintset.lua"
         testing.ok(ship_template_run(lib):find(lib, 1, true))
     end)
 
     testing.test("ship.names.a.changed.readme.guide.template", function()
-        local path = "dotfiles/bin/.local/share/dev/init/README.md"
+        local path = "init/README.md"
         local out = ship_template_run(path)
         testing.ok(out:find("The dev sync templates changed.", 1, true), out)
         testing.ok(out:find(path, 1, true), out)
@@ -290,7 +290,7 @@ if dev_os.which("jj") then
     testing.test("ship says nothing about templates without sync.templates", function()
         local out = ship_template_run("docs/other.md", "")
         testing.ok(not out:find("The dev sync templates changed.", 1, true), out)
-        local lint = "dotfiles/claude/.claude/skills/style/lint/lua/stylua.toml"
+        local lint = "tools/style/lint/lua/stylua.toml"
         testing.ok(not ship_template_run(lint, ""):find("sync templates changed", 1, true))
     end)
 
@@ -418,7 +418,7 @@ if dev_os.which("jj") then
         testing.eq(#done_notes(select(2, state(home, id))), 0)
     end)
 
-    local SHIP_ROOTS = '\n[board.ship]\nsource_roots = ["dotfiles/bin/.local/share/dev/lua/"]\n'
+    local SHIP_ROOTS = '\n[board.ship]\nsource_roots = ["lua/"]\n'
 
     local function red_ship(failing, landed, extra)
         local root, home = project(extra or SHIP_ROOTS)
@@ -472,7 +472,7 @@ if dev_os.which("jj") then
     end)
 
     testing.test("ship.names.the.card.that.touched.code.a.failing.test.loads", function()
-        local module = "dotfiles/bin/.local/share/dev/lua/dev/zmod.lua"
+        local module = "lua/dev/zmod.lua"
         local out = red_ship("tests/lua/z_test.lua", {
             { path = "tests/lua/z_test.lua", text = 'require("dev.zmod")\n' },
             { name = "Loaded", path = module },
@@ -486,7 +486,7 @@ if dev_os.which("jj") then
     testing.test(
         "ship.names.the.card.that.touched.code.a.failing.test.loads.through.a.chain",
         function()
-            local lua = "dotfiles/bin/.local/share/dev/lua/dev/"
+            local lua = "lua/dev/"
             local out = red_ship("tests/lua/c_test.lua", {
                 { path = "tests/lua/c_test.lua", text = 'require("dev.mid")\n' },
                 { path = lua .. "mid.lua", text = 'require("dev.leaf")\n' },
@@ -518,7 +518,7 @@ if dev_os.which("jj") then
     end)
 
     testing.test("ship.still.follows.requires.of.a.lua.file.the.failing.test.quotes", function()
-        local lua = "dotfiles/bin/.local/share/dev/lua/dev/"
+        local lua = "lua/dev/"
         local out = red_ship("tests/lua/r_test.lua", {
             {
                 path = "tests/lua/r_test.lua",
@@ -536,7 +536,7 @@ if dev_os.which("jj") then
     end)
 
     testing.test("ship.suspects.follow.no.require.without.source_roots", function()
-        local lua = "dotfiles/bin/.local/share/dev/lua/dev/"
+        local lua = "lua/dev/"
         local out = red_ship("tests/lua/n_test.lua", {
             { path = "tests/lua/n_test.lua", text = 'require("dev.zmod")\n' },
             { name = "Loaded", path = lua .. "zmod.lua" },

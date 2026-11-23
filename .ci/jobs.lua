@@ -1,5 +1,7 @@
+-- Lint and test dev. No job names a target, so each runs on the
+-- default_target of the ci config that starts the run.
 local PACMAN_PACKAGES = "git jujutsu luajit bats shellcheck shfmt stylua selene ast-grep jq go-yq dash stow ripgrep fd sd man-db zsh unzip"
-local ROOT_CLONE = "/root/dotfiles"
+local ROOT_CLONE = "/root/dev"
 
 local function real_root(file, name)
   local run = "sudo bash -c 'cd " .. ROOT_CLONE .. " && bash " .. file .. " </dev/null' >$log 2>&1"
@@ -25,25 +27,24 @@ local function selects(file)
 end
 
 local function prepare()
+  ci.sh("command -v pacman >/dev/null || { echo 'This pipeline installs its tools with pacman. Set default_target to an Arch Linux target.'; exit 1; }", { name = "check pacman" })
   ci.sh("missing=$(pacman -T " .. PACMAN_PACKAGES .. ") || sudo pacman -Syu --noconfirm --needed $missing", { name = "install packages" })
 end
 
 return {
   jobs = {
     lint = {
-      name = "lint on ${target} (${shape})",
-      matrix = { { target = "linux-x86-dev", shape = "small" } },
+      name = "lint on ${target}",
       run = function()
         prepare()
-        ci.sh("./dotfiles/bin/.local/bin/dev lint </dev/null", { name = "lint" })
+        ci.sh("./bin/dev lint </dev/null", { name = "lint" })
       end,
     },
     test = {
       name = "test on ${target}",
-      matrix = { { target = "linux-x86-rust" } },
       run = function()
         prepare()
-        local command = "./dotfiles/bin/.local/bin/dev test"
+        local command = "./bin/dev test"
         for _, word in ipairs(ci.args) do
           command = command .. " " .. shell_quote(word)
         end

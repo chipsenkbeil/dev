@@ -200,7 +200,7 @@ local function page_output(rows, opts)
             .. "local paged = ui.page(string.rep('row\\n', %d), "
             .. "{ pager = %q, interactive = true, rows = 24, fallback = %s }); "
             .. "io.write(tostring(paged))",
-        REPO .. "/dotfiles/bin/.local/share/dev/lua/?.lua;",
+        REPO .. "/lua/?.lua;",
         rows,
         opts.pager,
         opts.fallback and string.format("%q", opts.fallback) or "nil"

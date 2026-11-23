@@ -1,0 +1,38 @@
+id: or-zero-guard
+language: lua
+severity: error
+message: Guard the optional on the variable itself, `x and x > 0`, so the checker narrows it.
+note: "style/references/lua.md, Optionality. Pure defaulting with no guarded body, such as `width + (pad or 0)`, is fine."
+utils:
+  or-default:
+    kind: parenthesized_expression
+    has:
+      kind: binary_expression
+      all:
+        - has:
+            field: operator
+            regex: '^or$'
+        - has:
+            field: right
+            kind: number
+rule:
+  kind: binary_expression
+  all:
+    - has:
+        field: operator
+        regex: '^(<|>|<=|>=)$'
+    - any:
+        - has:
+            field: left
+            matches: or-default
+        - has:
+            field: right
+            matches: or-default
+    - inside:
+        any:
+          - kind: if_statement
+          - kind: elseif_statement
+          - kind: while_statement
+          - kind: repeat_statement
+        stopBy:
+          kind: block

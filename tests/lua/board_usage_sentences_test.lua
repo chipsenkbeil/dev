@@ -3,7 +3,7 @@ local dev_os = require("dev.os")
 local fs = require("dev.fs")
 
 local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
-local LUA_ROOT = REPO .. "/dotfiles/bin/.local/share/dev/lua/dev/"
+local LUA_ROOT = REPO .. "/lua/dev/"
 local BOARD_SOURCE = LUA_ROOT .. "cmd/board.lua"
 local MOVED_SOURCES = {
     LUA_ROOT .. "board/guards.lua",

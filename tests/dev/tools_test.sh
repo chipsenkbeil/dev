@@ -6,7 +6,10 @@ set -o pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$DIR/../.." && pwd)"
-DEV="$REPO/dotfiles/bin/.local/bin/dev"
+DEV="$REPO/bin/dev"
+
+# shellcheck source=tests/dev/stage.bash
+source "$DIR/stage.bash"
 unset DOTFILES VERBOSE CI
 export DEV_REMOTE=0
 
@@ -242,32 +245,18 @@ STUB
     : >"$RECORD"
     FAKE_UID=1000 tools "$relproj/sub" install --user rel >/dev/null
     assert_eq "a script: path is relative to the project root" "$(cat "$RECORD")" "ran from $(cd "$relproj" && pwd -P)"
-
-    out="$(tools "$REPO" install --dry-run 2>&1)"
-    assert_eq "dotfiles' own .dev/tools.tsv installs" "$?" "0"
-    assert_contains "the repo manifest plans its stow row" "$out" "stow"
 else
     skip_user
 fi
-if [ -x /usr/bin/pacman ] && [ "$EUID" -eq 0 ]; then
-    out="$(FAKE_UID=0 tools "$REPO" install --system --dry-run 2>&1)"
-    assert_not_contains "dotfiles' --system skips its script rows" "$out" "install-stow.lua"
-    assert_contains "dotfiles' --system names its AUR rows" "$out" "skipped third-party"
-else
-    printf 'SKIP real-root - root package driver runs need the real /usr/bin/pacman and real root with a root-owned project chain\n'
-fi
-assert_eq "the old manifest path is gone" "$([ -e "$REPO/tools.tsv" ] && echo present || echo gone)" "gone"
 
-copy="$TMP/image/usr-local-lib-dotfiles"
-mkdir -p "$copy/dotfiles/bin/.local/bin"
-cp -R "$REPO/scripts" "$copy/scripts"
-cp "$DEV" "$copy/dotfiles/bin/.local/bin/dev"
-mkdir -p "$copy/dotfiles/bin/.local/share"
-cp -R "$REPO/dotfiles/bin/.local/share/dev" "$copy/dotfiles/bin/.local/share/dev"
+copy="$TMP/image/usr-local-lib-dev"
+mkdir -p "$copy/bin"
+cp "$DEV" "$copy/bin/dev"
+stage_share "$copy"
 chmod -R a-w "$copy"
 out="$(FAKE_UID=0 HOME="$TMP/nohome" tools "$proj" install --system --dry-run 2>&1)"
-out_copy="$(cd "$proj" && FAKE_UID=0 HOME="$TMP/nohome" PATH="$STUBS:$PATH" "$copy/dotfiles/bin/.local/bin/dev" tools install --system --dry-run 2>&1)"
-assert_eq "a read-only copy of dotfiles gives the same plan" "$out_copy" "$out"
+out_copy="$(cd "$proj" && FAKE_UID=0 HOME="$TMP/nohome" PATH="$STUBS:$PATH" "$copy/bin/dev" tools install --system --dry-run 2>&1)"
+assert_eq "a read-only copy of dev gives the same plan" "$out_copy" "$out"
 assert_eq "a read-only copy leaves HOME unmade" "$([ -e "$TMP/nohome" ] && echo made || echo none)" "none"
 chmod -R u+w "$copy"
 
@@ -400,9 +389,6 @@ if [ -x /usr/bin/pacman ] && [ "$EUID" -eq 0 ]; then
     assert_not_contains "--system --group skips a cargo row" "$out" "crg-d"
     assert_not_contains "--system --group skips an ungrouped row" "$out" "oth-e"
     assert_contains "--system --group names the skipped AUR row" "$out" "skipped third-party rows (built into the image, not installed with root): aur-b (aur:)"
-    out="$(FAKE_UID=0 tools "$REPO" install --system --dry-run --group base 2>&1)"
-    assert_eq "dotfiles' manifest --system --group base exits 0" "$?" "0"
-    assert_not_contains "dotfiles' --group base leaves out a rust row" "$out" "cargo-nextest"
     out="$(FAKE_UID=0 tools "$gproj" install --system --group rust 2>&1)"
     assert_eq "--system --group rust with only user-scope rows exits 0" "$?" "0"
     assert_not_contains "--system --group rust installs nothing" "$out" "pacman -S"

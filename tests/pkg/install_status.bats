@@ -5,7 +5,7 @@
 # records its arguments and fails for the package named bad-formula.
 
 REPO="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
-PKG="$REPO/dotfiles/bin/.local/share/dev/pkg.lua"
+PKG="$REPO/pkg.lua"
 
 setup() {
     STUBS="$BATS_TEST_TMPDIR/stubs"

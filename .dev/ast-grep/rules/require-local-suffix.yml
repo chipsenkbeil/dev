@@ -1,0 +1,22 @@
+id: require-local-suffix
+language: lua
+severity: error
+message: Name a require-bound local after the module's final path segment, with no `_cache`, `_module` or `_util` suffix.
+note: "style/references/lua.md, Files and names. Correct: `local grid = require(\"arena.grid\")`."
+rule:
+  kind: variable_declaration
+  has:
+    kind: assignment_statement
+    all:
+      - has:
+          kind: variable_list
+          has:
+            kind: identifier
+            regex: '_(cache|module|util)$'
+      - has:
+          kind: expression_list
+          has:
+            kind: function_call
+            has:
+              field: name
+              regex: '^require$'

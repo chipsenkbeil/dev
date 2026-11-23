@@ -1,0 +1,19 @@
+id: annotation-period
+valid:
+  - |
+    ---@param base integer the numeric base
+  - |
+    ---@return app.Entry? entry nil when nothing is registered under name
+  - |
+    ---@field ttl integer ticks until this entry expires, starting at 60
+  - |
+    ---Route `packet` by age.
+  - |
+    ---@return any ...
+invalid:
+  - |
+    ---@param base integer the numeric base.
+  - |
+    ---@return app.Entry? entry nil when nothing is registered under name.
+  - |
+    ---@field ttl integer Ticks until expiry.

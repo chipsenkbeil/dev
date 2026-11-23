@@ -1,0 +1,17 @@
+[board]
+backend = "pomb"
+name = "dev"
+
+[board.lint]
+required = ["dev --remote lint", "dev --remote test"]
+
+[board.land]
+deploys = true
+deployed = ["bin/**", "lua/**", "docs/**", "init/**", "board/**", "main.lua", "pkg.lua", "VERSION", "xtrace.bash"]
+recheck = ["dev --remote lint", "dev --remote test"]
+
+[board.release]
+checks = ["dev --remote lint", "dev --remote test"]
+
+[board.ship]
+source_roots = ["lua/", "tests/lua/", ".dev/lua/"]

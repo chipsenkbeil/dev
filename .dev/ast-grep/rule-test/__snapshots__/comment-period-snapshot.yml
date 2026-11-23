@@ -1,0 +1,20 @@
+id: comment-period
+snapshots:
+  "-- @TODO: route handler iteration through a method that guarantees sorted order.\n":
+    labels:
+    - source: "-- @TODO: route handler iteration through a method that guarantees sorted order."
+      style: primary
+      start: 0
+      end: 80
+  "-- Advance generation to invalidate handles.\n":
+    labels:
+    - source: -- Advance generation to invalidate handles.
+      style: primary
+      start: 0
+      end: 44
+  "local x = 1 -- Seconds.\n":
+    labels:
+    - source: -- Seconds.
+      style: primary
+      start: 12
+      end: 23

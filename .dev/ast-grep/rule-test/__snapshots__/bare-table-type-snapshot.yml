@@ -1,0 +1,50 @@
+id: bare-table-type
+snapshots:
+  "---@alias app.Counts table\n":
+    labels:
+    - source: ---@alias app.Counts table
+      style: primary
+      start: 0
+      end: 26
+  "---@field private __cache table[] cached rows\n":
+    labels:
+    - source: ---@field private __cache table[] cached rows
+      style: primary
+      start: 0
+      end: 45
+  "---@field rows table rows of the table\n":
+    labels:
+    - source: ---@field rows table rows of the table
+      style: primary
+      start: 0
+      end: 38
+  "---@param counts table mapping of name -> count\n":
+    labels:
+    - source: ---@param counts table mapping of name -> count
+      style: primary
+      start: 0
+      end: 47
+  "---@param t string|table the input\n":
+    labels:
+    - source: ---@param t string|table the input
+      style: primary
+      start: 0
+      end: 34
+  "---@param t table? optional bag\n":
+    labels:
+    - source: ---@param t table? optional bag
+      style: primary
+      start: 0
+      end: 31
+  "---@return table\n":
+    labels:
+    - source: ---@return table
+      style: primary
+      start: 0
+      end: 16
+  "---@type table\n":
+    labels:
+    - source: ---@type table
+      style: primary
+      start: 0
+      end: 14

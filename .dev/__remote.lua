@@ -1,6 +1,6 @@
 local remote = require("dev.remote")
 
-local PIPELINES = { bootstrap = "bootstrap", soak = "soak" }
+local PIPELINES = { soak = "soak" }
 
 return function(run)
     local opts = { verbosity = run.verbose }

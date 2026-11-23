@@ -1,0 +1,546 @@
+# modules: The dev Lua modules, the .dev scripts and the test runner
+
+## dev modules
+
+The luajit modules of `dev`, one per item.
+
+### Commands and dispatch
+
+- `dev.cli`: dispatch.
+- `dev.command`: the `.lua` command contract (`chunk(ctx)`,
+  `usage_error`, `no_args`, `say`, `relay`, `note`, `die`, `show`, `need`).
+- `dev.cmd.types`: the project type's built-ins and the command lines
+  `dev help <command>` prints for them.
+- `dev.cmd.tools`: `tools install` and `tools check`.
+- `dev.cmd.land`: `land`, which reads the card from the workspace name through
+  `dev.scm` and `dev.board`, refuses it through the card's `land_problem`,
+  hands it to the `board land` command, or lands a plain change when the
+  project has no board.
+- `dev.cmd.box`: the `box` subcommands, the time-left text and the `ci box`
+  call.
+- `dev.cmd.config`: `config`, the first-run wizard for the user config. See
+  `dev help flags`, the config command section.
+- `dev.cmd.connect`: `connect` and `box connect`.
+- `dev.cmd.init`: `init` with `--name` and `--dry-run`. It sets up version
+  control, the `[board]` section of `.dev/config.toml` named for the project
+  and the `origin` remote hint, prints the `would create:`, `created:` and
+  `skipped:` lines and the summary, then the Pomb board hint and its note that
+  Pomb refused the token, and skips what exists. It writes
+  no lint file, style guide, README, CI jobs file or `.editorconfig`, takes
+  no `--type` and sets up no Gerrit project. A global `init` command that
+  wants them overrides it and runs it as `builtin:init` first. The board
+  hint reads
+  `[board.pomb] url` (after `POMB_URL`) and `token` from the user config and
+  is skipped when either is unset. None of the keys has a default.
+
+### Board
+
+- `dev.cmd.board`: the `board` subcommands and the one place that turns a
+  result into output and an exit code.
+- `dev.board`: the column names and short forms, the card-id prefix match, the
+  size label, the table lines and the `dev.board.Backend` interface the
+  commands call. It is also the board half of dev's public API for commands.
+  `board.find(workspace)` returns a board with `find_card`, `release_column`
+  and `done_column`, and a card found on it has `land_problem`, `carry_proof`,
+  `move_to`, `move_to_release` and `move_to_done`. `land_problem` returns why
+  the card cannot land, from its column, claimant, outcomes, check and reviews,
+  or nil, and lands nothing. `carry_proof` writes the card's check and reviews
+  onto a rebased commit. `move_to` into Release or Done refuses a card its
+  check, reviews and outcomes do not prove, read at the working-copy commit or
+  at the state a caller passes. A command calls them in its own order.
+- `dev.scm`: the source control half of that API, a new module over `dev.vcs`
+  and `dev.board.land`. `scm.workspace(root)` returns a workspace with `name`,
+  `is_dirty`, `touched`, `holds`, `state`, `rebase` and `merge_into_trunk`.
+  `board land` runs on it.
+- `dev.board.render`: the color terminal table and summary `board ls` prints.
+- `dev.board.guards`: the refusals and guards the `board` subcommands run before
+  they act, and the usage and failure results they return.
+- `dev.board.runner`: a runner's size limit and refusals, the full-column result
+  and the claim a `take` makes.
+- `dev.board.wait`, `dev.board.ship`, `dev.board.stale`, `dev.board.runcard`,
+  `dev.board.setup`: the `board wait`, `ship`, `stale` and `run` subcommands
+  and the board setup helpers, split out of `dev.cmd.board` to keep it below
+  the 200 locals LuaJIT allows in one chunk.
+- `dev.board.wiring`: the flag parsing and rows behind `board check`, and the
+  landing problems, turn wait and held landing behind `board land`.
+- `dev.board.pomb`: that interface over curl. The token comes from
+  `DEV_BOARD_TOKEN`, then the file for `DEV_AGENT`, then `pass`, and goes to
+  curl on standard input.
+- `dev.board.tokenfile`: the role token files `dev board token mint` writes.
+  It holds the directory, the name by a hash of the agent, the 0600 write,
+  the read, the delete and the sweep of expired files.
+
+### Workspaces
+
+`dev.cmd.ws` holds `ws new NAME`, `ws ls`, `ws adopt PATH`, `ws rm NAME` and
+`ws prune`. `ws` is machine-local, so `--remote` refuses it.
+
+The path of a workspace is `DEV_WS_ROOT`, else `~/.local/share/workspaces`,
+then the project folder's name, then NAME. A path that exists is refused with
+exit 1. A project inside the central root is named by its folder just below
+the root, so a workspace makes siblings. Any other folder is named by its main
+repo's folder, so a secondary jj workspace or a git worktree outside the root
+shares the main checkout's name.
+
+`ws new NAME` refuses with exit 1 and makes nothing when the project root
+holds no `.jj`, `.git` or `.dev`, which is a folder outside any project.
+Otherwise it works by project kind:
+
+- A jj project first fetches its remote of record (`forge.resolve`, then
+  `jj git fetch --remote NAME`). A failed fetch exits 1 with its output and
+  adds nothing. The fetch, the remote listing and the `jj git root` read run
+  with `--ignore-working-copy`, so a stale calling workspace does not stop
+  them. The calling workspace then runs
+  `jj workspace update-stale`, which changes nothing in a fresh one. In a
+  colocated project, a prunable git worktree record for the path of NAME is
+  pruned first, but when another prunable record would drop with it the command
+  exits 1 and names it. The project then gets
+  `jj workspace add --name NAME -r trunk()`.
+- A git project fetches its remote of record the same way (`git fetch
+  NAME`), and a failed fetch exits 1 and adds nothing. It then gets
+  `git worktree add --no-track -b NAME PATH REMOTE/TRUNK`, where TRUNK is the
+  `master` or `main` branch the remote holds, and a remote with neither exits
+  1. A git project with no remote of record exits 1 and adds nothing.
+- A folder with only `.dev` gets a plain directory.
+
+The path is printed. `ws ls` prints each folder under ROOT/<repo> as its name,
+a tab and its path.
+
+`ws adopt PATH` calls `ws.adopt(root, path, opts)` and moves a workspace folder
+of the project into ROOT/<repo>/<name>, where name is the jj workspace name or
+the worktree folder's name. It returns the same result table as `ws.remove`.
+jj cannot relocate a workspace, as `jj workspace list` keeps naming the old
+folder after a hand move. So a jj workspace is read first, refreshed with
+`jj workspace update-stale` and refused with `DIRTY` when its `@` holds changes.
+Then `adopt` runs `jj workspace forget NAME` and `jj workspace add --name NAME`
+at the new path on the parent of `@`, or on `@` itself when it is already on
+trunk. The old folder goes to the trash as `ws rm` does, and the line is
+`Adopted NAME at TARGET. Moved PATH to TRASH.` When the add fails, the
+workspace stays forgotten and its folder stays where it was, and the refusal
+names that folder. A git worktree moves with `git worktree move PATH TARGET`
+and may hold changes. `adopt` refuses a PATH that is not a workspace of this
+project (`NOT_WORKSPACE`), one already under the central root (`ADOPTED`), the
+folder dev runs in, and a target that exists (`EXISTS`), and moves nothing.
+
+`ws rm NAME` calls `ws.remove(root, name, opts)`. It returns a result table with
+`ok`, `message`, `code` and `purged` instead of dying, and `opts.inside` skips
+only the refusal of the workspace dev runs in, which `dev board land` uses when
+it removes the card's workspace. With `opts.inside` a jj workspace whose `@`
+holds a change already on trunk is first moved to a new change on trunk.
+
+The lookup runs in order: the folder `ROOT/<repo>/NAME` for the checkout's own
+folder name, then, from any workspace of the repo including a sibling, the
+folder `jj workspace root --name NAME` lists. The listed folder is taken only
+when it sits directly under a folder of `ROOT`, so a checkout named
+`host-setup` removes the workspace at `ROOT/hosts/NAME`. The trash entry goes
+under the folder the workspace sat in. The forget runs with
+`--ignore-working-copy` to keep a stale main checkout from stopping it. A
+failed forget or prune keeps the folder, and the message names the command's
+`Error:` line or else its first line of output.
+
+It refuses a NAME that is missing, a link, outside the central root or the
+workspace dev runs in, and a folder whose jj `@` is not empty and has no
+description or whose `git status --porcelain` is not empty. A described
+working-copy commit counts as committed here and in `ws prune`, but `ws adopt`
+still refuses it.
+
+It deletes nothing it can rename instead. It first moves the folder (ignored
+files included) to `ROOT/.trash/<repo>/NAME-<UTC stamp>`, where the stamp reads
+`YYYYMMDDTHHMMSSZ`, and then runs `jj workspace forget NAME` or `git worktree
+prune` from the project's main folder. After a forget in a colocated repo it
+also runs `git worktree prune`, which drops the git record jj leaves, and
+ignores a failure there. A plain folder is only moved.
+
+Before the move, `ws rm` runs `jj workspace update-stale` in a jj folder to
+refresh a stale working copy, and then treats a working-copy commit that is
+already on trunk as holding no changes. `ws prune --dry-run` does not refresh.
+It reads a stale workspace with `--ignore-working-copy` and plans the same
+removal.
+
+The move comes first, so a move that fails leaves the folder and the workspace
+as they were, and a forget or prune that fails moves the folder back. A target
+that already exists fails the move. Before the move, a git worktree is refused
+when `git worktree list --porcelain` marks it locked (the prune would skip it)
+or marks another worktree prunable (the prune would drop its record). A locked
+worktree needs `git worktree unlock` first, and a prunable one `git worktree
+prune`. `ws prune` removes the records of gone folders before it removes
+finished worktrees, and its `--dry-run` applies the same refusal to each
+finished worktree, ignoring only the records of gone folders it would remove
+first. `ws ls` and `ws prune` read only ROOT/<repo>, so they never treat the
+trash as a workspace.
+
+The trash sits on the same filesystem as the workspaces, so the move is a
+rename. A folder that is a mount of its own is copied and then deleted, and
+fails with the error of `mv`.
+
+Each call then purges the trash of the repo. An entry whose name ends in a
+stamp more than 14 days old is deleted and gets one line, `Purged PATH from
+the trash.` The stamp is compared as text with the stamp of the cutoff, never
+the entry's mtime, and an entry with no stamp is left alone.
+
+The purge runs only when a later removal runs, so an old entry can stay on
+disk until then. Nothing restores an entry. The folder is moved back by hand.
+
+A jj folder whose name `jj workspace list` no longer shows is refused by
+default. jj has no working-copy commit to read there, and the message says jj
+no longer tracks it and that `dev ws rm NAME --forgotten` moves it to the
+trash. `--forgotten` skips the clean check and the forget and moves the folder
+under the same guards. It is refused for a folder jj still lists.
+
+A plain file directly under ROOT/<repo> is moved under the same guards, and
+`ws rm` prints `Moved PATH to TRASH.` followed by the purge lines. The call
+returns the purge lines as a fourth value, so `dev board land` adds them to
+its cleanup lines.
+
+Before the move, `opts.warn` gets one line for each process whose working
+directory is the folder or under it, `Process PID (COMMAND) is still inside
+PATH.`, and `ws rm` writes it to standard error. The removal goes on and no
+process is killed. `ws.__processes_proc` finds them on Linux from the
+`/proc/PID/cwd` links, and `ws.__processes_lsof` on macOS from `lsof -a -d cwd
+-F pcn`.
+
+`ws.remove` also takes `opts.missing`, the folder jj or git recorded. A folder
+that is gone skips every folder check, and the call only forgets the jj
+workspace or removes the git worktree record, never the default workspace.
+
+`ws prune [--dry-run]` clears what finished work leaves behind, for a jj or a
+git project. Each action is one sentence on standard output and the last line
+counts them, for example `Pruned 2 workspaces and 1 head. Left 3 items alone.`
+A dry run says `Would forget` and `Would prune` and removes nothing. As with
+any jj command, reading a workspace snapshots its working copy.
+
+A jj workspace or git worktree is pruned when its recorded folder is gone,
+through `ws.remove` with `opts.missing`. It is also pruned when its name is the
+short id of a Done card on the project's board and its folder sits where
+`ws new` puts it, through the same `ws.remove` as `ws rm`, so the folder goes
+to the trash and its line ends with `Moved PATH to TRASH.` The default
+workspace and the main worktree are never listed.
+
+A folder with changes not in a commit, and the workspace dev runs in, are kept
+and each gets a `Kept` line, as does a git worktree that is locked or sits
+beside a prunable one. A folder that jj or git cannot read is kept too,
+and its line ends with the first line of their error. A workspace whose folder
+exists and whose name is not the short id of a Done card gets a `Left workspace
+NAME alone.` line (`worktree` for git) and counts in the closing `Left N items
+alone`, in a dry run and a real one. The workspace of a Done card whose
+folder is elsewhere gets the same line, with the reason
+`Its folder is not where ws new puts it.` Ignored files do not count as
+changes, as with `ws rm`. A project with no board, or a board that cannot be
+read, skips the card test and says so. A board setting that is invalid stops
+prune with exit 1 before any change. `dev.cmd.board.finished(root)` lists the
+Done short ids.
+
+A forget, removal or abandon that fails gets a line saying so, and prune goes
+on with the rest. It exits with the code of the first failure after the count
+line. A jj or git command that only reads state and fails exits 1 at once.
+
+A jj project then abandons every head of `heads(mutable()) & empty()` that no
+working copy, bookmark, remote bookmark or tag holds. It runs after the
+forgets, so the working copy of a forgotten workspace goes too. A dry run
+leaves the workspaces it would forget out of the held working copies, so it
+lists the same heads a real run does. Only heads go, so a chain of empty
+commits needs one run per commit.
+
+It lists and leaves alone every non-empty head that nothing holds, and every
+bookmark whose commit is not an ancestor of `trunk()`. There is no age
+threshold. A git project has no heads to abandon and says so, so only
+worktrees are pruned.
+
+`vcs.delete_branch(root, backend, name)` runs `jj bookmark delete` or
+`git branch -D` when `vcs.branches` lists the name. `land` calls it for the
+card's bookmark.
+
+### Project setup and configuration
+
+- `dev.toml`: a small TOML reader. It takes tables and dotted tables, basic
+  strings, integers, booleans, arrays of scalars that may span lines and
+  comments, and names the line of an error for anything else. `toml.set` adds a
+  string, integer or list of strings under its section by a dotted key and makes
+  the section when absent. It returns a `toml.SetRefusal` reason when the key is
+  set, is not a plain dotted key, or would leave a file that does not parse.
+- `dev.config`: `config.get(root, "a.b")` reads `~/.config/dev/config.toml`
+  and then `<root>/.dev/config.toml` over it. `config.user("a.b")` reads the
+  user file alone. `config.prefer_user(root, key)` reads the user file first
+  and the project file second. A malformed file is
+  `<path>:<line>: <reason>` with exit 1, and as root no file is read.
+- `dev.root`: the command words dev may run as root (`tools install` and
+  `tools check`) and the checked manifest copy.
+- `dev.remote`: `--remote`.
+- `dev.fetch`: the `# fetch JOB FILE` and `# patch JOB FILE` command
+  headers. `fetch.pull(root, spec)` runs the job on ci for this host's
+  platform and returns the pulled file, and `dev.cli` hands it to the command in
+  `DEV_FETCHED`. `fetch.apply(root, spec)` runs a patch job on its first listed
+  target and applies the pulled patch at the project root (`dev help remote`).
+- `dev.registry`: the registry of commands.
+- `dev.version`: `current` reads the `VERSION` file beside `main.lua`, and
+  `compare` orders two `MAJOR.MINOR.PATCH` strings. `dev.cli` refuses a
+  project whose `[dev] min_version` is newer (`dev help flags`).
+- `dev.xdg`: `state_home`, the one place that resolves `XDG_STATE_HOME`. It
+  falls back to `$HOME/.local/state` when the variable is unset or not
+  absolute. The board claims, the board store, `dev.board.tokenfile` and
+  `connect` append their own subpath.
+
+### Help and completion
+
+- `dev.help`: `dev help` and the help every command's `-h` and `--help`
+  print.
+  It detects the project type only for `lint`, `fmt`, `test`, `build`, `run`
+  and `fetch`. The Lua check of `dev.project` is one `find` capped at 4 levels
+  that skips dot directories, `node_modules` and `target` and does not follow
+  symlinks below the root. `dev.cli.guard` and `dev.command` turn an
+  `interrupted!` error into exit 130 with nothing on standard error.
+- `dev.complete`: the hidden `__commands`, `__subs`, `__flags` and `__args` that
+  feed shell completion, and `__topics check`. `__args` reads a card cache and
+  asks `ci __complete`, see `dev help flags`.
+- `dev.topics`: the topic files and the check behind `__topics check`.
+
+### Test support
+
+- `dev.testing`: `test(name, fn)` registers a case, and `eq`, `ok` and
+  `raises` assert. These moved from `tests/lua/testing.lua`.
+- `dev.testrun`: `run(root)` runs every `root/.dev/tests/*_test.lua` sorted,
+  with `root/.dev/lua` on `package.path`. It prints `ok - NAME` and
+  `not ok - NAME` with the error, and returns 1 when a case failed or a file
+  failed to load. When the directory is missing it prints
+  `SKIP .dev/tests (none)` and returns 0. `execute(from, only)` is the loop
+  `tests/lua/run.lua` calls.
+- `dev.testenv`: the helpers a project test uses.
+  - `tempdir`: a temporary directory for one test.
+  - `fake(root, name, {code, out, err})`: writes an executable
+    `root/bin/NAME` that prints `out` and `err`, appends its arguments to
+    `root/bin/NAME.log` and exits `code`.
+  - `calls(root, name)`: the logged lines.
+  - the launcher helper, called with `(root, words, opts)`: runs the dev
+    launcher in `root` with `root/bin` first on PATH and `opts.env`. It
+    returns `out, code, err` with standard error apart.
+
+  `tests/lua/projtest_test.lua` pins all three helpers.
+
+### System, release and terminal
+
+- `dev.os`: quoted commands, `nap`, `capture_input` to run a command with a
+  secret on its standard input, exec, isatty, the uid, and `kind_of`,
+  `open_nofollow`, `fstat`, `read_fd` and `close` through ffi.
+- `dev.release`: the session the release installers under `scripts/` share.
+  It holds the parsing of `--dry-run [version]`, the latest-tag lookup, the
+  platform names, `step` that runs or prints a command, and a scratch
+  directory removed at the end.
+  A `die` prints `  ! install-<tool>: <message>` and exits 1.
+- `dev.term`: raw mode that is always restored, and key decoding including
+  pgup, pgdn, home and end.
+- `dev.text`: display width, `fit`, `trim`, `words`, `index_of`, `contains`
+  and `wrap`. `wrap` is the one greedy word wrap that confirm and
+  `dev.ui.markdown` share, and it leaves a word wider than the width on a line
+  of its own.
+
+### Terminal UI
+
+- `dev.ui`: colors, tables, bars, confirm and spin. Confirm wraps the
+  consequence to the terminal width above the `[y/N]` question.
+- `dev.ui.markdown`: one function, `markdown(text, {width, color})`, that
+  returns the text styled for a terminal.
+- `dev.ui.picker`: a list picker, with the keys and windowing below.
+
+`dev.ui.markdown` styles these parts:
+
+- headings and bold in bold
+- inline code in cyan without its backticks
+- fenced code indented and never wrapped
+- bulleted and numbered lists with their indent and a hanging wrap
+- pipe tables with every column as wide as its widest cell
+- prose wrapped at the width
+
+A table wider than the width shrinks its widest columns, down to the longest
+word or 8 columns, and wraps the text inside the cells. It never falls back to
+the raw row. `color` off drops the markers and paints nothing.
+
+`dev help` calls it with the terminal's width capped at 100 when standard
+output takes color. `tests/lua/markdown_test.lua` pins both modes.
+
+The picker behaves this way:
+
+- Up and down, ctrl-p and ctrl-n, and j and k move.
+- Pgup and pgdn move by a window, and home and end by the list.
+- A list taller than the screen scrolls in a window that follows the cursor,
+  with dim `↑ n more` and `↓ n more` lines.
+- When the context has no height, the picker reads the screen's rows from its
+  `size` before each draw. That is 24 when `term.size` cannot read them, and
+  `Model:lines` windows only when `ctx.height` is set.
+- In multi mode a row with `checked` starts checked, and `required` keeps
+  enter from finishing until a row is checked.
+
+### Tests and checks
+
+Lua tests are `tests/lua/*_test.lua`. The hand-rolled runner runs one file at
+a time: `luajit tests/lua/run.lua <file> [name]`, where a name keeps the cases
+whose name contains it. The pty suites are
+`tests/dev/{term,picker,confirm}.bats`, which drive a pty through
+`tests/dev/pty.bash`.
+
+`dev test` runs them when luajit is on PATH and prints `SKIP` for a suite that
+ran no case.
+
+This repo's own `dev lint`, `dev fmt` and `dev test` are `.dev/lint.lua`,
+`.dev/fmt.lua` and `.dev/test.lua`. The shared code is in
+`.dev/lua/devrepo/checks.lua`, and project commands get `.dev/lua`
+on `package.path`.
+
+#### dev lint and dev fmt
+
+`dev lint` runs these checks:
+
+- shellcheck, shfmt and the comment-spacing check over the bash roots
+- the bare-assertion check over the bats files
+- stylua, selene, ast-grep and the comment checks over the Lua roots, with
+  the repo's `stylua.toml`, `selene.toml` and `sgconfig.yml`
+- the line-width check over the docs, the topics and `README.md`
+- the ast-grep rule tests under `.dev/ast-grep`, once
+
+The Lua roots are the dev modules, `main.lua`, `pkg.lua`, `tests/lua` and
+`.dev`. `dev fmt` runs stylua over the same files with the same config.
+
+selene runs with `--no-exclude`. The set's `exclude = [".*/**"]` would hide
+`.dev` otherwise.
+
+#### dev soak
+
+`dev --remote soak [-- --runs N]` is `.dev/soak.lua`, the job of
+`.ci/soak.lua`. It does 50 runs by default. Each run loops these cases beside
+two busy loops per core:
+
+- the pkg_script TERM case
+- the `ctrl-c` cases of `tests/dev/confirm.bats`
+
+It prints each run as `PASS` or `FAIL` with the burner count, core count, load
+average and runnable count it ran under, and keeps the output of a failed run.
+It fails a run in which no case ran and exits 1 when any run failed. It
+refuses to run off a ci host to avoid loading the machine. Each case runs in its
+own process group with a 300 second limit, so a TERM or a kill of dev alone
+stops the case and its busy loops at once.
+
+#### dev test
+
+`dev test PATH...` runs only the suites at each path under `tests/` and
+refuses a path that names no suite with exit 2. A path under a group skipped on
+this machine (`tests/lua` without luajit) is also exit 2. The message reads
+`PATH is skipped here. It needs luajit.` A leading `./` and a trailing slash are
+dropped from a path first. `dev test` alone runs every bats file, `*_test.sh`
+and `test-*.sh` script and `*_test.lua` suite.
+
+`dev board check` and the `dev board land` recheck narrow a plain
+`dev --remote test` row, one with no words after it, to the suites that cover
+the working-copy change (`dev.board.select`). This is the selection rule:
+
+- A touched suite is picked itself.
+- A touched Lua module picks every Lua suite that requires it, directly,
+  through the modules that require it, or through a concatenated require such
+  as `require("dev.pkg." .. name)`, and no other suite. A bats or shell suite,
+  a suite that requires `support` or `dev.testenv`, and a suite that names a
+  fixture or reads the source are not picked, and `dev board ship` runs the
+  whole suite as the backstop.
+- A touched file that is not a Lua module or a suite, a touched test helper,
+  or a touched module that no Lua suite reaches leaves the whole suite running.
+- A touched module that a command file loads, directly or through other
+  modules, leaves the whole suite running. A command file is a Lua file under
+  `.dev` that is not a module, not a suite and not under `tests/`. Its parity
+  suites run it as a subprocess and never require the module, so the map
+  cannot name them.
+- A moved or copied file counts at both its old and its new path.
+
+The recorded row stays the card's own plain row, so the checks fingerprint does
+not change. A row that names suites and every other row run as written, and
+`dev board ship` runs its release rows whole.
+
+The suites run in parallel:
+
+- The worker pool is the core count from `nproc` or `sysctl -n hw.ncpu`.
+  `DEV_TEST_JOBS` overrides it, and 1 runs one after another.
+- Each suite runs in its own `TMPDIR` with its output in a file.
+- The scratch directory `dt.XXXXXX` sits under `TMPDIR` when that is an
+  absolute path of at most 40 characters, else under `/tmp`. A suite's
+  `TMPDIR` stays short that way.
+- Ctrl-C included, a guard process in its own process group waits for dev to
+  die, sends TERM and then KILL to every unfinished suite's group and removes
+  the scratch directory. `tests/dev/interrupt_test.sh` pins it.
+
+These suites run one at a time beside the pool:
+
+- `tests/dev/{term,picker,confirm,pager}.bats`
+- `tests/dev/help_test.sh`
+- `tests/lua/help_test.lua`
+
+`dev test` prints each suite's output whole with its `PASS`, `FAIL` or `SKIP`
+line in discovery order, then a summary line. When the uid is not 0 or the OS
+is not Linux it ends with ``The real-root cases of tests/dev/root_test.sh
+and tests/dev/tools_test.sh were skipped. Run `dev --remote test` for them.``
+
+The real root group of the ci `test` job in `.ci/jobs.lua` runs both files as
+root, or for a named run (`dev --remote test PATH`) each file that a path
+selects. A path selects a file when it names the file or a directory above it,
+with a leading `./` and a trailing slash dropped. It fails the job when a file
+it runs prints a line starting `SKIP real-root` (a case that needs real root or
+the real pacman). A line starting `SKIP user-only` (a case that runs as a user
+through `FAKE_UID` or `FAKE_OS`) still passes.
+
+### The lint-set template rule
+
+The rule covers the synced lint templates. A change making a synced
+template call a dev module or function the deployed dev lacks lands only after
+the ci images are rebuilt from a rev that holds it.
+
+`.dev/baked.txt` lists the dev modules (`dev.fs`) and functions
+(`dev.fs.exists`) the dev baked into ci's images provides, and
+`dev.board.land.dev_calls` reads the same entries from a template file's
+`require("dev.x")` locals, skipping full-line comments. The `sync.templates`
+and `sync.baked` keys of `.dev/config.toml` name the template path prefixes
+and the list file. `dev board land` refuses a commit that changes a Lua
+template file calling an entry the list lacks, with the dev change in the same
+commit or an earlier one, so the dev change lands first and the template
+commit adds the entries after the rebuild. The runner blocks the template card
+on the card for that rebuild.
+
+### Modules a command may require
+
+A project or global command (`.dev/*.lua` or `~/.config/dev/commands/*.lua`)
+may `require` these modules and call the functions listed under each. The list
+is what project and global commands call today, and the test
+`tests/lua/modules_contract_test.lua` reads it, so it fails when a listed
+module or function goes away.
+
+- `dev.command`: `die`, `need`, `no_args`, `note`, `say`, `show`,
+  `usage_error`.
+- `dev.config`: `get`, `user`.
+- `dev.fs`: `basename`, `dirname`, `exists`, `is_dir`, `is_exec`, `is_file`,
+  `is_link`, `join`, `list`, `mkdir`, `mktemp`, `read`, `readlink`, `realpath`,
+  `remove`, `symlink`, `write`.
+- `dev.help`: `bad_argument`, `overview_text`, `page`, `topic_text`,
+  `usage_error`.
+- `dev.json`: `decode`, `encode`.
+- `dev.os`: `capture`, `capture_input`, `capture_timed`, `command`, `exec`,
+  `getpid`, `getuid`, `isatty`, `name`, `nap`, `quote`, `run`, `which`.
+- `dev.pipelines`: `jobs`.
+- `dev.project`: `detect_type`, `root`.
+- `dev.registry`: `load`.
+- `dev.release`: `env`.
+- `dev.remote`: `ci_runner`, `is_remote_host`.
+- `dev.standalone`: `problems`.
+- `dev.text`: `fit`, `words`, `wrap`.
+- `dev.ui`: `confirm`, `context`, `table`.
+- `dev.ui.picker`: `run`.
+- `dev.vcs`: `backend`, `base`, `branches`, `files`, `remotes`, `require`,
+  `with`.
+- `dev.xdg`: `state_home`.
+
+Every other module under `dev` is internal and may change without notice.
+
+## .dev scripts
+
+There is one script per command (`lint.lua`, `fmt.lua`, `test.lua`,
+`soak.lua` and `install.lua`), run through `dev <command>` in the dev process.
+
+`dev install` publishes this checkout as dev's snapshot with
+`devrepo.snapshot`. It copies the files an install ships (`main.lua`,
+`pkg.lua`, `VERSION`, `xtrace.bash`, `lua`, `docs`, `init` and `board`) to a
+new version directory under `$XDG_STATE_HOME/dev/snapshot/versions`, writes
+the checkout's real path to its `ORIGIN` file and renames a link over
+`current`. `tests/lua/snapshot_test.lua` pins the module.

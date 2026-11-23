@@ -1,0 +1,31 @@
+id: bare-table-type
+valid:
+  - |
+    ---@param counts table<string, integer> mapping of name -> count
+  - |
+    ---@return render.Lane[] lanes
+  - |
+    ---@field rows Row[] rows of the table
+  - |
+    ---@type table<string, boolean>
+  - |
+    ---@param t app.utils.Tablelib the table helpers
+  - |
+    ---@alias app.Counts table<string, integer>
+invalid:
+  - |
+    ---@param counts table mapping of name -> count
+  - |
+    ---@return table
+  - |
+    ---@field rows table rows of the table
+  - |
+    ---@type table
+  - |
+    ---@param t table? optional bag
+  - |
+    ---@param t string|table the input
+  - |
+    ---@field private __cache table[] cached rows
+  - |
+    ---@alias app.Counts table
