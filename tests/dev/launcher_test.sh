@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Pure-bash tests for the dev launcher. A stub id says 0 so the launcher sees root, a stub luajit records its environment,
-# and a PATH without luajit checks the missing-luajit line and the bootstrap route.
+# and a PATH without luajit checks the missing-luajit line.
 set -o pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -16,9 +16,8 @@ REAL_LUAJIT="$(command -v luajit)"
 NOLUA="$TMP/nolua"
 ROOTID="$TMP/rootid"
 RECORDER="$TMP/recorder"
-FAKE_DOTFILES="$TMP/dotfiles"
 ROOT_REFUSAL="As root, dev runs only \`dev tools install\` and \`dev tools check\`."
-mkdir -p "$NOLUA" "$ROOTID" "$RECORDER" "$FAKE_DOTFILES"
+mkdir -p "$NOLUA" "$ROOTID" "$RECORDER"
 for tool in bash env id realpath dirname uname cat awk sed grep tr cut sort head tail paste wc basename stat date mktemp rm; do
     found="$(command -v "$tool")" && ln -s "$found" "$NOLUA/$tool"
 done
@@ -28,9 +27,6 @@ cat >"$RECORDER/luajit" <<'STUB'
 env >"$ENV_OUT"
 echo "$*" >"$ARGS_OUT"
 STUB
-
-# shellcheck disable=SC2016  # $* and ${VERBOSE} expand when the stub runs
-printf '#!/bin/sh\necho "bootstrap plan (dry run, nothing will change)"\necho "args: $*"\necho "verbose: ${VERBOSE:-unset}"\n' >"$FAKE_DOTFILES/bootstrap.sh"
 chmod +x "$ROOTID/id" "$RECORDER/luajit"
 export ENV_OUT="$TMP/env.out" ARGS_OUT="$TMP/args.out"
 
@@ -71,27 +67,18 @@ ln -s "$REAL_LUAJIT" "$TMP/realjit/luajit"
 LC_REAL="$(system_launcher real "$TMP/realjit")"
 LC_NONE="$(system_launcher none "$TMP/nowhere")"
 
-missing="Luajit is not found. Run \`dev bootstrap\`, or install it with \`brew install luajit\`, \`pacman -S luajit\`, \`dnf install luajit\` or \`apt install luajit\`."
+missing="Luajit is not found. Install it with \`brew install luajit\`, \`pacman -S luajit\`, \`dnf install luajit\` or \`apt install luajit\`."
 out="$(PATH="$NOLUA" "$DEV" lint 2>&1)"
 assert_eq "no luajit exits 1" "$?" "1"
 assert_eq "no luajit prints the one line" "$out" "$missing"
 
-scribe_missing='scribe: luajit not found. Run dev bootstrap, or install it with brew install luajit, pacman -S luajit, dnf install luajit or apt install luajit'
+scribe_missing='scribe: luajit not found. Install it with brew install luajit, pacman -S luajit, dnf install luajit or apt install luajit'
 out="$(PATH="$NOLUA" "$REPO/dotfiles/scribe/.local/bin/scribe" 2>&1)"
 assert_eq "scribe without luajit prints the hint" "$out" "$scribe_missing"
 
-guide_missing='guide: luajit not found. Run dev bootstrap, or install it with brew install luajit, pacman -S luajit, dnf install luajit or apt install luajit'
+guide_missing='guide: luajit not found. Install it with brew install luajit, pacman -S luajit, dnf install luajit or apt install luajit'
 out="$(PATH="$NOLUA" "$REPO/dotfiles/guide/.local/bin/guide" 2>&1)"
 assert_eq "guide without luajit prints the hint" "$out" "$guide_missing"
-
-out="$(PATH="$NOLUA" DOTFILES="$FAKE_DOTFILES" "$DEV" bootstrap --dry-run 2>&1)"
-assert_eq "bootstrap needs no luajit" "$?" "0"
-assert_contains "bootstrap prints the plan" "$out" "bootstrap plan (dry run, nothing will change)"
-assert_contains "bootstrap passes its arguments on" "$out" "args: --dry-run"
-
-out="$(PATH="$ROOTID:$NOLUA" DOTFILES="$FAKE_DOTFILES" "$DEV" bootstrap --dry-run 2>&1)"
-assert_eq "root is refused bootstrap with exit 2" "$?" "2"
-assert_eq "root gets the refusal line" "$out" "$ROOT_REFUSAL"
 
 for name in BASH_ENV ENV LUA_PATH LUA_CPATH LUA_INIT LUA_PATH_5_1 LUA_CPATH_5_1 LUA_INIT_5_1 LUA_PATH_5_2 LUA_CPATH_5_2 LUA_INIT_5_2 DEV_UID DEV_OS; do
     rm -f "$ENV_OUT"
@@ -116,47 +103,11 @@ rm -f "$ENV_OUT"
 out="$(PATH="$ROOTID:$RECORDER:$NOLUA" "$LC_REC" help 2>&1)"
 assert_eq "root runs the luajit from the system directory" "$([ -e "$ENV_OUT" ] && echo ran || echo absent)" "ran"
 
-for spec in "-v:1" "-vv:2" "--verbose:1" "-vvv:2"; do
-    flag=${spec%%:*}
-    want=${spec##*:}
-    out="$(PATH="$NOLUA" DOTFILES="$FAKE_DOTFILES" "$DEV" bootstrap "$flag" --dry-run 2>&1)"
-    assert_eq "bootstrap $flag without luajit reaches bootstrap.sh with VERBOSE=$want" "$(printf '%s\n' "$out" | tail -2)" "args: --dry-run
-verbose: $want"
-done
-out="$(PATH="$NOLUA" DOTFILES="$FAKE_DOTFILES" "$DEV" bootstrap --dry-run -- -v 2>&1)"
-assert_contains "bootstrap keeps a -v after -- without luajit" "$out" "args: --dry-run -v"
-out="$(PATH="$NOLUA" DOTFILES="$FAKE_DOTFILES" "$DEV" bootstrap --help 2>&1)"
-assert_eq "bootstrap --help without luajit exits 0" "$?" "0"
-assert_contains "bootstrap --help without luajit reaches bootstrap.sh, which prints its own usage" "$out" "args: --help"
 for flag in -h --help -v -vv -vvv --verbose --remote; do
     rm -f "$ARGS_OUT"
-    PATH="$RECORDER:$NOLUA" DOTFILES="$FAKE_DOTFILES" "$DEV" bootstrap "$flag" >/dev/null 2>&1
-    assert_eq "bootstrap $flag goes to main.lua" "$(cat "$ARGS_OUT")" "$SHARE_MAIN bootstrap $flag"
+    PATH="$RECORDER:$NOLUA" "$DEV" lint "$flag" >/dev/null 2>&1
+    assert_eq "lint $flag goes to main.lua" "$(cat "$ARGS_OUT")" "$SHARE_MAIN lint $flag"
 done
-out="$(PATH="$RECORDER:$NOLUA" DOTFILES="$FAKE_DOTFILES" "$DEV" bootstrap --dry-run -- --help 2>&1)"
-assert_contains "bootstrap routes its own arguments after --, without the --" "$out" "args: --dry-run --help"
-
-REALJIT_PATH="$TMP/realjit:$NOLUA:/usr/bin:/bin"
-for mode in nojit jit; do
-    for spec in "--no-login:unset" "-- --no-login:unset" "-v -- --no-login:1"; do
-        words=${spec%:*}
-        read -r -a bootstrap_words <<<"$words"
-        want=${spec##*:}
-        if [ "$mode" = jit ]; then path=$REALJIT_PATH; else path=$NOLUA; fi
-        out="$(cd "$REPO" && PATH="$path" DOTFILES="$FAKE_DOTFILES" "$DEV" bootstrap "${bootstrap_words[@]}" 2>&1)"
-        assert_eq "$mode: dev bootstrap $words gives bootstrap.sh --no-login and VERBOSE $want" "$(printf '%s\n' "$out" | tail -2)" "args: --no-login
-verbose: $want"
-    done
-done
-
-out="$(cd "$REPO" && PATH="$REALJIT_PATH" "$DEV" bootstrap --help 2>&1)"
-assert_contains "bootstrap --help prints dev's own help" "$out" "dev bootstrap [--dry-run] [--no-login]"
-out="$(cd "$REPO" && PATH="$REALJIT_PATH" "$DEV" bootstrap -h 2>&1)"
-assert_contains "bootstrap -h prints dev's own short help" "$out" "dev bootstrap [--dry-run] [--no-login]"
-out="$(cd "$REPO" && PATH="$REALJIT_PATH" "$DEV" bootstrap --remote 2>&1)"
-assert_eq "--remote does not refuse bootstrap, which has a job" "$(printf '%s' "$out" | grep -c "runs on this machine only")" "0"
-out="$(cd "$REPO" && PATH="$REALJIT_PATH" DOTFILES="$FAKE_DOTFILES" "$DEV" bootstrap -v --dry-run 2>&1)"
-assert_contains "bootstrap -v is a global flag and still reaches bootstrap.sh" "$out" "args: --dry-run"
 
 mkdir -p "$TMP/spy"
 cat >"$TMP/spy/realpath" <<'STUB'
@@ -211,7 +162,6 @@ assert_contains "a clone under a path with a space finds the built-in topics" "$
 CIBIN="$TMP/cibin"
 CILOG="$TMP/ci.log"
 PROJ="$TMP/ciproj"
-BOOT_MARK="$TMP/boot-marker"
 mkdir -p "$CIBIN" "$PROJ/.dev/widget"
 cat >"$CIBIN/ci" <<'STUB'
 #!/bin/sh
@@ -220,30 +170,19 @@ echo "ci $*" >>"$CI_LOG"
 exit 0
 STUB
 chmod +x "$CIBIN/ci"
-printf '#!/bin/sh\ntouch "%s"\n' "$BOOT_MARK" >"$FAKE_DOTFILES/bootstrap.sh"
 printf '#!/bin/sh\ntouch "%s"\n' "$TMP/widget-marker" >"$PROJ/.dev/widget/save.sh"
 chmod +x "$PROJ/.dev/widget/save.sh"
 export CI_LOG="$CILOG"
-CIPATH="$CIBIN:$TMP/realjit:$NOLUA:/usr/bin:/bin"
 
 # ran_nothing <desc>: the ci log and the markers are all absent.
 ran_nothing() {
     local seen=absent
-    if [ -e "$CILOG" ] || [ -e "$BOOT_MARK" ] || [ -e "$TMP/widget-marker" ]; then seen=ran; fi
+    if [ -e "$CILOG" ] || [ -e "$TMP/widget-marker" ]; then seen=ran; fi
     assert_eq "$1 ran nothing" "$seen" "absent"
-    rm -f "$CILOG" "$BOOT_MARK" "$TMP/widget-marker"
+    rm -f "$CILOG" "$TMP/widget-marker"
 }
 
-rm -f "$CILOG" "$BOOT_MARK" "$TMP/widget-marker"
-out="$(cd "$PROJ" && PATH="$CIPATH" DOTFILES="$FAKE_DOTFILES" DEV_REMOTE=1 "$DEV" bootstrap 2>&1)"
-assert_eq "DEV_REMOTE=1 dev bootstrap goes through main.lua and finds no job" "$?" "1"
-assert_contains "DEV_REMOTE=1 dev bootstrap names the missing job" "$out" "No job named bootstrap exists"
-assert_eq "DEV_REMOTE=1 dev bootstrap did not run bootstrap.sh" "$([ -e "$BOOT_MARK" ] && echo ran || echo absent)" "absent"
-assert_eq "DEV_REMOTE=1 dev bootstrap ran no ci job" "$(grep -c -- "--job" "$CILOG")" "0"
-rm -f "$CILOG"
-out="$(cd "$PROJ" && PATH="$CIPATH" DOTFILES="$FAKE_DOTFILES" DEV_REMOTE=0 "$DEV" bootstrap 2>&1)"
-assert_eq "DEV_REMOTE=0 dev bootstrap still runs bootstrap.sh" "$([ -e "$BOOT_MARK" ] && echo ran || echo absent)" "ran"
-rm -f "$CILOG" "$BOOT_MARK"
+rm -f "$CILOG" "$TMP/widget-marker"
 
 out="$(cd "$TMP" && PATH="$NOLUA" "$DEV" -C nope lint 2>&1)"
 assert_eq "-C with a relative directory it cannot enter exits 2" "$?" "2"
@@ -262,17 +201,6 @@ assert_eq "--agent with an empty word says it needs a name" "$out" "The --agent 
 out="$(PATH="$NOLUA" "$DEV" lint --agent 2>&1)"
 assert_eq "--agent with no word after it exits 2" "$?" "2"
 assert_eq "--agent with no word after it says it needs a name" "$out" "The --agent flag needs a name."
-C_DOTFILES="$TMP/c-dotfiles"
-mkdir -p "$C_DOTFILES"
-
-# shellcheck disable=SC2016  # $* expands when the stub runs
-printf '#!/bin/sh\necho "args: $*"\n' >"$C_DOTFILES/bootstrap.sh"
-out="$(PATH="$NOLUA" DOTFILES="$C_DOTFILES" "$DEV" -C "$TMP" bootstrap --dry-run 2>&1)"
-assert_eq "-C beside bootstrap exits 0" "$?" "0"
-assert_contains "-C beside bootstrap passes the rest of the arguments on" "$out" "args: --dry-run"
-out="$(PATH="$ROOTID:$NOLUA" DOTFILES="$C_DOTFILES" "$DEV" -C "$TMP" bootstrap --dry-run 2>&1)"
-assert_eq "root with -C beside bootstrap is refused with exit 2" "$?" "2"
-assert_eq "root with -C beside bootstrap gets the refusal line" "$out" "$ROOT_REFUSAL"
 
 NOJIT="$CIBIN:$NOLUA"
 remote_missing="The flag \`--remote\` needs luajit. Install it with \`brew install luajit\`, \`pacman -S luajit\`, \`dnf install luajit\` or \`apt install luajit\`."
@@ -280,12 +208,9 @@ out="$(cd "$PROJ" && PATH="$NOJIT" "$DEV" lint --remote 2>&1)"
 assert_eq "no luajit, dev lint --remote exits 1" "$?" "1"
 assert_eq "no luajit, dev lint --remote says --remote needs luajit" "$out" "$remote_missing"
 ran_nothing "no luajit with --remote"
-out="$(cd "$PROJ" && PATH="$NOJIT" DOTFILES="$FAKE_DOTFILES" DEV_REMOTE=1 "$DEV" bootstrap -v 2>&1)"
-assert_eq "no luajit, DEV_REMOTE=1 dev bootstrap -v exits 1" "$?" "1"
-assert_eq "no luajit, DEV_REMOTE=1 dev bootstrap -v says --remote needs luajit" "$out" "$remote_missing"
-out="$(cd "$PROJ" && PATH="$NOJIT" DOTFILES="$FAKE_DOTFILES" "$DEV" bootstrap --verbose --remote 2>&1)"
-assert_eq "no luajit, dev bootstrap --verbose --remote exits 1" "$?" "1"
-ran_nothing "no luajit, a remote bootstrap with -v runs no bootstrap.sh"
+out="$(cd "$PROJ" && PATH="$NOJIT" DEV_REMOTE=1 "$DEV" lint -v 2>&1)"
+assert_eq "no luajit, DEV_REMOTE=1 dev lint -v exits 1" "$?" "1"
+assert_eq "no luajit, DEV_REMOTE=1 dev lint -v says --remote needs luajit" "$out" "$remote_missing"
 
 for words in "--remote tools install" "lint --detach" "lint --priority"; do
     # shellcheck disable=SC2086

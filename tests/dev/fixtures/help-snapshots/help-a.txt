@@ -37,7 +37,6 @@ Widgets
   widget          project               Manage the widget.
 
 Hidden
-  bootstrap       global over builtin   Bootstrap the fixture machine.
   help            builtin               Show the commands, the details of one command or a topic
   plumbing        project               Internal helper for the other commands.
   hello           global                Greet from the global commands.

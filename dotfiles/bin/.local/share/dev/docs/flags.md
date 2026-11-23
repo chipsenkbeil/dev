@@ -412,7 +412,6 @@ At uid 0 (`$EUID` or `id -u`), the launcher then does the following.
 - Unsets `DEV_UID`, `DEV_OS`, `BASH_ENV`, `ENV`, and `LUA_PATH`, `LUA_CPATH`
   and `LUA_INIT` with their `_5_1` and `_5_2` variants. Bash has already read
   `BASH_ENV` by then, so this scrubs the children only.
-- Refuses `bootstrap` with the root refusal (exit 2).
 - Takes luajit only from `/usr/bin` or `/usr/local/bin`. When it is in
   neither, the launcher refuses `--remote`, `--detach`, `--priority`,
   `--job-timeout` and an enabled `DEV_REMOTE` with the root refusal (exit 2).
@@ -446,27 +445,6 @@ from another clone, and always for root. A landing is live only after
 `dev install bin`. When a landing changed a `dev.*` module that the install
 verb itself needs, run `DEV_FROM=checkout dev install bin`.
 
-### bootstrap
-
-`bootstrap` as the first word runs `bootstrap.sh` from the dotfiles clone,
-with no luajit needed. Dev's own handling takes over when either of these
-holds.
-
-- `--remote`, `--detach`, `--priority`, `--job-timeout` or an enabled
-  `DEV_REMOTE` is present.
-- Luajit is available and `--verbose`, `-v` (any number of v), `-h` or
-  `--help` follows `bootstrap` before a `--`.
-
-On the `bootstrap.sh` path the launcher drops the first `--` and passes the
-words after it verbatim. `dev bootstrap --no-login`,
-`dev bootstrap -- --no-login` and `dev bootstrap -v -- --no-login` all give
-`bootstrap.sh` exactly `--no-login`, with or without luajit.
-
-With no luajit, the launcher also turns `--verbose` and `-v` words before the
-`--` into `VERBOSE=1` or `VERBOSE=2` (the count, at most 2) in
-`bootstrap.sh`'s environment and strips them from its arguments. `-h` and
-`--help` reach `bootstrap.sh`, which prints its own usage.
-
 ### Without luajit
 
 With luajit, the launcher execs
@@ -476,7 +454,7 @@ exits 1 with one of the two messages below. The second applies with `--remote`,
 nothing runs.
 
 ```
-Luajit is not found. Run `dev bootstrap`, or install it with `brew install luajit`, `pacman -S luajit`, `dnf install luajit` or `apt install luajit`.
+Luajit is not found. Install it with `brew install luajit`, `pacman -S luajit`, `dnf install luajit` or `apt install luajit`.
 ```
 
 ```
@@ -515,7 +493,6 @@ Other modules serve these commands.
   slow or failing `ci` prints nothing and exits 0.
 - `dev.cmd.types`: the project-type built-ins `lint`, `fmt`, `test`, `build`,
   `run` and `fetch`, in process.
-- `dev.cmd.misc`: `bootstrap`.
 - `dev.cmd.sync`, over `dev.templates`: `sync`.
 - `dev.cmd.push` and `dev.cmd.pull`: `push` and `pull`, with the backend and
   the forge setting in `dev.vcs` and `dev.forge`. `dev help push` and

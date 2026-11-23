@@ -8,7 +8,6 @@ local connect = require("dev.cmd.connect")
 local follow = require("dev.cmd.follow")
 local init = require("dev.cmd.init")
 local land = require("dev.cmd.land")
-local misc = require("dev.cmd.misc")
 local pull = require("dev.cmd.pull")
 local push = require("dev.cmd.push")
 local sync = require("dev.cmd.sync")
@@ -417,7 +416,6 @@ local function builtin_handler(row)
     if row and row.kind == "builtin" and not row.noun and row.handler == "lua" then
         return types.handlers[row.name]
             or VCS_HANDLERS[row.name]
-            or misc[row.name]
             or tools.handlers[row.name]
             or box.handlers[row.name]
             or ci.handlers[row.name]

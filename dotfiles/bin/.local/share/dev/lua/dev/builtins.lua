@@ -690,14 +690,6 @@ return {
         desc = "Block until the board, or one card, changes, then print each change",
     },
     {
-        words = { "bootstrap" },
-        handler = "lua",
-        flags = "--dry-run --no-login",
-        usage = "dev bootstrap [--dry-run] [--no-login]",
-        desc = "Run bootstrap.sh from the dotfiles clone",
-        hidden = true,
-    },
-    {
         words = { "help" },
         remote = false,
         handler = "lua",

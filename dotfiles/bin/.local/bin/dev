@@ -49,10 +49,6 @@ if [ "$EUID" -eq 0 ] || [ "$(id -u)" -eq 0 ]; then
     PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     unset DEV_UID DEV_OS BASH_ENV ENV
     unset LUA_PATH LUA_CPATH LUA_INIT LUA_PATH_5_1 LUA_CPATH_5_1 LUA_INIT_5_1 LUA_PATH_5_2 LUA_CPATH_5_2 LUA_INIT_5_2
-    if [ "${1:-}" = bootstrap ]; then
-        printf '%s\n' "$root_refusal" >&2
-        exit 2
-    fi
     luajit=""
     for dir in "${SYSTEM_BIN_DIRS[@]}"; do
         if [ -x "$dir/luajit" ]; then
@@ -101,58 +97,6 @@ for arg in "$@"; do
     esac
 done
 
-have_luajit=0
-if [ -n "$luajit" ] && { [ "$luajit" != luajit ] || command -v luajit >/dev/null 2>&1; }; then
-    have_luajit=1
-fi
-
-if [ "${1:-}" = bootstrap ]; then
-    dev_flag=0
-    level=0
-    after_dashes=0
-    bootstrap_args=()
-    for arg in "${@:2}"; do
-        if [ "$after_dashes" -eq 1 ]; then
-            bootstrap_args+=("$arg")
-            continue
-        fi
-        case "$arg" in
-        -h | --help)
-            dev_flag=1
-            bootstrap_args+=("$arg")
-            ;;
-        --verbose)
-            dev_flag=1
-            level=$((level + 1))
-            ;;
-        --)
-            after_dashes=1
-            ;;
-        --local) ;;
-        *)
-            if [[ "$arg" =~ ^-v+$ ]]; then
-                dev_flag=1
-                level=$((level + ${#arg} - 1))
-            else
-                bootstrap_args+=("$arg")
-            fi
-            ;;
-        esac
-    done
-    if [ "$remote_flag" -eq 0 ] && { [ "$have_luajit" -eq 0 ] || [ "$dev_flag" -eq 0 ]; }; then
-        if [ "$level" -gt 0 ]; then
-            export VERBOSE=$((level > 2 ? 2 : level))
-        fi
-        if [ -n "${DOTFILES:-}" ]; then
-            root=$DOTFILES
-        else
-            root=$(cd "$(dirname "$DEV_SELF")/../../../.." && pwd)
-        fi
-        cd "$root"
-        exec bash "$root/bootstrap.sh" ${bootstrap_args[@]+"${bootstrap_args[@]}"}
-    fi
-fi
-
 if [ -z "$luajit" ]; then
     if [ "$remote_flag" -eq 1 ]; then
         printf '%s\n' "$root_refusal" >&2
@@ -183,7 +127,7 @@ if [ "$luajit" = luajit ] && ! command -v luajit >/dev/null 2>&1; then
         printf "The flag \`--remote\` needs luajit. Install it with \`brew install luajit\`, \`pacman -S luajit\`, \`dnf install luajit\` or \`apt install luajit\`.\n" >&2
         exit 1
     fi
-    printf "Luajit is not found. Run \`dev bootstrap\`, or install it with \`brew install luajit\`, \`pacman -S luajit\`, \`dnf install luajit\` or \`apt install luajit\`.\n" >&2
+    printf "Luajit is not found. Install it with \`brew install luajit\`, \`pacman -S luajit\`, \`dnf install luajit\` or \`apt install luajit\`.\n" >&2
     exit 1
 fi
 

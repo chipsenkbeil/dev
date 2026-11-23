@@ -125,13 +125,13 @@ assert_contains "help commands prints the commands topic" "$(fixture_dev help co
 
 # Every non-hidden verb sits in exactly one group
 for root in "$PROJ" "$REPO"; do
-    listing="$(cd "$root" && DOTFILES="$REPO" "$DEV" help -a)"
+    listing="$(cd "$root" && XDG_CONFIG_HOME="$REPO/dotfiles/dev/.config" DOTFILES="$REPO" "$DEV" help -a)"
     hidden=" $(hidden_names "$listing" | tr '\n' ' ')"
     while IFS= read -r verb; do
         want=1
         case "$hidden" in *" $verb "*) want=0 ;; esac
         assert_eq "$(basename "$root"): $verb is in $want group" "$(group_count "$listing" "$verb")" "$want"
-    done < <(cd "$root" && DOTFILES="$REPO" "$DEV" __commands | cut -f1)
+    done < <(cd "$root" && XDG_CONFIG_HOME="$REPO/dotfiles/dev/.config" DOTFILES="$REPO" "$DEV" __commands | cut -f1)
     if [ "$root" = "$PROJ" ]; then
         assert_contains "the fixture hides plumbing" "$hidden" " plumbing "
     else
