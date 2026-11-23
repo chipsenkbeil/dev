@@ -2116,7 +2116,7 @@ esac
             local id = template_ready(project, { template = CALLS_EXISTS, baked = "dev.fs\n" })
             refused(project, id, {
                 "The lint-set template calls dev.fs.exists, which .dev/baked.txt",
-                "have infra rebake the ci images, then land the template change",
+                "rebuild the ci images, then land the template change",
             })
         end
     )
@@ -2127,7 +2127,7 @@ esac
         local subdirectory = project.root .. "/" .. TEMPLATE_DIR
         refused(project, id, {
             "The lint-set template calls dev.fs.exists, which .dev/baked.txt",
-            "have infra rebake the ci images, then land the template change",
+            "rebuild the ci images, then land the template change",
         }, { cwd = subdirectory })
     end)
 

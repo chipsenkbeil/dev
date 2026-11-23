@@ -1360,7 +1360,7 @@ function M.template_problem(root, touched)
         .. ", which "
         .. templates.BAKED
         .. " does not list as baked into ci's images. Land the dev change first,"
-        .. " have infra rebake the ci images,"
+        .. " rebuild the ci images,"
         .. " then land the template change with the entries added to "
         .. templates.BAKED
         .. "."
@@ -1878,7 +1878,7 @@ end
 ---Name the sync drift a failed land printed that the landing commit did not cause.
 ---
 ---`dev sync --check` prints `differs: PATH` or `missing: PATH` for each drifted file. A path the
----commit does not touch drifted because a dotfiles template changed, so the advice says to sync.
+---commit does not touch drifted because a synced template changed, so the advice says to sync.
 ---@param output string what the failed land printed
 ---@param touched string[] the paths the landing commit touches
 ---@return string? advice the sentence to append, nil when no printed drift is the template's
@@ -1900,7 +1900,7 @@ function M.template_drift(output, touched)
     table.sort(found)
     return string.format(
         "This drift is not from the card, which does not touch %s. "
-            .. "A dotfiles template changed, so run `dev sync`, land that as its own card, "
+            .. "A synced template changed, so run `dev sync`, land that as its own card, "
             .. "and land this card again.",
         table.concat(found, ", ")
     )

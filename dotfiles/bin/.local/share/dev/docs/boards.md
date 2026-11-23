@@ -3322,7 +3322,7 @@ The command:
 - When the land fails and its output has lines from the built-in
   sync's check mode, `differs:` or `missing:` with a path the change does not
   touch, that is template drift
-  and land adds a sentence after the output. It says a dotfiles template
+  and land adds a sentence after the output. It says a synced template
   changed, not the card, and tells the repo to run `dev sync`, land that as its
   own card and land again.
 
@@ -3341,7 +3341,7 @@ lists each one that fails. A refusal can leave the change rebased onto trunk.
   `standalone-ok` label.
 - A commit that changes a lint-set template file calls only the dev modules and
   functions that `.dev/baked.txt` lists. The refusal says to land the dev change
-  first, have infra rebake the ci images, then land the template change with
+  first, rebuild the ci images, then land the template change with
   the entries added.
 - In a Gerrit project the ci change run of the landing commit has not failed.
   `land` reads `ci ps -a --json --repo PROJECT`, with PROJECT the name in the
