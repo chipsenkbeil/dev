@@ -294,11 +294,11 @@ else
 fi
 if [ "$REAL_ROOT" = 0 ]; then
     out="$(tools "$proj" --help)"
-    assert_not_contains "a built-in subcommand is not marked as an override" "$out" "(override)"
+    assert_contains "a built-in subcommand a project script replaces is marked as an override" "$out" "(override)"
     out="$(cd "$proj" && PATH="$STUBS:$PATH" "$DEV" help)"
     assert_not_contains "dev help does not mark the noun as an override" "$out" "(override)"
     out="$(cd "$proj" && PATH="$STUBS:$PATH" "$DEV" help tools install)"
-    assert_not_contains "dev help tools install is not an override" "$out" "(override)"
+    assert_contains "dev help tools install is an override while a project script replaces it" "$out" "(override)"
     out="$(FAKE_UID=1000 tools "$proj" extra 2>&1)"
     assert_eq "a project-only tools subcommand runs as a user" "$out" "extra ran"
 else
@@ -331,6 +331,9 @@ if [ "$REAL_ROOT" = 0 ]; then
     out="$(tools "$proj" --help)"
     assert_contains "dev tools --help lists install" "$out" "install"
     assert_contains "dev tools --help lists check" "$out" "check"
+    assert_not_contains "a built-in subcommand no script replaces is not marked as an override" "$out" "(override)"
+    out="$(cd "$proj" && PATH="$STUBS:$PATH" "$DEV" help tools install)"
+    assert_not_contains "dev help tools install is not an override without a project script" "$out" "(override)"
     out="$(tools "$proj" frobnicate 2>&1)"
     assert_eq "an unknown tools subcommand exits 2" "$?" "2"
     assert_contains "an unknown tools subcommand is named" "$out" "dev tools: unknown subcommand frobnicate"
