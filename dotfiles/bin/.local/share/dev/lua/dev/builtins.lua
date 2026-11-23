@@ -72,6 +72,33 @@ return {
         group = "Share it",
     },
     {
+        words = { "branch" },
+        remote = false,
+        parent = true,
+        desc = "List, archive and prune branches by content",
+        group = "Share it",
+    },
+    {
+        words = { "branch", "ls" },
+        handler = "lua",
+        usage = "dev branch ls",
+        desc = "List branches, remote branches and anonymous jj heads as landed or unlanded",
+    },
+    {
+        words = { "branch", "archive" },
+        requires = { "workspace" },
+        handler = "lua",
+        usage = "dev branch archive REV",
+        desc = "Push a revision to refs/archive/DATE/NAME on every remote",
+    },
+    {
+        words = { "branch", "prune" },
+        requires = { "workspace" },
+        handler = "lua",
+        usage = "dev branch prune NAME",
+        desc = "Delete a branch that is landed by content or archived everywhere",
+    },
+    {
         words = { "pull" },
         remote = false,
         requires = { "workspace" },

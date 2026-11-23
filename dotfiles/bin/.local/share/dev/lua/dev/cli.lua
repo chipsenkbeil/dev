@@ -1,5 +1,6 @@
 local abandon = require("dev.cmd.abandon")
 local board = require("dev.cmd.board")
+local branch = require("dev.cmd.branch")
 local box = require("dev.cmd.box")
 local ci = require("dev.cmd.ci")
 local complete = require("dev.complete")
@@ -422,6 +423,7 @@ local function builtin_handler(row)
             or connect.handlers[row.name]
             or init.handlers[row.name]
             or ws.handlers[row.name]
+            or branch.handlers[row.name]
     end
     return nil
 end

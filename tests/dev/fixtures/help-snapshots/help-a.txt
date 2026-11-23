@@ -11,6 +11,7 @@ Check your work
 Share it
   push            builtin               Push the trunk or current branch to the remote of record
   abandon         builtin               Abandon an open Gerrit change by its number or Change-Id
+  branch          builtin               List, archive and prune branches by content
   pull            builtin               Fetch the remote and rebase local work onto it
   follow          builtin               Move the main checkout onto trunk
   land            builtin               Land the workspace's card, or its change with no board
