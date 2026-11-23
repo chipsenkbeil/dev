@@ -202,6 +202,53 @@ testing.test("dev config stops with a sentence when the key cannot be added to t
     testing.ok(out:find("config.toml: board.pomb.token: The file would not parse", 1, true), out)
 end)
 
+local function board_without_url(opts)
+    local root = support.sandbox(
+        { [".dev/config.toml"] = '[board]\nbackend = "pomb"\nname = "x"\n' },
+        {}
+    )
+    local home = support.tempdir()
+    local out, code = support.dev(root, { "board", "next" }, {
+        input = "https://pomb.example\n",
+        env = {
+            HOME = home,
+            NO_COLOR = "1",
+            DEV_AGENT = opts.agent,
+            FAKE_TTY = opts.terminal and "1" or "0",
+            LUA_INIT = "@" .. REPO .. "/tests/lua/fake_env.lua",
+        },
+    })
+    return out, code, fs.read(home .. "/.config/dev/config.toml")
+end
+
+testing.test(
+    "a missing Pomb url starts the prompt on a terminal and the command carries on",
+    function()
+        local out, _, body = board_without_url({ terminal = true, agent = "" })
+        testing.ok(out:find("Pomb URL: ", 1, true), out)
+        testing.ok(out:find("Wrote board.pomb.url to ", 1, true), out)
+        testing.eq(
+            assert(toml.parse(body)),
+            { board = { pomb = { url = "https://pomb.example" } } }
+        )
+        testing.eq(out:find("must be an http or https address", 1, true), nil)
+    end
+)
+
+testing.test("a missing Pomb url refuses with the dev config sentence without a prompt", function()
+    local cases = {
+        { terminal = false, agent = "" },
+        { terminal = true, agent = "x/implementer/y" },
+    }
+    for _, case in ipairs(cases) do
+        local out, code, body = board_without_url(case)
+        testing.eq(code, 1, out)
+        testing.ok(out:find("Run `dev config` to set it.", 1, true), out)
+        testing.eq(out:find("Pomb URL: ", 1, true), nil)
+        testing.eq(body, nil)
+    end
+end)
+
 testing.test("dev config refuses an argument", function()
     local root = support.sandbox({}, {})
     local _, code = support.dev(root, { "config", "extra" }, { env = { HOME = support.tempdir() } })

@@ -4,6 +4,7 @@ local check = require("dev.board.check")
 local claims = require("dev.board.claims")
 local role_clock = require("dev.board.clock")
 local config = require("dev.config")
+local dev_config = require("dev.cmd.config")
 local device = require("dev.board.device")
 local dev_os = require("dev.os")
 local follow = require("dev.cmd.follow")
@@ -61,7 +62,7 @@ end
 ---The sentence for each reason `pomb.new` refuses with
 local POMB_REFUSALS = {
     [pomb.Reason.BAD_URL] = "The `url` setting of `[board.pomb]` must be an http or "
-        .. "https address in ~/.config/dev/config.toml.",
+        .. "https address in ~/.config/dev/config.toml. Run `dev config` to set it.",
 }
 
 ---Write the refusal of a command that only a lead runs.
@@ -5340,8 +5341,12 @@ local function open_backend(settings, token_key)
     end
     local key = standing_key(token_key, os.getenv("DEV_AGENT") or "")
     local standing = key ~= nil and config.user("board.pomb." .. key) ~= nil
+    local url = config.user("board.pomb.url")
+    if url == nil then
+        url = dev_config.prompt("board.pomb.url")
+    end
     local backend, reason = pomb.new({
-        url = config.user("board.pomb.url"),
+        url = url,
         token = config.user("board.pomb." .. (standing and key or token_key)),
         name = settings.name,
         lead = token_key == LEAD_TOKEN_KEY,

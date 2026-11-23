@@ -18,6 +18,8 @@ local GERRIT_CONFIG = '[gerrit]\nhost = "me@gerrit.example"\nport = 29418\n'
 local BOARD_CONFIG =
     '[board.pomb]\nurl = "https://pomb.example"\ntoken = "pass:secrets/worker/token/pomb.example"\n'
 
+local FAKE_ENV = "@" .. dev_os.capture({ "pwd" }):gsub("\n$", "") .. "/tests/lua/fake_env.lua"
+
 local function user_env(text)
     local home = support.tempdir()
     local config = home .. "/.config"
@@ -168,8 +170,52 @@ testing.test("init skips the Gerrit step with no gerrit host", function()
         support.dev(root, { "init", "--type", "lua", "--dry-run", "--name", "zz" }, user_env(""))
     testing.eq(code, 0, out)
     testing.ok(out:find("skipped: gerrit: no [gerrit] host in the user config", 1, true), out)
-    testing.ok(out:find("set host under [gerrit]", 1, true), out)
+    testing.ok(out:find("Run `dev config` to set the host, then rerun init", 1, true), out)
     testing.ok(not out:find("gerrit project", 1, true), out)
+    fs.remove(root, { recursive = true })
+end)
+
+local function terminal_env(terminal)
+    local user = user_env("")
+    user.env.LUA_INIT = FAKE_ENV
+    user.env.FAKE_TTY = terminal and "1" or "0"
+    user.env.DEV_AGENT = ""
+    return user
+end
+
+testing.test("init asks for the Gerrit host on a terminal and writes it", function()
+    if not dev_os.which("git") then
+        print("skip - git is not installed")
+        return
+    end
+    local root = project()
+    assert(fs.write(root .. "/bin/ssh", "#!/bin/sh\nexit 1\n"))
+    assert(dev_os.run({ "chmod", "755", root .. "/bin/ssh" }) == 0, "chmod failed")
+    local user = terminal_env(true)
+    user.input = "me@gerrit.example\n"
+    local out, code = support.dev(root, { "init", "--type", "lua" }, user)
+    testing.eq(code, 0, out)
+    testing.ok(out:find("Wrote gerrit.host to ", 1, true), out)
+    local body = fs.read(user.env.HOME .. "/.config/dev/config.toml")
+    testing.ok(body:find('host = "me@gerrit.example"', 1, true), body)
+    testing.ok(not out:find("no [gerrit] host", 1, true), out)
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("init asks for nothing in a dry run or without a terminal", function()
+    local root = project()
+    for _, case in ipairs({ { true, true }, { false, false } }) do
+        local user = terminal_env(case[1])
+        user.input = "me@gerrit.example\n"
+        local args = { "init", "--type", "lua" }
+        if case[2] then
+            args[#args + 1] = "--dry-run"
+        end
+        local out, code = support.dev(root, args, user)
+        testing.eq(code, 0, out)
+        testing.ok(out:find("Run `dev config` to set the host, then rerun init", 1, true), out)
+        testing.eq(fs.read(user.env.HOME .. "/.config/dev/config.toml"), "")
+    end
     fs.remove(root, { recursive = true })
 end)
 

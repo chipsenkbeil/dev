@@ -210,6 +210,37 @@ local function ask_all(unset)
     return answers, left
 end
 
+---Report whether a command may ask for a key.
+---
+---It may at a terminal when `DEV_AGENT` is unset.
+---@return boolean askable true when standard input is a terminal and `DEV_AGENT` is unset
+function M.askable()
+    local agent = os.getenv("DEV_AGENT")
+    return (agent == nil or agent == "") and dev_os.isatty(0)
+end
+
+---Ask for one key and write the answer to the user config.
+---
+---It asks only for a key the user file leaves unset, and only when `askable` holds.
+---An answer is never echoed back.
+---@param name string the dotted key, one of `KEYS`
+---@return any? value the value written, nil when the key was not asked for or no answer came
+function M.prompt(name)
+    if not M.askable() or config.user(name) ~= nil then
+        return nil
+    end
+    for _, key in ipairs(M.KEYS) do
+        if key.name == name then
+            local value = ask(key)
+            if value ~= nil then
+                write_answers({ { key = name, value = value } })
+            end
+            return value
+        end
+    end
+    return nil
+end
+
 ---Report the user keys, and on a terminal ask for the ones that are unset.
 ---
 ---Without a terminal it prints each key and whether it is set, and exits 1 when
