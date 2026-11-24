@@ -23,6 +23,7 @@ return {
     jobs = {
         targets = {
             name = "Build the release binary on ${target}",
+            matrix = { { arch = "aarch64" } },
             run = function()
                 local triple = "aarch64-apple-darwin"
                 ci.sh(
@@ -49,6 +50,7 @@ return {
         },
         build = {
             name = "Format, lint and test the crate on ${target}",
+            matrix = { { arch = "aarch64" } },
             run = function()
                 ci.sh(CARGO .. NIGHTLY_RUSTFMT, { name = "Find a nightly rustfmt" })
                 ci.sh(CARGO .. "cargo +nightly fmt --check", { name = "Check the formatting" })
@@ -62,6 +64,7 @@ return {
         },
         test = {
             name = "test on ${target}",
+            matrix = { { arch = "aarch64" } },
             run = function()
                 ci.sh(
                     "HOMEBREW_NO_AUTO_UPDATE=1 brew install --quiet " .. BREW_PACKAGES,
