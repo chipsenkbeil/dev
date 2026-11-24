@@ -3,6 +3,7 @@ name: release
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -101,10 +102,33 @@ jobs:
           path: target/x86_64-unknown-freebsd/release/dev
           if-no-files-found: error
 
+  build-windows:
+    name: build x86_64-pc-windows-msvc
+    runs-on: windows-2025
+    continue-on-error: true
+    defaults:
+      run:
+        shell: bash
+    env:
+      TARGET: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build the release binary
+        run: cargo build --release --locked --target "$TARGET"
+      - name: Test the release binary
+        run: |
+          binary=target/$TARGET/release/dev.exe
+          ./$binary release test $binary --tag "$DEV_RELEASE_TAG"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dev-${{ github.ref_name }}-x86_64-pc-windows-msvc
+          path: target/x86_64-pc-windows-msvc/release/dev.exe
+          if-no-files-found: error
+
   publish:
     name: publish
-    needs: [build, build-macos, build-freebsd]
-    if: ${{ !cancelled() && needs.build.result == 'success' && needs.build-macos.result == 'success' }}
+    needs: [build, build-macos, build-freebsd, build-windows]
+    if: ${{ startsWith(github.ref, 'refs/tags/v') && !cancelled() && needs.build.result == 'success' && needs.build-macos.result == 'success' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write

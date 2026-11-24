@@ -136,7 +136,19 @@ through `FAKE_UID` or `FAKE_OS`) still passes.
 ## Releasing
 
 A release is a pushed tag. `.github/workflows/release.yml` runs on a `v*` tag
-and on nothing else, never on a push or a pull request.
+and on a manual dispatch, never on a push or a pull request. Only a run on a
+`refs/tags/v*` ref publishes. A dispatched run builds and tests every platform
+and creates no release and no tag.
+
+To try a change on every platform before it lands, run `dev release dispatch`
+in its workspace. It force-pushes the current change to a `review-` branch on
+origin, starts the workflow on that branch with `gh workflow run`, waits up to
+`--timeout` seconds (default 3600), then prints each job's result and the last
+`--lines` lines of every job that did not pass. It works for jj and git, and
+exits 1 when any job did not pass, a job marked `continue-on-error` included.
+The verb deletes the branch from origin when the run ends, so jj never holds it
+as an immutable remote bookmark. `--keep` leaves it, and a timeout leaves it
+too.
 
 1. Push the tag from a workspace: `jj tag set vX.Y.Z -r REV`, then
    `dev push --tag vX.Y.Z`. Gerrit mirrors it to GitHub.

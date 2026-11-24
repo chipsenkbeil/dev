@@ -305,3 +305,9 @@ tag. Push the tag with `dev push --tag TAG`.
   `dev-TAG-TRIPLE` binaries under DIR, then create the GitHub release for TAG
   or upload to it, as a pre-release when TAG holds `-pre.`. It refuses to
   overwrite an asset. Flag: `--dir` (default `artifacts`).
+- `dev release dispatch [--timeout SECONDS] [--interval SECONDS] [--lines N]
+  [--keep]`: push the current change to a `review-` branch on origin, start
+  the workflow on it, wait, and print each job's result with the end of each
+  failed job's log, then delete the branch. Exits 1 when any job did not pass.
+  Flags: `--timeout` (default 3600), `--interval` (default 20), `--lines`
+  (default 40), `--keep` (leave the branch).
