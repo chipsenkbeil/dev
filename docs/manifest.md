@@ -109,11 +109,12 @@ carry `bin:-`, and the row is checked by running the script, so
 `~/.local/bin` need not be on PATH. An install does nothing when the binary is
 there unless forced.
 
-A dry run prints the curl, checksum and unpack lines and then each build
+A dry run prints the download, checksum and unpack lines and then each build
 command with its `cd`. The stow script runs through `ensure_stow` when none
 is on PATH, and keeps stow as it is when one is.
-`tests/lua/pkg_source_test.lua` runs both scripts against stub tarballs, a stub
-`curl` and a stub `make` in a temporary prefix.
+`tests/lua/pkg_source_test.luau` runs both scripts, kept as the fixtures under
+`tests/pkg/fixtures/`, against a stub tarball on a local server and a stub
+`make` in a temporary prefix.
 
 ### The rust group
 
