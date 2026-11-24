@@ -108,8 +108,9 @@ match in this order wins:
 2. `main.lua` and `conf.lua` together: love2d
 3. `project.godot`: godot
 4. `package.json`: node
-5. a `.lua` file within four folders of the root, skipping hidden folders,
-   `node_modules` and `target`: lua
+5. a `.lua` file at most four levels below the root (`find -maxdepth 4`, so a
+   file in a folder three levels down counts and one in a fourth-level folder
+   does not), skipping hidden folders, `node_modules` and `target`: lua
 6. `Makefile`: make
 
 A project that matches none is undetected. Every built-in then prints `There
@@ -187,7 +188,16 @@ The fields:
   that makes a checkout there leaves `DEV_AGENT` out of the environment it
   passes, or runs the command in a workspace made with `dev ws new`.
 - `runs_local`: the command runs here under the remote default.
-- `positional`: keep `KEY=value` words in the arguments.
+- `positional`: keep `KEY=value` words in the arguments. Without it, every word
+  shaped `KEY=value` whose key starts with an uppercase letter goes to
+  `ctx.vars` and is dropped from the words, before the spec parses them. A
+  command that takes such a word as a plain argument, such as a scenario named
+  `FOO=bar`, sets `positional = true`. Only a project or global command has
+  its words split, and the words after a `--` stay where they are.
+  - A `KEY=value` word never reaches the spec's refusal of unknown words, so
+    a mistyped variable is dropped with no message, even when the command
+    reads none of its keys. dev gives no warning, with no declared
+    variables to check the key against.
 - `fetch = { job, file }` and `patch = { job, file }`: fetch a ci file or run
   a patch job, as `dev help remote` describes.
 - `flags`: each has a `name`, an optional one-letter `short`, a `kind` of
