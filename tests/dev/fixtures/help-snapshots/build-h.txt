@@ -2,7 +2,7 @@ dev build
   Build the project
 
 usage
-  dev build
+  dev build [rest...]
 
-Run `dev build --help` for the script header and the command it runs.
+Run `dev build --help` for every flag and argument.
 exit 0

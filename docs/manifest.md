@@ -79,7 +79,7 @@ something outside dev tools.
 ### The base group
 
 The column pins ripgrep, fd, jq, yq, sd, gh, jujutsu, shellcheck, shfmt and
-stylua through `release:`. It marks git, zsh, dash and luajit `system:`.
+stylua through `release:`. It marks git, zsh and dash `system:`.
 
 It drops difftastic, tokei, watchexec, hyperfine, ast-grep and selene with
 `-`. The selene release zip is arm64 only, and `dev lint` runs on ci by
@@ -110,10 +110,10 @@ carry `bin:-`, and the row is checked by running the script, so
 there unless forced.
 
 A dry run prints the curl, checksum and unpack lines and then each build
-command with its `cd`.
+command with its `cd`. The stow script runs through `ensure_stow` when none
+is on PATH, and keeps stow as it is when one is.
 `tests/lua/pkg_source_test.lua` runs both scripts against stub tarballs, a stub
-`curl` and a stub `make` in a temporary prefix, through the copies in
-`tests/pkg/fixtures/`.
+`curl` and a stub `make` in a temporary prefix.
 
 ### The rust group
 
@@ -159,7 +159,7 @@ gnupg. `dev tools install` on Ubuntu therefore installs the base group. The
 column is for x86_64 Ubuntu 24.04 (the pins are x86_64 builds).
 
 The packages are `ripgrep`, `fd-find`, `sd`, `jq`, `hyperfine`, `shellcheck`,
-`shfmt`, `bats`, `luajit`, `git`, `gh`, `zsh`, `dash` and `stow`. Ubuntu names
+`shfmt`, `bats`, `git`, `gh`, `zsh`, `dash` and `stow`. Ubuntu names
 the `fd-find` command `fdfind`, so its cell carries `bin:fdfind` and no `fd` is
 put on PATH.
 
@@ -171,8 +171,8 @@ and `selene`. The `yq` in apt is the Python wrapper, not mikefarah's. tokei is
 ### A fresh machine
 
 A fresh Ubuntu machine runs `bash scripts/prelude/ubuntu.sh`. It installs
-`ca-certificates`, `curl`, `git`, `jq`, `stow`, `unzip`, `xz-utils` and
-`luajit`. Then run `dev tools install --group base`.
+`ca-certificates`, `curl`, `git`, `jq`, `stow`, `unzip` and `xz-utils`. Then run
+`dev tools install --group base`.
 
 The pins need `curl`, `tar`, `unzip`, `xz-utils` (for watchexec) and
 `sha256sum`.
@@ -191,6 +191,9 @@ A `release:NAME` cell installs a pinned upstream release. `dev.pkg.release`
 reads the row `NAME` of `<project root>/.dev/releases.tsv`, beside the
 manifest. The columns are name, version, sha256, url with `${version}`, and the
 binary's path in the archive (`-` for a bare binary).
+
+As root, `dev tools` copies the manifest and this file into one new folder that
+only root can enter, and the driver reads the pins from that folder.
 
 The file is checked when it is read:
 
@@ -244,19 +247,58 @@ dev tools check --group base
 To bump a pin, change the `version` and `sha256` columns of its row and run
 the last three commands (with `--group rust` on `check` for a rust-group pin).
 
+## A fresh Intel guest
+
+The guest has the Xcode command line tools, no `brew` and a dotfiles archive
+unpacked into its current directory. `dev` finds the project from the
+directory holding `.dev` when there is no `.jj` or `.git`, so run these from
+the archive root. None of them needs `sudo`.
+
+```
+bash scripts/prelude/mac.sh
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+dev tools install --group base
+dev tools install --group rust
+dev tools check
+```
+
+The prelude builds the pinned tools the `base` group needs into `~/.local` and
+needs `curl`, `tar`, `make` and a compiler (all from the Xcode tools).
+
+The `base` group needs `curl`, `tar`, `unzip` and `shasum` for the pins, and
+Xcode's `perl` and `make` for stow. The `rust` group installs rustup with
+toolchain 1.99.1, the nightly rustfmt, cargo-sort and the pinned cargo tools.
+
+### The archive
+
+The archive must hold these paths and keep the execute bit on `dev`:
+
+- `dev`, the binary
+- `` (the whole directory)
+- `.dev/tools.tsv`
+- `.dev/releases.tsv`
+- `scripts/prelude/mac.sh`
+- every local `script:` source in the manifest, cut at the first comma
+
+List the script paths with this command after a manifest change.
+
+```
+rg -o --no-filename 'script:scripts/[^ ",]+' .dev/tools.tsv | sort -u
+```
+
 ## The driver
 
 `dev tools install` and `dev tools check` are built-in commands for any
-project. They run `luajit pkg.lua` from the directory that holds `dev`'s own
-`main.lua`, from the project root, and pass the project's `.dev/tools.tsv` as
-`--manifest`.
+project. They run the hidden built-in `dev __pkg` from the project root and
+pass the project's `.dev/tools.tsv` as `--manifest`.
 The driver refuses `check` and `install` without `--manifest` and exits 2.
 Nothing writes into `dev`'s own directory.
 
-The driver reads the manifest, picks the tools, prints the status lines and
-runs the install and status commands in Lua. There is one module per manager
-under `lua/dev/pkg/`: `brew`, `pacman`, `dnf`,
-`apt`, `cargo`, `luarocks`, `script` and `release`.
+The manifest parser is the native `dev.manifest` module (`parse`, `column`
+and `select`). The driver reads the manifest, picks the tools, prints the status
+lines and runs the install and status commands in Luau. There is one module per
+manager under `luau/dev/pkg/`: `brew`, `pacman`, `dnf`, `apt`, `cargo`,
+`luarocks`, `script` and `release`.
 
 Every package, repo and channel word reaches a command as one argument, never
 through a shell. A package name or repo in a cell must be a plain word (no
@@ -265,13 +307,13 @@ leading `-`, no spaces), else the row fails. The pacman and dnf commands put
 
 ### script rows
 
-A `script:` source ending in `.lua` runs as `luajit <path> <args>` with dev's
-modules on `package.path`. Any other source runs as `bash <path> <args>`. The
-dry-run line prints whichever was chosen.
+A `script:` source ending in `.lua` or `.luau` runs as `dev -l <path> <args>`,
+with dev's modules on the `require` path. Any other source runs as
+`bash <path> <args>`. The dry-run line prints whichever was chosen.
 
 The arguments split on blanks and are never glob-expanded, and no shell sees
 them. A row for a pinned tool, such as stow or bats, names
-`scripts/install-*.lua`. `script.lua` gives each the pins file as
+`scripts/install-*.lua`. `luau/dev/pkg/script.luau` gives each the pins file as
 `PKG_RELEASES`.
 
 ### Logs
@@ -282,10 +324,10 @@ command's output, indented, under its failure line (`dev.pkg.lib` `run` and
 
 ### Overrides
 
-`.dev/tools.sh` cannot override the `tools` command. A script such as
-`.dev/tools/install.sh` replaces that subcommand for a user, as it does any
-built-in subcommand. As root, dev skips the registry and the driver never runs
-a project script, so the root step of a box build never executes
+`.dev/commands/tools.sh` cannot override the `tools` command. A script such
+as `.dev/commands/tools/install.sh` replaces that subcommand for a user, as it
+does any built-in subcommand. As root, dev skips the registry and the driver
+never runs a project script, so the root step of a box build never executes
 project-controlled code. `dev --remote` refuses every `tools` subcommand.
 
 ## As root
@@ -317,16 +359,15 @@ gives that copy to the driver.
 ### Running the driver
 
 The driver runs under a scrubbed environment. `DOTFILES` is ignored and the
-driver comes from `dev`'s own location. It runs with the absolute `luajit` the
-launcher started `dev` with (argv zero, never found through `PATH`).
+driver is the built-in `dev __pkg` of the running binary (`dev.runtime.exe`,
+never found through `PATH`).
 
 The driver runs through a constant `sh -c` wrapper. The wrapper takes the copy
 and the driver command as arguments and removes the temp copy on exit, `INT`
 and `TERM`.
 
-With `-vv` the driver gets `BASH_ENV=<dev's share>/xtrace.bash` and dev's fixed
-`PS4`, only when that trace file exists. Otherwise it falls back to
-`VERBOSE=1`. It never takes anything from the caller's environment.
+With `-v` or more the driver gets `VERBOSE=<level>`. It never takes anything
+from the caller's environment, and no `BASH_ENV` or `PS4` reaches it.
 
 ### Usage errors
 

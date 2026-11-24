@@ -2,7 +2,7 @@
 
 load pty
 
-FIXTURE="${BATS_TEST_DIRNAME}/../lua/fixtures/pick.lua"
+FIXTURE="${BATS_TEST_DIRNAME}/../lua/fixtures/pick.luau"
 
 setup() {
     require_pty
@@ -10,7 +10,7 @@ setup() {
     OUT="$BATS_TEST_TMPDIR/out"
     cat >"$INNER" <<INNER
 stty -a >"$OUT.before"
-printf 'one\tOne\ntwo\tTwo\n' | luajit "$FIXTURE" >"$OUT.choice" 2>"$OUT.err"
+printf 'one\tOne\ntwo\tTwo\n' | dev -l "$FIXTURE" >"$OUT.choice" 2>"$OUT.err"
 echo \$? >"$OUT.status"
 stty -a >"$OUT.after"
 INNER
@@ -102,7 +102,7 @@ tall_pty() {
     cat >"$INNER" <<INNER
 stty rows 8 cols 60
 stty -a >"$OUT.before"
-for i in \$(seq 1 30); do printf 'v%s\tRow %s\n' "\$i" "\$i"; done | luajit "$FIXTURE" >"$OUT.choice" 2>"$OUT.err"
+for i in \$(seq 1 30); do printf 'v%s\tRow %s\n' "\$i" "\$i"; done | dev -l "$FIXTURE" >"$OUT.choice" 2>"$OUT.err"
 echo \$? >"$OUT.status"
 stty -a >"$OUT.after"
 INNER

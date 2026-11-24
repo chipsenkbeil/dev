@@ -2,10 +2,10 @@ dev tools check
   Report which of the manifest's tools are missing from PATH
 
 usage
-  dev tools check [--group NAME]
+  dev tools check [flags]
 
 flags
-  --group
+  --group <string>
 
-Run `dev tools check --help` for the script header and the command it runs.
+Run `dev tools check --help` for every flag and argument.
 exit 0

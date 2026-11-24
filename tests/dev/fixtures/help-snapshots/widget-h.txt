@@ -5,5 +5,5 @@ subcommands
   diff  Diff the widget.
   save  Save the widget.
 
-Run `dev help widget <sub>` for a subcommand's flags and header.
+Run `dev help widget <sub>` for a subcommand's flags and arguments.
 exit 0

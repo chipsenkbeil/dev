@@ -7,5 +7,5 @@ usage
 flags
   --now
 
-Run `dev widget save --help` for the script header and the command it runs.
+Run `dev widget save --help` for every flag and argument.
 exit 0

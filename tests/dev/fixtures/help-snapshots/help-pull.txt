@@ -1,12 +1,17 @@
 dev pull
   Fetch the remote and rebase local work onto it
 
+usage
+  dev pull
+
 the built-in runs
   Neither .jj nor .git found in <root>.
 
 Global flags:
-  -v                      print each command before it runs
-  -vv                     also trace every line of dev and of each bash script
+  -v                      print each command before it runs, and debug log lines
+  -vv                     also log every spawn with its folder, exit code and time
+  -vvv                    also trace every native dev call, and run a .sh command under bash -x (that script only, not the scripts or tools it starts)
+  -vvvv                   also trace calls between dev's Luau modules
   --remote                run this command on a remote runner, see `dev help remote`
   --local                 run this command here, whatever the default is (refused for a ci command under DEV_AGENT)
   --detach                with --remote, start the job and return

@@ -2,7 +2,7 @@
 
 load pty
 
-FIXTURE="${BATS_TEST_DIRNAME}/../lua/fixtures/raw.lua"
+FIXTURE="${BATS_TEST_DIRNAME}/../lua/fixtures/raw.luau"
 
 setup() {
     require_pty
@@ -14,7 +14,7 @@ if test -t 1; then kind=tty; fi
 echo "\$kind" >"$OUT.tty"
 stty min 4 time 3
 stty -a >"$OUT.before"
-luajit "$FIXTURE" \${KEYS:-1} >"$OUT.key"
+dev -l "$FIXTURE" \${KEYS:-1} >"$OUT.key"
 stty -a >"$OUT.after"
 INNER
 }
@@ -65,15 +65,15 @@ in_pty() {
 }
 
 @test "require_terminal exits 2 with the message when stdin is not a terminal" {
-    run luajit "${BATS_TEST_DIRNAME}/../lua/fixtures/require_terminal.lua" </dev/null
+    run dev -l "${BATS_TEST_DIRNAME}/../lua/fixtures/require_terminal.luau" </dev/null
     [ "$status" -eq 2 ]
     [ "$output" = "✗ dev connect: No box given and no terminal to pick one. Pass a box name." ]
 }
 
 @test "require_terminal writes no escapes to a redirected stderr while stdout is a terminal" {
-    local fixture="${BATS_TEST_DIRNAME}/../lua/fixtures/require_terminal.lua"
+    local fixture="${BATS_TEST_DIRNAME}/../lua/fixtures/require_terminal.luau"
     local inner="$BATS_TEST_TMPDIR/rt.sh"
-    printf 'TERM=xterm luajit "%s" </dev/null 2>"%s"\n' "$fixture" "$BATS_TEST_TMPDIR/err" >"$inner"
+    printf 'TERM=xterm dev -l "%s" </dev/null 2>"%s"\n' "$fixture" "$BATS_TEST_TMPDIR/err" >"$inner"
     pty_run '' 0 1 "$inner" >/dev/null || true
     [ "$(cat "$BATS_TEST_TMPDIR/err")" = "✗ dev connect: No box given and no terminal to pick one. Pass a box name." ]
     ! grep -q $'\033' "$BATS_TEST_TMPDIR/err"

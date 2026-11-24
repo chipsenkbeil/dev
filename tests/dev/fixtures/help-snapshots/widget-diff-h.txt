@@ -4,5 +4,5 @@ dev widget diff
 usage
   dev widget diff
 
-Run `dev widget diff --help` for the script header and the command it runs.
+Run `dev widget diff --help` for every flag and argument.
 exit 0

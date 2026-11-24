@@ -1,8 +1,0 @@
-# fixture manifest with groups, for the parse and group selection tests
-name     binary   brew     pacman   groups
-ripgrep  rg       ripgrep  ripgrep  base
-jq       jq       jq       jq       base
-sd       sd       sd       sd       base,rust
-rustup   rustup   rustup   rustup   rust
-sccache  sccache  sccache  sccache  rust
-tokei    tokei    tokei    tokei    -

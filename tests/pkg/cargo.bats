@@ -5,8 +5,7 @@
 # that record their arguments.
 
 REPO="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
-PKG="$REPO/pkg.lua"
-LUAJIT="$(command -v luajit)"
+DEV="${DEV_BIN:-$REPO/target/debug/dev}"
 
 setup() {
     STUBS="$BATS_TEST_TMPDIR/stubs"
@@ -26,7 +25,7 @@ stub() {
 }
 
 install_crate() {
-    "$LUAJIT" "$PKG" install --manifest "$BATS_TEST_TMPDIR/tools.tsv" zzz-tool
+    "$DEV" __pkg install --manifest "$BATS_TEST_TMPDIR/tools.tsv" zzz-tool
 }
 
 @test "a rustup with no default toolchain gets stable before the crate installs" {

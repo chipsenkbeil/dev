@@ -1,0 +1,113 @@
+local dev_os = require("dev.os")
+local term = require("dev.term")
+
+local failures = 0
+
+local function check(name, body)
+    local ok, err = pcall(body)
+    if ok then
+        print("ok   " .. name)
+    else
+        failures += 1
+        print("FAIL " .. name .. ": " .. tostring(err))
+    end
+end
+
+local function same(actual, expected)
+    if actual ~= expected then
+        error(string.format("expected %s, got %s", tostring(expected), tostring(actual)), 2)
+    end
+end
+
+local function keys(bytes)
+    return table.concat(term.decode(bytes), ",")
+end
+
+check("the constants are today's", function()
+    same(term.TTY_PATH, "/dev/tty")
+    same(term.DEFAULT_COLS, 80)
+    same(term.Key.UP, "up")
+    same(term.Key.CTRL_C, "ctrl-c")
+    same(term.Key.EOF, "eof")
+end)
+
+local function names(...)
+    return table.concat({ ... }, ",")
+end
+
+check("decode names every escape form", function()
+    local Key = term.Key
+    same(keys("\27[A\27OA"), names(Key.UP, Key.UP))
+    same(keys("\27[B\27OB"), names(Key.DOWN, Key.DOWN))
+    same(keys("\27[5~\27[6~"), names(Key.PGUP, Key.PGDN))
+    same(keys("\27[H\27OH\27[1~\27[7~"), names(Key.HOME, Key.HOME, Key.HOME, Key.HOME))
+    same(keys("\27[F\27OF\27[4~\27[8~"), names(Key.END, Key.END, Key.END, Key.END))
+end)
+
+check("decode names single bytes", function()
+    local Key = term.Key
+    same(keys("\r\n"), names(Key.ENTER, Key.ENTER))
+    same(keys("\3"), Key.CTRL_C)
+    same(keys("\16\14"), names(Key.UP, Key.DOWN))
+    same(keys(" kj"), names(Key.SPACE, Key.UP, Key.DOWN))
+    same(keys("aZ9"), "a,Z,9")
+end)
+
+check("decode names a multi-byte character as itself", function()
+    same(keys("é"), "é")
+end)
+
+check("decode skips an unknown escape and names a lone one", function()
+    same(keys("\27[99Zx"), "x")
+    same(keys("\27"), term.Key.ESC)
+    same(keys("\1\127"), "")
+end)
+
+check("size gives positive rows and columns", function()
+    local rows, cols = term.size()
+    same(rows > 0 and cols > 0, true)
+end)
+
+check("raw refuses a descriptor that is not a terminal", function()
+    local ok, err = pcall(term.raw, 99)
+    same(ok, false)
+    same(tostring(err):find("not a terminal", 1, true) ~= nil, true)
+end)
+
+check("silent returns a restore that does nothing off a terminal", function()
+    local restore = term.silent(99)
+    same(type(restore), "function")
+    restore()
+    restore()
+end)
+
+check("open_tty gives a handle or a reason, and close frees it", function()
+    local fd, reason = term.open_tty()
+    if fd then
+        same(type(fd), "number")
+        term.close(fd)
+    else
+        same(type(reason), "string")
+    end
+end)
+
+check("page prints plainly when it is not on a terminal", function()
+    same(term.page("one\ntwo\n", { rows = 1 }), false)
+end)
+
+check("page hands the text to the pager command", function()
+    same(term.page("a\nb\nc\n", { pager = "cat", rows = 1, interactive = true }), true)
+end)
+
+check("page reports a pager that fails", function()
+    local shown, reason = term.page("a\nb\n", { pager = "false", rows = 1, interactive = true })
+    same(shown, nil)
+    same(type(reason), "string")
+    local missing =
+        term.page("a\nb\n", { pager = "dev-no-such-pager", rows = 1, interactive = true })
+    same(missing, nil)
+end)
+
+if failures > 0 then
+    dev_os.exit(1)
+end

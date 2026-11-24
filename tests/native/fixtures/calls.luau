@@ -1,0 +1,5 @@
+local runtime = require("dev.runtime")
+runtime.add_path((arg[0]:match("^(.*)/[^/]*$") or ".") .. "/lib")
+local reexport = require("reexport")
+local calls = require("calls")
+print(reexport.twice(calls.one()), calls.name, reexport == calls)

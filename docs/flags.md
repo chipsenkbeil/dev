@@ -2,12 +2,19 @@
 
 ## Global flags
 
-Nine flags work anywhere before a `--` on the line, whatever the command.
+These flags work before the command word, whatever the command. `-v` and `-q`
+also count after it.
 
-- `-v` or `--verbose`: print each command before it runs, and export
-  `VERBOSE=1` to it.
-- `-vv`: also trace every line of dev and of each bash script it runs, which
-  exports `VERBOSE=2`.
+- `-v` or `--verbose`: print each command before it runs, show debug log
+  lines, and export `VERBOSE=1` to it.
+- `-vv`: also log every spawn with its folder, exit code and time, and export
+  `VERBOSE=2`.
+- `-vvv`: also trace every native `dev.*` call, and run each `.sh` command
+  under `bash -x`. Only that script is traced, not the scripts or tools it
+  starts. It exports `VERBOSE=3`.
+- `-vvvv`: also trace calls between dev's Luau modules, and export
+  `VERBOSE=4`.
+- `-q` or `--quiet`: show errors only. It never touches standard output.
 - `--remote`: run the command on a remote runner. By default that is the job
   named like the command in the project's default pipeline (`.ci/jobs.lua`),
   run on example-box through ci. `DEV_REMOTE=1` in the environment is the
@@ -23,29 +30,28 @@ Nine flags work anywhere before a `--` on the line, whatever the command.
 - `--job-timeout DURATION`: with `--remote`, add `--timeout DURATION` to the
   `ci run`, which bounds the run. Alone, with no duration, or with a duration
   that starts with `-`, it is a usage error.
-- `-C DIR`: run as if dev started in `DIR`. The launcher enters `DIR` before
-  `luajit` starts, so the project root, the config and a `--remote` run all
+- `-C DIR`: run as if dev started in `DIR`. dev enters `DIR` before
+  any Luau runs, so the project root, the config and a `--remote` run all
   come from `DIR`.
-- `--agent NAME`: export `DEV_AGENT=NAME` to the command. The launcher sets it
-  before `luajit` starts, so a plain `dev -C DIR --agent NAME board land CARD`
+- `--agent NAME`: export `DEV_AGENT=NAME` to the command. dev sets it
+  before any Luau runs, so a plain `dev -C DIR --agent NAME board land CARD`
   names its claimant with no `export` or env prefix in the call.
 
 A missing `DIR` or an empty word after `-C` is a usage error (exit 2), and so is
-a missing or empty `NAME` after `--agent`. The launcher passes the word after
-`--job-timeout` on with it, and the Lua parser refuses a missing duration.
+a missing or empty `NAME` after `--agent`. dev takes the word after
+`--job-timeout` only when it does not start with `-`, and a missing duration is
+a usage error.
 Repeated `-C` flags apply in turn, a relative one from the directory before.
-Every `-C` or `--agent` is a global flag wherever it stands.
+Global flags other than `-v` and `-q` count only before the first command
+word. After it, every word belongs to the command. A command opts out of the
+words it takes back with `globals = false`.
 
-`-v` and `-vv` also stack as `-vvv`, and the count is capped at 2. Setting
-`VERBOSE` in the environment counts the same: empty, `no` and `false` mean
-off, a number counts up to 2, and any other word means 1.
+`-v` stacks up to `-vvvv`, and the count is capped at 4. Setting `VERBOSE` in
+the environment counts the same: empty, `no` and `false` mean off, a number
+counts up to 4, and any other word means 1.
 
 `dev help remote` explains the runner, the refusals and how a project replaces
 it.
-
-When the trace file `xtrace.bash` is missing, `-vv` prints
-`The trace file <path> is missing. Showing commands only.` and falls back to
-`-v`.
 
 These lines show each global flag at work:
 
@@ -57,107 +63,103 @@ dev --remote test
 
 ### Adding a global flag
 
-A new flag goes first into `BARE_FLAGS` or `VALUE_FLAGS` in
-`lua/dev/registry.lua`, the one list every other copy is checked against.
-Then add it to each copy:
+A new flag is one row in the `GLOBALS` table of `src/flags.rs` and one match
+arm there. The Rust host parses it and hands the result to Luau as
+`dev.globals`. Then add it to each copy:
 
-- the launcher, `bin/dev`, when it consumes the flag or implies
-  `--remote`
-- the parser in `lua/dev/cli.lua`
-- the flag table in `lua/dev/help.lua`
+- `GLOBAL_FLAGS` or `VALUE_FLAGS` in `luau/dev/registry.luau`, the list
+  completion and the topic check read
+- the checks that combine flags in `luau/dev/cli.luau`
+- the flag table in `luau/dev/help.luau`
 - the list above
 
-`tests/lua/global_flags_test.lua` fails and names the flag when a copy
+`tests/lua/global_flags_test.luau` fails and names the flag when a copy
 misses it.
 
 ## Help flags
 
 `-h` and `--help` are reserved for help on every command and subcommand,
-in any position, but only before a `--`. A script never sees them there, so it
-cannot declare them in its `# flags:` line (`dev __topics check` reports one
-that does). Everything after a `--` reaches the command verbatim, so
+in any position, but only before a `--`. A command never sees them there, so it
+cannot declare them as flags (`dev help --check-topics` reports one that
+does). Everything after a `--` reaches the command verbatim, so
 `dev run -- -h` runs `cargo run -- -h`.
 
-- `-h` anywhere after a command prints its description, usage and flags.
+- `-h` anywhere after a command prints its description, usage and flag names.
 - `--help` anywhere after a command prints the long form, the same as
-  `dev help <command>`. When both appear, the first one found wins.
+  `dev help <command>`: every flag with its kind, short, default, choices,
+  repeatable mark and help text, and every argument. When both appear, the
+  first one found wins.
 - `dev help -a` lists every command, hidden ones included.
-- `dev help --topics` lists the topics, and `dev help -k <topic>` prints one.
-- A topic taller than the terminal opens in `$PAGER` (else `less -R`).
-  `dev help --no-pager <topic>` or `DEV_PAGER=0` prints it directly.
+- `dev help --topics` lists the help pages, and `dev help -k <page>` prints one.
+- A topic taller than the terminal opens in `$PAGER`, else in dev's built-in
+  pager. `dev help --no-pager <topic>` or `DEV_PAGER=0` prints it directly.
 - The curated `dev help` always pages on a terminal, even when it fits, unless
-  `--no-pager` or `DEV_PAGER=0` is set. With less as the pager, dev adds `-+F`
-  and the last line reads `& filters · / searches · q quits`.
+  `--no-pager` or `DEV_PAGER=0` is set. With less as `$PAGER`, dev adds `-+F`
+  and the last line reads `& filters · / searches · q quits`. The built-in
+  pager has its own `/` search.
 
-The `&` key narrows the lines as you type. The one exception to the help
-flags is `tools install` and `tools check` as root, where they are an unknown
-flag.
+The `&` key narrows the lines as you type in less.
 
 Color is on only when the output is a terminal and `NO_COLOR` is unset.
 
-## Flags a script declares
+## Flags a command declares
 
-A project script gets a flag only when its `# flags:` line declares it.
-Before a `--`, a word that starts with `-` (and is not the lone word `-`) must
-be a global flag, `-h` or `--help`, or listed on the line. Anything else stops
-dev before the script runs.
+A command gets a flag only when its spec declares it, or its `.sh` header does
+with a `# flag:` line. dev parses the words after the command through the spec
+before the command runs. A word that starts with `-` (and is not the lone word
+`-`) must be a global flag, `-h`, `--help` or a declared flag, or dev stops
+before the command runs. A command with subcommands checks its own words the
+same way.
 
-`<command>` is the command words, a subcommand included.
-`--name=value` is checked as `--name`, and a declared flag's separate value
-(`--days 7`) is a plain word. Words that do not start with `-` are never
-refused, and a value that starts with `-` is checked as a flag, so write it as
-`--days=-1`.
+`--name=value` and `--name value` both work for a flag that takes a value, and
+`-w VALUE` for a flag with a short. A flag that takes a value takes the next
+word verbatim, even one that starts with `-`, and a word that holds whitespace
+before any `=` is never a flag.
 
-Everything after the first `--` reaches the script untouched, so flags meant
+Words after the first `--` are plain arguments, unless the spec sets
+`passthrough`. Then those words reach the command untouched, so flags meant
 for another tool go there. `dev test -- <args>` runs the test suites with
 `<args>`.
 
-Built-in commands check their own flags. With `--remote`, arguments typed with
-no `--` reach the job, and arguments on both sides of a `--` are refused, as
-the `remote` topic describes.
+With `--remote`, arguments typed with no `--` reach the job, and arguments on
+both sides of a `--` are refused, as the `remote` topic describes.
 
-The refusal exits 2 with this message:
+The refusal exits 2 with a sentence naming the flag or argument:
 
 ```
-dev <command>: Unknown flag <flag>. Pass it after -- to reach the script, or add it to the script's # flags: line.
+dev <command>: Unknown flag <flag>.
 ```
 
-## Script headers
+## Command specs and headers
 
-Each command is `.dev/<command>.lua` or `.dev/<command>.sh`, and
-`dev help <command>` prints the script's header. A header can carry these
-lines.
+Each command is a `.luau` file returning a `dev.command` spec, or a `.sh` or
+`.ps1` file with a header. `dev help <command>` draws the help from the spec.
+`dev help commands` has the fields, the header grammar and the three layers.
+A few fields change how dev calls a command:
 
-- `# flags: --a --b`: the flags that `dev help <command>` and shell completion
-  offer. Commas also separate the words.
-- `# group: <name>`: the heading the command is listed under. A command with
-  none lands in a group named after the project directory, and a built-in
-  override keeps its built-in group.
-- `# hidden`: keeps a flat command to `dev help -a`.
-- `# local`: keeps the remote default from sending that command to ci, for a
-  script that drives ci itself beside a same-named job. An explicit `--remote`
-  still sends it, and `dev help <command>` says it runs here under the
-  default.
-- `# remote: false`: marks a command that never runs on a remote runner. The
-  remote default skips it, `--remote` refuses it, and the line of a command
-  with subcommands covers its subcommands. A script that overrides a built-in
-  keeps the built-in's flags.
-- `# requires: workspace`: refuses the command to a `DEV_AGENT` with a
-  workspace role in the primary checkout. The line is a list of preconditions
-  and `workspace` is the only one dev knows. Any other word is a header
-  warning that names it.
-- `# fetch JOB FILE`: runs the command here, and under the remote mode first
-  builds `FILE` with the ci job `JOB` on this host's platform and hands the
-  pulled path to the command in `DEV_FETCHED`. `dev help remote` has the rule.
-- `# patch JOB FILE`: under the remote mode runs the ci job `JOB` and applies
-  the patch `FILE` it keeps at the project root, in place of running the
+- `hidden` keeps a command to `dev help -a`.
+- `runs_local` keeps the remote default from sending that command to ci, for a
+  command that drives ci itself beside a same-named job. An explicit
+  `--remote` still sends it, and `dev help <command>` says it runs here under
+  the default.
+- `remote = false` marks a command that never runs on a remote runner. The
+  remote default skips it, `--remote` refuses it, and the setting of a command
+  with subcommands covers its subcommands.
+- `requires = { "workspace" }` refuses the command to a `DEV_AGENT` with a
+  workspace role in the primary checkout. `workspace` is the only
+  precondition dev knows.
+- `fetch = { job, file }` runs the command here, and under the remote mode
+  first builds `file` with the ci job `job` on this host's platform and hands
+  the pulled path to the command in `DEV_FETCHED`. `dev help remote` has the
+  rule.
+- `patch = { job, file }` runs the ci job under the remote mode and applies
+  the patch `file` it keeps at the project root, in place of running the
   command. `dev help remote` has the rule.
-- `# positional`: marks a `.lua` command that takes positional words. A word
-  shaped `KEY=value` stays in `ctx.args` for it and `ctx.vars` is empty.
+- `positional` keeps a word shaped `KEY=value` in the command's arguments.
 
-Any other `.lua` command has such words split into `ctx.vars`, and a `.sh`
-command always gets every word as given. A command documents its `KEY=value`
-arguments in its header.
+Any other global or project command has such words split into `ctx.vars`, and
+a `.sh` command always gets every word as given. A command documents its
+`KEY=value` arguments in its help.
 
 ## The help views
 
@@ -166,14 +168,14 @@ commands under task-named group headings, the topic list and a pointer line.
 
 The groups are Check your work, Share it, Set up a machine or project and
 Boxes, shown in that order and only when they have members. Any project group
-follows, then Hidden. A command's description is the first comment line of its
-script.
+follows, then Hidden. A command's description is the summary of its
+spec or header.
 
 Each view reads the terminal like this.
 
 - On a terminal with color, the curated view and `dev help -a` draw commands
-  in bold and group headings in dim. Each command and topic sits on one line
-  cut to the terminal width with `…`.
+  in bold and group headings in dim. Each command and help page sits on one
+  line cut to the terminal width with `…`.
 - Piped output, `NO_COLOR` and `TERM=dumb` stay plain and uncut.
 - The closing pointer line draws its backticked spans in cyan without the
   backticks and is cut to the width with `…`. Piped, it keeps the backticks
@@ -181,19 +183,18 @@ Each view reads the terminal like this.
 - `dev help -a` adds the hidden commands and dev's own `__` helpers. Its mark
   column names the source of each command, `builtin`, `global` or `project`,
   and `project over builtin`, `global over builtin` or `project over global`
-  for a script that replaces another. The curated view marks such a script
+  for a command that replaces another. The curated view marks such a command
   `(override)` and has no source column.
 - `dev help <command>` and `dev <command> --help` print the long form, and
   `dev <command> -h` prints the description, usage and flags. The heading of a
-  script that replaces another names its source and what it replaces, as in
+  command that replaces another names its source and what it replaces, as in
   `dev lint (project over builtin)`.
-- `dev help <topic>`, `dev help -k <topic>` and `dev help --topics` read
-  topics.
+- `dev help <page>`, `dev help -k <page>` and `dev help --topics` read
+  help pages.
 
-A command with subcommands takes the group of its first subcommand script with
-a `# group:` line. `builtin_table` rows end in a group column, where `hidden`
-keeps a built-in to `dev help -a` and a subcommand row leaves the column empty
-to take its parent command's.
+A command with subcommands takes the group of its first subcommand that has
+one. Every command, built-in or not, is a spec, so `-h` and `--help` read the
+same fields for all of them.
 
 ## Paging
 
@@ -202,7 +203,8 @@ A topic prints as the file when standard output is not a terminal, when
 prints as styled Markdown through `dev.ui.markdown`, at most 100 columns wide.
 
 `dev help <topic>` and `dev help -k <topic>` then go through `dev.ui.page`
-(`$PAGER`, else `less -R`) when standard output is a terminal and the text has
+(`$PAGER`, else the built-in pager) when standard output is a terminal and
+the text has
 more lines than the screen has rows (`dev.term.size`). Otherwise they print
 directly. `dev help --no-pager ...` (the flag may stand anywhere among the
 arguments) or `DEV_PAGER=0` in the environment turns paging off.
@@ -211,16 +213,15 @@ The curated view always goes through the pager on a terminal, even when it
 fits. `--no-pager`, `DEV_PAGER=0`, a pipe, `NO_COLOR` and `TERM=dumb` print it
 directly. In `help.page_plan`, `rows = 0` forces `dev.ui.page` to page it.
 
-With less as the pager (`PAGER` unset or its first word has the basename
+With less as the pager (`PAGER` is set and its first word has the basename
 `less`), dev adds `-+F` to its arguments. That cancels a `-F` from `PAGER` or
 `LESS` that would make less quit on short text. The paged text also ends in a
-dim `& filters · / searches · q quits` line, and dev builds no viewer of its
-own.
+dim `& filters · / searches · q quits` line.
 
 `dev.ui.should_page(content, opts)` makes the decision and
 `dev.ui.page(content, opts)` runs the pager. The `opts` are:
 
-- `pager`: the command, run by `sh`.
+- `pager`: the command to run.
 - `allowed`: whether paging is permitted.
 - `interactive`: whether standard output is a terminal.
 - `rows`: the rows the screen has.
@@ -233,18 +234,19 @@ the text prints directly without the filter line.
 
 ## Topics
 
-Topics are Markdown files whose first line is `# <name>: <summary>`. Built-in
-ones live in the `docs` folder beside `main.lua`, and project ones in
-`.dev/topics/`. A topic may not share a name with a command or a built-in topic.
+Topics are Markdown files whose first line is `# <name>: <summary>`.
+Built-in ones are the `docs/` folder baked into the binary, and project ones
+live in `.dev/help/`. A help page may not share a name with a command or a
+built-in topic.
 
-`dev __topics check` checks the built-in topics when that folder lies inside
-the project, and the project's topics in every project. For each topic it
-checks the first line, the names, and that each backticked or fenced `dev` line
-followed by words
-names a real command or subcommand and only flags `dev __flags` lists for it. It
-exits 1 with `file:line` for each problem.
+`dev help --check-topics` checks the built-in help pages from `docs/` on disk
+when the project is dev itself (`luau/dev/cli.luau` exists), and the project's
+help pages in every project. For each help page it checks the first line, the
+names, and that each backticked or fenced `dev` line followed by words names a
+real command or subcommand and only flags it declares. It exits 1 with
+`file:line` for each problem.
 
-`tests/dev/help_test.sh` runs the check on the real topics and snapshots the
+`tests/dev/help_test.sh` runs the check on the real help pages and snapshots the
 help views of `tests/dev/fixtures/help-project/`.
 `UPDATE_SNAPSHOTS=1 bash tests/dev/help_test.sh` rewrites them.
 
@@ -303,7 +305,8 @@ The flags `--local` and `--remote` cannot be used together.
 
 ## The minimum dev version
 
-dev's own version is the `VERSION` file beside `main.lua`. A project names the
+dev's own version is `dev.runtime.version`, the version of the crate.
+A project names the
 oldest dev it works with as `[dev] min_version = "MAJOR.MINOR.PATCH"` in
 `.dev/config.toml`. When this dev is older, dev exits 1 before it runs
 anything, with ``This project needs dev 0.2.0 or newer, and this dev is
@@ -319,8 +322,8 @@ runner's exit code.
 Arguments given with no `--` reach the job as well, and arguments on both
 sides of a `--` are a usage error.
 
-The runner is `.dev/__remote.lua` when the project has one, else `ci`. A
-`.dev/__remote.lua` is a chunk returning `function(run) -> integer`, with
+The runner is `.dev/helpers/remote.luau` when the project has one, else `ci`. A
+`.dev/helpers/remote.luau` is a chunk returning `function(run) -> integer`, with
 `run = {words, args, detach, priority, job_timeout, root, verbose}`.
 
 The ci runner needs `ci` on PATH and checks `ci -C <root> run --list --json`
@@ -333,9 +336,9 @@ deeper). It then runs
 Arguments on both sides of the `--` are a usage error, and so are `--detach`,
 `--priority` and `--job-timeout` without `--remote`.
 
-This repo's `.dev/__remote.lua` sends `soak` to the job of the same name in
-`.ci/soak.lua`. The default pipeline runs on every patchset, so `soak` stays
-out of `.ci/jobs.lua`.
+This repo's `.dev/helpers/remote.luau` sends `soak` to the job of the same
+name in `.ci/soak.lua`. The default pipeline runs on every patchset, so `soak`
+stays out of `.ci/jobs.lua`.
 
 Every other command goes to `dev.remote.ci_runner`. The topic is
 `docs/dev/remote.md`.
@@ -390,9 +393,9 @@ sets it to the commit it tested, and a value that is not hex exits 2.
   `FOLDER stays on the newer commit COMMIT.`, and the exit code is 0 for all
   four. A failed jj or git command exits 1 with a sentence that names it, such
   as `The git fetch command failed in FOLDER: OUTPUT.`
-- A project `.dev/follow.sh` or `.dev/follow.lua` replaces the built-in.
+- A project `.dev/commands/follow.luau` or `follow.sh` replaces the built-in.
   `dev board land` on a board with no `deploys = true` under `[board.land]`
-  and `dev board ship` run it through the launcher, and the script runs in
+  and `dev board ship` run it through dev, and the script runs in
   the main checkout.
 
 ## The config command
@@ -432,110 +435,93 @@ value in a project's `.dev/config.toml` leaves a key unset to the wizard.
 
 ## The launcher
 
-`bin/dev` is a small launcher.
+dev is one Rust binary that embeds Luau. `bootstrap.sh` and the zsh
+completion find dev as `dev` on `PATH`, and a built binary runs as
+`target/debug/dev` or `target/release/dev`.
 
-Before anything else, the launcher takes each `-C DIR` pair out of the
-arguments before a `--`. A missing or empty word exits 2 with
-``The flag `-C` needs a directory.`` Once the launcher has found itself, it
-enters the directories in turn, and one it cannot enter exits 2 with
-``The flag `-C` cannot enter <DIR>.``
+Before any Luau runs, the Rust host parses the global flags. It reads them
+only before the first command word. That word and every word after it belong
+to the command, so `dev test --remote` hands `--remote` to `test`. Any other
+word that starts with `-` before the command word exits 2 with
+``The flag `X` is not a global flag of dev.`` A lone `-` is a command word.
 
-At uid 0 (`$EUID` or `id -u`), the launcher then does the following.
+- Each `-C DIR` is applied in order. A missing or empty word exits 2 with
+  ``The flag `-C` needs a directory.`` and a folder dev cannot enter exits 2
+  with ``The flag `-C` cannot enter <DIR>.`` dev sets `PWD` for each.
+- `--agent NAME` exports `DEV_AGENT=NAME`. A missing name exits 2 with
+  `The --agent flag needs a name.`
+- `--job-timeout` takes the next word unless it starts with `-`.
+- `-l FILE ARGS...` runs a Luau file with every word after it as its arguments,
+  for example `dev -l tests/native/runtime_test.luau`. A missing file exits 2
+  with `The file FILE does not exist.` An error prints its traceback and exits
+  1.
+- An argument that is not valid UTF-8 exits 2 with
+  `An argument to dev is not valid UTF-8.`
 
-- Sets `PATH` to `/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`.
-- Unsets `DEV_UID`, `DEV_OS`, `BASH_ENV`, `ENV`, and `LUA_PATH`, `LUA_CPATH`
-  and `LUA_INIT` with their `_5_1` and `_5_2` variants. Bash has already read
-  `BASH_ENV` by then, so this scrubs the children only.
-- Takes luajit only from `/usr/bin` or `/usr/local/bin`. When it is in
-  neither, the launcher refuses `--remote`, `--detach`, `--priority`,
-  `--job-timeout` and an enabled `DEV_REMOTE` with the root refusal (exit 2).
+At uid 0 the host resets `PATH` to
+`/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin` and unsets
+`DEV_UID`, `DEV_OS`, `BASH_ENV` and `ENV`. The root check itself stays in Luau.
+The host exports `DEV_SELF` as the canonical path of the running binary. An
+enabled `DEV_REMOTE` is anything but empty, `0`, `no` or `false`.
 
-A root caller without luajit and without those flags gets the root refusal
-(exit 2) for every command but `tools install` and `tools check`. Those print
-`As root, dev runs only on Linux.` (exit 2) off Linux and
-``The command `dev tools` needs luajit in /usr/bin or /usr/local/bin.`` (exit 1)
-on it.
-The launcher decides this in bash from the words after the `-v` and
-`--verbose` flags, before anything is read.
+Nothing is read from disk to start: the Luau modules, the topics and the
+init templates are baked into the binary. A modules folder on disk is not
+needed and a checkout update never shows a running dev half-written code.
 
-The launcher resolves its own real path into `DEV_SELF`. An enabled
-`DEV_REMOTE` is anything but empty, `0`, `no` or `false`.
-
-### Which copy of dev runs
-
-A user's launcher runs dev from the installed snapshot when
-`${XDG_STATE_HOME:-~/.local/state}/dev/snapshot/current` holds a `main.lua`
-and an `ORIGIN` file naming the clone that launcher belongs to. It resolves
-that link once and hands luajit the real version directory. A checkout
-update therefore never shows a running dev half-written code. `dev install` in
-the dev checkout publishes the snapshot: it copies the files an install ships
-into a new `versions/` directory, then renames a link over `current`, so the
-swap is one step. The newest three versions stay.
-
-The launcher runs the checkout copy instead when `DEV_FROM=checkout` is set
-(`dev test` sets it for every suite), when no snapshot exists yet or it came
-from another clone, and always for root. A landing is live only after
-`dev install`. When a landing changed a `dev.*` module that the install
-command itself needs, run `DEV_FROM=checkout dev install`.
-
-### Without luajit
-
-With luajit, the launcher execs
-`luajit main.lua`. Without it, a non-root caller
-exits 1 with one of the two messages below. The second applies with `--remote`,
-`--detach`, `--priority`, `--job-timeout` or an enabled `DEV_REMOTE`, and
-nothing runs.
-
-```
-Luajit is not found. Install it with `brew install luajit`, `pacman -S luajit`, `dnf install luajit` or `apt install luajit`.
-```
-
-```
-The flag `--remote` needs luajit. Install it with `brew install luajit`, `pacman -S luajit`, `dnf install luajit` or `apt install luajit`.
-```
+Verbosity is the flag count, else the `VERBOSE` variable, capped at 4. At `-vv`
+dev logs every spawn to standard error. At `-vvv` it also traces every native
+`dev.*` call, and a `.sh` command runs as `bash -x SCRIPT ARGS`. Only that
+script is traced, because dev sets no `BASH_ENV` hook for the scripts and tools
+it starts.
 
 ## The dispatcher
 
-`main.lua` builds its `package.path` from its own location only and calls
-`dev.cli`. That module does these steps in order.
+`dev.cli.main(dev.globals)` is the entry point the host calls with the parsed
+flags. It returns the exit code. These steps run in order.
 
-- Parses the global flags and applies the root check.
-- Resolves the command through `dev.registry`.
-- Refuses a flag the command's `# flags:` line does not declare. With
-  `--remote` it does not, and the remote check refuses arguments on both sides
-  of a `--`.
-- Runs a `.lua` command in process (`chunk(ctx)`, with `.dev/lua` added to
-  `package.path` unless root), or execs a `.sh` command.
+- Checks the flags that combine, such as `--local` with `--remote` and
+  `--detach` without `--remote`, and applies the root check.
+- Resolves the command words through `dev.registry`, which merges the
+  built-in, global and project layers.
+- Walks a command with subcommands, and answers `needs a subcommand` or
+  `unknown subcommand` with the subcommand list (exit 2).
+- Parses the words after the command through the command's spec with
+  `dev.spec`, refusing an unknown flag or argument with a usage message
+  (exit 2). `-h` and `--help` are answered before the parse.
 - Runs `--remote` through `dev.remote`.
+- Runs a `.luau` command in process through `dev.command`, or execs a `.sh`
+  command with each parsed flag in `DEV_FLAG_NAME`, or a `.ps1` command under
+  `pwsh -File` on Windows.
 
-An error or a syntax error in a `.lua` command prints as
-`dev <command>: <message>` with exit 1. A word the registry does not know is
-`dev: unknown command <word>` with the curated help on standard error (exit 2).
+An error in a `.luau` command prints as `dev <command>: <message>` with exit 1.
+A word the registry does not know is `dev: unknown command <word>` with the
+curated help on standard error (exit 2). An error that escapes the host prints
+`dev: <message>` and a traceback and exits 1. A closed standard output exits 141
+with no text.
 
 Other modules serve these commands.
 
-- `dev.complete` and `dev.topics`: `__commands`, `__subs`, `__flags`, `__args`
-  and `__topics check`.
-  `dev __args WORD...` takes the words from the command up to the one being
-  typed and prints `value<TAB>label` per line. A card id completes after a
-  `dev board` subcommand that takes a card, from a cache file under
-  `$XDG_CACHE_HOME/dev` that a background `dev board ls` refreshes when it is a
-  minute old, so Tab never waits on Pomb. A box name completes after
-  `dev box show`, `stop`, `resume`, `extend`, `retag` and `delete`, a box or
-  connectable name after `dev connect` and `dev box connect`, and a run id
-  after `--run`. Those come from `ci __complete KIND` under a 3 second limit
-  for each kind. A missing, slow or failing `ci` prints nothing and exits 0.
+- `dev.complete` and `dev.topics`: `dev __complete WORD...` prints one
+  candidate per line, `value`, a tab and a description. It completes command
+  words, flag names, flag values (the `choices`, or the flag's provider) and
+  arguments through their provider. The providers are
+  `dev.complete.board_card`, `board_column`, `box` and `file`. A card id
+  completes from a cache file under `$XDG_CACHE_HOME/dev` that a detached
+  `dev __complete --refresh-cards FILE` rewrites when it is a minute old, so
+  Tab never waits on Pomb. A box or connectable name comes from
+  `ci __complete KIND` under a 3 second limit, and a run id after `--run`. A
+  missing, slow or failing provider prints nothing and exits 0.
+  `dev completion SHELL` prints the shell's script.
 - `dev.cmd.types`: the project-type built-ins `lint`, `fmt`, `test`, `build`,
   `run` and `fetch`, in process.
 - `dev.cmd.push` and `dev.cmd.pull`: `push` and `pull`, with the backend and
-  the forge setting in `dev.vcs` and `dev.forge`. `dev help push` and
-  `dev help pull` print their commands from the same code.
+  the forge setting in `dev.vcs` and `dev.forge`.
 - `dev.cmd.follow`: `follow`, and the `main` and `launch` calls `board land` and
   `board ship` make.
 - `dev.cmd.tools` and, as root, `dev.root`: `tools install` and `tools check`.
 - `dev.cmd.init`: `init`.
 - `dev.cmd.config`: `config`, which writes through `dev.toml`'s `set`.
 
-A test seam (`tests/lua/fake_env.lua` through `LUA_INIT`) can fake the uid and
-system name and hide named tools from `which` (`FAKE_HIDE`) for a user. It
-never loads at uid 0.
+A test seam (`tests/lua/fake_env.luau`) can fake the uid and system name and
+hide named tools from `which` (`FAKE_HIDE`) for a user. It never loads at
+uid 0.

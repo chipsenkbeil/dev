@@ -1,0 +1,670 @@
+local testing = require("dev.testing")
+local board = require("dev.board")
+local dev_os = require("dev.os")
+local fs = require("dev.fs")
+local support = require("support")
+
+local TOKEN = "pomb_SECRETtoken0123456789"
+local LEAD = "dotfiles/lead"
+local LEAD_SECRET = "pomb_LEADtoken9876543210"
+local Column = support.Column
+local POMB = '[board]\nbackend = "pomb"\nname = "dotfiles"\n'
+local NEW = "dotfiles/implementer"
+local NAME = support.COLUMN_NAME
+local ID = {
+    DONE = "col-done",
+    PROGRESS = "col-progress",
+    READY = "col-ready",
+    REVIEW = "col-review",
+    VERIFY = "col-verify",
+}
+local TASK = "task"
+local LIMIT_TEXT = NAME.PROGRESS .. " is at its limit of 4"
+local LIMIT_BODY = '{"code":"wip_limit_reached","message":"' .. LIMIT_TEXT .. '"}'
+local EPIC = "epic"
+local COUNT = "count"
+local HOURS = "hours"
+local IN_FLIGHT = string.format(
+    "3 cards are in flight in %s, %s and %s"
+        .. " (aaaaaaaa, bbbbbbbb, cccccccc), at the limit of 3. Land one first.\n",
+    NAME.PROGRESS,
+    NAME.REVIEW,
+    NAME.VERIFY
+)
+local FLIGHT = {
+    { "a", ID.PROGRESS, TASK },
+    { "b", ID.REVIEW, TASK },
+    { "c", ID.VERIFY, TASK },
+    { "d", ID.READY, TASK },
+}
+local GROUP = '[{"id":"g1","column_ids":["'
+    .. ID.PROGRESS
+    .. '","'
+    .. ID.REVIEW
+    .. '","'
+    .. ID.VERIFY
+    .. '"],'
+local PLANNED = support.READY_DESCRIPTION_JSON
+local SUBTASKS = support.subtasks(support.READY_OUTCOMES)
+local BOARDS =
+    '[{"id":"board-1","name":"dotfiles","archived":false},{"id":"board-2","name":"other","archived":false}]'
+local COLORS = '[{"id":"yellow-id","value":"yellow","label":"1 Pomodoro"}]'
+local COLUMNS = {
+    { ID.READY, NAME.READY },
+    { ID.PROGRESS, NAME.PROGRESS },
+    { ID.REVIEW, NAME.REVIEW },
+    { ID.VERIFY, NAME.VERIFY },
+    { ID.DONE, NAME.DONE },
+}
+
+local PASS = string.format(
+    '#!/bin/sh\ncase "$*" in *lead*) echo "%s" ;; *) echo "%s" ;; esac\n',
+    LEAD_SECRET,
+    TOKEN
+)
+
+local function executable(path, body)
+    assert(fs.write(path, body))
+    assert(dev_os.run({ "chmod", "755", path }) == 0, "chmod failed")
+end
+
+local SERVERS = {}
+
+---Make the server answer the way the old curl stub answered, from the control files in the box.
+local function sync(box)
+    local root = box.root
+    local function control(name)
+        return fs.read(root .. "/" .. name)
+    end
+    local export = control("export.json")
+    local refusal = control("move_refusal")
+    local function routes_for(owner, owned)
+        local routes = {
+            {
+                path = "/api/boards/board-1/limit-groups/g1",
+                status = control("limit_refusal") and 403 or 200,
+                body = control("limit_refusal") and '{"message":"columns.edit is required"}'
+                    or '{"ok":true}',
+            },
+            { path = "/api/boards", body = control("boards.json") },
+            { path = "/api/boards/board-1", body = control("detail.json") },
+            { path = "/api/boards/board-2", body = control("detail2.json") },
+            { path = "/api/boards/board-1/colors", body = control("colors.json") },
+            { path = "/api/boards/board-1/fields", body = control("fields.json") },
+        }
+        for _, route in
+            ipairs(support.pomb_task_routes({
+                export = export,
+                owner = owner,
+                move_status = refusal and 409 or nil,
+                move_body = refusal,
+                owner_stage = owned,
+            }))
+        do
+            routes[#routes + 1] = route
+        end
+        routes[#routes + 1] = { path = "*", body = '{"ok":true}' }
+        return routes
+    end
+    local server = SERVERS[root]
+    server:set(routes_for(nil, server:stage_copy("owned", routes_for(NEW))))
+end
+
+local function requests(box)
+    return SERVERS[box.root]:requests()
+end
+
+---The request of a method the backend logged last, with its headers.
+local function entry_of(box, method)
+    local found
+    for _, entry in ipairs(support.pomb_requests(SERVERS[box.root])) do
+        if entry.method == method then
+            found = entry
+        end
+    end
+    return assert(found, "no " .. method .. " request logged"), found
+end
+
+local function uuid(letter)
+    return letter:rep(8) .. "-1111-4111-8111-111111111111"
+end
+
+local function detail(limits, opts)
+    local groups, units = opts and opts.groups, opts and opts.units
+    local parts = {}
+    for _, column in ipairs(COLUMNS) do
+        local limit = "null"
+        if limits[column[2]] then
+            limit = tostring(limits[column[2]])
+        end
+        local unit = ""
+        if units and units[column[2]] then
+            unit = string.format('"limit_unit":"%s",', units[column[2]])
+        end
+        parts[#parts + 1] = string.format(
+            '{"id":"%s","name":"%s",%s"wip_limit":%s,"is_done":%s}',
+            column[1],
+            column[2],
+            unit,
+            limit,
+            tostring(column[1] == ID.DONE)
+        )
+    end
+    return '{"id":"board-1","name":"dotfiles","swimlanes":[],"columns":['
+        .. table.concat(parts, ",")
+        .. "]"
+        .. (groups and (',"limit_groups":' .. groups) or "")
+        .. "}"
+end
+
+local function export(placed)
+    local parts = {}
+    for index, place in ipairs(placed) do
+        parts[#parts + 1] = support.pomb_export_task({
+            id = uuid(place[1]),
+            name = "Card " .. place[1],
+            column_id = place[2],
+            position = index,
+            color_id = "yellow-id",
+            kind = place[3],
+            labels = place[4],
+            description = PLANNED,
+            subtasks = SUBTASKS,
+            fields = support.ready_fields(),
+        })
+    end
+    return '{"tasks":[' .. table.concat(parts, ",") .. "]}"
+end
+
+local function sandbox(opts)
+    local root = support.sandbox({
+        [".dev/config.toml"] = opts.project,
+    }, {})
+    local home = support.tempdir()
+    SERVERS[root] = support.fake_http({})
+    assert(fs.mkdir(home .. "/.config/dev", { parents = true }))
+    assert(
+        fs.write(
+            home .. "/.config/dev/config.toml",
+            '[board.pomb]\nurl = "'
+                .. SERVERS[root].url
+                .. '"\nfield_prefix = "runner"\ntoken = "pass:secrets/worker/token/pomb"\n'
+                .. 'lead_token = "pass:secrets/lead/token/pomb"\n'
+        )
+    )
+    for name, body in pairs({
+        ["boards.json"] = BOARDS,
+        ["detail.json"] = opts.detail,
+        ["colors.json"] = COLORS,
+        ["fields.json"] = support.FIELDS,
+        ["export.json"] = opts.export,
+        ["detail2.json"] = opts.other or "{}",
+    }) do
+        assert(fs.write(root .. "/" .. name, body))
+    end
+    executable(root .. "/bin/security", "#!/bin/sh\nexit 1\n")
+    executable(root .. "/bin/sleep", "#!/bin/sh\nexec " .. dev_os.which("sleep") .. " 0.2\n")
+    executable(root .. "/bin/pass", PASS)
+    return { root = root, home = home }
+end
+
+local function dev(box, args, agent)
+    sync(box)
+    return support.dev(box.root, args, {
+        env = {
+            HOME = box.home,
+            ROOT = box.root,
+            XDG_STATE_HOME = box.home .. "/state",
+            CI = "",
+            CLAUDE_SESSION_ID = "one",
+            DEV_AGENT = agent,
+            DEV_PASS_LOCK = box.root .. "/pass.lock",
+        },
+    })
+end
+
+local function read(box, name)
+    return assert(fs.read(box.root .. "/" .. name))
+end
+
+testing.test("take refuses at the group limit and names the cards", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({}, { groups = GROUP .. '"limit":3,"count":3}]' }),
+        export = export(FLIGHT),
+    })
+    local out, code = dev(box, { "board", "take", "dddddddd", "--as", NEW }, "")
+    testing.eq(code, 3, out)
+    testing.eq(out, IN_FLIGHT)
+    testing.eq(requests(box):find("/owner", 1, true), nil)
+end)
+
+testing.test("take refuses at a column limit with room in its group", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({ [NAME.PROGRESS] = 1 }, { groups = GROUP .. '"limit":4,"count":3}]' }),
+        export = export(FLIGHT),
+    })
+    local out, code = dev(box, { "board", "take", "dddddddd", "--as", NEW }, "")
+    testing.eq(code, 3, out)
+    testing.eq(
+        out,
+        NAME.PROGRESS .. " holds 1 card (aaaaaaaa), at its limit of 1. Land one first.\n"
+    )
+    testing.eq(requests(box):find("/owner", 1, true), nil)
+end)
+
+testing.test("a count limit still refuses at its limit", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({ [NAME.PROGRESS] = 1 }, { units = { [NAME.PROGRESS] = COUNT } }),
+        export = export(FLIGHT),
+    })
+    local out, code = dev(box, { "board", "take", "dddddddd", "--as", NEW }, "")
+    testing.eq(code, 3, out)
+    testing.eq(
+        out,
+        NAME.PROGRESS .. " holds 1 card (aaaaaaaa), at its limit of 1. Land one first.\n"
+    )
+end)
+
+testing.test("an hours limit never refuses a take or move", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({ [NAME.PROGRESS] = 1 }, { units = { [NAME.PROGRESS] = HOURS } }),
+        export = export(FLIGHT),
+    })
+    local out, code = dev(box, { "board", "take", "dddddddd", "--as", NEW }, "")
+    testing.eq(code, 0, out)
+    testing.ok(out:find("took dddddddd", 1, true), out)
+    dev(box, { "board", "release", "dddddddd" }, "")
+    out, code = dev(box, { "board", "move", "dddddddd", Column.PROGRESS }, NEW)
+    testing.eq(code, 0, out)
+    testing.ok(requests(box):find("/move", 1, true), requests(box))
+end)
+
+testing.test("a board with no limits is uncapped", function()
+    local box = sandbox({ project = POMB, detail = detail({}), export = export(FLIGHT) })
+    local out, code = dev(box, { "board", "take", "dddddddd", "--as", NEW }, "")
+    testing.eq(code, 0, out)
+    testing.ok(out:find("took dddddddd", 1, true), out)
+    dev(box, { "board", "release", "dddddddd" }, "")
+end)
+
+testing.test("an epic in the group is not counted", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({}, { groups = GROUP .. '"limit":3,"count":2}]' }),
+        export = export({
+            { "a", ID.PROGRESS, TASK },
+            { "b", ID.REVIEW, TASK },
+            { "c", ID.VERIFY, EPIC },
+            { "d", ID.READY, TASK },
+        }),
+    })
+    local out, code = dev(box, { "board", "take", "dddddddd", "--as", NEW }, "")
+    testing.eq(code, 0, out)
+    dev(box, { "board", "release", "dddddddd" }, "")
+end)
+
+testing.test("a run card in the group is not counted", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({}, { groups = GROUP .. '"limit":3,"count":2}]' }),
+        export = export({
+            { "a", ID.PROGRESS, TASK },
+            { "b", ID.REVIEW, TASK },
+            { "c", ID.VERIFY, TASK, { board.RUN } },
+            { "d", ID.READY, TASK },
+        }),
+    })
+    local out, code = dev(box, { "board", "take", "dddddddd", "--as", NEW }, "")
+    testing.eq(code, 0, out)
+    dev(box, { "board", "release", "dddddddd" }, "")
+end)
+
+testing.test("move refuses a card entering a full group and names the cards", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({}, { groups = GROUP .. '"limit":3,"count":3}]' }),
+        export = export(FLIGHT),
+    })
+    local out, code = dev(box, { "board", "move", "dddddddd", Column.REVIEW }, "")
+    testing.eq(code, 3, out)
+    testing.eq(out, IN_FLIGHT)
+    testing.eq(requests(box):find("/move", 1, true), nil)
+end)
+
+local function flight_with(labels)
+    return {
+        { "a", ID.PROGRESS, TASK },
+        { "b", ID.REVIEW, TASK },
+        { "c", ID.VERIFY, TASK },
+        { "d", ID.READY, TASK, labels },
+    }
+end
+
+testing.test("take and move accept a trunk-blocker card at the group limit", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({}, { groups = GROUP .. '"limit":3,"count":3}]' }),
+        export = export(flight_with({ board.TRUNK_BLOCKER })),
+    })
+    local out, code = dev(box, { "board", "take", "dddddddd", "--as", NEW }, "")
+    testing.eq(code, 0, out)
+    testing.ok(out:find("took dddddddd", 1, true), out)
+    local calls = requests(box)
+    testing.ok(calls:find("/move?force=true", 1, true), calls)
+    out, code = dev(box, { "board", "move", "dddddddd", Column.PROGRESS }, NEW)
+    testing.eq(code, 0, out)
+    calls = requests(box)
+    testing.ok(calls:find("/move?force=true", 1, true), calls)
+    testing.eq(calls:find('"force"', 1, true), nil)
+end)
+
+testing.test("a second trunk-blocker card at the group limit is refused", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({}, { groups = GROUP .. '"limit":3,"count":3}]' }),
+        export = export({
+            { "a", ID.PROGRESS, TASK, { board.TRUNK_BLOCKER } },
+            { "b", ID.REVIEW, TASK },
+            { "c", ID.VERIFY, TASK },
+            { "d", ID.READY, TASK, { board.TRUNK_BLOCKER } },
+        }),
+    })
+    local out, code = dev(box, { "board", "take", "dddddddd", "--as", NEW }, "")
+    testing.eq(code, 3, out)
+    testing.eq(out, IN_FLIGHT)
+    out, code = dev(box, { "board", "move", "dddddddd", Column.PROGRESS }, NEW)
+    testing.eq(code, 3, out)
+    testing.eq(requests(box):find("/move", 1, true), nil)
+end)
+
+testing.test("a card with another label is still refused at the group limit", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({}, { groups = GROUP .. '"limit":3,"count":3}]' }),
+        export = export(flight_with({ "docs" })),
+    })
+    local out, code = dev(box, { "board", "take", "dddddddd", "--as", NEW }, "")
+    testing.eq(code, 3, out)
+    testing.eq(out, IN_FLIGHT)
+    out, code = dev(box, { "board", "move", "dddddddd", Column.PROGRESS }, NEW)
+    testing.eq(code, 3, out)
+    testing.eq(requests(box):find("/move", 1, true), nil)
+end)
+
+testing.test("a plain move sends no force", function()
+    local box = sandbox({ project = POMB, detail = detail({}), export = export(FLIGHT) })
+    local out, code = dev(box, { "board", "move", "dddddddd", Column.PROGRESS }, NEW)
+    testing.eq(code, 0, out)
+    local calls = requests(box)
+    testing.ok(calls:find('"column_id":"' .. ID.PROGRESS .. '"', 1, true), calls)
+    testing.eq(calls:find("force", 1, true), nil)
+end)
+
+testing.test("move refuses a card entering a full column", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({ [NAME.REVIEW] = 1 }, { groups = GROUP .. '"limit":4,"count":3}]' }),
+        export = export(FLIGHT),
+    })
+    local out, code = dev(box, { "board", "move", "dddddddd", Column.REVIEW }, "")
+    testing.eq(code, 3, out)
+    testing.eq(out, NAME.REVIEW .. " holds 1 card (bbbbbbbb), at its limit of 1. Land one first.\n")
+    testing.eq(requests(box):find("/move", 1, true), nil)
+end)
+
+testing.test("a move inside the group is not counted", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({}, { groups = GROUP .. '"limit":2,"count":3}]' }),
+        export = export(FLIGHT),
+    })
+    local out, code = dev(box, { "board", "move", "cccccccc", Column.REVIEW }, "")
+    testing.eq(code, 0, out)
+    testing.eq(out, "moved cccccccc to Review\n")
+    testing.ok(requests(box):find("/move", 1, true), requests(box))
+end)
+
+testing.test("a 409 wip_limit_reached becomes the refusal and move releases the claim", function()
+    local box = sandbox({ project = POMB, detail = detail({}), export = export(FLIGHT) })
+    assert(fs.write(box.root .. "/move_refusal", LIMIT_BODY))
+    local out, code = dev(box, { "board", "move", "dddddddd", Column.PROGRESS }, NEW)
+    testing.eq(code, 3, out)
+    testing.eq(out, "Pomb refused the move: " .. LIMIT_TEXT .. "\n")
+    local calls = requests(box)
+    testing.ok(calls:find("/api/tasks/" .. uuid("d") .. "/owner/release", 1, true), calls)
+    testing.eq(calls:find("force", 1, true), nil)
+    testing.eq(fs.exists(box.home .. "/state/dev/board/" .. uuid("d")), false)
+end)
+
+testing.test("take of a Ready card whose move is refused releases the claim", function()
+    local box = sandbox({ project = POMB, detail = detail({}), export = export(FLIGHT) })
+    assert(fs.write(box.root .. "/move_refusal", LIMIT_BODY))
+    local out, code = dev(box, { "board", "take", "dddddddd", "--as", NEW }, "")
+    testing.eq(code, 1, out)
+    testing.ok(out:find(LIMIT_TEXT, 1, true), out)
+    local calls = requests(box)
+    testing.ok(calls:find("/api/tasks/" .. uuid("d") .. "/owner/release", 1, true), calls)
+    testing.eq(fs.exists(box.home .. "/state/dev/board/" .. uuid("d")), false)
+end)
+
+testing.test("a local board is uncapped", function()
+    local box = sandbox({
+        project = '[board]\nbackend = "local"\nname = "mine"\n',
+        detail = detail({}),
+        export = export({}),
+    })
+    local out, code = dev(box, { "board", "init" }, "")
+    testing.eq(code, 0, out)
+    for index = 1, 6 do
+        local args = {
+            "board",
+            "add",
+            "Card" .. index,
+            "--column",
+            Column.READY,
+            "--size",
+            "1",
+            "--description",
+            support.READY_DESCRIPTION,
+        }
+        for _, outcome in ipairs(support.READY_OUTCOMES) do
+            args[#args + 1] = "--done-when"
+            args[#args + 1] = outcome.name
+        end
+        for _, row in ipairs(support.READY_CHECKS) do
+            args[#args + 1] = "--checks"
+            args[#args + 1] = row
+        end
+        out, code = dev(box, args, "")
+        testing.eq(code, 0, out)
+        local id = assert(out:match("added (%x+)"), out)
+        out, code = dev(box, { "board", "move", id, Column.PROGRESS }, NEW .. "/" .. index)
+        testing.eq(code, 0, out)
+    end
+end)
+
+local UNITS = '"limit":4,"limit_unit":"count","count":2}]'
+
+testing.test("limits prints each column limit with its unit and each group", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail(
+            { [NAME.PROGRESS] = 2 },
+            { groups = GROUP .. UNITS, units = { [NAME.PROGRESS] = HOURS } }
+        ),
+        export = export({}),
+    })
+    local out, code = dev(box, { "board", "limits" }, "")
+    testing.eq(code, 0, out)
+    testing.eq(
+        out,
+        NAME.PROGRESS
+            .. ": 2 hours\n"
+            .. NAME.PROGRESS
+            .. ", "
+            .. NAME.REVIEW
+            .. ", "
+            .. NAME.VERIFY
+            .. ": 4 (2 in flight)\n"
+    )
+end)
+
+testing.test("limits --set patches the group with its columns and the new limit", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({}, { groups = GROUP .. UNITS }),
+        export = export({}),
+    })
+    local out, code = dev(box, { "board", "limits", "--set", "6" }, LEAD)
+    testing.eq(code, 0, out)
+    testing.eq(
+        out,
+        string.format(
+            "Set the limit of %s, %s and %s to 6.\n",
+            NAME.PROGRESS,
+            NAME.REVIEW,
+            NAME.VERIFY
+        )
+    )
+    local want = "PATCH /api/boards/board-1/limit-groups/g1 body="
+        .. string.format(
+            '{"column_ids":["%s","%s","%s"],"limit":6}',
+            ID.PROGRESS,
+            ID.REVIEW,
+            ID.VERIFY
+        )
+    testing.ok(requests(box):find("PATCH /", 1, true), requests(box))
+    testing.ok(requests(box):find(want, 1, true), requests(box))
+end)
+
+testing.test("limits --set names the lead token when Pomb answers 403", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({}, { groups = GROUP .. UNITS }),
+        export = export({}),
+    })
+    assert(fs.write(box.root .. "/limit_refusal", "x"))
+    local out, code = dev(box, { "board", "limits", "--set", "6" }, LEAD)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("use a lead token, which holds columns.edit.", 1, true), out)
+end)
+
+testing.test("limits --set refuses a board with no group and a bad number", function()
+    local box = sandbox({ project = POMB, detail = detail({}), export = export({}) })
+    local out, code = dev(box, { "board", "limits", "--set", "6" }, LEAD)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("has no limit group that holds", 1, true), out)
+    for _, bad in ipairs({ "0", "x", "2.5" }) do
+        out, code = dev(box, { "board", "limits", "--set", bad }, LEAD)
+        testing.eq(code, 2, out)
+        testing.ok(out:find("needs a whole number", 1, true), out)
+    end
+end)
+
+testing.test("limits --set refuses a board name beside it", function()
+    local box = sandbox({ project = POMB, detail = detail({}), export = export({}) })
+    local out, code = dev(box, { "board", "limits", "other", "--set", "6" }, LEAD)
+    testing.eq(code, 2, out)
+    testing.ok(out:find("The --set flag changes only this project's board.", 1, true), out)
+end)
+
+testing.test("limits --set under a lead name sends the lead token", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({}, { groups = GROUP .. UNITS }),
+        export = export({}),
+    })
+    local out, code = dev(box, { "board", "limits", "--set", "6" }, LEAD)
+    testing.eq(code, 0, out)
+    testing.ok(entry_of(box, "PATCH").text:find(LEAD_SECRET, 1, true), requests(box))
+end)
+
+testing.test("column under a lead name sends the lead token to the column", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({}, { groups = GROUP .. UNITS }),
+        export = export({}),
+    })
+    local out, code = dev(box, { "board", "column", NAME.REVIEW, "--blocked", "on" }, LEAD)
+    testing.eq(code, 0, out)
+    testing.ok(requests(box):find("PATCH /", 1, true), requests(box))
+    testing.ok(requests(box):find("/api/columns/" .. ID.REVIEW, 1, true), requests(box))
+    testing.ok(entry_of(box, "PATCH").text:find(LEAD_SECRET, 1, true), requests(box))
+end)
+
+testing.test("limits without --set under a lead name sends the worker token", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({}, { groups = GROUP .. UNITS }),
+        export = export({}),
+    })
+    local out, code = dev(box, { "board", "limits" }, LEAD)
+    testing.eq(code, 0, out)
+    local sent = requests(box)
+    testing.ok(sent:find(TOKEN, 1, true), sent)
+    testing.eq(sent:find(LEAD_SECRET, 1, true), nil)
+end)
+
+testing.test("limits --set under a non-lead name is refused before any request", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({}, { groups = GROUP .. UNITS }),
+        export = export({}),
+    })
+    local out, code = dev(box, { "board", "limits", "--set", "6" }, NEW)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("Only the lead sets a limit.", 1, true), out)
+    testing.eq(requests(box), "")
+end)
+
+testing.test("limits --set refuses a local board with a sentence", function()
+    local box = sandbox({
+        project = '[board]\nbackend = "local"\nname = "mine"\n',
+        detail = detail({}),
+        export = export({}),
+    })
+    local out, code = dev(box, { "board", "limits", "--set", "6" }, LEAD)
+    testing.eq(code, 1, out)
+    testing.ok(out:find("A local board has no limit group to set.", 1, true), out)
+end)
+
+testing.test("limits exits 1 with no limit group when the board has none", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({}, { groups = "[]" }),
+        export = export({}),
+    })
+    local out, code = dev(box, { "board", "limits" }, "")
+    testing.eq(code, 1, out)
+    testing.eq(out, "The board has no limit group.\n")
+end)
+
+testing.test("limits names a column limit with no group and still exits 1", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({ [NAME.READY] = 5 }),
+        export = export({}),
+    })
+    local out, code = dev(box, { "board", "limits", "dotfiles" }, "")
+    testing.eq(code, 1, out)
+    testing.eq(out, NAME.READY .. ": 5 count\nThe board has no limit group.\n")
+end)
+
+testing.test("limits names another board and reads its limits", function()
+    local box = sandbox({
+        project = POMB,
+        detail = detail({}),
+        other = detail({}, { groups = GROUP .. UNITS }),
+        export = export({}),
+    })
+    local out, code = dev(box, { "board", "limits", "other" }, "")
+    testing.eq(code, 0, out)
+    testing.eq(
+        out,
+        NAME.PROGRESS .. ", " .. NAME.REVIEW .. ", " .. NAME.VERIFY .. ": 4 (2 in flight)\n"
+    )
+end)

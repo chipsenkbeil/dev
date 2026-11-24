@@ -1,57 +1,79 @@
-# porting: Port a .dev bash command to Lua
+# porting: Port a .dev bash command to Luau
 
 ## Overview
 
-A project command is a script in `.dev/`. It can be bash
-(`.dev/<command>.sh`) or Lua (`.dev/<command>.lua`).
+A project command is a file in `.dev/commands/`. It can be bash
+(`.dev/commands/<command>.sh`) or Luau (`.dev/commands/<command>.luau`).
 
 dev runs both the same way from the user's side: the same `dev help` listing,
-the same `-h`, the same flag check. A Lua command runs inside the dev process,
-so it gets dev's modules and skips a process spawn.
+the same `-h`, the same flag check. A Luau command runs inside the dev
+process, so it gets dev's modules and skips a process spawn.
 
-## Which script runs
+## Formatting the Luau
 
-When `.dev/<command>.lua` and `.dev/<command>.sh` both exist, the `.lua` file
-wins. A `.lua` command needs no exec bit and a `.sh` command does. The rule is
-the same for `.dev/<command>/<sub>.lua`.
+A ported project sets `syntax = "Luau"` in its `stylua.toml`, as dev's own does.
+stylua reads a `.luau` file as LuaJIT otherwise and rejects Luau types.
 
-A `.sh` command is a separate process and cannot call Lua. dev's modules are
+## Which file runs
+
+When `<command>.luau` and `<command>.sh` both exist in one folder, the `.luau`
+file wins. A `.luau` command needs no exec bit and a `.sh` command does. The
+rule is the same for `<command>/<sub>.luau`. A file that ends in `.lua` is
+refused, so name every command file `.luau`.
+
+A `.sh` command is a separate process and cannot call Luau. dev's modules are
 not on its path, so port the whole command or leave it in bash.
 
 ## The command contract
 
-dev loads the file with `load` and calls the chunk with one argument, the
-context. Read it with `local ctx = ...`.
+A `.luau` file returns a `dev.command` spec, and dev parses the words through
+it before `run` starts. `dev help commands` has every field and the header
+grammar of a `.sh` file. A command looks like this:
 
+```luau
+local dev_command = require("dev.command")
+
+return dev_command({
+    summary = "Print the installable default targets",
+    hidden = true,
+    run = function(opts, args, ctx)
+        return 0
+    end,
+})
+```
+
+`run(opts, args, ctx)` gets these.
+
+- `opts`: the flags by name, with `-` as `_`.
+- `args`: the arguments by name.
 - `ctx.name`: the command as typed, a command and its subcommand joined by a
   space
 - `ctx.words`: the command words
 - `ctx.root`: the project root, an absolute path
-- `ctx.args`: the positional arguments, with every `KEY=value` word removed
-  unless the header has a `positional` line
+- `ctx.argv`: the unparsed words after the command words
+- `ctx.passthrough`: the words after a `--`, when the spec sets `passthrough`
 - `ctx.vars`: the `KEY=value` arguments whose key starts with an uppercase
-  letter, by key, and empty when the header has a `positional` line
-- `ctx.after`: how many of `ctx.args` follow a `--`, 0 when none was typed
-- `ctx.dashed`: whether a `--` was typed, even with nothing after it
-- `ctx.verbose`: 0, 1 or 2, after `-v`, `-vv` and `VERBOSE`
-- `ctx.interpreter`: the luajit dev runs under, as the launcher started it
+  letter, by key, and empty when the spec sets `positional`
+- `ctx.verbose`: 0 to 4, after the `-v` flags and `VERBOSE`
 
 ### The exit code
 
-The chunk returns the exit code as an integer, and nothing means 0. dev takes
-the code modulo 256.
+`run` returns the exit code as an integer, and nothing means 0. dev takes the
+code modulo 256.
 
-Any other return value, a Lua error or a syntax error ends the run with
+Any other return value, a Luau error or a syntax error ends the run with
 `dev <name>: <message>` and exit 1, with no traceback. To stop early with
-another code, return it, or call `os.exit`.
+another code, return it, or call `dev_os.exit`.
 
 ### The command helpers
 
 `require("dev.command")` holds the helpers a command needs:
 
-- `dev_command.usage_error(ctx, msg)`: print `dev <name>: <msg>` and exit 2
-- `dev_command.no_args(ctx)`: refuse any positional argument, for a command
-  that takes no positional arguments
+- `dev_command.usage_error(ctx, msg)`: print `dev <name>: <msg>`, then the
+  command's usage line drawn from its spec, on standard error and exit 2
+- `dev_command.say(msg)`: write `msg` and a newline to standard output
+- `dev_command.relay(text)`: write a captured `text` to standard output without
+  its one trailing newline, and nothing for an empty text
 - `dev_command.note(msg)`: write `msg` and a newline to standard error
 - `dev_command.die(msg)`: print `msg` and exit 1
 - `dev_command.show(ctx, argv)`: print `+ <argv>` on standard error when
@@ -59,46 +81,70 @@ another code, return it, or call `os.exit`.
 - `dev_command.need(binary, install)`: exit 1 with one warning when `binary` is
   not on `PATH`
 
+An unknown flag or argument, a missing required argument and a flag without
+its value are refused by the spec before `run`. The refusal replaces any
+message and exit code the old command gave: one sentence, then the usage line
+drawn from the spec, on standard error, exit 2. A command needs no check of
+its own, and a test that pinned the old wording pins the spec's instead.
+
+### Passing words on to another tool
+
+A command that hands its words to another tool, as `dev test` and `dev build`
+hand them to cargo, has three spec fields to pick from:
+
+- `rest = true` on a last `list` argument: every word from its first plain
+  word on is taken verbatim, so a later word that starts with `-` stays text.
+- `pass_unknown = true` with a trailing `list` argument: flags the spec does
+  not declare go to that argument, and the declared flags still parse.
+- `passthrough = true`: the words after a `--` reach `ctx.passthrough`.
+
+```luau
+return dev_command({
+    summary = "Run the project's tests",
+    args = { { name = "rest", list = true, rest = true } },
+    pass_unknown = true,
+    run = function(opts, args, ctx)
+        local argv = { "cargo", "test" }
+        for _, word in ipairs(args.rest or {}) do
+            argv[#argv + 1] = word
+        end
+        return dev_os.run(argv)
+    end,
+})
+```
+
+The words reach cargo in the order typed, whether a flag comes before or after
+the plain word.
+
+### Finding the project from a .sh command
+
+A `.sh` command gets `DEV_ROOT`, the absolute path of the project root, so
+`"$DEV_ROOT/.dev/helpers/tool.sh"` finds a helper without a path relative to
+`$0`. Every flag the header declares arrives as `DEV_FLAG_NAME`.
+
 ### Cleanup on exit
 
 Register `dev.os.on_exit(fn)` where a bash command would write `trap fn EXIT`.
 Each cleanup runs once, newest first, on a return, on an error and when
 `SIGTERM`, `SIGHUP` or `SIGINT` ends the command, which then exits with 143,
-129 or 130. A signal that arrives while the command waits on a child process
-takes effect once the child returns, and `SIGKILL` runs no cleanup.
-
-## Header lines
-
-A Lua command keeps the header lines of a shell script in one leading block
-comment. The block starts with `--[[` alone on the first line and ends with
-`]]` alone on its own line.
-
-The first line inside it that is not a `group:`, `hidden`, `local`,
-`positional` or `flags:` line is the description. The other lines are:
-
-- `group: <name>`: the heading `dev help` lists the command under
-- `hidden`: keep the command out of `dev help`, so only `dev help -a` lists it
-- `local`: keep the remote default from sending the command to ci
-- `positional`: keep `KEY=value` words in `ctx.args` for a Lua command
-- `flags: --a --b`: the flags `dev help <command>` and completion offer, and
-  the only flags dev lets through to the script before a `--`
-
-`dev help commands` and `dev help flags` have the rules. `-h` and `--help` stay
-reserved, so a `flags:` line cannot declare them.
+129 or 130. dev passes the signal on to the child process it waits for, and
+the command stops once that child returns. `SIGKILL` runs no cleanup. A
+`SIGINT` or `SIGHUP` that was ignored at start, as `nohup` leaves it, stays
+ignored where dev can read that (Linux), and `SIGTERM` is always handled.
 
 ## Modules
 
-Every module below is `require`d by its dotted name and documents its
-functions in its doc comments.
+Every module below is `require`d by its dotted name. `dev help modules` lists
+the native ones function by function.
 
 - `dev.os`: run and capture commands (`run`, `capture`, `capture_input`,
-  `capture_timed`), `which`, `exec`, `getuid`, `isatty`, `quote`, and
+  `capture_timed`, `spawn`), `which`, `exec`, `getuid`, `isatty`, `quote`, and
   `on_exit(fn)` for a cleanup in place of a bash `trap` on `EXIT`
 - `dev.fs`: `exists`, `is_dir`, `is_file`, `is_link`, `is_exec`, `read`,
-  `write`, `mkdir`, `remove`, `move`, `list`, `stat`, `realpath`,
+  `write`, `append`, `mkdir`, `remove`, `move`, `list`, `stat`, `realpath`,
   `readlink`, `mktemp`, `symlink`, `join`, `dirname`, `basename`
 - `dev.json`: `decode` and `encode`
-- `dev.toml`: `parse` and `set`
+- `dev.toml`: `parse`, `set` and `encode`
 - `dev.config`: `get(root, "a.b")` reads `~/.config/dev/config.toml` and then
   `<root>/.dev/config.toml` over it, `prefer_user(root, "a.b")` lets the user
   file win, and `user("a.b")` reads the user file alone
@@ -107,17 +153,19 @@ functions in its doc comments.
 - `dev.ui`: `context`, colors through `paint` and `mark`, `table`, `bar`,
   `confirm` and `spin`
 - `dev.ui.picker`: the list picker, `run(ctx, items, opts)`
-- `dev.project`: `root`, `share` and `detect_type`
+- `dev.project`: `root` and `detect_type`
 - `dev.testing`, `dev.testrun` and `dev.testenv`: the test registry, the
   runner and the helpers (see "Testing a command")
 
 ## Your own modules
 
-A directory `.dev/lua/` is on `package.path` as `.dev/lua/?.lua` while a Lua
-command runs. `.dev/lua/myproj/checks.lua` therefore loads with
-`require("myproj.checks")`.
+A folder `.dev/lib/` is on the `require` path while a Luau command runs.
+`.dev/lib/myproj/checks.luau` therefore loads with `require("myproj.checks")`.
 
-dev never lists `lua` or `topics` as a command with subcommands.
+Scripts that a command calls but that are not commands live in
+`.dev/helpers/`. dev never lists, completes or runs anything there as a
+command. dev never lists `lib`, `helpers` or `help` as a command with
+subcommands.
 
 ## Headless rules
 
@@ -131,10 +179,8 @@ attached.
   so guard it the same way.
 - Color is on only when the stream is a terminal, `NO_COLOR` is empty or unset
   and `TERM` is not `dumb`. Print plain text and let `dev.ui` decide.
-- dev refuses to run any project script as root, and `dev.config` reads no file
-  as root.
-- A command that takes only `KEY=value` calls `dev_command.no_args(ctx)`
-  first.
+- dev refuses to run any project command as root, and `dev.config` reads no
+  file as root.
 
 ## Standalone shell
 
@@ -144,14 +190,12 @@ never lists or runs.
 
 Line 2 of each script reads `# standalone: runs on <where>, where dev is
 absent`, and `<where>` is one of `production server`, `test sandbox` or
-`GitHub Actions`. The list is `M.WHERE` in `dev/standalone.lua`, and widening it
-is a change to dev.
+`GitHub Actions`. The list is `M.WHERE` in `luau/dev/standalone.luau`, and
+widening it is a dev change.
 
-`dev lint` fails on a `.sh` file anywhere else under `.dev` and on a
-standalone script with a bad line 2. It names each file and exits 1.
-
-The one exemption is a hidden helper named `.dev/__*.sh`. AGENTS.md sanctions
-that path for a raw script a command needs, so the lint does not fail on it.
+`dev lint` fails on a `.sh` file anywhere else under `.dev` outside
+`commands/` and `helpers/`, and on a standalone script with a bad line 2. It
+names each file and exits 1.
 
 Adding a file under `.dev/standalone/` is a deliberate choice. `dev board land`
 refuses the commit unless the card carries the `standalone-ok` label, and only
@@ -163,25 +207,34 @@ The check is `dev.standalone.land_problem(added, labels)`.
 ## Running somewhere else
 
 `dev --remote <command>` runs the command's job from the project's pipeline
-through `ci`. A project replaces that with `.dev/__remote.lua`, a chunk that
-returns `function(run)`.
+through `ci`. A project replaces that with `.dev/helpers/remote.luau`, a chunk
+that returns `function(run)`. A command that must stay on this machine sets
+`remote = false` in its spec.
 
 `dev help remote` has the fields of `run`, the refusals and the `dev.remote`
 helper a runner can reuse.
 
 ## Testing a command
 
-A project's Lua command tests live in `.dev/tests/NAME_test.lua`. Each file
+A project's Luau command tests live in `.dev/tests/NAME_test.luau`. Each file
 requires `dev.testing` and registers cases with `t.test(name, fn)`, then
 asserts with `t.eq`, `t.ok` and `t.raises`.
 
-The project's `.dev/test.lua` ends with
+The project's `test` command ends with
 `return require("dev.testrun").run(ctx.root)`, so `dev --remote test` runs
 these files on ci. Cargo and the project's other suites never see them.
 
-`run` loads the files in sorted order with `.dev/lua` on `package.path`. It
-prints `ok - NAME` or `not ok - NAME` with the error, and returns 1 when a case
-fails or a file fails to load.
+`run` loads the files in sorted order with `.dev/lib` on the `require` path.
+It prints `ok - NAME` or `not ok - NAME` with the error, and returns 1 when a
+case fails or a file fails to load.
+
+A single file runs with `dev -l .dev/tests/NAME_test.luau`. `dev -l` puts the
+file's folder and the `.dev/lib` of the project that holds it on the `require`
+path, runs the file, then runs every `dev.testing` case the file registered. It
+prints the same `ok` and `not ok` lines and exits 1 when a case fails. A file
+that returns a non-zero number exits with it. This is also how a ci step runs
+one named project test: the step's command is
+`dev -l .dev/tests/NAME_test.luau`, and its exit code is the step's result.
 
 A project with no `.dev/tests` prints `SKIP .dev/tests (none)` and returns 0.
 
@@ -192,8 +245,8 @@ A project with no `.dev/tests` prints `SKIP .dev/tests (none)` and returns 0.
   that prints `out` and `err`, appends its arguments to `root/bin/NAME.log` and
   exits `code`
 - `calls(root, name)` returns the logged lines
-- the launcher helper, called with `(root, words, opts)`, runs the dev
-  launcher in `root` with `root/bin` first on PATH and `opts.env`, and returns
+- `command(root, words, opts)` runs the dev binary in
+  `root` with `root/bin` first on PATH and `opts.env`, and returns
   `out, code, err`
 
 ## One command before and after
@@ -206,83 +259,28 @@ A command that lists targets, first in bash:
 # Print the installable default targets.
 set -eo pipefail
 
-if [ "$#" -gt 0 ]; then
-    case "$1" in
-    -*) printf 'dev list: Unknown flag %s.\n' "$1" >&2 ;;
-    *) printf 'dev list: Unknown argument %s. This command takes no positional arguments.\n' "$1" >&2 ;;
-    esac
-    exit 2
-fi
 for pkg in git nvim zsh; do
     printf '+ %s\n' "$pkg"
 done
 ```
 
-and the same command in Lua:
+and the same command in Luau:
 
-```lua
---[[
-hidden
-Print the installable default targets.
-]]
+```luau
 local dev_command = require("dev.command")
+local dev_os = require("dev.os")
 
-local ctx = ...
-dev_command.no_args(ctx)
-for _, pkg in ipairs({ "git", "nvim", "zsh" }) do
-    print("+ " .. pkg)
-end
+return dev_command({
+    summary = "Print the installable default targets",
+    hidden = true,
+    run = function()
+        for _, pkg in ipairs({ "git", "nvim", "zsh" }) do
+            dev_os.stdout:write("+ ", pkg, "\n")
+        end
+        return 0
+    end,
+})
 ```
 
-## The lint set commands
-
-A global init or sync command writes the Rust and Lua lint sets
-as Lua commands: `.dev/lint.lua`, `.dev/fmt.lua` and, for Rust,
-`.dev/test.lua`. The code they share is in `.dev/lua/lintset.lua`
-(`require("lintset")`). A Rust project also gets the shared `stylua.toml`, and
-its `fmt` and `lint` commands run stylua over the Lua under `.dev` and `.ci`
-only, which `lint:dev_lua()` lists.
-
-They write no `.sh` file. The templates live in the style skill's `lint/`
-folder.
-
-### Project checks
-
-A project keeps its own checks in `.dev/lint.lua` below the
-`-- --- project-specific checks below ---` line. Put them above the final
-`return lint:finish()` line, which the sync keeps at the end.
-
-Inside the chunk, `lint` is the run:
-
-- `lint:check(name, argv)`
-- `lint:fail(name, message)`
-- `lint:have(binary, install, name)`
-- `lint:files(globs)`
-- `lint:dev_lua()`
-- `lint:grep(pattern, files)`
-
-`ctx` is the command context and `lint.root` the project root.
-
-### A project still on bash
-
-A project still on bash is not forced over. While any of `.dev/lint.sh`,
-`.dev/fmt.sh` or `.dev/test.sh` exists, the sync writes no Lua command the
-project lacks, not even one whose bash file is absent. It prints one
-`pending:` line naming the bash files.
-
-A Lua command the project already ported stays synced. A check-only sync
-exits 0 for it.
-
-To port the commands:
-
-1. Run the sync with its yes flag after moving the bash command out of the
-   way, or copy the template from the style skill's `lint/<set>/` folder to
-   `.dev/`, plus `lint/lintset.lua` to `.dev/lua/lintset.lua`.
-2. Move the checks below the bash marker into Lua below the Lua marker.
-3. Delete `.dev/lint.sh`, `.dev/fmt.sh`, `.dev/test.sh` and `.dev/lint-lib.sh`,
-   and point the project's ci jobs at `dev lint` and `dev test`.
-
-A leftover `.sh` file keeps the `pending:` line until it is deleted. Once the
-Lua command exists, dev runs the `.lua` command (see "Which script runs"). The
-global `dev init` follows the same rule and prints
-`skipped: .dev/lint.sh exists, left on bash`.
+The spec refuses an argument or flag the command does not declare with exit 2,
+as the bash command did by hand.

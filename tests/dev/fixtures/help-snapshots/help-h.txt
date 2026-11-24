@@ -1,14 +1,15 @@
 dev help
-  Show the commands, the details of one command or a topic
+  Show the commands, the details of one command or a help page
 
 usage
-  dev help [-a] [--topics] [-k topic] [--no-pager] [command or topic]
+  dev help [flags] [target...]
 
 flags
-  -a
-  -k
+  -a, --all
   --topics
+  -k, --topic <string>
   --no-pager
+  --check-topics
 
-Run `dev help --help` for the script header and the command it runs.
+Run `dev help --help` for every flag and argument.
 exit 0

@@ -1,28 +1,22 @@
 #!/usr/bin/env bats
 
 load pty
-load stage
 
-DEV="${BATS_TEST_DIRNAME}/../../bin/dev"
+DEV="${DEV_BIN:-$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)/target/debug/dev}"
 
 setup() {
     require_pty
-    mkdir -p "$BATS_TEST_TMPDIR/home/bin"
-    cp "${BATS_TEST_DIRNAME}/../../bin/dev" "$BATS_TEST_TMPDIR/home/bin/dev"
-    stage_share "$BATS_TEST_TMPDIR/home/share/dev"
-    rm "$BATS_TEST_TMPDIR/home/share/dev/docs/overview.md"
-    DEV="$BATS_TEST_TMPDIR/home/bin/dev"
     OUT="$BATS_TEST_TMPDIR/out"
     PAGED="$BATS_TEST_TMPDIR/paged"
     PROJ="$BATS_TEST_TMPDIR/proj"
-    mkdir -p "$PROJ/.dev/topics"
+    mkdir -p "$PROJ/.dev/help"
     {
         printf '# long: A topic taller than the screen\n\n'
         for i in $(seq 1 120); do
             printf 'line %s\n\n' "$i"
         done
-    } >"$PROJ/.dev/topics/long.md"
-    printf '# short: A topic that fits\n\nonly line\n' >"$PROJ/.dev/topics/short.md"
+    } >"$PROJ/.dev/help/long.md"
+    printf '# short: A topic that fits\n\nonly line\n' >"$PROJ/.dev/help/short.md"
     ARGV="$BATS_TEST_TMPDIR/argv"
     mkdir -p "$BATS_TEST_TMPDIR/bin"
     {
@@ -31,6 +25,8 @@ setup() {
         printf 'cat >"%s"\n' "$PAGED"
     } >"$BATS_TEST_TMPDIR/bin/less"
     cp "$BATS_TEST_TMPDIR/bin/less" "$BATS_TEST_TMPDIR/bin/other"
+    printf '#!/bin/sh\ncat >"%s"\n' "$PAGED" >"$BATS_TEST_TMPDIR/bin/capture"
+    chmod +x "$BATS_TEST_TMPDIR/bin/capture"
     chmod +x "$BATS_TEST_TMPDIR/bin/less" "$BATS_TEST_TMPDIR/bin/other"
 }
 
@@ -38,7 +34,7 @@ in_pty() {
     local inner="$BATS_TEST_TMPDIR/inner.sh"
     {
         printf 'cd %q\n' "$PROJ"
-        printf 'export PAGER=%q\n' "${PAGER_CMD:-cat >$PAGED}"
+        printf 'export PAGER=%q\n' "${PAGER_CMD:-$BATS_TEST_TMPDIR/bin/capture}"
         if [ -n "${PTY_COLS:-}" ]; then
             printf 'unset NO_COLOR\n'
             printf 'export TERM=xterm\n'
@@ -53,68 +49,68 @@ in_pty() {
 }
 
 @test "a topic taller than the screen goes through the pager" {
-    in_pty "bash $DEV help long"
+    in_pty "$DEV help long"
     [ "$(cat "$OUT.status")" = 0 ]
     grep -q 'line 120' "$PAGED"
     ! grep -q 'line 120' "$OUT.pty"
 }
 
 @test "a topic that fits prints directly" {
-    in_pty "bash $DEV help short"
+    in_pty "$DEV help short"
     [ "$(cat "$OUT.status")" = 0 ]
     [ ! -e "$PAGED" ]
     grep -q 'only line' "$OUT.pty"
 }
 
 @test "--no-pager prints a long topic directly" {
-    in_pty "bash $DEV help --no-pager long"
+    in_pty "$DEV help --no-pager long"
     [ "$(cat "$OUT.status")" = 0 ]
     [ ! -e "$PAGED" ]
     grep -q 'line 120' "$OUT.pty"
 }
 
 @test "DEV_PAGER=0 prints a long topic directly" {
-    in_pty "DEV_PAGER=0 bash $DEV help -k long"
+    in_pty "DEV_PAGER=0 $DEV help -k long"
     [ "$(cat "$OUT.status")" = 0 ]
     [ ! -e "$PAGED" ]
     grep -q 'line 120' "$OUT.pty"
 }
 
 @test "the curated help goes through a less pager with -+F and ends in the hint" {
-    PAGER_CMD="$BATS_TEST_TMPDIR/bin/less" in_pty "bash $DEV help"
+    PAGER_CMD="$BATS_TEST_TMPDIR/bin/less" in_pty "$DEV help"
     [ "$(cat "$OUT.status")" = 0 ]
     grep -qx -- '-+F' "$ARGV"
-    grep -q 'Topics' "$PAGED"
+    grep -q 'Help pages' "$PAGED"
     [ "$(tail -n 1 "$PAGED" | tr -d '\r')" = '& filters · / searches · q quits' ]
 }
 
 @test "the curated help ends in no hint for another pager and gets no -+F" {
-    PAGER_CMD="$BATS_TEST_TMPDIR/bin/other" in_pty "bash $DEV help"
+    PAGER_CMD="$BATS_TEST_TMPDIR/bin/other" in_pty "$DEV help"
     [ "$(cat "$OUT.status")" = 0 ]
     grep -qx 0 "$ARGV"
-    grep -q 'Topics' "$PAGED"
+    grep -q 'Help pages' "$PAGED"
     ! grep -q 'filters' "$PAGED"
 }
 
 @test "dev help --no-pager prints the curated help directly with no hint" {
-    PAGER_CMD="$BATS_TEST_TMPDIR/bin/less" in_pty "bash $DEV help --no-pager"
+    PAGER_CMD="$BATS_TEST_TMPDIR/bin/less" in_pty "$DEV help --no-pager"
     [ "$(cat "$OUT.status")" = 0 ]
     [ ! -e "$PAGED" ]
-    grep -q 'Topics' "$OUT.pty"
+    grep -q 'Help pages' "$OUT.pty"
     ! grep -q 'filters' "$OUT.pty"
 }
 
 @test "a failing less pager falls back to the text without the hint" {
     printf '#!/bin/sh\nexit 1\n' >"$BATS_TEST_TMPDIR/bin/less"
-    PAGER_CMD="$BATS_TEST_TMPDIR/bin/less" in_pty "bash $DEV help"
+    PAGER_CMD="$BATS_TEST_TMPDIR/bin/less" in_pty "$DEV help"
     [ "$(cat "$OUT.status")" = 0 ]
     grep -q 'The pager failed' "$OUT.pty"
-    grep -q 'Topics' "$OUT.pty"
+    grep -q 'Help pages' "$OUT.pty"
     ! grep -q 'filters' "$OUT.pty"
 }
 
 @test "on a colour terminal the pointer line is cut to the width with no raw backticks" {
-    PTY_COLS=40 PAGER_CMD="$BATS_TEST_TMPDIR/bin/other" in_pty "bash $DEV help"
+    PTY_COLS=40 PAGER_CMD="$BATS_TEST_TMPDIR/bin/other" in_pty "$DEV help"
     [ "$(cat "$OUT.status")" = 0 ]
     line="$(grep '^Run ' "$PAGED" | tail -n 1 | tr -d '\r')"
     [[ "$line" == *$'\e[36mdev help -a\e[0m'* ]] || false

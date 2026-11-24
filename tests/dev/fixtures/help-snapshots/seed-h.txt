@@ -4,5 +4,5 @@ dev seed
 usage
   dev seed
 
-Run `dev seed --help` for the script header and the command it runs.
+Run `dev seed --help` for every flag and argument.
 exit 0

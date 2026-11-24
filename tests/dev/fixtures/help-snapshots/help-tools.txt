@@ -2,8 +2,8 @@ dev tools
   Install and check the tools in .dev/tools.tsv
 
 subcommands
-  install  Install the manifest's tools, by install scope
   check    Report which of the manifest's tools are missing from PATH
+  install  Install the manifest's tools, by install scope
 
-Run `dev help tools <sub>` for a subcommand's flags and header.
+Run `dev help tools <sub>` for a subcommand's flags and arguments.
 exit 0

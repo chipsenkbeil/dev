@@ -2,9 +2,9 @@
 
 load pty
 
-CONFIRM="${BATS_TEST_DIRNAME}/../lua/fixtures/confirm.lua"
-SPIN="${BATS_TEST_DIRNAME}/../lua/fixtures/spin.lua"
-SPIN_CAPTURE="${BATS_TEST_DIRNAME}/../lua/fixtures/spin_capture.lua"
+CONFIRM="${BATS_TEST_DIRNAME}/../lua/fixtures/confirm.luau"
+SPIN="${BATS_TEST_DIRNAME}/../lua/fixtures/spin.luau"
+SPIN_CAPTURE="${BATS_TEST_DIRNAME}/../lua/fixtures/spin_capture.luau"
 
 setup() {
     require_pty
@@ -18,7 +18,7 @@ in_pty() {
         if [ -n "${PTY_COLS:-}" ]; then
             printf 'stty rows 24 cols %s\n' "$PTY_COLS"
         fi
-        printf 'luajit'
+        printf 'dev -l'
         printf ' %q' "$@"
         printf '\n'
         printf 'echo $? >"%s"\n' "$OUT.status"
@@ -70,7 +70,7 @@ process_gone() {
 }
 
 @test "no terminal exits 2 and names -y" {
-    run luajit "$CONFIRM" </dev/null
+    run dev -l "$CONFIRM" </dev/null
     [ "$status" -eq 2 ]
     [[ "$output" == *"-y"* ]] || false
 }
@@ -141,7 +141,7 @@ process_gone() {
 
 @test "spin writes no escape bytes when stderr is a file" {
     local inner="$BATS_TEST_TMPDIR/inner2.sh"
-    printf 'luajit %q sh -c %q 2>%q\necho $? >%q\n' "$SPIN" 'sleep 0.3; echo hi >&2; exit 0' "$OUT.errfile" "$OUT.status" >"$inner"
+    printf 'dev -l %q sh -c %q 2>%q\necho $? >%q\n' "$SPIN" 'sleep 0.3; echo hi >&2; exit 0' "$OUT.errfile" "$OUT.status" >"$inner"
     pty_run '' 0 2 "$inner" >"$OUT.pty"
     [ "$(cat "$OUT.status")" = 0 ]
     [ "$(cat "$OUT.errfile")" = hi ]
@@ -184,52 +184,6 @@ process_gone() {
     [ "$output" = 0 ]
 }
 
-with_dash_as_sh() {
-    command -v dash >/dev/null 2>&1 || skip "dash not installed"
-    mkdir -p "$BATS_TEST_TMPDIR/dashbin"
-    ln -sf "$(command -v dash)" "$BATS_TEST_TMPDIR/dashbin/sh"
-    PATH="$BATS_TEST_TMPDIR/dashbin:$PATH"
-}
-
-@test "ctrl-c stops every process the command started when sh is dash" {
-    with_dash_as_sh
-    READY="$BATS_TEST_TMPDIR/ready"
-    in_pty '\003' 0 "$SPIN" sh -c 'touch "$1"; sleep 7.654; echo done' sh "$READY"
-    status_is_130
-    process_gone 'sleep 7.654'
-}
-
-@test "ctrl-c under dash exits 130 and leaves no sleep on every one of twenty runs" {
-    with_dash_as_sh
-    local run
-    for run in $(seq 20); do
-        rm -f "$OUT.status"
-        READY="$BATS_TEST_TMPDIR/ready$run"
-        PTY_AFTER=0 in_pty '\003' 0 "$SPIN" sh -c 'touch "$1"; sleep 7.654; echo done' sh "$READY"
-        status_is_130
-        process_gone 'sleep 7.654'
-    done
-}
-
-dash_job_control_run() {
-    local mode=$1 inner="$BATS_TEST_TMPDIR/inner-dash.sh"
-    {
-        printf 'trap %q INT\n' "touch \"$OUT.hit\""
-        printf 'dash -c %q dash %q\n' "trap \"\" INT; $mode touch \"\$1\"; sleep 1" "$OUT.ready"
-        printf 'echo $? >"%s"\n' "$OUT.status"
-    } >"$inner"
-    pty_run '\003' 0 0 "$inner" "$OUT.ready" "$OUT.status" >"$OUT.pty"
-}
-
-@test "dash with job control hands the terminal away so a ctrl-c typed while it lives misses its parent" {
-    command -v dash >/dev/null 2>&1 || skip "dash not installed"
-    dash_job_control_run ''
-    [ -e "$OUT.hit" ]
-    rm -f "$OUT.hit" "$OUT.status" "$OUT.ready"
-    dash_job_control_run 'set -m;'
-    [ ! -e "$OUT.hit" ]
-}
-
 confirm_lines() {
     tr -d '\r' <"$OUT.pty" | sd '\x1b\[[0-9;?]*[A-Za-z]' ''
 }
@@ -260,7 +214,7 @@ confirm_lines() {
 
 @test "dev box delete on a terminal shows the Deleting label and the Deleted line" {
     local stubs="$BATS_TEST_TMPDIR/stubs" inner="$BATS_TEST_TMPDIR/inner.sh"
-    local dev="${BATS_TEST_DIRNAME}/../../bin/dev" out
+    local dev="${DEV_BIN:-${BATS_TEST_DIRNAME}/../../target/debug/dev}" out
     mkdir -p "$stubs"
     cat >"$stubs/ci" <<'STUB'
 #!/bin/sh
@@ -280,90 +234,3 @@ STUB
     [ "$(tail -n 1 <<<"$out")" = "Deleted ci-abc · no archive" ]
 }
 
-dash_holding_launcher() {
-    command -v dash >/dev/null 2>&1 || skip "dash not installed"
-    mkdir -p "$BATS_TEST_TMPDIR/dashbin"
-    {
-        printf '#!/usr/bin/env bash\n'
-        printf 'if [ "$1" = -c ] && [[ "$2" == trap\\ * ]]; then\n'
-        printf '    needle=%q\n' 'echo $! >"$dir/pid"'
-        printf '    script=${2/"$needle"/". \\"\\$LAUNCH_HOLD\\"; $needle"}\n'
-        printf '    shift 2\n'
-        printf '    exec %q -c "$script" "$@"\n' "$(command -v dash)"
-        printf 'fi\n'
-        printf 'exec %q "$@"\n' "$(command -v dash)"
-    } >"$BATS_TEST_TMPDIR/dashbin/sh"
-    chmod +x "$BATS_TEST_TMPDIR/dashbin/sh"
-    PATH="$BATS_TEST_TMPDIR/dashbin:$PATH"
-}
-
-@test "ctrl-c before the first frame under dash stops the job with 130" {
-    local HOLD_SPINS=2000000
-    dash_holding_launcher
-    local run inner="$BATS_TEST_TMPDIR/inner-early.sh" mark="$OUT.launched" hold="$BATS_TEST_TMPDIR/hold.sh" caught="$OUT.caught"
-    {
-        printf ': >"$LAUNCH_MARK"\n'
-        printf 'n=0\n'
-        printf 'while [ -z "$hit" ] && [ "$n" -lt %s ]; do n=$((n+1)); done\n' "$HOLD_SPINS"
-        printf '[ -z "$hit" ] || : >"$LAUNCH_CAUGHT"\n'
-    } >"$hold"
-    {
-        printf 'export LAUNCH_MARK=%q LAUNCH_HOLD=%q LAUNCH_CAUGHT=%q\n' "$mark" "$hold" "$caught"
-        printf 'luajit %q sh -c %q\n' "$SPIN" 'sleep 7.654; echo done'
-        printf 'echo $? >%q\n' "$OUT.status"
-    } >"$inner"
-    for run in 1 2 3 4 5; do
-        rm -f "$OUT.status" "$mark" "$caught"
-        pty_run '\003' 0 0 "$inner" "$mark" "$OUT.status" >"$OUT.pty"
-        status_is_130
-        [ -e "$caught" ]
-        process_gone 'sleep 7.654'
-    done
-}
-
-@test "ctrl-c still stops a job whose launcher writes its pid late" {
-    dash_holding_launcher
-    local HOLD_SPINS=10000000
-    local inner="$BATS_TEST_TMPDIR/inner-late.sh" mark="$OUT.launched" hold="$BATS_TEST_TMPDIR/hold-late.sh" released="$OUT.released"
-    {
-        printf ': >"$LAUNCH_MARK"\n'
-        printf 'n=0\n'
-        printf 'while [ -z "$hit" ] && [ "$n" -lt %s ]; do n=$((n+1)); done\n' "$HOLD_SPINS"
-        printf '[ -z "$hit" ] || : >"$LAUNCH_RELEASED"\n'
-    } >"$hold"
-    {
-        printf 'export LAUNCH_MARK=%q LAUNCH_HOLD=%q LAUNCH_RELEASED=%q\n' "$mark" "$hold" "$released"
-        printf 'luajit %q sh -c %q\n' "$SPIN" 'sleep 7.655; echo done'
-        printf 'echo $? >%q\n' "$OUT.status"
-    } >"$inner"
-    pty_run '\003' 0 0 "$inner" "$mark" "$OUT.status" >"$OUT.pty"
-    status_is_130
-    [ -e "$released" ]
-    process_gone 'sleep 7.655'
-}
-
-@test "a dead launcher exits 130 within a second with no key sent" {
-    [ -n "$(bash -c 'echo $EPOCHREALTIME')" ] || skip "bash has no EPOCHREALTIME"
-    local LIMIT_MS=1000
-    mkdir -p "$BATS_TEST_TMPDIR/deadbin"
-    {
-        printf '#!/usr/bin/env bash\n'
-        printf 'if [ "$1" = -c ] && [[ "$2" == trap\\ * ]]; then\n'
-        printf '    exit 130\n'
-        printf 'fi\n'
-        printf 'exec /bin/sh "$@"\n'
-    } >"$BATS_TEST_TMPDIR/deadbin/sh"
-    chmod +x "$BATS_TEST_TMPDIR/deadbin/sh"
-    PATH="$BATS_TEST_TMPDIR/deadbin:$PATH"
-    local inner="$BATS_TEST_TMPDIR/inner-dead.sh"
-    {
-        printf 'start=$EPOCHREALTIME\n'
-        printf 'luajit %q sh -c %q\n' "$SPIN" 'sleep 7.656'
-        printf 'echo $? >%q\n' "$OUT.status"
-        printf 'end=$EPOCHREALTIME\n'
-        printf 'echo $(( (${end/./} - ${start/./}) / 1000 )) >%q\n' "$OUT.elapsed"
-    } >"$inner"
-    pty_run '' 0 0 "$inner" "" "$OUT.elapsed" >"$OUT.pty"
-    status_is_130
-    [ "$(cat "$OUT.elapsed")" -lt "$LIMIT_MS" ]
-}

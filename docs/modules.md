@@ -1,13 +1,155 @@
-# modules: The dev Lua modules, the .dev scripts and the test runner
+# modules: The dev modules, .dev commands and the test runner
 
 ## dev modules
 
-The luajit modules of `dev`, one per item.
+The native and Luau modules of `dev`, one per item.
+
+## Native modules
+
+The Rust host registers these modules under `dev.*` before any Luau runs, and
+`require("dev.NAME")` returns them first. An expected failure returns `nil,
+reason`, and misuse (a wrong argument type) raises `bad argument #N to 'fn'`. An
+error a native function raises reaches Luau as userdata, so call `tostring` on
+it before string methods. At `-vvv` every native call writes `+ dev.MODULE.FN`
+to standard error.
+
+### dev.runtime
+
+- `load(source, chunkname?, env?)`: compile a chunk, `nil, err` on a syntax
+  error. With `env` the chunk runs in that table.
+- `dofile(path)`: run a file and return its values, raising on any error.
+- `add_path(dir)`: put `DIR/a/b.luau` and `DIR/a/b/init.luau` on the `require`
+  path, newest folder first.
+- `asset(path)`: an embedded file (`luau/dev/...`, `docs/...` or `init/...`) or
+  nil.
+- `assets(path)`: the sorted names of the direct children of an embedded
+  folder, `{}` for anything else.
+- `signatures()`: every registered native function as `{ module, name,
+  signature, docs }`.
+- `parse_globals(words)`: read dev's global flags from `words`, the command
+  line after the program name, with the code the binary starts with. It
+  applies them (`-C`, `--agent`, verbosity) and returns a table shaped like
+  `dev.globals`, or nil and the usage message. A `dev -l` script that runs
+  `dev.cli.main` on its own words calls it, so it reads the flags exactly as
+  the binary does.
+- `exe`: the canonical path of the running binary.
+- `version`: the crate version, which `dev.version` reads.
+- `loaded`: the `require` cache.
+
+### dev.globals
+
+A table of the parsed global flags: `args`, `after`, `dashed`, `remote`,
+`detach`, `priority`, `job_timeout`, `local_flag`, `env_local`, `conflict`,
+`level`, `quiet`, `stripped` and `agent`. `dev.cli.main` receives it.
+
+### dev.os
+
+- `getenv(name)`, `setenv(name, value?)` (nil unsets) and `vars()`.
+- `name()` is `Darwin`, `Linux` or `Windows`. `arch()`, `getpid()`, `getuid()`
+  and `isatty(fd)`.
+- `nap(secs)`, `monotonic()` and `random_bytes(n)`.
+- `append_path(dirs)`, `which(name)`, `quote(arg)`, `command(argv)` and
+  `kind_of(mode)`.
+- `defaults = { env, unset, show }`, read at every spawn.
+- `run(argv, opts)` returns the exit code, and `capture(argv, opts)` returns
+  `out, code`. `capture_input(argv, input, opts)` and `capture_timed(argv,
+  secs, opts)` add standard input and a time limit.
+- The `opts` table of `run`, `capture`, `capture_input`, `capture_timed`, `exec`
+  and `spawn` takes these fields: `env` (variables to set over dev's own),
+  `unset` (variable names to remove), `cwd` (the folder to run in), `stdin`
+  (`"null"` for /dev/null, the only value), `stdout` and `stderr` (`"null"`,
+  `"inherit"` or a file path). `capture_input` and `capture_timed` take neither
+  `stdin` nor `stdout`, and `capture_timed` adds `input` (text for its standard
+  input) and `merge`. `stderr = "stdout"` merges standard error into standard
+  output. A path in `stdout` or `stderr` is opened for append and created when
+  missing, so an existing file keeps its content, and a caller that wants a
+  fresh file makes it first with `dev.fs.mktemp`.
+- `exec(argv, opts)` replaces dev and returns only on failure.
+- `spawn(argv, opts)` starts a child without waiting and returns a process
+  with `pid`, `wait(secs?)` and `kill(sig)`. `opts.detach` starts a new
+  session that outlives dev.
+- `stdout` and `stderr` with `write` and `flush`, and `stdin` with `read`.
+- `exit(code?)`, `on_exit(fn)`, `run_cleanups()`, `interrupt_code()`,
+  `SIGNAL_EXIT_BASE` (128) and `EXEC_FAILED` (126).
+
+### dev.fs
+
+- `exists`, `is_dir`, `is_file`, `is_link` and `is_exec` test a path.
+- `read(path)`, `write(path, text, { mode?, atomic? })` (`mode` is a decimal
+  integer such as `493` for 0755, written `tonumber("755", 8)` in Luau, and
+  applies to the new file) and
+  `append(path, text)`.
+- `mkdir`, `remove`, `move`, `list`, `stat`, `realpath`, `readlink`, `mktemp`,
+  `symlink` and `chmod(path, mode)`.
+- `join`, `dirname` and `basename` build and split paths.
+- `open_nofollow`, `fstat`, `read_fd` and `close` read a file without
+  following a link.
+- `Kind` names the kinds of a path.
+
+### dev.lock
+
+- `lock(path, { shared?, timeout?, mode? })` waits for a file lock and returns
+  a handle.
+- `try_lock(path, opts)` returns at once.
+- `handle:release()` frees the lock.
+
+### dev.hash
+
+- `sha256(text)` returns the hex digest.
+- `sha256_file(path)` returns it for a file, or `nil, reason`.
+
+### dev.http
+
+- `request{ method, url, headers?, body?, file?, timeout?, connect_timeout? }`
+  returns `{ status, headers, body }`, or `nil, reason, kind`. A non-2xx status
+  is a normal result. `kind` is `resolve`, `connect`, `timeout`, `tls` or
+  `other`.
+- `download{ url, path, headers?, timeout?, progress? }` returns `{ status,
+  headers }` or `nil, reason, kind`.
+
+### dev.json
+
+- `decode(text)` and `encode(value)`.
+- `null` is the null sentinel, `object()` makes an object, and `is_object` and
+  `present` test values.
+
+### dev.toml
+
+- `parse(text)` returns a tree, or `nil, "LINE: reason"`.
+- `set(text, key, value)` sets a dotted key, and `SetRefusal` names why it
+  refuses.
+- `encode(tree)` writes a tree as TOML.
+
+### dev.manifest
+
+- `parse(text)` reads a tools manifest, and `column` and `select` read one
+  column of a row and pick the rows.
+
+### dev.term
+
+- `TTY_PATH`, `DEFAULT_COLS` and `Key`.
+- `raw`, `silent`, `open_tty` and `close` manage raw mode, which is always
+  restored.
+- `size()` and `decode` and `read_key` read the screen and the keys.
+- `page(text, opts)` shows text in the built-in pager and returns whether it
+  did. `move_to(row, col)`, `clear()` and `alt_screen(on)` move the cursor and
+  switch the screen.
+
+### dev.spec
+
+- `validate(spec)` checks a `dev.command` spec and returns it, or `nil,
+  reason`. When the spec declares a flag that takes `--help` or `-h`, a third
+  value, `Reason.RESERVED_FLAG`, says so. `Reason` is the closed set of those
+  codes.
+- `parse(spec, argv)` returns `opts, args, passthrough`, or `nil,
+  usage_message`.
+
+## Luau modules
 
 ### Commands and dispatch
 
 - `dev.cli`: dispatch.
-- `dev.command`: the `.lua` command contract (`chunk(ctx)`,
+- `dev.command`: the command spec contract (`dev_command({...})`, the helpers
   `usage_error`, `no_args`, `say`, `relay`, `note`, `die`, `show`, `need`).
 - `dev.cmd.types`: the project type's built-ins and the command lines
   `dev help <command>` prints for them.
@@ -27,9 +169,7 @@ The luajit modules of `dev`, one per item.
   `skipped:` lines and the summary, then the Pomb board hint and its note that
   Pomb refused the token, and skips what exists. It writes
   no lint file, style guide, README, CI jobs file or `.editorconfig`, takes
-  no `--type` and sets up no Gerrit project. A global `init` command that
-  wants them overrides it and runs it as `builtin:init` first. The board
-  hint reads
+  no `--type` and sets up no Gerrit project. The board hint reads
   `[board.pomb] url` (after `POMB_URL`) and `token` from the user config and
   is skipped when either is unset. None of the keys has a default.
 
@@ -60,7 +200,7 @@ The luajit modules of `dev`, one per item.
 - `dev.board.wait`, `dev.board.ship`, `dev.board.stale`, `dev.board.runcard`,
   `dev.board.setup`: the `board wait`, `ship`, `stale` and `run` subcommands
   and the board setup helpers, split out of `dev.cmd.board` to keep it below
-  the 200 locals LuaJIT allows in one chunk.
+  the local-variable limit of one chunk.
 - `dev.board.wiring`: the flag parsing and rows behind `board check`, and the
   landing problems, turn wait and held landing behind `board land`.
 - `dev.board.pomb`: that interface over curl. The token comes from
@@ -252,12 +392,10 @@ card's bookmark.
 
 ### Project setup and configuration
 
-- `dev.toml`: a small TOML reader. It takes tables and dotted tables, basic
-  strings, integers, booleans, arrays of scalars that may span lines and
-  comments, and names the line of an error for anything else. `toml.set` adds a
-  string, integer or list of strings under its section by a dotted key and makes
-  the section when absent. It returns a `toml.SetRefusal` reason when the key is
-  set, is not a plain dotted key, or would leave a file that does not parse.
+- `dev.toml`: native, see above. `toml.set` adds a string, integer or list of
+  strings under its section by a dotted key and makes the section when
+  absent. It returns a `toml.SetRefusal` reason when the key is set, is not a
+  plain dotted key, or would leave a file that does not parse.
 - `dev.config`: `config.get(root, "a.b")` reads `~/.config/dev/config.toml`
   and then `<root>/.dev/config.toml` over it. `config.user("a.b")` reads the
   user file alone. `config.prefer_user(root, key)` reads the user file first
@@ -272,7 +410,7 @@ card's bookmark.
   `DEV_FETCHED`. `fetch.apply(root, spec)` runs a patch job on its first listed
   target and applies the pulled patch at the project root (`dev help remote`).
 - `dev.registry`: the registry of commands.
-- `dev.version`: `current` reads the `VERSION` file beside `main.lua`, and
+- `dev.version`: `current` reads `dev.runtime.version`, and
   `compare` orders two `MAJOR.MINOR.PATCH` strings. `dev.cli` refuses a
   project whose `[dev] min_version` is newer (`dev help flags`).
 - `dev.xdg`: `state_home`, the one place that resolves `XDG_STATE_HOME`. It
@@ -283,27 +421,27 @@ card's bookmark.
 ### Help and completion
 
 - `dev.help`: `dev help` and the help every command's `-h` and `--help`
-  print.
-  It detects the project type only for `lint`, `fmt`, `test`, `build`, `run`
-  and `fetch`. The Lua check of `dev.project` is one `find` capped at 4 levels
-  that skips dot directories, `node_modules` and `target` and does not follow
-  symlinks below the root. `dev.cli.guard` and `dev.command` turn an
+  print, drawn from the command's spec. `dev.cli` and `dev.command` turn an
   `interrupted!` error into exit 130 with nothing on standard error.
-- `dev.complete`: the hidden `__commands`, `__subs`, `__flags` and `__args` that
-  feed shell completion, and `__topics check`. `__args` reads a card cache and
-  asks `ci __complete`, see `dev help flags`.
-- `dev.topics`: the topic files and the check behind `__topics check`.
+- `dev.complete`: what `dev __complete` prints. It walks the typed words
+  through the registry and the command spec, and completes command words, flag
+  names, flag values and arguments. `dev.complete.board_card`, `board_column`,
+  `box` and `file` are the providers a spec names in `complete`, and
+  `dev.complete.scripts` holds the four shell scripts `dev completion` prints.
+  A provider that errors prints nothing. See `dev help commands`.
+- `dev.topics`: the help page files, read from the embedded `docs/` and the
+  project's `.dev/help/`, and the check behind `dev help --check-topics`.
 
 ### Test support
 
 - `dev.testing`: `test(name, fn)` registers a case, and `eq`, `ok` and
   `raises` assert. These moved from `tests/lua/testing.lua`.
-- `dev.testrun`: `run(root)` runs every `root/.dev/tests/*_test.lua` sorted,
-  with `root/.dev/lua` on `package.path`. It prints `ok - NAME` and
+- `dev.testrun`: `run(root)` runs every `root/.dev/tests/*_test.luau` sorted,
+  with `root/.dev/lib` on the `require` path. It prints `ok - NAME` and
   `not ok - NAME` with the error, and returns 1 when a case failed or a file
   failed to load. When the directory is missing it prints
   `SKIP .dev/tests (none)` and returns 0. `execute(from, only)` is the loop
-  `tests/lua/run.lua` calls.
+  `tests/lua/run.luau` calls.
 - `dev.testenv`: the helpers a project test uses.
   - `tempdir`: a temporary directory for one test.
   - `fake(root, name, {code, out, err})`: writes an executable
@@ -318,16 +456,13 @@ card's bookmark.
 
 ### System, release and terminal
 
-- `dev.os`: quoted commands, `nap`, `capture_input` to run a command with a
-  secret on its standard input, exec, isatty, the uid, and `kind_of`,
-  `open_nofollow`, `fstat`, `read_fd` and `close` through ffi.
+- `dev.os`: native, see above.
 - `dev.release`: the session the release installers under `scripts/` share.
   It holds the parsing of `--dry-run [version]`, the latest-tag lookup, the
   platform names, `step` that runs or prints a command, and a scratch
   directory removed at the end.
   A `die` prints `  ! install-<tool>: <message>` and exits 1.
-- `dev.term`: raw mode that is always restored, and key decoding including
-  pgup, pgdn, home and end.
+- `dev.term`: native, see above. It adds the built-in pager and cursor moves.
 - `dev.text`: display width, `fit`, `trim`, `words`, `index_of`, `contains`
   and `wrap`. `wrap` is the one greedy word wrap that confirm and
   `dev.ui.markdown` share, and it leaves a word wider than the width on a line
@@ -371,19 +506,19 @@ The picker behaves this way:
 
 ### Tests and checks
 
-Lua tests are `tests/lua/*_test.lua`. The hand-rolled runner runs one file at
-a time: `luajit tests/lua/run.lua <file> [name]`, where a name keeps the cases
-whose name contains it. The pty suites are
-`tests/dev/{term,picker,confirm}.bats`, which drive a pty through
-`tests/dev/pty.bash`.
+Luau tests are `tests/lua/*_test.luau`. The runner runs one file at a time:
+`dev -l tests/lua/run.luau <file> [name]`, where a name keeps the cases whose
+name contains it, and `dev -l FILE` runs any Luau file with the embedded
+modules and `arg` set (the Rust integration tests in `tests/native/` use it).
+The pty suites are `tests/dev/{term,picker,confirm}.bats`, which drive a pty
+through `tests/dev/pty.bash`.
 
-`dev test` runs them when luajit is on PATH and prints `SKIP` for a suite that
-ran no case.
+`dev test` runs them and prints `SKIP` for a suite that ran no case.
 
-This repo's own `dev lint`, `dev fmt` and `dev test` are `.dev/lint.lua`,
-`.dev/fmt.lua` and `.dev/test.lua`. The shared code is in
-`.dev/lua/devrepo/checks.lua`, and project commands get `.dev/lua`
-on `package.path`.
+This repo's own `dev lint`, `dev fmt` and `dev test` are
+`.dev/commands/lint.luau`, `fmt.luau` and `test.luau`. The shared code is in
+`.dev/lib/devrepo/checks.luau`, and project commands get `.dev/lib` on the
+`require` path.
 
 #### dev lint and dev fmt
 
@@ -391,20 +526,23 @@ on `package.path`.
 
 - shellcheck, shfmt and the comment-spacing check over the bash roots
 - the bare-assertion check over the bats files
-- stylua, selene, ast-grep and the comment checks over the Lua roots, with
-  the repo's `stylua.toml`, `selene.toml` and `sgconfig.yml`
-- the line-width check over the docs, the topics and `README.md`
-- the ast-grep rule tests under `.dev/ast-grep`, once
+- stylua over the Luau files and the `.ci` Lua files, with the repo's
+  `stylua.toml`
+- selene and ast-grep over the `.ci` Lua files, with the repo's `selene.toml`,
+  the `ci` global that `ci.yml` declares, and `sgconfig.yml`
+- the comment checks over the Luau files
+- the line-width check over the docs, the help pages and `README.md`
+- the ast-grep rule tests, once
 
-The Lua roots are the dev modules, `main.lua`, `pkg.lua`, `tests/lua` and
-`.dev`. `dev fmt` runs stylua over the same files with the same config.
+The Luau roots are `luau/dev`, `tests/lua` and `.dev`. `dev fmt` runs stylua
+over the same files with the same config.
 
 selene runs with `--no-exclude`. The set's `exclude = [".*/**"]` would hide
 `.dev` otherwise.
 
 #### dev soak
 
-`dev --remote soak [-- --runs N]` is `.dev/soak.lua`, the job of
+`dev --remote soak [-- --runs N]` is `.dev/commands/soak.luau`, the job of
 `.ci/soak.lua`. It does 50 runs by default. Each run loops these cases beside
 two busy loops per core:
 
@@ -422,10 +560,10 @@ stops the case and its busy loops at once.
 
 `dev test PATH...` runs only the suites at each path under `tests/` and
 refuses a path that names no suite with exit 2. A path under a group skipped on
-this machine (`tests/lua` without luajit) is also exit 2. The message reads
-`PATH is skipped here. It needs luajit.` A leading `./` and a trailing slash are
-dropped from a path first. `dev test` alone runs every bats file, `*_test.sh`
-and `test-*.sh` script and `*_test.lua` suite.
+this machine is also exit 2. The message reads `PATH is skipped here.` A
+leading `./` and a trailing slash are dropped from a path first. `dev test`
+alone runs every bats file, `*_test.sh` and `test-*.sh` script and
+`*_test.luau` suite.
 
 `dev board check` and the `dev board land` recheck narrow a plain
 `dev --remote test` row, one with no words after it, to the suites that cover
@@ -467,7 +605,7 @@ These suites run one at a time beside the pool:
 
 - `tests/dev/{term,picker,confirm,pager}.bats`
 - `tests/dev/help_test.sh`
-- `tests/lua/help_test.lua`
+- `tests/lua/help_test.luau`
 
 `dev test` prints each suite's output whole with its `PASS`, `FAIL` or `SKIP`
 line in discovery order, then a summary line. When the uid is not 0 or the OS
@@ -501,10 +639,11 @@ on the card for that rebuild.
 
 ### Modules a command may require
 
-A project or global command (`.dev/*.lua` or `~/.config/dev/commands/*.lua`)
-may `require` these modules and call the functions listed under each. The list
-is what project and global commands call today, and the test
-`tests/lua/modules_contract_test.lua` reads it, so it fails when a listed
+A project or global command (`.dev/commands/*.luau` or
+`~/.config/dev/commands/*.luau`) may `require` these modules and call the
+functions listed under each. The list is what `.dev` calls
+today, and the test `tests/lua/modules_contract_test.luau` reads it, so it
+fails when a listed module or function goes away.
 module or function goes away.
 
 - `dev.command`: `die`, `need`, `no_args`, `note`, `say`, `show`,
@@ -533,14 +672,3 @@ module or function goes away.
 
 Every other module under `dev` is internal and may change without notice.
 
-## .dev scripts
-
-There is one script per command (`lint.lua`, `fmt.lua`, `test.lua`,
-`soak.lua` and `install.lua`), run through `dev <command>` in the dev process.
-
-`dev install` publishes this checkout as dev's snapshot with
-`devrepo.snapshot`. It copies the files an install ships (`main.lua`,
-`pkg.lua`, `VERSION`, `xtrace.bash`, `lua`, `docs`, `init` and `board`) to a
-new version directory under `$XDG_STATE_HOME/dev/snapshot/versions`, writes
-the checkout's real path to its `ORIGIN` file and renames a link over
-`current`. `tests/lua/snapshot_test.lua` pins the module.

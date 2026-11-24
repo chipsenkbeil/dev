@@ -1,0 +1,1580 @@
+local testing = require("dev.testing")
+local board = require("dev.board")
+local cmd_board = require("dev.cmd.board")
+local dev_os = require("dev.os")
+local fs = require("dev.fs")
+local localboard = require("dev.board.localboard")
+local pomb = require("dev.board.pomb")
+local store = require("dev.board.store")
+local support = require("support")
+local turn = require("dev.board.turn")
+
+local LEASE_SECONDS = 3
+local PAST_LEASE_SECONDS = 4
+local PAST_HOLD_SECONDS = 2
+local TURN_HOLD_SECONDS = 600
+local OVER_CAP_TTL_SECONDS = turn.MAX_HOLD_SECONDS * 2
+local ID_A = "11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+local ICEBOX_ID = "col-icebox"
+local BOARD_SEATS = "/api/boards/board-1/seats"
+local WANTED_SEATS = { "code", "style", "recheck" }
+
+local clock
+
+local function advance(seconds)
+    clock = clock + seconds
+end
+
+local function board_home()
+    local root = support.sandbox({
+        [".dev/config.toml"] = '[board]\nbackend = "local"\nname = "mine"\n',
+    }, {})
+    local home = support.tempdir()
+    assert(fs.mkdir(home .. "/.config/dev", { parents = true }), "mkdir failed")
+    assert(fs.write(home .. "/.config/dev/config.toml", ""), "write failed")
+    local out, code = support.dev(root, { "board", "init" }, {
+        env = { HOME = home, XDG_STATE_HOME = home .. "/state" },
+    })
+    assert(code == 0, out)
+    support.drop_turn_card(support.board_file(home, "mine"))
+    return home
+end
+
+local function backend_at(home)
+    dev_os.setenv("XDG_STATE_HOME", home .. "/state")
+    clock = os.time()
+    store.now = function()
+        return clock
+    end
+    local backend = localboard.new({
+        name = "mine",
+        path = support.board_file(home, "mine"),
+        private = true,
+    })
+    backend.stages = board.stages(nil, {})
+    return backend
+end
+
+local function lease(seconds)
+    local previous = turn.LEASE_SECONDS
+    turn.LEASE_SECONDS = seconds
+    return function()
+        turn.LEASE_SECONDS = previous
+    end
+end
+
+testing.test("the turn goes to one asker and names its holder and the time to the next", function()
+    local backend = backend_at(board_home())
+    local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+    testing.eq(first.holder, "alpha")
+    local second, message = turn.take(backend, "beta", "bbbb2222")
+    testing.eq(second, nil)
+    testing.ok(message:find("held by alpha since 20", 1, true), message)
+    local holder = assert(turn.holder(backend))
+    testing.eq(holder.name, "alpha")
+    testing.ok(holder.since:find("^20%d%d%-"), holder.since)
+end)
+
+testing.test("a released turn goes to the next asker", function()
+    local backend = backend_at(board_home())
+    local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+    turn.release(backend, first)
+    testing.eq(turn.holder(backend), nil)
+    local second = assert(turn.take(backend, "beta", "bbbb2222"))
+    testing.eq(second.holder, "beta")
+end)
+
+testing.test("a holder that stops renewing loses the turn to the next asker", function()
+    local backend = backend_at(board_home())
+    local restore = lease(LEASE_SECONDS)
+    assert(turn.take(backend, "alpha", "aaaa1111"))
+    local early = turn.take(backend, "beta", "bbbb2222")
+    testing.eq(early, nil)
+    advance(PAST_LEASE_SECONDS)
+    local second = assert(turn.take(backend, "beta", "bbbb2222"))
+    restore()
+    testing.eq(second.holder, "beta")
+    testing.eq(assert(turn.holder(backend)).name, "beta")
+end)
+
+testing.test("a holder that returns after another took the turn is refused", function()
+    local backend = backend_at(board_home())
+    local restore = lease(LEASE_SECONDS)
+    local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+    advance(PAST_LEASE_SECONDS)
+    assert(turn.take(backend, "beta", "bbbb2222"))
+    local renewed, message = turn.renew(backend, first)
+    restore()
+    testing.eq(renewed, nil)
+    testing.ok(message:find("The landing turn was lost. ", 1, true), message)
+    testing.ok(message:find("[.!?]$") and not message:find("%.%.$"), message)
+    testing.eq(assert(turn.holder(backend)).name, "beta")
+end)
+
+testing.test("a holder that returns after its lease ran out must ask again", function()
+    local backend = backend_at(board_home())
+    local restore = lease(LEASE_SECONDS)
+    local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+    advance(PAST_LEASE_SECONDS)
+    local renewed, message = turn.renew(backend, first)
+    restore()
+    testing.eq(renewed, nil)
+    testing.ok(message:find("ran out", 1, true), message)
+    testing.eq(turn.holder(backend), nil)
+end)
+
+testing.test("a stretched turn outlasts its first lease", function()
+    local backend = backend_at(board_home())
+    local STRETCH_SECONDS = 10
+    local restore = lease(LEASE_SECONDS)
+    local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+    advance(PAST_HOLD_SECONDS)
+    testing.eq(turn.stretch(backend, first, STRETCH_SECONDS), true)
+    advance(PAST_LEASE_SECONDS)
+    restore()
+    testing.eq(turn.take(backend, "beta", "bbbb2222"), nil)
+    testing.eq(assert(turn.holder(backend)).name, "alpha")
+end)
+
+testing.test("a stretch restores the holder's own lease", function()
+    local backend = backend_at(board_home())
+    local restore = lease(LEASE_SECONDS)
+    local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+    testing.eq(turn.stretch(backend, first, TURN_HOLD_SECONDS), true)
+    restore()
+    testing.eq(first.lease, LEASE_SECONDS)
+end)
+
+testing.test("a stretch keeps a hold's longer lease", function()
+    local backend = backend_at(board_home())
+    local LONG_HOLD_SECONDS = 6
+    local SHORT_STRETCH_SECONDS = 3
+    local PAST_SHORT_SECONDS = 5
+    local held = assert(turn.take(backend, "alpha", "aaaa1111", {
+        hold = true,
+        seconds = LONG_HOLD_SECONDS,
+    }))
+    advance(PAST_HOLD_SECONDS)
+    testing.eq(turn.stretch(backend, held, SHORT_STRETCH_SECONDS), true)
+    advance(PAST_SHORT_SECONDS)
+    testing.eq(held.lease, LONG_HOLD_SECONDS)
+    testing.eq(turn.take(backend, "beta", "bbbb2222"), nil)
+    testing.eq(assert(turn.holder(backend)).name, "alpha")
+end)
+
+testing.test("a holder that renews in time keeps the turn past its first lease", function()
+    local backend = backend_at(board_home())
+    local LONG_LEASE_SECONDS = 4
+    local HALF_LEASE_SECONDS = 2
+    local restore = lease(LONG_LEASE_SECONDS)
+    local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+    advance(HALF_LEASE_SECONDS)
+    testing.eq(turn.renew(backend, first), true)
+    advance(HALF_LEASE_SECONDS)
+    restore()
+    testing.eq(turn.take(backend, "beta", "bbbb2222"), nil)
+    testing.eq(assert(turn.holder(backend)).name, "alpha")
+end)
+
+testing.test("a turn on an old board without the card creates it once", function()
+    -- Start from a board with no turn card
+    local backend = backend_at(board_home())
+    testing.eq(#assert(backend:cards()), 0)
+
+    -- Let two askers come, one takes the turn
+    local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+    testing.eq(turn.take(backend, "beta", "bbbb2222"), nil)
+
+    -- Count the open turn cards and name the holder
+    local open = 0
+    for _, card in ipairs(assert(backend:cards())) do
+        open = open + (card.name == turn.NAME and not card.done and 1 or 0)
+    end
+    testing.eq(open, 1)
+    testing.eq(assert(turn.holder(backend)).name, "alpha")
+    testing.eq(first.holder, "alpha")
+end)
+
+testing.test("two turn cards made by a race leave one turn on the lowest id", function()
+    local backend = backend_at(board_home())
+    local first = assert(backend:add(turn.NAME, backend.stages.icebox, {}))
+    local second = assert(backend:add(turn.NAME, backend.stages.icebox, {}))
+    local lowest = first.id < second.id and first.id or second.id
+    local held = assert(turn.take(backend, "alpha", "aaaa1111"))
+    testing.eq(held.card, lowest)
+    testing.eq(turn.take(backend, "beta", "bbbb2222"), nil)
+end)
+
+testing.test("holder and claimed read the lowest turn card, not the cached one", function()
+    local backend = backend_at(board_home())
+    local taken = assert(turn.take(backend, "alpha", "aaaa1111", { hold = true, seconds = 600 }))
+    local lower
+    repeat
+        lower = assert(backend:add(turn.NAME, backend.stages.icebox, {}))
+    until lower.id < taken.card
+    testing.eq(turn.holder(backend), nil)
+    testing.eq(turn.claimed(backend, "alpha", "aaaa1111"), nil)
+end)
+
+testing.test("waiting cards get the turn in the order they asked", function()
+    local backend = backend_at(board_home())
+    local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+    assert(turn.ask(backend, { name = "beta", card = "bbbb2222", seconds = 60 }))
+    assert(turn.ask(backend, { name = "gamma", card = "cccc3333", seconds = 60 }))
+    turn.release(backend, first)
+    local late, message = turn.take(backend, "gamma", "cccc3333")
+    testing.eq(late, nil)
+    testing.ok(message:find("next for beta", 1, true), message)
+    local fresh = turn.take(backend, "delta", "dddd4444")
+    testing.eq(fresh, nil)
+    local second = assert(turn.take(backend, "beta", "bbbb2222"))
+    turn.release(backend, second)
+    testing.eq(assert(turn.take(backend, "gamma", "cccc3333")).holder, "gamma")
+end)
+
+testing.test("a card that leaves the line passes the turn to the next one", function()
+    local backend = backend_at(board_home())
+    assert(turn.ask(backend, { name = "beta", card = "bbbb2222", seconds = 60 }))
+    assert(turn.ask(backend, { name = "gamma", card = "cccc3333", seconds = 60 }))
+    testing.eq(turn.take(backend, "gamma", "cccc3333"), nil)
+    turn.leave(backend, "beta", "bbbb2222")
+    testing.eq(assert(turn.take(backend, "gamma", "cccc3333")).holder, "gamma")
+end)
+
+testing.test("a waiter that died stops holding the line after its wait", function()
+    local backend = backend_at(board_home())
+    local WAIT_SECONDS = 3
+    local grace = turn.ASK_GRACE_SECONDS
+    turn.ASK_GRACE_SECONDS = 0
+    assert(turn.ask(backend, { name = "beta", card = "bbbb2222", seconds = WAIT_SECONDS }))
+    local early = turn.take(backend, "gamma", "cccc3333")
+    advance(PAST_LEASE_SECONDS)
+    turn.ASK_GRACE_SECONDS = grace
+    testing.eq(early, nil)
+    testing.eq(assert(turn.take(backend, "gamma", "cccc3333")).holder, "gamma")
+end)
+
+testing.test("only the holder's fence releases the turn", function()
+    local backend = backend_at(board_home())
+    local restore = lease(LEASE_SECONDS)
+    local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+    advance(PAST_LEASE_SECONDS)
+    assert(turn.take(backend, "beta", "bbbb2222"))
+    restore()
+    turn.release(backend, first)
+    testing.eq(assert(turn.holder(backend)).name, "beta")
+    local stale = first.fence + 100
+    local released, message =
+        turn.release(backend, { card = first.card, fence = stale, holder = "gamma" })
+    testing.eq(released, nil)
+    testing.eq(
+        message,
+        string.format(
+            "The landing turn could not be released. The claim on %s is not held with fence %d.",
+            first.card,
+            stale
+        )
+    )
+    testing.eq(assert(turn.holder(backend)).name, "beta")
+end)
+
+testing.test("a note cannot forge a turn record", function()
+    testing.ok(
+        require("dev.board").reserved("dev-turn: ask holder=x card=y until=2099-01-01T00:00:00Z")
+    )
+end)
+
+testing.test(
+    "a hold is found from the board, renews with its lease and ends when it is given back",
+    function()
+        local backend = backend_at(board_home())
+        testing.eq(turn.held(backend, "alpha", "aaaa1111"), nil)
+        local first =
+            assert(turn.take(backend, "alpha", "aaaa1111", { hold = true, seconds = 600 }))
+        testing.eq(first.lease, 600)
+        local found = assert(turn.held(backend, "alpha", "aaaa1111"))
+        testing.eq(found.fence, first.fence)
+        testing.eq(found.lease, 600)
+        testing.eq(turn.renew(backend, found), true)
+        testing.eq(turn.held(backend, "alpha", "bbbb2222"), nil)
+        turn.release(backend, found)
+        testing.eq(turn.held(backend, "alpha", "aaaa1111"), nil)
+        testing.eq(turn.holder(backend), nil)
+    end
+)
+
+testing.test(
+    "a hold that ran out is reported as lost, and a landing's own turn is no hold",
+    function()
+        local backend = backend_at(board_home())
+        local restore = lease(LEASE_SECONDS)
+        assert(turn.take(backend, "alpha", "aaaa1111", { hold = true, seconds = LEASE_SECONDS }))
+        advance(PAST_LEASE_SECONDS)
+        local found, message = turn.held(backend, "alpha", "aaaa1111")
+        restore()
+        testing.eq(found, nil)
+        testing.ok(message:find("ran out or was taken", 1, true), message)
+        local plain = assert(turn.take(backend, "beta", "bbbb2222"))
+        testing.eq(plain.hold, false)
+        testing.eq(turn.held(backend, "beta", "bbbb2222"), nil)
+    end
+)
+
+testing.test("a stale hold record for another claim is treated as lost", function()
+    -- Take a hold, let it lapse, then take the turn again under the same name for another card
+    local backend = backend_at(board_home())
+    local restore = lease(LEASE_SECONDS)
+    assert(turn.take(backend, "alpha", "aaaa1111", { hold = true, seconds = LEASE_SECONDS }))
+    advance(PAST_LEASE_SECONDS)
+    local second = assert(turn.take(backend, "alpha", "bbbb2222"))
+    restore()
+    testing.eq(second.holder, "alpha")
+
+    -- Check that the old record names an older fence than the live claim
+    local found, message, lost = turn.held(backend, "alpha", "aaaa1111")
+    testing.eq(found, nil)
+    testing.ok(message:find("ran out or was taken", 1, true), message)
+    testing.ok(message:find("the claim fence is", 1, true), message)
+    testing.eq(lost, true)
+end)
+
+testing.test("a hold survives the command that took it and a later process finds it", function()
+    -- Take a hold, then drop the backend and open the same board again
+    local home = board_home()
+    local first = assert(turn.take(backend_at(home), "alpha", "aaaa1111", { hold = true }))
+    local later = backend_at(home)
+
+    -- Find the hold from the new backend and land under it
+    local found = assert(turn.held(later, "alpha", "aaaa1111"))
+    testing.eq(found.fence, first.fence)
+    testing.eq(found.hold, true)
+    testing.eq(turn.renew(later, found), true)
+    testing.eq(turn.release(later, found), true)
+    testing.eq(turn.held(backend_at(home), "alpha", "aaaa1111"), nil)
+end)
+
+testing.test("a lost hold names a missing claim and a claim of another name", function()
+    -- Let the claim of a hold lapse and expect the missing claim named
+    local backend = backend_at(board_home())
+    local restore = lease(LEASE_SECONDS)
+    assert(turn.take(backend, "alpha", "aaaa1111", { hold = true, seconds = LEASE_SECONDS }))
+    advance(PAST_LEASE_SECONDS)
+    local _, message, lost = turn.held(backend, "alpha", "aaaa1111")
+    testing.ok(message:find("The landing turn card has no live claim.", 1, true), message)
+    testing.eq(lost, true)
+
+    -- Let another name take the turn and expect that name in the refusal
+    assert(turn.take(backend, "beta", "bbbb2222"))
+    restore()
+    _, message, lost = turn.held(backend, "alpha", "aaaa1111")
+    testing.ok(message:find("The landing turn card is claimed by beta.", 1, true), message)
+    testing.eq(lost, true)
+end)
+
+testing.test(
+    "a failed lease note after a renewal says so and does not fall through to a take",
+    function()
+        -- Take a hold
+        local backend = backend_at(board_home())
+        local first =
+            assert(turn.take(backend, "alpha", "aaaa1111", { hold = true, seconds = 600 }))
+
+        -- Fail every note from now on
+        backend.note = function()
+            return nil, "the board is down"
+        end
+
+        -- Renew the claim, fail the note and expect a stop
+        local ok, message, capped, kept = turn.extend(backend, first, 1200)
+        testing.eq(ok, nil)
+        testing.eq(capped, nil)
+        testing.eq(kept, true)
+        testing.ok(message:find("renewed but its lease could not be noted", 1, true), message)
+        testing.eq(assert(turn.holder(backend)).name, "alpha")
+    end
+)
+
+testing.test("renewing a hold keeps the lease it was taken with", function()
+    local backend = backend_at(board_home())
+    local restore = lease(1)
+    local HOLD_LEASE_SECONDS = 6
+    local first = assert(
+        turn.take(backend, "alpha", "aaaa1111", { hold = true, seconds = HOLD_LEASE_SECONDS })
+    )
+    advance(HOLD_LEASE_SECONDS - 2)
+    testing.eq(turn.renew(backend, first), true)
+    advance(HOLD_LEASE_SECONDS - 2)
+    local second = turn.take(backend, "beta", "bbbb2222")
+    restore()
+    testing.eq(second, nil)
+    testing.eq(assert(turn.holder(backend)).name, "alpha")
+end)
+
+testing.test("a hold cannot be extended past the most it may be kept", function()
+    local backend = backend_at(board_home())
+    local previous = turn.MAX_HOLD_SECONDS
+    turn.MAX_HOLD_SECONDS = 1
+    local first = assert(turn.take(backend, "alpha", "aaaa1111", { hold = true, seconds = 600 }))
+    advance(PAST_HOLD_SECONDS)
+    local renewed, message, capped = turn.extend(backend, first, 600)
+    local landing, landing_message, landing_capped = turn.renew(backend, first)
+    turn.MAX_HOLD_SECONDS = previous
+    testing.eq(renewed, nil)
+    testing.eq(capped, true)
+    testing.ok(message:find("the most it may be kept", 1, true), message)
+    testing.eq(landing, nil)
+    testing.eq(landing_capped, true)
+    testing.ok(landing_message:find("the most it may be kept", 1, true), landing_message)
+end)
+
+testing.test("extending a hold records the new lease for the next command", function()
+    local backend = backend_at(board_home())
+    local first = assert(turn.take(backend, "alpha", "aaaa1111", { hold = true, seconds = 600 }))
+    advance(PAST_LEASE_SECONDS)
+    testing.eq(turn.extend(backend, first, 1800), true)
+    local found = assert(turn.held(backend, "alpha", "aaaa1111"))
+    testing.eq(found.lease, 1800)
+    testing.eq(found.taken, first.taken)
+    testing.eq(assert(turn.holder(backend)).since, first.taken)
+end)
+
+testing.test(
+    "a waiting poll reads the remembered card twice per call and never lists the cards",
+    function()
+        local backend = backend_at(board_home())
+        assert(turn.take(backend, "alpha", "aaaa1111"))
+        local _, _, first = turn.take(backend, "beta", "bbbb2222")
+        local listed, single = 0, 0
+        local cards, card = backend.cards, backend.card
+        function backend:cards()
+            listed = listed + 1
+            return cards(self)
+        end
+        function backend:card(id)
+            single = single + 1
+            return card(self, id)
+        end
+        for _ = 1, 3 do
+            local taken, message, place = turn.take(backend, "beta", "bbbb2222")
+            testing.eq(taken, nil)
+            testing.ok(message:find("held by alpha", 1, true), message)
+            testing.eq(place, first)
+        end
+        testing.eq(listed, 0)
+        testing.eq(single, 6)
+    end
+)
+
+testing.test(
+    "the poll backs off while the place in line is unchanged and starts over when it moves",
+    function()
+        local poll = turn.poller({
+            random = function()
+                return 0
+            end,
+        })
+        local slept = {}
+        for _ = 1, 8 do
+            slept[#slept + 1] = poll:pace("2:alpha")
+        end
+        testing.eq(slept[1], turn.POLL_SECONDS)
+        testing.eq(slept[2], turn.POLL_SECONDS * turn.POLL_BACKOFF)
+        testing.ok(slept[3] > slept[2], "the third sleep did not grow")
+        testing.eq(slept[8], turn.POLL_MAX_SECONDS)
+        testing.eq(poll:pace("1:alpha"), turn.POLL_SECONDS)
+        testing.eq(poll:pace("1:alpha"), turn.POLL_SECONDS * turn.POLL_BACKOFF)
+    end
+)
+
+testing.test("jitter only shortens a sleep and never below its share", function()
+    local MIN_JITTERED_SECONDS = 4
+    local poll = turn.poller({
+        random = function()
+            return 0.999
+        end,
+    })
+    local seconds = poll:pace("1:alpha")
+    testing.ok(seconds < turn.POLL_SECONDS, seconds)
+    testing.ok(seconds >= MIN_JITTERED_SECONDS, seconds)
+end)
+
+testing.test(
+    "a lookup resolves a lower-id duplicate turn card created after the first read",
+    function()
+        local LOWER_ID = "00000000-0000-4000-8000-000000000000"
+        local backend = backend_at(board_home())
+        assert(turn.take(backend, "alpha", "aaaa1111"))
+        local cards, comments = backend.cards, backend.comments
+        function backend:cards()
+            local listed, message = cards(self)
+            if not listed then
+                return nil, message
+            end
+            listed[#listed + 1] = { id = LOWER_ID, name = turn.NAME, claimant = "zed" }
+            return listed
+        end
+        function backend:comments(id)
+            if id == LOWER_ID then
+                return {}
+            end
+            return comments(self, id)
+        end
+        local holder = turn.holder(backend)
+        backend.cards, backend.comments = cards, comments
+        testing.eq(holder.name, "zed")
+    end
+)
+
+testing.test("a poll finds a new turn card once the cached one is done", function()
+    local backend = backend_at(board_home())
+    local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+    turn.release(backend, first)
+    assert(backend:move(first.card, board.DEFAULT_NAMES.done))
+    local second = assert(turn.take(backend, "beta", "bbbb2222"))
+    testing.ok(second.card ~= first.card, "the done turn card was reused")
+end)
+
+testing.test("a claim lost after the turn card was read still names the holder", function()
+    local backend = backend_at(board_home())
+    assert(turn.take(backend, "alpha", "aaaa1111"))
+    local card = backend.card
+    local reads = 0
+    function backend:card(id)
+        reads = reads + 1
+        local read, message = card(self, id)
+        if read and reads == 1 then
+            read.claimant = nil
+        end
+        return read, message
+    end
+    local taken, message = turn.take(backend, "beta", "bbbb2222")
+    backend.card = card
+    testing.eq(taken, nil)
+    testing.ok(message:find("held by alpha", 1, true), message)
+end)
+
+testing.test("a failed holder note with no reason ends its sentence and adds nothing", function()
+    -- Fail every note without giving a reason
+    local backend = backend_at(board_home())
+    backend.note = function()
+        return nil, nil
+    end
+
+    -- Take the turn and expect the bare sentence
+    local taken, message = turn.take(backend, "alpha", "aaaa1111")
+    testing.eq(taken, nil)
+    testing.eq(message, "The landing turn was taken but could not be noted.")
+end)
+
+testing.test(
+    "a backend reason keeps a leading card id as written and capitalizes any other",
+    function()
+        -- Fail every note with a reason that starts with a card id
+        local backend = backend_at(board_home())
+        backend.note = function()
+            return nil, "6df0e018 is not writable"
+        end
+
+        -- Take the turn and expect the id untouched
+        local _, message = turn.take(backend, "alpha", "aaaa1111")
+        testing.eq(
+            message,
+            "The landing turn was taken but could not be noted. 6df0e018 is not writable."
+        )
+
+        -- Fail with a plain lowercase reason and expect a capital
+        backend.note = function()
+            return nil, "the board is down"
+        end
+        _, message = turn.take(backend, "alpha", "aaaa1111")
+        testing.eq(message, "The landing turn was taken but could not be noted. The board is down.")
+    end
+)
+
+testing.test(
+    "the turn card lookup failures and a take with no holder are full sentences",
+    function()
+        -- Fail the card listing and expect the read sentence
+        local backend = backend_at(board_home())
+        local cards = backend.cards
+        backend.cards = function()
+            return nil, "the board is down"
+        end
+        local _, message = turn.take(backend, "alpha", "aaaa1111")
+        testing.eq(message, "The landing turn card could not be read. The board is down.")
+
+        -- Fail adding the turn card and expect the add sentence
+        backend.cards = cards
+        backend.add = function()
+            return nil, "the board is full"
+        end
+        _, message = turn.take(backend, "alpha", "aaaa1111")
+        testing.eq(message, "The landing turn card could not be added. The board is full.")
+
+        -- Fail the claim with no holder to name and expect the take sentence
+        backend = backend_at(board_home())
+        backend.claim = function()
+            return nil, "the claim failed"
+        end
+        _, message = turn.take(backend, "alpha", "aaaa1111")
+        testing.eq(message, "The landing turn could not be taken. The claim failed.")
+    end
+)
+
+testing.test("held, claimed and release failures are full sentences", function()
+    -- Hold the turn so the card and its notes exist
+    local backend = backend_at(board_home())
+    local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+    local cards, card = backend.cards, backend.card
+    local comments = backend.comments
+
+    -- Fail the card reads and expect the read sentence from both
+    backend.cards = function()
+        return nil, "the board is down"
+    end
+    backend.card = backend.cards
+    local _, message = turn.held(backend, "alpha", "aaaa1111")
+    testing.eq(message, "The landing turn card could not be read. The board is down.")
+    _, message = turn.claimed(backend, "alpha", "aaaa1111")
+    testing.eq(message, "The landing turn card could not be read. The board is down.")
+
+    -- Fail the notes listing and expect the notes sentence from both
+    backend.cards, backend.card = cards, card
+    backend.comments = function()
+        return nil, "the notes are gone"
+    end
+    _, message = turn.held(backend, "alpha", "aaaa1111")
+    testing.eq(message, "The notes of the landing turn card could not be read. The notes are gone.")
+    _, message = turn.claimed(backend, "alpha", "aaaa1111")
+    testing.eq(message, "The notes of the landing turn card could not be read. The notes are gone.")
+
+    -- Fail the release and expect the release sentence
+    backend.comments = comments
+    backend.release = function()
+        return nil, "the claim is stuck"
+    end
+    _, message = turn.release(backend, first)
+    testing.eq(message, "The landing turn could not be released. The claim is stuck.")
+end)
+
+local function fill(backend, id)
+    local notes = assert(backend:comments(id))
+    for _ = #notes + 1, turn.MAX_NOTES do
+        assert(backend:note(id, "filler"))
+    end
+end
+
+local function open_turn_card(backend)
+    local cards = assert(backend:cards())
+    for _, card in ipairs(cards) do
+        if card.name == turn.NAME and not card.done then
+            return card
+        end
+    end
+end
+
+local function count_lists(backend)
+    local lists = { n = 0 }
+    local listed = backend.cards
+    backend.cards = function(self, ...)
+        lists.n = lists.n + 1
+        return listed(self, ...)
+    end
+    return lists
+end
+
+testing.test("turnpoll: a second take on one backend reads no board list", function()
+    local backend = backend_at(board_home())
+    assert(turn.take(backend, "alpha", "aaaa1111"))
+    local lists = count_lists(backend)
+    testing.eq(turn.take(backend, "beta", "bbbb2222"), nil)
+    testing.eq(turn.take(backend, "beta", "bbbb2222"), nil)
+    testing.eq(lists.n, 0)
+end)
+
+testing.test("turnpoll: held right after a take reads no board list", function()
+    local backend = backend_at(board_home())
+    assert(turn.take(backend, "alpha", "aaaa1111"))
+    testing.eq(turn.take(backend, "beta", "bbbb2222"), nil)
+    local lists = count_lists(backend)
+    testing.eq(turn.held(backend, "beta", "bbbb2222"), nil)
+    testing.eq(lists.n, 0)
+end)
+
+testing.test("turnpoll: a rotated turn card is found again by the next take", function()
+    local backend = backend_at(board_home())
+    local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+    turn.release(backend, first)
+    fill(backend, first.card)
+    local second = assert(turn.take(backend, "beta", "bbbb2222"))
+    testing.ok(second.card ~= first.card, "the full card was reused")
+    local lists = count_lists(backend)
+    testing.eq(turn.take(backend, "gamma", "cccc3333"), nil)
+    testing.eq(lists.n, 0)
+    testing.eq(turn.holder(backend).name, "beta")
+    turn.release(backend, second)
+    testing.eq(assert(turn.take(backend, "gamma", "cccc3333")).card, second.card)
+end)
+
+testing.test("a full landing turn card rotates to a fresh one", function()
+    local backend = backend_at(board_home())
+    local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+    turn.release(backend, first)
+    fill(backend, first.card)
+    local second = assert(turn.take(backend, "beta", "bbbb2222"))
+    testing.ok(second.card ~= first.card, "the full card was reused")
+    testing.eq(open_turn_card(backend).id, second.card)
+    testing.eq(assert(backend:card(first.card)).done, true)
+end)
+
+testing.test("a held landing turn card is not rotated", function()
+    local backend = backend_at(board_home())
+    local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+    fill(backend, first.card)
+    testing.eq(turn.take(backend, "beta", "bbbb2222"), nil)
+    assert(turn.ask(backend, { name = "beta", card = "bbbb2222", seconds = 60 }))
+    testing.eq(open_turn_card(backend).id, first.card)
+    testing.eq(turn.holder(backend).name, "alpha")
+    turn.release(backend, first)
+    local second = assert(turn.take(backend, "beta", "bbbb2222"))
+    testing.ok(second.card ~= first.card, "the freed full card was reused")
+end)
+
+testing.test("rotation keeps the line of askers", function()
+    local backend = backend_at(board_home())
+    local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+    assert(turn.ask(backend, { name = "beta", card = "bbbb2222", seconds = 60 }))
+    assert(turn.ask(backend, { name = "gamma", card = "cccc3333", seconds = 60 }))
+    assert(turn.ask(backend, { name = "late", card = "dddd4444", seconds = 1 }))
+    turn.release(backend, first)
+    fill(backend, first.card)
+    advance(turn.ASK_GRACE_SECONDS + 2)
+    testing.eq(turn.take(backend, "gamma", "cccc3333"), nil)
+    local fresh = open_turn_card(backend)
+    testing.ok(fresh.id ~= first.card, "the full card was kept")
+    local bodies = {}
+    for _, comment in ipairs(assert(backend:comments(fresh.id))) do
+        bodies[#bodies + 1] = comment.body
+    end
+    testing.eq(#bodies, 2)
+    testing.ok(bodies[1]:find("holder=beta card=bbbb2222", 1, true), bodies[1])
+    testing.ok(bodies[2]:find("holder=gamma card=cccc3333", 1, true), bodies[2])
+    local second = assert(turn.take(backend, "beta", "bbbb2222"))
+    testing.eq(second.card, fresh.id)
+    turn.release(backend, second)
+    testing.eq(assert(turn.take(backend, "gamma", "cccc3333")).holder, "gamma")
+end)
+
+testing.test("a card past the byte limit rotates", function()
+    local backend = backend_at(board_home())
+    local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+    turn.release(backend, first)
+    fill(backend, first.card)
+    backend.move = function()
+        return nil, "limit reached: at most 1048576 bytes in one task", true
+    end
+    local binned = false
+    backend.bin = function()
+        binned = true
+        return true
+    end
+    local refused, message = turn.take(backend, "beta", "bbbb2222")
+    testing.eq(refused, nil)
+    testing.ok(message:find(first.card:sub(1, 8), 1, true), message)
+    testing.ok(message:find("Rename it to have dev make a fresh one.", 1, true), message)
+    testing.eq(binned, false)
+    testing.eq(open_turn_card(backend).id, first.card)
+end)
+
+local function as_agent(name, run)
+    local previous = dev_os.getenv("DEV_AGENT") or ""
+    dev_os.setenv("DEV_AGENT", name)
+    local ok, err = pcall(run)
+    dev_os.setenv("DEV_AGENT", previous)
+    assert(ok, err)
+end
+
+local function landing_card(backend)
+    local id = assert(backend:add("work", board.DEFAULT_NAMES.review, {})).id
+    return id, id:sub(1, board.MIN_PREFIX)
+end
+
+testing.test("a waiter whose card moves to Done leaves the queue within one retry", function()
+    local backend = backend_at(board_home())
+    local id, short = landing_card(backend)
+    local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+    local naps = 0
+    local result
+    local nap = dev_os.nap
+    dev_os.nap = function(seconds)
+        naps = naps + 1
+        assert(naps == 1, "the waiter kept polling after its card was done")
+        advance(seconds)
+        assert(backend:move(id, board.DEFAULT_NAMES.done))
+    end
+    local ok, err = pcall(as_agent, "beta", function()
+        result = cmd_board.run("turn", { short, "--wait", "600" }, backend)
+    end)
+    dev_os.nap = nap
+    assert(ok, err)
+    testing.eq(naps, 1)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find(short .. " is done", 1, true), result.message)
+    turn.release(backend, first)
+    testing.ok(turn.take(backend, "gamma", "cccc3333"), "the done card's ask kept the line")
+end)
+
+testing.test("a waiter whose card is done is not handed a turn that frees meanwhile", function()
+    local backend = backend_at(board_home())
+    local id, short = landing_card(backend)
+    local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+    local nap = dev_os.nap
+    dev_os.nap = function(seconds)
+        advance(seconds)
+        turn.release(backend, first)
+        assert(backend:move(id, board.DEFAULT_NAMES.done))
+    end
+    local result
+    local ok, err = pcall(as_agent, "beta", function()
+        result = cmd_board.run("turn", { short, "--wait", "600" }, backend)
+    end)
+    dev_os.nap = nap
+    assert(ok, err)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find(short .. " is done", 1, true), result.message)
+    testing.eq(turn.holder(backend), nil)
+end)
+
+testing.test("turn stops on a failed renewal that leaves the hold in place", function()
+    -- Hold the turn, then fail the next claim once
+    local backend = backend_at(board_home())
+    local _, short = landing_card(backend)
+    assert(turn.take(backend, "alpha", short, { hold = true, seconds = 600 }))
+    local claim = backend.claim
+    local claims = 0
+    backend.claim = function(self, ...)
+        claims = claims + 1
+        if claims == 1 then
+            return nil, "the board is down"
+        end
+        return claim(self, ...)
+    end
+
+    -- Run the turn command and expect the renewal's message with no second take
+    local result
+    as_agent("alpha", function()
+        result = cmd_board.run("turn", { short, "--wait", "600" }, backend)
+    end)
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("The board is down.", 1, true), result.message)
+    testing.eq(claims, 1)
+    testing.eq(assert(turn.holder(backend)).name, "alpha")
+    testing.ok(turn.held(backend, "alpha", short), "the hold stayed the caller's")
+end)
+
+testing.test("a failed renewal of a hold that is gone takes the turn again", function()
+    -- Hold the turn, then let the next claim free it and fail
+    local backend = backend_at(board_home())
+    local _, short = landing_card(backend)
+    local first = assert(turn.take(backend, "alpha", short, { hold = true, seconds = 600 }))
+    local claim = backend.claim
+    local claims = 0
+    backend.claim = function(self, ...)
+        claims = claims + 1
+        if claims == 1 then
+            assert(backend:release(first.card, first.fence))
+            return nil, "the claim is gone"
+        end
+        return claim(self, ...)
+    end
+
+    -- Run the turn command and expect a fresh hold with a new fence
+    local result
+    as_agent("alpha", function()
+        result = cmd_board.run("turn", { short, "--wait", "60" }, backend)
+    end)
+    testing.eq(result.code, nil)
+    testing.ok(result.output:find("Holding the landing turn for", 1, true) == 1, result.output)
+    testing.eq(assert(turn.holder(backend)).name, "alpha")
+    local second = assert(turn.held(backend, "alpha", short))
+    testing.ok(second.fence ~= first.fence, "the new hold kept the first fence")
+end)
+
+testing.test("move and turn refuse a bad wait with the same message", function()
+    local backend = backend_at(board_home())
+    local _, short = landing_card(backend)
+    local expected = "The --wait flag needs a whole number of seconds"
+    for _, bad in ipairs({ "abc", "86401" }) do
+        local moved =
+            cmd_board.run("move", { short, board.DEFAULT_NAMES.done, "--wait", bad }, backend)
+        testing.eq(moved.code, 2)
+        testing.ok(moved.message:find(expected, 1, true), moved.message)
+        local turned
+        as_agent("beta", function()
+            turned = cmd_board.run("turn", { short, "--wait", bad }, backend)
+        end)
+        testing.eq(turned.code, 2)
+        testing.eq(turned.message, moved.message)
+    end
+end)
+
+testing.test("release drops the queued ask of a caller that holds no turn", function()
+    local backend = backend_at(board_home())
+    local _, short = landing_card(backend)
+    local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+    assert(turn.ask(backend, { name = "beta", card = short, seconds = 600 }))
+    local result
+    as_agent("beta", function()
+        result = cmd_board.run("turn", { short, "--release" }, backend)
+    end)
+    testing.eq(result.code, 1)
+    turn.release(backend, first)
+    testing.ok(turn.take(backend, "gamma", "cccc3333"), "the released ask kept the line")
+end)
+
+testing.test("a failed claim release keeps the hold found until a retry gives it back", function()
+    -- Hold the turn and find its card
+    local backend = backend_at(board_home())
+    assert(turn.take(backend, "alpha", "aaaa1111", { hold = true, seconds = 600 }))
+    local found = assert(turn.held(backend, "alpha", "aaaa1111"))
+
+    -- Count the left notes the holder wrote
+    local function lefts()
+        local count = 0
+        for _, comment in ipairs(assert(backend:comments(found.card))) do
+            if comment.body:find("left holder=alpha", 1, true) then
+                count = count + 1
+            end
+        end
+        return count
+    end
+
+    -- Fail the claim release and expect the hold still found with no left note
+    local release = backend.release
+    backend.release = function()
+        return nil, "the claim is stuck"
+    end
+    local ok, message = turn.release(backend, found)
+    testing.eq(ok, nil)
+    testing.eq(message, "The landing turn could not be released. The claim is stuck.")
+    testing.eq(lefts(), 0)
+    local again = assert(turn.held(backend, "alpha", "aaaa1111"))
+    testing.eq(again.fence, found.fence)
+
+    -- Let the release pass and expect the retry to give the hold back
+    backend.release = release
+    testing.eq(turn.release(backend, again), true)
+    testing.eq(turn.held(backend, "alpha", "aaaa1111"), nil)
+    testing.eq(lefts(), 1)
+end)
+
+testing.test("a leave keeps a live hold", function()
+    local backend = backend_at(board_home())
+    local first = assert(turn.take(backend, "alpha", "aaaa1111", { hold = true, seconds = 600 }))
+    turn.leave(backend, "alpha", "aaaa1111")
+    local found = assert(turn.held(backend, "alpha", "aaaa1111"))
+    testing.eq(found.fence, first.fence)
+    turn.release(backend, found)
+    testing.eq(turn.held(backend, "alpha", "aaaa1111"), nil)
+end)
+
+local function reclaimed(backend, name, short)
+    -- Take a hold on a short lease and let the lease lapse
+    local restore = lease(LEASE_SECONDS)
+    local first = assert(turn.take(backend, name, short, { hold = true, seconds = LEASE_SECONDS }))
+    advance(PAST_LEASE_SECONDS)
+    restore()
+
+    -- Claim the card again under the same name and drop the hold note
+    local card = assert(open_turn_card(backend))
+    local fence = assert(backend:claim(card.id, name, { ttl = TURN_HOLD_SECONDS, lease = true }))
+    turn.leave(backend, name, short)
+    return card, fence, first
+end
+
+local function over_cap_claim(backend, short)
+    -- Reclaim the card and keep its claim alive past the hold cap
+    local card, fence = reclaimed(backend, "alpha", short)
+    local opts = { ttl = OVER_CAP_TTL_SECONDS, fence = fence, lease = true }
+    assert(backend:claim(card.id, "alpha", opts))
+    return card
+end
+
+testing.test("a holder whose live claim outran its hold note takes the turn again", function()
+    -- Open a board and find its landing card
+    local backend = backend_at(board_home())
+    local _, short = landing_card(backend)
+
+    -- Reclaim the card and queue another asker
+    local card, fence, first = reclaimed(backend, "alpha", short)
+    assert(turn.ask(backend, { name = "beta", card = "bbbb2222", seconds = TURN_HOLD_SECONDS }))
+
+    -- Find the live claim for its own card only, with no hold note
+    testing.eq(turn.held(backend, "alpha", short), nil)
+    testing.eq(assert(turn.claimed(backend, "alpha", short)).fence, fence)
+    testing.eq(turn.claimed(backend, "beta", "bbbb2222"), nil)
+    testing.eq(turn.claimed(backend, "alpha", "bbbb2222"), nil)
+
+    -- Take the turn again under the live fence ahead of the queue
+    local again = assert(turn.take(backend, "alpha", short))
+    testing.eq(again.card, card.id)
+    testing.eq(again.fence, fence)
+    testing.eq(again.hold, true)
+    testing.eq(again.lease, first.lease)
+    testing.eq(again.taken, first.taken)
+end)
+
+testing.test(
+    "a holder whose live claim outran its hold note keeps the lease it asks for",
+    function()
+        -- Open a board and reclaim its landing card
+        local backend = backend_at(board_home())
+        local _, short = landing_card(backend)
+        reclaimed(backend, "alpha", short)
+
+        -- Take it again with a hold and expect the lease it asked for
+        local opts = { hold = true, seconds = TURN_HOLD_SECONDS }
+        local again = assert(turn.take(backend, "alpha", short, opts))
+        testing.eq(again.lease, TURN_HOLD_SECONDS)
+    end
+)
+
+testing.test(
+    "a holder whose live claim outran its hold note is refused past the hold cap",
+    function()
+        -- Open a board and find its landing card
+        local backend = backend_at(board_home())
+        local _, short = landing_card(backend)
+
+        -- Reclaim the card and keep its claim alive past the hold cap
+        over_cap_claim(backend, short)
+        advance(turn.MAX_HOLD_SECONDS + 1)
+
+        -- Take it again and expect a refusal that says it was given back
+        local take_opts = { hold = true, seconds = TURN_HOLD_SECONDS }
+        local again, message = turn.take(backend, "alpha", short, take_opts)
+        testing.eq(again, nil)
+        testing.ok(message:find("the most it may be kept", 1, true), message)
+        testing.ok(message:find("given back", 1, true), message)
+    end
+)
+
+testing.test(
+    "a refusal past the hold cap ends with the release sentence when giving back fails",
+    function()
+        -- Open a board and find its landing card
+        local backend = backend_at(board_home())
+        local _, short = landing_card(backend)
+
+        -- Reclaim the card past the hold cap and fail the release
+        over_cap_claim(backend, short)
+        advance(turn.MAX_HOLD_SECONDS + 1)
+        backend.release = function()
+            return nil, "the claim is stuck"
+        end
+
+        -- Take it again and expect the release sentence as the ending
+        local take_opts = { hold = true, seconds = TURN_HOLD_SECONDS }
+        local _, message = turn.take(backend, "alpha", short, take_opts)
+        local taken = message:match("held since (%S+),")
+        testing.eq(
+            message,
+            string.format(
+                "The landing turn has been held since %s, the most it may be kept "
+                    .. "(%d seconds). The landing turn could not be released. The claim is stuck.",
+                taken,
+                turn.MAX_HOLD_SECONDS
+            )
+        )
+    end
+)
+
+testing.test("a capped own-claim take frees the turn and notes it left", function()
+    -- Open a board and find its landing card
+    local backend = backend_at(board_home())
+    local _, short = landing_card(backend)
+
+    -- Reclaim the card and keep its claim alive past the hold cap
+    local card = over_cap_claim(backend, short)
+
+    -- Count the left notes the holder wrote
+    local function lefts()
+        local count = 0
+        for _, comment in ipairs(assert(backend:comments(card.id))) do
+            if comment.body == "dev-turn: left holder=alpha card=" .. short then
+                count = count + 1
+            end
+        end
+        return count
+    end
+    local before = lefts()
+
+    -- Take it again past the cap and expect the turn freed with one more left note
+    advance(turn.MAX_HOLD_SECONDS + 1)
+    testing.eq(
+        turn.take(backend, "alpha", short, { hold = true, seconds = TURN_HOLD_SECONDS }),
+        nil
+    )
+    testing.eq(turn.holder(backend), nil)
+    testing.eq(lefts(), before + 1)
+    testing.eq(assert(turn.take(backend, "beta", "bbbb2222")).holder, "beta")
+end)
+
+testing.test("a release leaves the plain claim of a landing alone", function()
+    -- Open a board and take the plain claim of its landing card
+    local backend = backend_at(board_home())
+    local _, short = landing_card(backend)
+    assert(turn.take(backend, "alpha", short))
+
+    -- Release as the holder and expect the claim to stay
+    local result
+    as_agent("alpha", function()
+        result = cmd_board.run("turn", { short, "--release" }, backend)
+    end)
+    testing.eq(result.code, 1)
+    testing.eq(assert(turn.holder(backend)).name, "alpha")
+end)
+
+testing.test("a holder whose live claim outran its hold note releases the claim", function()
+    -- Open a board and reclaim its landing card
+    local backend = backend_at(board_home())
+    local _, short = landing_card(backend)
+    reclaimed(backend, "alpha", short)
+
+    -- Release it as its holder and expect the claim freed
+    local result
+    as_agent("alpha", function()
+        result = cmd_board.run("turn", { short, "--release" }, backend)
+    end)
+    testing.eq(result.code, nil)
+    testing.ok(result.output:find("Gave back the landing turn", 1, true), result.output)
+    testing.eq(turn.holder(backend), nil)
+    testing.eq(turn.claimed(backend, "alpha", short), nil)
+end)
+
+testing.test("a failed release through the turn command prints one sentence", function()
+    -- Open a board, reclaim its landing card and fail the release
+    local backend = backend_at(board_home())
+    local _, short = landing_card(backend)
+    reclaimed(backend, "alpha", short)
+    backend.release = function()
+        return nil, "the claim is stuck"
+    end
+
+    -- Release as the holder and expect the release sentence alone
+    local result
+    as_agent("alpha", function()
+        result = cmd_board.run("turn", { short, "--release" }, backend)
+    end)
+    testing.eq(result.code, 1)
+    testing.eq(result.message, "The landing turn could not be released. The claim is stuck.")
+end)
+
+testing.test("a turn hold over 3600 is refused", function()
+    local backend = backend_at(board_home())
+    local _, short = landing_card(backend)
+    testing.eq(turn.HOLD_SECONDS, 1800)
+    testing.eq(turn.MAX_HOLD_SECONDS, 3600)
+    local result
+    as_agent("alpha", function()
+        result = cmd_board.run("turn", { short, "--hold", "3601" }, backend)
+    end)
+    testing.eq(result.code, 2)
+    testing.ok(result.message:find("up to 3600", 1, true), result.message)
+    testing.eq(turn.holder(backend), nil)
+end)
+
+testing.test("turn covers rebase and land only", function()
+    local backend = backend_at(board_home())
+    testing.eq(turn.holder(backend), nil)
+    local landing = assert(turn.take(backend, "alpha", "aaaa1111"))
+    testing.eq(landing.hold, false)
+    assert(turn.release(backend, landing))
+    local next_landing = assert(turn.take(backend, "beta", "bbbb2222"))
+    testing.eq(next_landing.hold, false)
+    assert(turn.release(backend, next_landing))
+    testing.eq(turn.holder(backend), nil)
+end)
+
+testing.test("turn take grabs the owner with the turn lease", function()
+    local backend = backend_at(board_home())
+    local restore = lease(LEASE_SECONDS)
+    local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+    testing.eq(first.lease, LEASE_SECONDS)
+    advance(PAST_LEASE_SECONDS)
+    restore()
+    testing.eq(turn.holder(backend), nil)
+    local RENEWED_AT_SECONDS = 500
+    local held =
+        assert(turn.take(backend, "beta", "bbbb2222", { hold = true, seconds = TURN_HOLD_SECONDS }))
+    testing.eq(held.lease, TURN_HOLD_SECONDS)
+    advance(RENEWED_AT_SECONDS)
+    testing.eq(turn.renew(backend, held), true)
+    advance(TURN_HOLD_SECONDS - RENEWED_AT_SECONDS)
+    testing.eq(turn.take(backend, "gamma", "cccc3333"), nil)
+    testing.eq(assert(turn.holder(backend)).name, "beta")
+end)
+
+testing.test("turn release ends the owner lease", function()
+    local backend = backend_at(board_home())
+    local first = assert(
+        turn.take(backend, "alpha", "aaaa1111", { hold = true, seconds = TURN_HOLD_SECONDS })
+    )
+    testing.eq(first.lease, TURN_HOLD_SECONDS)
+    testing.eq(turn.renew(backend, first), true)
+    testing.eq(turn.release(backend, first), true)
+    testing.eq(turn.holder(backend), nil)
+    local second = assert(turn.take(backend, "beta", "bbbb2222"))
+    testing.eq(second.holder, "beta")
+    testing.eq(turn.release(backend, first), nil)
+    testing.eq(assert(turn.holder(backend)).name, "beta")
+end)
+
+testing.test("turn names the live owner as its holder", function()
+    local backend = backend_at(board_home())
+    local restore = lease(LEASE_SECONDS)
+    assert(turn.take(backend, "alpha", "aaaa1111"))
+    local refused, message = turn.take(backend, "beta", "bbbb2222")
+    testing.eq(refused, nil)
+    testing.ok(message:find("The landing turn is held by alpha since 20", 1, true), message)
+    testing.eq(assert(turn.holder(backend)).name, "alpha")
+    advance(PAST_LEASE_SECONDS)
+    restore()
+    testing.eq(turn.holder(backend), nil)
+    testing.eq(assert(turn.take(backend, "beta", "bbbb2222")).holder, "beta")
+end)
+
+local function turn_card(fence)
+    return support.pomb_export_task({
+        id = ID_A,
+        name = "landing turn",
+        column_id = ICEBOX_ID,
+        holder = fence and "alpha" or nil,
+        claim_fence = fence,
+    })
+end
+
+local function hold_record(fence)
+    return '[{"id":"c1","body":"dev-turn: holder=alpha card=aaaa1111 '
+        .. "taken=2099-01-01T00:00:00Z fence="
+        .. fence
+        .. ' lease=600 hold=1","kind":"status"}]'
+end
+
+local SERVERS = {}
+
+local function pomb_root()
+    local ID_B = "11111111-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+    local ID_C = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+    local boards = '[{"id":"board-1","name":"dotfiles","archived":false}]'
+    local detail = '{"id":"board-1","name":"dotfiles","swimlanes":[],"columns":['
+        .. '{"id":"'
+        .. ICEBOX_ID
+        .. '","name":"'
+        .. support.COLUMN_NAME.ICEBOX
+        .. '"},'
+        .. '{"id":"col-done","name":"'
+        .. support.COLUMN_NAME.DONE
+        .. '","is_done":true}]}'
+    local card = turn_card()
+    local root = support.sandbox({
+        ["boards.json"] = boards,
+        ["detail.json"] = detail,
+        ["colors.json"] = "[]",
+        ["export.json"] = '{"tasks":[' .. card .. "]}",
+        ["task.json"] = '{"id":"'
+            .. ID_A
+            .. '","name":"landing turn","column_id":"'
+            .. ICEBOX_ID
+            .. '","position":1,"labels":[]}',
+        ["comments.json"] = "[]",
+    }, {})
+    SERVERS[root] = support.pomb_server(root, ID_A, ID_B, ID_C)
+    return root
+end
+
+local function on_pomb(root, run)
+    local names = { "DEV_BOARD_TOKEN" }
+    local previous = {}
+    for _, name in ipairs(names) do
+        previous[name] = dev_os.getenv(name) or ""
+    end
+    support.pomb_sync(root)
+    dev_os.setenv("DEV_BOARD_TOKEN", "pomb_SECRETtoken0123456789")
+    local ok, err = pcall(function()
+        run(assert(pomb.new({
+            url = SERVERS[root].url,
+            token = "pass:secrets/worker/token/pomb",
+            name = "dotfiles",
+        })))
+    end)
+    for _, name in ipairs(names) do
+        dev_os.setenv(name, previous[name])
+    end
+    assert(ok, err)
+end
+
+local function call_to(root, route)
+    for _, entry in ipairs(support.pomb_requests(SERVERS[root])) do
+        if entry.target:sub(-#route) == route then
+            return entry.text:lower()
+        end
+    end
+    return ""
+end
+
+testing.test("a Pomb hold is found by the claim fence and lost when the fence differs", function()
+    -- Give the turn card a live owner with fence 7 and a hold record of fence 7
+    local root = pomb_root()
+    assert(fs.write(root .. "/export.json", '{"tasks":[' .. turn_card(7) .. "]}"))
+
+    -- Accept a record of the same fence as the live hold
+    assert(fs.write(root .. "/comments.json", hold_record(7)))
+    on_pomb(root, function(backend)
+        testing.eq(assert(turn.held(backend, "alpha", "aaaa1111")).fence, 7)
+    end)
+
+    -- Treat a record of an older fence as lost
+    assert(fs.write(root .. "/comments.json", hold_record(6)))
+    on_pomb(root, function(backend)
+        local found, _, lost = turn.held(backend, "alpha", "aaaa1111")
+        testing.eq(found, nil)
+        testing.eq(lost, true)
+    end)
+end)
+
+testing.test("a Pomb turn taken with a hold is found as held from the remembered card", function()
+    local root = pomb_root()
+    on_pomb(root, function(backend)
+        local taken = assert(turn.take(backend, "alpha", "aaaa1111", { hold = true }))
+        assert(
+            fs.write(
+                root .. "/task.json",
+                '{"id":"'
+                    .. ID_A
+                    .. '","name":"landing turn","column_id":"'
+                    .. ICEBOX_ID
+                    .. '","position":1,"labels":[],"owner":{"holder":{"kind":"agent",'
+                    .. '"name":"alpha"},"lease_expires_at":null,"live":true,"fence":'
+                    .. taken.fence
+                    .. "}}"
+            )
+        )
+        assert(fs.write(root .. "/comments.json", hold_record(taken.fence)))
+        support.pomb_sync(root)
+        local found, message = turn.held(backend, "alpha", "aaaa1111")
+        testing.eq(message, nil)
+        testing.eq(assert(found).fence, taken.fence)
+    end)
+end)
+
+testing.test("taking the turn on Pomb grabs the owner with the turn lease", function()
+    local root = pomb_root()
+    on_pomb(root, function(backend)
+        assert(turn.take(backend, "alpha", "aaaa1111"))
+    end)
+    local owner = call_to(root, "/api/tasks/" .. ID_A .. "/owner")
+    testing.ok(owner:find('"ttl_seconds":900', 1, true), owner)
+    testing.ok(owner:find('"name":"alpha"', 1, true), owner)
+end)
+
+local function seat_calls(root)
+    local seats = {}
+    local route = "/api/tasks/" .. ID_A .. "/seats"
+    for _, entry in ipairs(support.pomb_requests(SERVERS[root])) do
+        if entry.target:sub(-#route) == route then
+            seats[#seats + 1] = entry.text
+        end
+    end
+    return seats
+end
+
+testing.test("a fresh claim on a Pomb card adds its code, style and recheck seats", function()
+    local root = pomb_root()
+    on_pomb(root, function(backend)
+        testing.eq(backend:claim(ID_A, "alpha", { ttl = 900 }), 7)
+    end)
+    local seats = seat_calls(root)
+    testing.eq(#seats, 3)
+    for index, name in ipairs({ "code", "style", "recheck" }) do
+        testing.ok(seats[index]:find('"name":"' .. name .. '"', 1, true), seats[index])
+        testing.ok(seats[index]:find('"role":"reviewer"', 1, true), seats[index])
+    end
+end)
+
+testing.test("a renewed claim and a turn lease add no seat", function()
+    local root = pomb_root()
+    on_pomb(root, function(backend)
+        testing.eq(backend:claim(ID_A, "alpha", { ttl = 900, fence = 7 }), 7)
+        testing.eq(backend:claim(ID_A, "alpha", { ttl = 900, lease = true }), 7)
+    end)
+    testing.eq(#seat_calls(root), 0)
+end)
+
+testing.test("a claim still succeeds when Pomb refuses a seat", function()
+    local root = pomb_root()
+    assert(fs.write(root .. "/seat_refused", "1"))
+    on_pomb(root, function(backend)
+        testing.eq(backend:claim(ID_A, "alpha", { ttl = 900 }), 7)
+    end)
+end)
+
+testing.test("a review names the seat the card lacks when Pomb refuses to add it", function()
+    local root = pomb_root()
+    assert(fs.write(root .. "/no_seat", "1"))
+    assert(fs.write(root .. "/seat_refused", "1"))
+    on_pomb(root, function(backend)
+        local ok, _, reason = backend:seat_verdict(ID_A, "style", "r", "approved", "abc")
+        testing.eq(ok, nil)
+        testing.eq(reason, board.SeatReason.NO_SEAT)
+    end)
+end)
+
+local function seat_writes(root)
+    local writes = {}
+    for _, entry in ipairs(support.pomb_requests(SERVERS[root])) do
+        if entry.method == "PUT" and entry.target:sub(-#BOARD_SEATS) == BOARD_SEATS then
+            writes[#writes + 1] = entry.text
+        end
+    end
+    return writes
+end
+
+testing.test(
+    "the default seats are PUT as the union of the stored seats and the wanted ones",
+    function()
+        local root = pomb_root()
+        assert(
+            fs.write(
+                root .. "/board_seats.json",
+                '{"seats":[{"name":"Code","role":"reviewer"},'
+                    .. '{"name":"qa","role":"verifier"}]}'
+            )
+        )
+        on_pomb(root, function(backend)
+            testing.eq(backend:add_seats(WANTED_SEATS), { "style", "recheck" })
+        end)
+        local writes = seat_writes(root)
+        testing.eq(#writes, 1)
+        testing.ok(writes[1]:find('{"name":"Code","role":"reviewer"}', 1, true), writes[1])
+        testing.ok(writes[1]:find('{"name":"qa","role":"verifier"}', 1, true), writes[1])
+        testing.ok(writes[1]:find('{"name":"style","role":"reviewer"}', 1, true), writes[1])
+        testing.ok(writes[1]:find('{"name":"recheck","role":"reviewer"}', 1, true), writes[1])
+        testing.eq(writes[1]:find('"name":"code"', 1, true), nil)
+    end
+)
+
+testing.test("no seats PUT goes out when every wanted seat is held", function()
+    local root = pomb_root()
+    assert(
+        fs.write(
+            root .. "/board_seats.json",
+            '{"seats":[{"name":"code","role":"reviewer"},'
+                .. '{"name":"style","role":"reviewer"},{"name":"recheck","role":"reviewer"}]}'
+        )
+    )
+    on_pomb(root, function(backend)
+        testing.eq(backend:add_seats(WANTED_SEATS), {})
+    end)
+    testing.eq(#seat_writes(root), 0)
+end)
+
+testing.test("a 403 on the seats PUT names seats.manage", function()
+    local root = pomb_root()
+    assert(fs.write(root .. "/board_seats_status", "403"))
+    on_pomb(root, function(backend)
+        local added, message, missing = backend:add_seats(WANTED_SEATS)
+        testing.eq(added, nil)
+        testing.ok(message ~= nil)
+        testing.eq(missing, "seats.manage")
+    end)
+end)
+
+testing.test("any other refusal of the seats PUT names no permission", function()
+    local root = pomb_root()
+    assert(fs.write(root .. "/board_seats_status", "500"))
+    on_pomb(root, function(backend)
+        local added, message, missing = backend:add_seats(WANTED_SEATS)
+        testing.eq(added, nil)
+        testing.ok(message ~= nil)
+        testing.eq(missing, nil)
+    end)
+end)
+
+testing.test("the local board has no default seats to add", function()
+    testing.eq(backend_at(board_home()):add_seats(WANTED_SEATS), {})
+end)
+
+testing.test("renewing the Pomb turn sends its fence as If-Owner-Fence", function()
+    local root = pomb_root()
+    on_pomb(root, function(backend)
+        local held = assert(turn.take(backend, "alpha", "aaaa1111"))
+        testing.eq(turn.renew(backend, held), true)
+    end)
+    local renewed = call_to(root, "/api/tasks/" .. ID_A .. "/owner/renew")
+    testing.ok(renewed:find("if-owner-fence: 7", 1, true), renewed)
+end)
+
+testing.test("ending the Pomb turn releases its owner with the fence", function()
+    local root = pomb_root()
+    on_pomb(root, function(backend)
+        local held = assert(turn.take(backend, "alpha", "aaaa1111"))
+        assert(fs.write(root .. "/owner_name", "alpha"))
+        support.pomb_sync(root)
+        testing.eq(turn.release(backend, held), true)
+    end)
+    local released = call_to(root, "/api/tasks/" .. ID_A .. "/owner/release")
+    testing.ok(released:find("if-owner-fence: 7", 1, true), released)
+    testing.ok(released:find('"name":"alpha"', 1, true), released)
+end)
+
+testing.test("a Pomb turn card is listed from the task list, never the export", function()
+    local root = pomb_root()
+    on_pomb(root, function(backend)
+        testing.eq(turn.holder(backend), nil)
+    end)
+    local calls = SERVERS[root]:requests()
+    testing.ok(calls:find("/tasks?limit=1000", 1, true), calls)
+    testing.eq(calls:find("export-data", 1, true), nil)
+end)
+
+testing.test("a summary row with an owner fence gives the turn card's claim fence", function()
+    local root = pomb_root()
+    assert(
+        fs.write(
+            root .. "/export.json",
+            '{"tasks":[{"id":"'
+                .. ID_A
+                .. '","name":"landing turn","column_id":"'
+                .. ICEBOX_ID
+                .. '","position":1,"labels":[],"owner":{"holder":{"kind":"agent","name":"alpha"},'
+                .. '"lease_expires_at":null,"live":true,"fence":7}}]}'
+        )
+    )
+    assert(fs.write(root .. "/comments.json", hold_record(7)))
+    on_pomb(root, function(backend)
+        local cards = assert(backend:cards({ summary = true }))
+        testing.eq(cards[1].claimant, "alpha")
+        testing.eq(cards[1].claim_fence, 7)
+        testing.eq(assert(turn.held(backend, "alpha", "aaaa1111")).fence, 7)
+    end)
+end)
+
+testing.test("a summary row with child counts gives the card its epic counts", function()
+    local root = pomb_root()
+    assert(
+        fs.write(
+            root .. "/export.json",
+            '{"tasks":[{"id":"'
+                .. ID_A
+                .. '","name":"parent","column_id":"'
+                .. ICEBOX_ID
+                .. '","position":1,"labels":[],"kind":"epic","children_total":2,'
+                .. '"children_done":1}]}'
+        )
+    )
+    on_pomb(root, function(backend)
+        local cards = assert(backend:cards({ summary = true }))
+        testing.eq(cards[1].epic, { done = 1, total = 2 })
+    end)
+end)

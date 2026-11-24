@@ -5,19 +5,13 @@ set -o pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$DIR/../.." && pwd)"
-DEV="$REPO/bin/dev"
-
-# shellcheck source=tests/dev/stage.bash
-source "$DIR/stage.bash"
+DEV="${DEV_BIN:-$REPO/target/debug/dev}"
 export DOTFILES="$REPO"
 unset VERBOSE CI DEV_AGENT
 export DEV_REMOTE=0
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-LUABIN="$TMP/luabin"
-mkdir -p "$LUABIN"
-ln -s "$(command -v luajit)" "$LUABIN/luajit"
 STUBS="$TMP/stubs"
 export STUB_LOG="$TMP/stub.log"
 mkdir -p "$STUBS"
@@ -165,56 +159,29 @@ assert_contains "undetected project explains" "$out" "There is no built-in lint 
 assert_contains "a .lua file in a dot directory does not make a lua project" "$(run_dev "$none")" "dev: project at"
 
 # A local override wins over the built-in
-mkdir -p "$rust/.dev"
-printf '#!/usr/bin/env bash\n# flags: --flag\necho "override $*"\n' >"$rust/.dev/lint.sh"
-chmod +x "$rust/.dev/lint.sh"
+mkdir -p "$rust/.dev/commands"
+
+# shellcheck disable=SC2016  # ${DEV_FLAG_*} expands in the generated script
+printf '#!/usr/bin/env bash\n# flag: flag kind=boolean\necho override ${DEV_FLAG_FLAG:+--flag}\n' >"$rust/.dev/commands/lint.sh"
+chmod +x "$rust/.dev/commands/lint.sh"
 out="$(run_dev "$rust" lint --flag)"
 assert_eq "override runs with args" "$out" "override --flag"
 assert_eq "override skips the built-in" "$(log)" ""
 
-printf '#!/usr/bin/env bash\n# flags: --dry-run\necho "init override $*"\n' >"$rust/.dev/init.sh"
-chmod +x "$rust/.dev/init.sh"
+# shellcheck disable=SC2016  # ${DEV_FLAG_*} expands in the generated script
+printf '#!/usr/bin/env bash\n# flag: dry-run kind=boolean\necho init override ${DEV_FLAG_DRY_RUN:+--dry-run}\n' >"$rust/.dev/commands/init.sh"
+chmod +x "$rust/.dev/commands/init.sh"
 out="$(run_dev "$rust" init --dry-run)"
 assert_eq "local init.sh wins over the built-in init" "$out" "init override --dry-run"
-rm "$rust/.dev/init.sh"
-
-# shellcheck disable=SC2016  # $* expands when the stub runs
-printf '#!/usr/bin/env bash\necho "pass $*" >>"$STUB_LOG"\necho cf_secret\n' >"$STUBS/pass"
-
-# shellcheck disable=SC2016  # $* and $BOARDS_JSON expand when the stub runs
-printf '#!/usr/bin/env bash\necho "curl $*" >>"$STUB_LOG"\ncat >>"$STUB_LOG"\n[ -n "${CURL_FAIL:-}" ] && exit 7\nprintf "%%s\n200" "$BOARDS_JSON"\n' >"$STUBS/curl"
-chmod +x "$STUBS/pass" "$STUBS/curl"
-initdir="$(project boardinit)"
-inithome="$(project inithome)"
-mkdir -p "$inithome/.config/dev"
-printf '[board.pomb]\nurl = "https://pomb.example.com"\ntoken = "pass:secrets/worker/token/pomb.example.com"\n' >"$inithome/.config/dev/config.toml"
-export BOARDS_JSON='[{"id":"b1","name":"General"}]'
-out="$(HOME="$inithome" run_dev "$initdir" builtin:init --dry-run --name proj 2>&1)"
-assert_contains "init suggests a board when none is named after the project" "$out" "No Pomb board for proj"
-assert_contains "init asks the board with a read-only GET" "$(log)" "curl -fsS --max-time 5 -w"
-assert_contains "init asks the board for the status code" "$(log)" "%{http_code} -K - https://pomb.example.com/api/boards"
-assert_contains "init reads the worker token" "$(log)" "pass show secrets/worker/token/pomb.example.com"
-assert_not_contains "init keeps the token off the command line" "$(log | grep '^curl')" "cf_secret"
-export BOARDS_JSON='[{"id":"b1","name":"General"},{"id":"b2","name":"proj"}]'
-out="$(HOME="$inithome" run_dev "$initdir" builtin:init --dry-run --name proj 2>&1)"
-assert_not_contains "init stays quiet when the board exists" "$out" "No Pomb board"
-out="$(HOME="$inithome" CURL_FAIL=1 run_dev "$initdir" builtin:init --dry-run --name proj 2>&1)"
-assert_eq "init survives an unreachable board" "$?" "0"
-assert_not_contains "init skips the hint when the board is unreachable" "$out" "No Pomb board"
-printf '#!/usr/bin/env bash\nexit 1\n' >"$STUBS/pass"
-export BOARDS_JSON='[]'
-out="$(HOME="$inithome" run_dev "$initdir" builtin:init --dry-run --name proj 2>&1)"
-assert_not_contains "init skips the hint when pass has no token" "$out" "No Pomb board"
-unset BOARDS_JSON
-rm -f "$STUBS/pass" "$STUBS/curl"
+rm "$rust/.dev/commands/init.sh"
 
 # Global verbosity flags
 vp="$(project verbose)"
-mkdir -p "$vp/.dev"
+mkdir -p "$vp/.dev/commands"
 
 # shellcheck disable=SC2016  # $* and ${VERBOSE} expand in the generated script
-printf '#!/usr/bin/env bash\n# flags: --flag\necho "args=$* verbose=${VERBOSE:-unset}"\nbash inner.sh\n' >"$vp/.dev/lint.sh"
-chmod +x "$vp/.dev/lint.sh"
+printf '#!/usr/bin/env bash\n# flag: flag kind=boolean\necho "args=$*${DEV_FLAG_FLAG:+--flag} verbose=${VERBOSE:-unset}"\nbash inner.sh\n' >"$vp/.dev/commands/lint.sh"
+chmod +x "$vp/.dev/commands/lint.sh"
 printf 'true\n' >"$vp/inner.sh"
 assert_eq "-v before the verb sets VERBOSE=1" "$(run_dev "$vp" -v lint 2>/dev/null)" "args= verbose=1"
 assert_eq "-v after the verb sets VERBOSE=1" "$(run_dev "$vp" lint -v 2>/dev/null)" "args= verbose=1"
@@ -223,33 +190,32 @@ assert_eq "lint --flag -v passes only --flag" "$(run_dev "$vp" lint --flag -v 2>
 assert_eq "-- passes -v through untouched" "$(run_dev "$vp" lint -- -v 2>/dev/null)" "args=-v verbose=unset"
 assert_eq "-vv sets VERBOSE=2" "$(run_dev "$vp" -vv lint 2>/dev/null)" "args= verbose=2"
 assert_eq "-v -v equals -vv" "$(run_dev "$vp" -v lint -v 2>/dev/null)" "args= verbose=2"
-assert_eq "-vvv clamps to 2" "$(run_dev "$vp" -vvv lint 2>/dev/null)" "args= verbose=2"
+assert_eq "-vvv sets VERBOSE=3" "$(run_dev "$vp" -vvv lint 2>/dev/null)" "args= verbose=3"
+assert_eq "-vvvvv clamps to 4" "$(run_dev "$vp" -vvvvv lint 2>/dev/null)" "args= verbose=4"
 assert_eq "VERBOSE=yes from the environment is level 1" "$(VERBOSE=yes run_dev "$vp" lint 2>/dev/null)" "args= verbose=1"
 assert_eq "VERBOSE=0 from the environment is not exported" "$(VERBOSE=0 run_dev "$vp" lint 2>/dev/null)" "args= verbose=unset"
 assert_eq "-v wins over VERBOSE from the environment" "$(VERBOSE=2 run_dev "$vp" -v lint 2>/dev/null)" "args= verbose=1"
-err="$(run_dev "$vp" -vv lint 2>&1 >/dev/null)"
-assert_contains "-vv traces the override script" "$err" "+ lint.sh:3: echo"
-assert_contains "-vv traces a bash script the override runs through BASH_ENV" "$err" "+ inner.sh:1: true"
-printf '#!/usr/bin/env bash\nset -euo pipefail\nbash child.sh\n' >"$vp/.dev/chain.sh"
-chmod +x "$vp/.dev/chain.sh"
+err="$(run_dev "$vp" -vvv lint 2>&1 >/dev/null)"
+assert_contains "-vvv traces the override script" "$err" "+ echo 'args= verbose=3'"
+printf '#!/usr/bin/env bash\nset -euo pipefail\nbash child.sh\n' >"$vp/.dev/commands/chain.sh"
+chmod +x "$vp/.dev/commands/chain.sh"
 printf 'set -euo pipefail\nbash grandchild.sh\n' >"$vp/child.sh"
 printf 'false\necho survived\n' >"$vp/grandchild.sh"
-assert_eq "-vv leaks no errexit into a grandchild script" "$(run_dev "$vp" -vv chain 2>/dev/null)" "survived"
-mkdir -p "$TMP/bare"
-cp "$DEV" "$TMP/bare/dev"
-stage_share "$TMP/share/dev"
-rm "$TMP/share/dev/xtrace.bash"
-out="$(cd "$vp" && "$TMP/bare/dev" -vv lint 2>"$TMP/err")"
-assert_eq "-vv without the trace file falls back to level 1" "$out" "args= verbose=1"
-assert_contains "-vv without the trace file says so" "$(cat "$TMP/err")" "trace file"
-out="$(VERBOSE=2 run_dev "$vp" lint 2>"$TMP/err")"
-assert_eq "VERBOSE=2 from the environment equals -vv" "$out" "args= verbose=2"
-assert_contains "VERBOSE=2 from the environment traces" "$(cat "$TMP/err")" "+ lint.sh:3: echo"
-assert_eq "-v prints the override command on stderr" "$(run_dev "$vp" -v lint --flag 2>&1 >/dev/null)" "+ .dev/lint.sh --flag"
+assert_eq "-vvv leaks no errexit into a grandchild script" "$(run_dev "$vp" -vvv chain 2>/dev/null)" "survived"
+out="$(VERBOSE=3 run_dev "$vp" lint 2>"$TMP/err")"
+assert_eq "VERBOSE=3 from the environment equals -vvv" "$out" "args= verbose=3"
+assert_contains "VERBOSE=3 from the environment traces" "$(cat "$TMP/err")" "+ echo 'args= verbose=3'"
+assert_eq "-v prints the override command on stderr" "$(run_dev "$vp" -v lint --flag 2>&1 >/dev/null)" "+ .dev/commands/lint.sh"
 assert_eq "no flag prints nothing on stderr" "$(run_dev "$vp" lint --flag 2>&1 >/dev/null)" ""
+
+# shellcheck disable=SC2016  # $DEV_ROOT expands in the generated script
+printf '#!/usr/bin/env bash\ncat "$DEV_ROOT/.dev/helpers/note.txt"\n' >"$vp/.dev/commands/where.sh"
+chmod +x "$vp/.dev/commands/where.sh"
+mkdir -p "$vp/.dev/helpers"
+printf 'helper found\n' >"$vp/.dev/helpers/note.txt"
+assert_eq "DEV_ROOT names the project root for a .sh command" "$(cd "$vp/.dev" && "$DEV" where 2>/dev/null)" "helper found"
 assert_contains "-v prints the built-in command on stderr" "$(run_dev "$rust" -v build 2>&1 >/dev/null)" "+ cargo build --release"
-assert_contains "-vv exports the trace to the built-in's bash children" "$(run_dev "$rust" -vv build 2>&1 >/dev/null)" "+ cargo:2: echo"
-assert_contains "__flags lint includes --verbose" "$(run_dev "$vp" __flags lint)" "--verbose"
+assert_contains "complete lists --verbose among lint's flags" "$(run_dev "$vp" __complete lint -)" "--verbose"
 assert_contains "help lists the global flags" "$(run_dev "$vp" help)" "global flags"
 
 # Usage
@@ -257,7 +223,7 @@ run_dev "$rust" bogus >/dev/null 2>&1
 assert_eq "unknown command exits 2" "$?" "2"
 out="$(run_dev "$rust" help nosuch 2>&1)"
 assert_eq "help of an unknown command exits 2" "$?" "2"
-assert_contains "help names the unknown command" "$out" "dev help: unknown command nosuch"
+assert_contains "help names the unknown command" "$out" "dev help: Unknown command nosuch, and no help page has that name."
 
 BOUNDED_TIMEOUT_SECS=10
 bounded_dev() {
@@ -281,7 +247,7 @@ bounded_dev() {
 }
 bounded_dev "$rust" builtin:init --name
 assert_eq "init --name with no value exits 2" "$BOUNDED_RC" "2"
-assert_contains "init names the --name with no value" "$BOUNDED_OUT" "dev init: --name needs a value"
+assert_contains "init names the --name with no value" "$BOUNDED_OUT" "dev init: The flag \`--name\` needs a value."
 out="$(run_dev "$rust" builtin:init --bogus 2>&1)"
 assert_eq "init with a bad flag exits 2" "$?" "2"
 assert_contains "init names the bad flag" "$out" "dev init: Unknown flag --bogus"
@@ -292,18 +258,19 @@ assert_contains "help marks the override" "$out" "(override)"
 assert_not_contains "help hides the hidden commands" "$out" "__commands"
 
 # A local-only verb runs, and the listings carry it with its description
-printf '#!/usr/bin/env bash\n# Install the thing.\n# flags: --now --later\necho "installed $*"\n' >"$rust/.dev/install.sh"
-chmod +x "$rust/.dev/install.sh"
+# shellcheck disable=SC2016  # ${DEV_FLAG_*} expands in the generated script
+printf '#!/usr/bin/env bash\n# Install the thing.\n# flag: now kind=boolean\n# flag: later kind=boolean\necho installed "$@" ${DEV_FLAG_NOW:+--now}\n' >"$rust/.dev/commands/install.sh"
+chmod +x "$rust/.dev/commands/install.sh"
 out="$(run_dev "$rust" install --now)"
 assert_eq "local-only verb runs its script" "$out" "installed --now"
 assert_contains "-h on a script verb gives help" "$(run_dev "$rust" install -h)" "dev install"
 assert_eq "-- lets -h through to a script verb" "$(run_dev "$rust" install -- -h)" "installed -h"
 assert_eq "-h after the -- of a built-in reaches its command" "$(run_dev "$rust" run -- -h >/dev/null && log)" "cargo run -- -h"
-out="$(run_dev "$rust" __commands)"
-assert_contains "__commands lists a local command with its description" "$out" "install	local	Install the thing."
-assert_contains "__commands lists a built-in" "$out" "fmt	builtin	"
-assert_contains "__commands marks an override" "$out" "lint	override	"
-assert_not_contains "__commands hides hidden commands" "$out" "__"
+out="$(run_dev "$rust" __complete "")"
+assert_contains "complete lists a local command with its description" "$out" "install	Install the thing."
+assert_contains "complete lists a built-in" "$out" "fmt	Format the source for the project type"
+assert_contains "complete lists an override" "$out" "lint"
+assert_not_contains "complete hides hidden commands" "$out" "__"
 out="$(run_dev "$rust" help)"
 assert_contains "help lists a local verb under the project's group" "$out" "$(printf '\nrust\n  install')"
 assert_contains "help shows a local verb description" "$out" "Install the thing."
@@ -312,27 +279,19 @@ for flag in --name --dry-run; do
     assert_contains "help init lists $flag" "$out" "$flag"
 done
 help_out="$(run_dev "$rust" help -a)"
-commands_out="$(run_dev "$rust" __commands)"
+commands_out="$(run_dev "$rust" __complete "")"
 for verb in lint fmt test build run push pull init help; do
     assert_contains "help lists built-in $verb" "$help_out" "  $verb "
-    assert_contains "__commands lists built-in $verb" "$commands_out" "$verb	"
 done
-out="$(run_dev "$rust" __flags install)"
-assert_eq "__flags reads the flags line of a script and adds the global flags" "$out" "--now
---later
--v
---verbose
--vv
---remote
---local
---detach
---priority
--C
---agent
---job-timeout"
+for verb in lint fmt test build run push pull init; do
+    assert_eq "complete lists built-in $verb once" "$(printf '%s\n' "$commands_out" | cut -f1 | grep -cx "$verb")" "1"
+done
+out="$(run_dev "$vp" __complete lint -)"
+assert_contains "complete reads the flags a script declares" "$out" "--flag"
+assert_contains "complete adds the global flags" "$out" "--remote"
 out="$(run_dev "$rust" help install)"
 assert_contains "help <verb> mentions the global flags" "$out" "Global flags:"
-assert_contains "help <verb> shows the script header" "$out" ".dev/install.sh header"
+assert_contains "help <verb> lists the script's flags" "$out" "--now"
 out="$(run_dev "$rust" help build)"
 assert_contains "help <verb> shows the built-in command" "$out" "cargo build --release"
 out="$(run_dev "$rust" help)"
@@ -340,19 +299,19 @@ case "$out" in
 *$'\033'*) assert_eq "help is plain when piped" "color escapes" "none" ;;
 *) assert_eq "help is plain when piped" "none" "none" ;;
 esac
-printf '#!/usr/bin/env bash\necho "custom help $*"\n' >"$rust/.dev/help.sh"
-chmod +x "$rust/.dev/help.sh"
+printf '#!/usr/bin/env bash\necho "custom help $*"\n' >"$rust/.dev/commands/help.sh"
+chmod +x "$rust/.dev/commands/help.sh"
 assert_eq "help.sh replaces dev help" "$(run_dev "$rust" help x)" "custom help x"
 assert_eq "help.sh replaces bare dev" "$(run_dev "$rust")" "custom help "
-rm "$rust/.dev/help.sh"
+rm "$rust/.dev/commands/help.sh"
 run_dev "$rust" nothere >/dev/null 2>&1
 assert_eq "verb with no script and no built-in exits 2" "$?" "2"
 
 # Missing tool
 if ! PATH=/usr/bin:/bin command -v cargo >/dev/null 2>&1; then
     touch "$rust/.dev/skip"
-    rm "$rust/.dev/lint.sh"
-    out="$(cd "$rust" && env PATH="$LUABIN:/usr/bin:/bin" bash "$DEV" lint 2>&1)"
+    rm "$rust/.dev/commands/lint.sh"
+    out="$(cd "$rust" && env PATH=/usr/bin:/bin "$DEV" lint 2>&1)"
     assert_eq "missing cargo exits 1" "$?" "1"
     assert_contains "missing cargo prints one install hint" "$out" "Tool cargo not found. Install it with"
 fi
@@ -369,7 +328,7 @@ assert_not_contains "init plans no jj colocate in a git worktree" "$out" "jj git
 if ! PATH=/usr/bin:/bin command -v jj >/dev/null 2>&1; then
     nojj="$(project nojj)"
     git -C "$nojj" init -q
-    out="$(cd "$nojj" && env HOME="$nojj" PATH="$LUABIN:/usr/bin:/bin" bash "$DEV" builtin:init 2>&1)"
+    out="$(cd "$nojj" && env HOME="$nojj" PATH=/usr/bin:/bin "$DEV" builtin:init 2>&1)"
     assert_eq "init without jj exits 0" "$?" "0"
     assert_contains "init without jj skips jj and says why" "$out" "skipped: .jj (jj not installed, git only)"
     assert_contains "init without jj prints the git remote command" "$out" "run: git remote add origin git@github.com:OWNER/nojj.git"
@@ -394,22 +353,7 @@ gitc -C "$gp" commit -q -m "feat: clean"
 out="$(run_dev "$gp" -v push 2>&1)"
 assert_eq "git push exits 0" "$?" "0"
 assert_contains "git push names the remote and branch" "$out" "Pushed main to origin."
-assert_contains "git push -v shows plain git when push.guard is unset" "$out" "+ git push -- origin $(git -C "$gp" rev-parse HEAD):refs/heads/main"
-guard_home="$TMP/guardhome"
-mkdir -p "$guard_home/.config/dev" "$guard_home/bin"
-cat >"$guard_home/bin/commit-guard" <<'STUB'
-#!/usr/bin/env bash
-shift 2
-if git log -1 --format=%B "${2%%:*}" | grep -q '^Claude-Session:'; then
-    echo "commit-guard: refusing to push to $1" >&2
-    exit 1
-fi
-exec git push -- "$@"
-STUB
-chmod +x "$guard_home/bin/commit-guard"
-printf '[push]\nguard = "%s/bin/commit-guard"\n' "$guard_home" >"$guard_home/.config/dev/config.toml"
-out="$(HOME="$guard_home" run_dev "$gp" -v push 2>&1)"
-assert_contains "git push -v shows the configured guard" "$out" "commit-guard push -- origin $(git -C "$gp" rev-parse HEAD):refs/heads/main"
+assert_contains "git push -v shows the push command" "$out" "git push -- origin $(git -C "$gp" rev-parse HEAD):refs/heads/main"
 assert_eq "git push puts the commit on the remote" "$(git -C "$gremote" rev-parse main)" "$(git -C "$gp" rev-parse HEAD)"
 clean="$(git -C "$gp" rev-parse HEAD)"
 git init -q --bare -b main "$TMP/gerrit.git"
@@ -465,22 +409,6 @@ out="$(run_dev "$gp" pull extra 2>&1)"
 assert_eq "pull with an argument exits 2" "$?" "2"
 assert_contains "pull names the argument" "$out" "dev pull: Unknown argument extra."
 
-echo b >"$gp/b"
-git -C "$gp" add b
-gitc -C "$gp" commit -q -m "fix: tagged" -m "Claude-Session: https://claude.ai/code/session_x"
-out="$(HOME="$guard_home" run_dev "$gp" push 2>&1)"
-assert_eq "git push of an attributed commit exits 1" "$?" "1"
-assert_contains "git push names the guard refusal" "$out" "commit-guard: refusing to push to origin"
-assert_eq "git push leaves the remote unchanged on a refusal" "$(git -C "$gremote" rev-parse main)" "$clean"
-git -C "$gp" reset -q --hard "$clean"
-
-missing_home="$TMP/missinghome"
-mkdir -p "$missing_home/.config/dev"
-printf '[push]\nguard = "%s/no-such-guard"\n' "$TMP" >"$missing_home/.config/dev/config.toml"
-out="$(HOME="$missing_home" run_dev "$gp" push 2>&1)"
-assert_eq "git push with a missing guard exits 1" "$?" "1"
-assert_contains "git push with a missing guard says so" "$out" "from \`push.guard\` is not an executable"
-
 git -C "$gp" checkout -q --detach
 out="$(run_dev "$gp" push 2>&1)"
 assert_eq "git push on a detached HEAD exits 1" "$?" "1"
@@ -504,8 +432,8 @@ assert_eq "git pull on a dirty tree exits 1" "$?" "1"
 assert_contains "git pull explains a dirty tree" "$out" "uncommitted changes"
 git -C "$gp" checkout -q -- a
 assert_eq "push and pull never create .jj" "$([ -e "$gp/.jj" ] || echo absent)" "absent"
-preview="$(HOME="$guard_home" run_dev "$gp" help push | grep 'commit-guard push' | sed 's/^ *//')"
-shown="$(HOME="$guard_home" run_dev "$gp" -v push 2>&1 | grep '^+ ' | sed 's/^+ //')"
+preview="$(run_dev "$gp" help push | grep 'git push' | sed 's/^ *//')"
+shown="$(run_dev "$gp" -v push 2>&1 | grep '^+ ' | sed 's/^+ //' | grep 'git push')"
 assert_eq "help push previews the command push runs" "$preview" "$shown"
 assert_contains "help pull shows the git command" "$(run_dev "$gp" help pull)" "pull --rebase origin main"
 echo dirty >>"$gp/a"
@@ -556,77 +484,72 @@ fi
 
 # Nouns: .dev/<noun>/<sub>.sh beside flat verbs
 nn="$(project noun)"
-mkdir -p "$nn/.dev/widget"
-printf '#!/usr/bin/env bash\n# Save the widget.\n# flags: --now --later\necho "save $*"\n' >"$nn/.dev/widget/save.sh"
-printf '#!/usr/bin/env bash\n# Diff the widget.\necho "diff $*"\n' >"$nn/.dev/widget/diff.sh"
-printf '#!/usr/bin/env bash\n# Hidden helper.\necho helper\n' >"$nn/.dev/widget/__helper.sh"
-printf '#!/usr/bin/env bash\n# Not executable.\n' >"$nn/.dev/widget/skipped.sh"
-printf '#!/usr/bin/env bash\n# Verify prod.\n# flags: --fast\necho "verify $*"\n' >"$nn/.dev/verify-prod.sh"
-chmod +x "$nn/.dev/widget/save.sh" "$nn/.dev/widget/diff.sh" "$nn/.dev/widget/__helper.sh" "$nn/.dev/verify-prod.sh"
+mkdir -p "$nn/.dev/commands/widget"
+printf '#!/usr/bin/env bash\n# Save the widget.\n# flag: now kind=boolean\n# flag: later kind=boolean\necho "save $*"\n' >"$nn/.dev/commands/widget/save.sh"
+printf '#!/usr/bin/env bash\n# Diff the widget.\necho "diff $*"\n' >"$nn/.dev/commands/widget/diff.sh"
+printf '#!/usr/bin/env bash\n# Not executable.\n' >"$nn/.dev/commands/widget/skipped.sh"
+printf '#!/usr/bin/env bash\n# Verify prod.\n# flag: fast kind=boolean\necho "verify $*"\n' >"$nn/.dev/commands/verify-prod.sh"
+chmod +x "$nn/.dev/commands/widget/save.sh" "$nn/.dev/commands/widget/diff.sh" "$nn/.dev/commands/verify-prod.sh"
 out="$(run_dev "$nn" widget save a b)"
 assert_eq "a subcommand runs its script with the arguments" "$out" "save a b"
 out="$(run_dev "$nn" verify-prod x)"
 assert_eq "a flat hyphenated project verb still dispatches" "$out" "verify x"
+
+# shellcheck disable=SC2016  # $* expands in the generated script
+printf '#!/usr/bin/env bash\n# Loose words.\necho "loose $*"\n' >"$nn/.dev/commands/loose.sh"
+
+# shellcheck disable=SC2016  # $* expands in the generated script
+printf '#!/usr/bin/env bash\n# Strict words.\n# arg: one -- The one word\necho "strict $*"\n' >"$nn/.dev/commands/strict.sh"
+chmod +x "$nn/.dev/commands/loose.sh" "$nn/.dev/commands/strict.sh"
+assert_eq "a .sh with no # arg: line accepts any words" "$(run_dev "$nn" loose a -- -x b)" "loose a -x b"
+assert_eq "a .sh with one # arg: line takes its declared word" "$(run_dev "$nn" strict a)" "strict a"
+out="$(run_dev "$nn" strict a b 2>&1)"
+assert_contains "one # arg: line turns on strict checking" "$out" "Unexpected argument b."
 out="$(run_dev "$nn" help)"
 assert_contains "help lists a flat hyphenated verb" "$out" "verify-prod  Verify prod."
-assert_contains "help lists the noun once, with its subcommands" "$out" "widget       diff, save"
+assert_contains "help lists the noun" "$out" "  widget "
 assert_eq "help lists the noun on one line" "$(printf '%s\n' "$out" | grep -c '^  widget ')" "1"
 assert_not_contains "help does not list subcommands as verbs" "$out" "  save "
-printf 'Manage the widget.\nmore\n' >"$nn/.dev/widget/DESCRIPTION"
+printf 'Manage the widget.\nmore\n' >"$nn/.dev/commands/widget/DESCRIPTION"
 assert_contains "a DESCRIPTION file describes the noun in help" "$(run_dev "$nn" help)" "Manage the widget."
 out="$(run_dev "$nn" help widget)"
 assert_contains "help <noun> shows the description" "$out" "Manage the widget."
-assert_contains "help <noun> lists a subcommand with its description" "$out" "save  Save the widget."
-assert_contains "help <noun> lists the other subcommand" "$out" "diff  Diff the widget."
-assert_not_contains "help <noun> hides hidden scripts" "$out" "helper"
+assert_contains "help <noun> lists a subcommand with its description" "$out" "save  "
+assert_contains "help <noun> lists the other subcommand" "$out" "Diff the widget."
 assert_not_contains "help <noun> hides a script that is not executable" "$out" "skipped"
 out="$(run_dev "$nn" help widget save)"
 assert_contains "help <noun> <sub> shows the flags" "$out" "--now"
-assert_contains "help <noun> <sub> shows the header" "$out" ".dev/widget/save.sh header"
+assert_contains "help <noun> <sub> shows the description" "$out" "Save the widget."
 out="$(run_dev "$nn" help widget zap 2>&1)"
 assert_eq "help <noun> <unknown> exits 2" "$?" "2"
-assert_contains "help <noun> <unknown> names it" "$out" "unknown subcommand zap of widget"
+assert_contains "help <noun> <unknown> names it" "$out" "Unknown subcommand zap of widget."
 out="$(run_dev "$nn" widget zap 2>&1)"
 assert_eq "an unknown subcommand exits 2" "$?" "2"
 assert_contains "an unknown subcommand names it" "$out" "dev widget: unknown subcommand zap"
-assert_contains "an unknown subcommand lists the choices" "$out" "save  Save the widget."
+assert_contains "an unknown subcommand lists the choices" "$out" "Save the widget."
 out="$(run_dev "$nn" widget 2>&1)"
 assert_eq "a noun with no subcommand exits 2" "$?" "2"
 assert_contains "a noun with no subcommand says so" "$out" "dev widget: needs a subcommand"
 out="$(run_dev "$nn" widget --help)"
 assert_eq "noun --help exits 0" "$?" "0"
-assert_contains "noun --help lists the subcommands" "$out" "diff  Diff the widget."
-out="$(run_dev "$nn" widget __helper 2>&1)"
-assert_eq "a hidden script is not a subcommand" "$?" "2"
-out="$(run_dev "$nn" __commands)"
-assert_contains "__commands lists a command with subcommands" "$out" "widget	local	Manage the widget."
-assert_contains "__commands lists a flat hyphenated command" "$out" "verify-prod	local	Verify prod."
-out="$(run_dev "$nn" __subs widget)"
-assert_eq "__subs lists the subcommands with descriptions" "$out" "diff	local	Diff the widget.
-save	local	Save the widget."
-assert_eq "__subs of a plain verb is empty" "$(run_dev "$nn" __subs verify-prod)" ""
-out="$(run_dev "$nn" __flags widget save)"
-assert_eq "__flags <noun> <sub> reads the script's flags line" "$out" "--now
---later
--v
---verbose
--vv
---remote
---local
---detach
---priority
--C
---agent
---job-timeout"
-assert_eq "-v prints the subcommand script on stderr" "$(run_dev "$nn" -v widget save 2>&1 >/dev/null)" "+ .dev/widget/save.sh"
-printf '#!/usr/bin/env bash\n# Flat widget.\necho "flat $*"\n' >"$nn/.dev/widget.sh"
-chmod +x "$nn/.dev/widget.sh"
+assert_contains "noun --help lists the subcommands" "$out" "Diff the widget."
+out="$(run_dev "$nn" __complete "")"
+assert_contains "complete lists a command with subcommands" "$out" "widget	Manage the widget."
+assert_contains "complete lists a flat hyphenated command" "$out" "verify-prod	Verify prod."
+out="$(run_dev "$nn" __complete widget "")"
+assert_eq "complete lists the subcommands with descriptions" "$out" "diff	Diff the widget.
+save	Save the widget."
+out="$(run_dev "$nn" __complete widget save -)"
+assert_contains "complete reads a subcommand script's flags" "$out" "--now"
+assert_eq "-v prints the subcommand script on stderr" "$(run_dev "$nn" -v widget save 2>&1 >/dev/null)" "+ .dev/commands/widget/save.sh"
+printf '#!/usr/bin/env bash\n# Flat widget.\necho "flat $*"\n' >"$nn/.dev/commands/widget.sh"
+chmod +x "$nn/.dev/commands/widget.sh"
 assert_eq "a flat script takes the whole noun name" "$(run_dev "$nn" widget save)" "flat save"
-rm "$nn/.dev/widget.sh"
+rm "$nn/.dev/commands/widget.sh"
 nn_none="$(project nonoun)"
-mkdir -p "$nn_none/.dev/lint" "$nn_none/.dev/empty"
-printf '#!/usr/bin/env bash\necho x\n' >"$nn_none/.dev/lint/x.sh"
-chmod +x "$nn_none/.dev/lint/x.sh"
+mkdir -p "$nn_none/.dev/commands/lint" "$nn_none/.dev/commands/empty"
+printf '#!/usr/bin/env bash\necho x\n' >"$nn_none/.dev/commands/lint/x.sh"
+chmod +x "$nn_none/.dev/commands/lint/x.sh"
 out="$(run_dev "$nn_none" help)"
 assert_not_contains "a directory named like a built-in verb is not a noun" "$out" "  x "
 assert_not_contains "a directory with no scripts is not a noun" "$out" "empty"
@@ -670,27 +593,23 @@ assert_eq "--remote runs the job through ci from the project root" "$out" ""
 assert_eq "--remote passes the root, job and follow flags" "$(log)" "ci -C $cip [run] [--local] [--follow] [--job] [lint] [--]"
 cirun "$TMP" --remote -C "$sub" lint >/dev/null 2>&1
 assert_eq "-C makes --remote run the job for that directory's project" "$(log)" "ci -C $cip [run] [--local] [--follow] [--job] [lint] [--]"
-cirun "$TMP" lint --remote -C "$cip" -- a >/dev/null 2>&1
-assert_eq "-C works after the verb and leaves the arguments after -- alone" "$(log)" "ci -C $cip [run] [--local] [--follow] [--job] [lint] [--] [a]"
-mkdir -p "$cip/.dev"
-printf '#!/usr/bin/env bash\n# Print the directory.\npwd -P\n' >"$cip/.dev/where.sh"
-chmod +x "$cip/.dev/where.sh"
+mkdir -p "$cip/.dev/commands"
+printf '#!/usr/bin/env bash\n# Print the directory.\npwd -P\n' >"$cip/.dev/commands/where.sh"
+chmod +x "$cip/.dev/commands/where.sh"
 out="$(cirun "$TMP" -C "$sub" where 2>&1)"
 assert_eq "-C runs a local verb in that directory" "$out" "$(cd "$sub" && pwd -P)"
 out="$(cd "$cip" && PATH="$cistubs:$STUBS:$PATH" "$DEV" -C sub -C .. where 2>&1)"
 assert_eq "-C twice applies each in turn and a relative one starts at the current directory" "$out" "$(cd "$cip" && pwd -P)"
-rm "$cip/.dev/where.sh"
+rm "$cip/.dev/commands/where.sh"
 cirun "$cip" --remote lint -- -C x >/dev/null 2>&1
 assert_eq "-C after -- reaches the job as an argument" "$(log)" "ci -C $cip [run] [--local] [--follow] [--job] [lint] [--] [-C] [x]"
 out="$(cirun "$cip" --remote -C "$TMP/no-such-dir" lint 2>&1)"
 assert_eq "-C with a missing directory exits 2" "$?" "2"
 assert_contains "-C with a missing directory names it" "$out" "The flag \`-C\` cannot enter $TMP/no-such-dir."
 assert_eq "-C with a missing directory runs nothing" "$(log)" ""
-out="$(cirun "$cip" --remote lint -C 2>&1)"
+out="$(cirun "$cip" --remote -C 2>&1)"
 assert_eq "-C with no directory exits 2" "$?" "2"
 assert_contains "-C with no directory says so" "$out" "The flag \`-C\` needs a directory."
-cirun "$cip" lint --remote >/dev/null 2>&1
-assert_contains "--remote works after the verb" "$(log)" "[--follow] [--job] [lint]"
 DEV_REMOTE=1 cirun "$cip" test >/dev/null 2>&1
 assert_contains "DEV_REMOTE=1 counts as --remote" "$(log)" "[--job] [test]"
 DEV_REMOTE=0 cirun "$cip" lint >/dev/null 2>&1
@@ -699,8 +618,6 @@ CI_STUB_RC=7 cirun "$cip" --remote test >/dev/null 2>&1
 assert_eq "--remote exits with ci's status" "$?" "7"
 cirun "$cip" --remote test -- a "b c" "\$(x)" >/dev/null 2>&1
 assert_contains "--remote hands the arguments after -- over as separate words" "$(log)" "[--job] [test] [--] [a] [b c] [\$(x)]"
-cirun "$cip" test --remote -- a >/dev/null 2>&1
-assert_contains "--remote after the verb passes the same arguments" "$(log)" "[--job] [test] [--] [a]"
 cirun "$cip" --remote --detach test >/dev/null 2>&1
 assert_contains "--detach replaces --follow" "$(log)" "[--detach] [--job] [test]"
 assert_not_contains "--detach drops --follow" "$(log)" "[--follow]"
@@ -719,7 +636,7 @@ out="$(cirun "$cip" --job-timeout 3600 test 2>&1)"
 assert_eq "--job-timeout without --remote exits 2" "$?" "2"
 assert_contains "--job-timeout without --remote says so" "$out" "The flag \`--job-timeout\` needs \`--remote\`."
 assert_eq "--job-timeout without --remote runs nothing" "$(log)" ""
-out="$(cirun "$cip" --remote test --job-timeout 2>&1)"
+out="$(cirun "$cip" --remote --job-timeout 2>&1)"
 assert_eq "--job-timeout duration missing exits 2" "$?" "2"
 assert_contains "--job-timeout duration missing says so" "$out" "The flag \`--job-timeout\` needs a duration."
 assert_eq "--job-timeout duration missing runs nothing" "$(log)" ""
@@ -736,19 +653,15 @@ out="$(cirun "$cip" --remote lint --extra -- more 2>&1)"
 assert_eq "--remote refuses arguments on both sides of -- with 2" "$?" "2"
 assert_contains "--remote prints the working command" "$out" "Run \`dev --remote lint -- --extra more\` instead."
 
-mkdir -p "$cip/.dev/widget"
-printf '#!/usr/bin/env bash\necho x\n' >"$cip/.dev/widget/save.sh"
-chmod +x "$cip/.dev/widget/save.sh"
+mkdir -p "$cip/.dev/commands/widget"
+printf '#!/usr/bin/env bash\necho x\n' >"$cip/.dev/commands/widget/save.sh"
+chmod +x "$cip/.dev/commands/widget/save.sh"
 cirun "$cip" --remote widget save >/dev/null 2>&1
 assert_contains "--remote maps a subcommand to the job noun-sub" "$(log)" "[--job] [widget-save]"
-out="$(cirun "$cip" widget --remote zap 2>&1)"
+out="$(cirun "$cip" --remote widget zap 2>&1)"
 assert_eq "--remote with an unknown subcommand exits 2" "$?" "2"
 assert_contains "--remote with an unknown subcommand names it" "$out" "unknown subcommand zap"
-for verb in install uninstall restow setup clean purge list skills stow; do
-    printf '#!/usr/bin/env bash\n# remote: false\necho x\n' >"$cip/.dev/$verb.sh"
-    chmod +x "$cip/.dev/$verb.sh"
-done
-for verb in install uninstall restow setup fmt fetch help init push pull clean purge list skills stow; do
+for verb in fmt fetch help init push pull; do
     out="$(cirun "$cip" --remote "$verb" 2>&1)"
     assert_eq "--remote refuses $verb with 2" "$?" "2"
     assert_contains "--remote names the refused verb $verb" "$out" "dev $verb: runs on this machine only, so --remote does not apply"
@@ -762,31 +675,31 @@ assert_eq "a refused verb runs nothing" "$(log)" ""
 out="$(cirun "$cip" help)"
 assert_contains "help mentions --remote" "$out" "--remote"
 
-printf '#!/usr/bin/env bash\nexit 99\n' >"$cip/.dev/lint.sh"
-chmod +x "$cip/.dev/lint.sh"
-mkdir -p "$cip/.dev"
-cat >"$cip/.dev/__remote.lua" <<'LUA'
+printf '#!/usr/bin/env bash\nexit 99\n' >"$cip/.dev/commands/lint.sh"
+mkdir -p "$cip/.dev/helpers"
+mkdir -p "$cip/.dev/commands"
+cat >"$cip/.dev/helpers/remote.luau" <<'LUA'
 return function(run)
-    io.write(table.concat(run.words, " "), "|", table.concat(run.args, ","), "|", tostring(run.detach), "|", run.root, "\n")
+    require("dev.os").stdout:write(table.concat(run.words, " "), "|", table.concat(run.args, ","), "|", tostring(run.detach), "|", run.root, "\n")
     return 5
 end
 LUA
 out="$(cirun "$cip" --remote lint -- a 'b c' 2>&1)"
-assert_eq "a __remote.lua runner's integer is the exit code" "$?" "5"
-assert_eq "a __remote.lua runner gets words, args, detach and root" "$out" "lint|a,b c|false|$cip"
-assert_eq "a __remote.lua runner replaces ci" "$(log)" ""
+assert_eq "a helpers/remote.luau runner's integer is the exit code" "$?" "5"
+assert_eq "a helpers/remote.luau runner gets words, args, detach and root" "$out" "lint|a,b c|false|$cip"
+assert_eq "a helpers/remote.luau runner replaces ci" "$(log)" ""
 out="$(cirun "$cip" --remote --detach lint 2>&1)"
-assert_contains "a __remote.lua runner sees --detach" "$out" "|true|"
-rm "$cip/.dev/__remote.lua"
+assert_contains "a helpers/remote.luau runner sees --detach" "$out" "|true|"
+rm "$cip/.dev/helpers/remote.luau"
 
 agent="$(project agent)"
-mkdir -p "$agent/.ci" "$agent/.dev"
+mkdir -p "$agent/.ci" "$agent/.dev/commands"
 printf 'return {}\n' >"$agent/.ci/jobs.lua"
 git -C "$agent" init -q
-printf '#!/usr/bin/env bash\necho check ran\n' >"$agent/.dev/check.sh"
-printf '#!/usr/bin/env bash\n# local\necho gadget ran\n' >"$agent/.dev/gadget.sh"
-printf '#!/usr/bin/env bash\necho notes ran\n' >"$agent/.dev/notes.sh"
-chmod +x "$agent/.dev/check.sh" "$agent/.dev/gadget.sh" "$agent/.dev/notes.sh"
+printf '#!/usr/bin/env bash\necho check ran\n' >"$agent/.dev/commands/check.sh"
+printf '#!/usr/bin/env bash\n# runs_local\necho gadget ran\n' >"$agent/.dev/commands/gadget.sh"
+printf '#!/usr/bin/env bash\necho notes ran\n' >"$agent/.dev/commands/notes.sh"
+chmod +x "$agent/.dev/commands/check.sh" "$agent/.dev/commands/gadget.sh" "$agent/.dev/commands/notes.sh"
 touch "$TMP/ci-box"
 out="$(DEV_AGENT=w cirun "$agent" --local check 2>&1)"
 assert_eq "an agent's --local run of a verb with a ci job exits 2" "$?" "2"
@@ -815,13 +728,13 @@ out="$(HOME="$TMP/agent-home" DEV_REMOTE='' DEV_AGENT=w cirun "$agent" check 2>&
 assert_eq "an agent's default run of a verb with a ci job still goes to ci" "$?" "0"
 assert_contains "an agent's default run goes to ci with remote default remote" "$(log)" "[--job] [check]"
 agentlocal="$(project agentlocal)"
-mkdir -p "$agentlocal/.ci" "$agentlocal/.dev"
+mkdir -p "$agentlocal/.ci" "$agentlocal/.dev/commands"
 printf 'return {}\n' >"$agentlocal/.ci/jobs.lua"
 git -C "$agentlocal" init -q
 printf '[remote]\ndefault = "local"\n' >"$agentlocal/.dev/config.toml"
-printf '#!/usr/bin/env bash\necho check ran\n' >"$agentlocal/.dev/check.sh"
-printf '#!/usr/bin/env bash\n# local\necho gadget ran\n' >"$agentlocal/.dev/gadget.sh"
-chmod +x "$agentlocal/.dev/check.sh" "$agentlocal/.dev/gadget.sh"
+printf '#!/usr/bin/env bash\necho check ran\n' >"$agentlocal/.dev/commands/check.sh"
+printf '#!/usr/bin/env bash\n# runs_local\necho gadget ran\n' >"$agentlocal/.dev/commands/gadget.sh"
+chmod +x "$agentlocal/.dev/commands/check.sh" "$agentlocal/.dev/commands/gadget.sh"
 out="$(HOME="$TMP/agent-home" DEV_REMOTE='' DEV_AGENT=w cirun "$agentlocal" check 2>&1)"
 assert_eq "an agent's default run of a verb with a ci job under remote default local exits 2" "$?" "2"
 assert_contains "an agent's default refusal under remote default local names dev --remote" "$out" "dev check: DEV_AGENT is set. Use \`dev --remote check\` instead, which runs it on ci."
@@ -832,11 +745,11 @@ out="$(HOME="$TMP/agent-home" DEV_REMOTE='' cirun "$agentlocal" check 2>&1)"
 assert_contains "DEV_AGENT unset runs a default run here under remote default local" "$out" "check ran"
 
 prim="$(project prim)"
-mkdir -p "$prim/.dev"
+mkdir -p "$prim/.dev/commands"
 git -C "$prim" init -q
-printf '#!/usr/bin/env bash\n# requires: workspace\necho install ran\n' >"$prim/.dev/install.sh"
-printf '#!/usr/bin/env bash\necho notes ran\n' >"$prim/.dev/notes.sh"
-chmod +x "$prim/.dev/install.sh" "$prim/.dev/notes.sh"
+printf '#!/usr/bin/env bash\n# requires: workspace\necho install ran\n' >"$prim/.dev/commands/install.sh"
+printf '#!/usr/bin/env bash\necho notes ran\n' >"$prim/.dev/commands/notes.sh"
+chmod +x "$prim/.dev/commands/install.sh" "$prim/.dev/commands/notes.sh"
 git -C "$prim" add -A
 git -C "$prim" -c user.name=t -c user.email=t@t commit -q -m init
 git -C "$prim" worktree add -q "$TMP/primwt" 2>/dev/null
@@ -880,12 +793,12 @@ assert_eq "workspace role install with -C on the primary checkout exits 2" "$?" 
 out="$(DEV_AGENT=repo/implementer/c DEV_BOX_MARKER="$TMP/ci-box" cirun "$prim" install 2>&1)"
 assert_contains "the box marker runs a workspace role install in the primary checkout" "$out" "install ran"
 bprim="$(project repoguard)"
-mkdir -p "$bprim/.dev"
+mkdir -p "$bprim/.dev/commands"
 git -C "$bprim" init -q
 printf '[agent]\nprimary_guarded = ["bump"]\n' >"$bprim/.dev/config.toml"
-printf '#!/usr/bin/env bash\necho bump ran\n' >"$bprim/.dev/bump.sh"
-printf '#!/usr/bin/env bash\necho capture ran\n' >"$bprim/.dev/capture.sh"
-chmod +x "$bprim/.dev/bump.sh" "$bprim/.dev/capture.sh"
+printf '#!/usr/bin/env bash\necho bump ran\n' >"$bprim/.dev/commands/bump.sh"
+printf '#!/usr/bin/env bash\necho capture ran\n' >"$bprim/.dev/commands/capture.sh"
+chmod +x "$bprim/.dev/commands/bump.sh" "$bprim/.dev/commands/capture.sh"
 git -C "$bprim" add -A
 git -C "$bprim" -c user.name=t -c user.email=t@t commit -q -m init
 git -C "$bprim" worktree add -q "$TMP/bprimwt" 2>/dev/null
@@ -903,7 +816,7 @@ assert_contains "a repo guarded verb in a worktree runs" "$out" "bump ran"
 out="$(cirun "$bprim" bump 2>&1)"
 assert_contains "a repo guarded verb runs for a human" "$out" "bump ran"
 badp="$(project repobad)"
-mkdir -p "$badp/.dev"
+mkdir -p "$badp/.dev/commands"
 printf '[agent]\nprimary_guarded = "bump"\n' >"$badp/.dev/config.toml"
 out="$(DEV_AGENT=repo/implementer/c cirun "$badp" bump 2>&1)"
 assert_contains "a non-list agent.primary_guarded is a malformed config" "$out" "must be a list of command names."

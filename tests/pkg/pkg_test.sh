@@ -3,7 +3,7 @@
 set -o pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PKG="$(cd "$DIR/../.." && pwd)/pkg.lua"
+DEV="${DEV_BIN:-$(cd "$DIR/../.." && pwd)/target/debug/dev}"
 
 fails=0
 
@@ -22,10 +22,9 @@ trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/stubs"
 printf '#!/bin/sh\necho Darwin\n' >"$TMP/stubs/uname"
 chmod +x "$TMP/stubs/uname"
-LUAJIT="$(command -v luajit)"
 
 # A quoted script: cell must print the script path with its args in the dry run.
-iout="$(PATH="$TMP/stubs:$PATH" "$LUAJIT" "$PKG" install --manifest "$DIR/fixtures/script-args.tsv" --dry-run script-args 2>&1)"
+iout="$(PATH="$TMP/stubs:$PATH" "$DEV" __pkg install --manifest "$DIR/fixtures/script-args.tsv" --dry-run script-args 2>&1)"
 assert_eq "install dry-run passes args through" "$iout" $'  + script-args (dry-run):\n      bash /tmp/echo-args.sh --flag value'
 
 if [ "$fails" -gt 0 ]; then

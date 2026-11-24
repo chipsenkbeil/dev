@@ -51,6 +51,11 @@ dev board sync
 dev board wait --for ready
 ```
 
+`dev board note` takes its flags before the text. The text starts at its first
+word that is not a flag or a flag value, and every word after it stays text.
+Give `--reason` one quoted argument, as in
+`outcome --rename 1 "New" --reason "why"`.
+
 `dev board outcome` takes the outcome text, and the text after `--rename`, as
 one quoted argument. It refuses a second text argument and says to run
 `outcome` once per outcome.
@@ -58,7 +63,7 @@ one quoted argument. It refuses a second text argument and says to run
 A project's `.dev/standalone/` is reserved for shell that must run where dev
 cannot, such as a production server. Line 2 of each script there reads
 `# standalone: runs on <where>, where dev is absent`. `dev lint` fails on any
-other `.sh` under `.dev`, except a hidden `.dev/__*.sh` helper.
+other `.sh` under `.dev`, except in `commands/` and `helpers/`.
 
 `dev board land` refuses a commit that adds a file under `.dev/standalone/`
 unless the card carries the `standalone-ok` label. The refusal names the file.
@@ -102,11 +107,12 @@ dev reads `[board.pomb]` from the user file alone, so a repository cannot send
 the token to another server.
 
 `field_prefix` names the four custom fields dev reads and writes on a Pomb
-board: `checks`, `allow`, `tests` and `files`. It has no default. With it set,
-the key of a field on the wire is the prefix, a dot and the name, so
-`field_prefix = "runner"` gives `runner.checks`, `runner.allow`,
-`runner.tests` and `runner.files`. With it unset the keys are the bare
-names. A local board keeps the bare names whatever the key says.
+board: `checks`, `allow`, `tests` and `files`. It defaults to `dev` when
+`board.pomb.field_prefix` is unset. The key of a field on the wire is the
+prefix, a dot and the name, so the default gives `dev.checks`, `dev.allow`,
+`dev.tests` and `dev.files`, and `field_prefix = "runner"` gives
+`runner.checks` and the rest. A local board keeps the bare names whatever the
+key says.
 
 ## The token
 
@@ -115,7 +121,10 @@ with `PASSWORD_STORE_GPG_OPTS="--pinentry-mode error --batch"`. A locked
 store fails at once with `Board unavailable: Pass is locked or has no entry
 ...` instead of waiting on a prompt.
 
-`board/passlock.sh` runs `pass` under one kernel file lock on
+The three board helpers, `passlock`, `keychain` and `keepalive`, are Luau
+modules of `dev.board`, and `dev __board NAME` is their hidden entry point.
+
+`dev __board passlock` runs `pass` under one kernel file lock on
 `/tmp/dev-pass-<uid>.lock`, taken with `flock` or, where that is missing,
 `lockf` (macOS). Concurrent dev calls and keep-alive ticks queue instead of
 crowding the hardware key.
@@ -128,10 +137,11 @@ crowding the hardware key.
   it on every tick.
 
 On a machine with `/usr/bin/security` (macOS), the Keychain answers before
-`pass`. `board/keychain.sh` keeps the token as a generic password named
+`pass`. `dev __board keychain` keeps the token as a generic password named
 `dev-pomb-token:<entry>`, one item per `pass` entry.
 
-`passlock.sh` reads the Keychain first, with no lock and no hardware key. On a
+`dev __board passlock` reads the Keychain first, with no lock and no hardware
+key. On a
 miss it reads `pass` under the lock and stores the token.
 
 The item is created through `security -i`, which takes the command on
@@ -599,6 +609,7 @@ them:
 
 The other stages come from a `[board.columns]` table, read with the project file
 over the user file. Each stage defaults to its standard name:
+`dotfiles/bin/.config/dev/config.toml` ships:
 
 ```toml
 [board.columns]
@@ -1914,9 +1925,8 @@ updates the project's kanban board so an agent never handles the API.
 
 It is machine-local. `--remote` refuses it, as does the root refusal.
 
-`dev help board` lists every subcommand. `tests/lua/help_test.lua` fails when a
-command in the commands table or a board handler has no builtins row, or when a
-non-hidden row is missing from that listing.
+`dev help board` lists every subcommand, each drawn from its spec.
+`tests/lua/help_test.luau` checks the listing.
 
 ### status
 
@@ -3244,9 +3254,9 @@ one land command, and runners use nothing else. Run in the workspace
 and hands the card to `dev board land`, which does the landing below. A
 workspace whose name is no card on the board is refused and nothing lands. In
 a project with no board it rebases the change onto trunk and lands it, with
-none of the board steps. A project's `.dev/land.lua` replaces `dev land`
-whole, as any `.dev` script replaces a built-in, and owns its own turn, `done`
-note and move.
+none of the board steps. A project's `.dev/commands/land.luau` replaces
+`dev land` whole, as any `.dev` script replaces a built-in, and owns its own
+turn, `done` note and move.
 
 An override that rebases before it pushes changes the commit id, so the
 guard on its move into Release or Done finds no check or review record at
@@ -3688,7 +3698,7 @@ Following trunk:
   then runs `dev follow`, which moves the repo's main checkout onto the new
   trunk, and adds its one line to the output.
 - On a board that deploys, `land` does not run it. `ship` does.
-- A project `.dev/follow.sh` or `.dev/follow.lua` replaces the built-in for
+- A project `.dev/commands/follow.luau` or `follow.sh` replaces the built-in for
   `land` and `ship` alike. `dev help follow` and `docs/dev/flags.md`
   describe the command.
 - It never changes the exit code or the card's column.
@@ -3995,7 +4005,7 @@ Following the shipped commit:
 - The main checkout lands on the commit `ship` tested, `--rev` or not, and not
   on trunk, which may hold landed cards the ship never tested. `ship` passes the
   commit in `DEV_FOLLOW_REV`, and `FOLDER is on COMMIT.` names it.
-- A project `.dev/follow.sh` or `.dev/follow.lua` replaces the built-in and
+- A project `.dev/commands/follow.luau` or `follow.sh` replaces the built-in and
   reads `DEV_FOLLOW_REV`. When a command fails, `ship` runs neither.
 - The line never changes the exit code.
 
@@ -4719,16 +4729,16 @@ State file:
 
 Start:
 
-- the loop is `board/keepalive.sh` in dev's share directory.
-- `dev.board.pomb` starts it through
-  `sh -c 'set -m; nohup bash <script> ... & echo $!'`. It has its own process
-  group, outlives the caller's shell and wakes no model.
+- the loop is `dev __board keepalive`, a Luau module.
+- `dev.board.pomb` starts it with `dev.os.spawn` of `dev __board keepalive`,
+  detached.
+  It has its own process group, outlives the caller's shell and wakes no model.
 
 Every 5 minutes (`sleep` with the tick in seconds as its seventh argument)
 the loop does these in order:
 
 1. It checks that the state file still holds its fence.
-2. It reads the token through the same `board/passlock.sh` as
+2. It reads the token through the same `dev __board passlock` as
    `dev.board.pomb`, Keychain first. A token that cannot be read, or has a
    character outside `A-Za-z0-9._~+/=-`, skips that renewal and counts as a
    tick.
@@ -4745,7 +4755,7 @@ The loop ends when:
   accepted the release, so a failed release can be retried.
 - a renewal answers 4xx (the owner lease is gone). The exception is a 401 for
   a token read from the Keychain: the loop drops that Keychain entry through
-  `board/keychain.sh` once, and ends on a second 401 before any renewal
+  `dev __board keychain` once, and ends on a second 401 before any renewal
   succeeds.
 - twice the card's size in 5-minute ticks have passed: 10 for 1 Pomodoro, 20
   for 2 Pomodori and 30 for any other size, unsized included.
@@ -5210,7 +5220,7 @@ unavailable: Pomb has no board named X.`
 
 ### Reading the token
 
-On a miss in the Keychain, `board/passlock.sh` reads the token with
+On a miss in the Keychain, `dev __board passlock` reads the token with
 `timeout 10 pass show <entry>`.
 
 - environment: `PASSWORD_STORE_GPG_OPTS="--pinentry-mode error --batch"`.

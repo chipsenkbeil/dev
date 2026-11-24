@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Tests for the accounting of .dev/test.lua, run through dev on a scratch tree of fake suites.
+# Tests for the accounting of .dev/commands/test.luau, run through dev on a scratch tree of fake suites.
 set -o pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$DIR/../.." && pwd)"
-DEV="$REPO/bin/dev"
+DEV="${DEV_BIN:-$REPO/target/debug/dev}"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
@@ -28,15 +28,16 @@ assert_line() {
     case $'\n'"$2"$'\n' in
     *$'\n'"$3"$'\n'*) printf 'ok   - %s\n' "$1" ;;
     *)
-        printf 'FAIL - %s\n       missing line: %q\n' "$1" "$3"
+        printf 'FAIL - %s\n       missing line: %q\n       in:           %q\n' "$1" "$3" "$2"
         fails=$((fails + 1))
         ;;
     esac
 }
 
-mkdir -p "$TMP/.dev/lua/devrepo" "$TMP/tests/a"
-sed 's/which("tmux")/which("tmux-not-installed")/' "$REPO/.dev/test.lua" >"$TMP/.dev/test.lua"
-cp "$REPO/.dev/lua/devrepo/checks.lua" "$TMP/.dev/lua/devrepo/"
+mkdir -p "$TMP/.dev/lib/devrepo" "$TMP/.dev/commands" "$TMP/tests/a"
+sed 's/which("tmux")/which("tmux-not-installed")/' "$REPO/.dev/commands/test.luau" >"$TMP/.dev/commands/test.luau"
+cp "$REPO/.dev/lib/devrepo/checks.luau" "$REPO/.dev/lib/devrepo/supervise.luau" "$TMP/.dev/lib/devrepo/"
+cp "$REPO/.dev/lib/lintset.luau" "$TMP/.dev/lib/"
 printf 'exit 0\n' >"$TMP/tests/a/pass_test.sh"
 printf 'exit 1\n' >"$TMP/tests/a/fail_test.sh"
 printf 'exit 3\n' >"$TMP/tests/a/skip_test.sh"
@@ -83,7 +84,7 @@ assert_line "a directory runs every suite under it" "$out" "2 passed, 0 failed, 
 out="$(cd "$TMP" && "$DEV" test tests/a/missing_test.sh 2>&1)"
 rc=$?
 assert_eq "a path that names no suite exits 2" "$rc" "2"
-assert_line "a path that names no suite is refused" "$out" "dev test: no suite at tests/a/missing_test.sh"
+assert_line "a path that names no suite is refused" "$out" "dev test: There is no suite at tests/a/missing_test.sh."
 
 out="$(cd "$TMP" && "$DEV" test ./tests/a/pass_test.sh 2>&1)"
 assert_line "a dot slash path names the same suite as the plain path" "$out" "PASS tests/a/pass_test.sh"
@@ -94,22 +95,12 @@ assert_line "a trailing slash path names the same suite as the plain path" "$out
 out="$(cd "$TMP" && "$DEV" test -x 2>&1)"
 rc=$?
 assert_eq "a dash flag is refused with exit 2" "$rc" "2"
-assert_line "a dash flag is refused with the unknown flag message" "$out" "dev test: Unknown flag -x. Pass it after -- to reach the script, or add it to the script's # flags: line."
+assert_line "a dash flag is refused with the unknown flag message" "$out" "dev test: Unknown flag -x."
 
 out="$(cd "$TMP" && "$DEV" test -- -x 2>&1)"
 rc=$?
 assert_eq "a dash flag after the double dash is refused with exit 2" "$rc" "2"
-assert_line "a dash flag after the double dash is refused by the verb" "$out" "dev test: Unknown flag -x."
-
-NOLUA="$TMP/nolua"
-mkdir -p "$NOLUA/.dev/lua/devrepo" "$NOLUA/tests/lua"
-cp "$REPO/.dev/lua/devrepo/checks.lua" "$NOLUA/.dev/lua/devrepo/"
-sed 's/which("luajit")/which("luajit-not-installed")/' "$REPO/.dev/test.lua" >"$NOLUA/.dev/test.lua"
-printf 'return\n' >"$NOLUA/tests/lua/some_test.lua"
-out="$(cd "$NOLUA" && "$DEV" test tests/lua/some_test.lua 2>&1)"
-rc=$?
-assert_eq "a tests/lua suite skipped without luajit exits 2" "$rc" "2"
-assert_line "a tests/lua suite skipped without luajit is named as skipped here" "$out" "dev test: tests/lua/some_test.lua is skipped here. It needs luajit."
+assert_line "a dash flag after the double dash is refused by the verb" "$out" "dev test: There is no suite at -x."
 
 printf 'exit 0\n' >"$TMP/tests/a/sp ace_test.sh"
 out="$(cd "$TMP" && "$DEV" test "tests/a/sp ace_test.sh" 2>&1)"

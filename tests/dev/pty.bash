@@ -1,8 +1,11 @@
 # shellcheck shell=bash
 
+DEV_BIN="${DEV_BIN:-$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)/target/debug/dev}"
+PATH="${DEV_BIN%/*}:$PATH"
+
 require_pty() {
     command -v script >/dev/null 2>&1 || skip "script not installed"
-    command -v luajit >/dev/null 2>&1 || skip "luajit not installed"
+    [ -x "$DEV_BIN" ] || skip "dev is not built"
 }
 
 PTY_DEADLINE_SECS=30
@@ -10,7 +13,7 @@ PTY_DEADLINE_SECS=30
 pty_timeout() {
     local what=$1 started=$2
     echo "$what after $((SECONDS - started)) seconds." >&2
-    ps -eo pid,ppid,pgid,stat,args | awk '/luajit/ && !/awk/' >&2
+    ps -eo pid,ppid,pgid,stat,args | awk '/dev -l/ && !/awk/' >&2
     exit 1
 }
 

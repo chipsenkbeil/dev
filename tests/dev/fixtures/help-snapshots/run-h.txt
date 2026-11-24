@@ -2,7 +2,7 @@ dev run
   Run the project
 
 usage
-  dev run
+  dev run [rest...]
 
-Run `dev run --help` for the script header and the command it runs.
+Run `dev run --help` for every flag and argument.
 exit 0

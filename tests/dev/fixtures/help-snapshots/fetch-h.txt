@@ -2,7 +2,7 @@ dev fetch
   Download the crates and advisory data for offline lint and test
 
 usage
-  dev fetch
+  dev fetch [rest...]
 
-Run `dev fetch --help` for the script header and the command it runs.
+Run `dev fetch --help` for every flag and argument.
 exit 0

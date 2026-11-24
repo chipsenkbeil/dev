@@ -1,8 +1,0 @@
-# LuaJIT: Lua 5.1 plus the jit and bit globals. Selene loads this when selene.toml says std = "luajit".
----
-base: lua51
-globals:
-  jit:
-    any: true
-  bit:
-    any: true

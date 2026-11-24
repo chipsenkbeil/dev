@@ -1,2 +1,2 @@
-std = "luajit"
+std = "luau+ci"
 exclude = [".*/**"]

@@ -4,5 +4,5 @@ dev pull
 usage
   dev pull
 
-Run `dev pull --help` for the script header and the command it runs.
+Run `dev pull --help` for every flag and argument.
 exit 0

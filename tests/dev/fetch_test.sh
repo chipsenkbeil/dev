@@ -4,7 +4,7 @@ set -o pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$DIR/../.." && pwd)"
-DEV="$REPO/bin/dev"
+DEV="${DEV_BIN:-$REPO/target/debug/dev}"
 export DOTFILES="$REPO"
 unset VERBOSE CI
 export DEV_REMOTE=0
@@ -48,7 +48,7 @@ assert_contains() {
 # project <name> <type>: a throwaway project of that type, printed as its path.
 project() {
     local dir="$TMP/$1"
-    mkdir -p "$dir/.dev"
+    mkdir -p "$dir/.dev/commands"
     case "$2" in
     rust) printf '[package]\nname = "p"\nversion = "0.1.0"\n' >"$dir/Cargo.toml" ;;
     lua) printf 'return 1\n' >"$dir/x.lua" ;;
@@ -103,10 +103,10 @@ out="$(cd "$plain" && PATH="$STUBS:$PATH" "$DEV" -v fetch 2>&1)"
 assert_contains "-v shows the command" "$out" "+ env CARGO_NET_OFFLINE=false cargo fetch --locked"
 
 over="$(project over rust)"
-printf '#!/usr/bin/env bash\n# Overridden.\necho override ran\n' >"$over/.dev/fetch.sh"
-chmod +x "$over/.dev/fetch.sh"
+printf '#!/usr/bin/env bash\n# Overridden.\necho override ran\n' >"$over/.dev/commands/fetch.sh"
+chmod +x "$over/.dev/commands/fetch.sh"
 out="$(run_fetch "$over" fetch)"
-assert_eq "a project .dev/fetch.sh replaces the built-in" "$out" "override ran"
+assert_eq "a project .dev/commands/fetch.sh replaces the built-in" "$out" "override ran"
 assert_eq "the override runs no cargo" "$(cat "$CARGO_LOG")" ""
 
 lua="$(project lua lua)"

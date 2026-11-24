@@ -1,56 +1,66 @@
 dev: rust project at <root>
 
 Check your work
-  lint            project over builtin  Lint the fixture.
-  fmt             builtin               Format the source for the project type
-  test            builtin               Run the project's tests
-  build           builtin               Build the project
-  run             builtin               Run the project
-  fetch           builtin               Download the crates and advisory data for offline lint and test
+  build              builtin               Build the project
+  fetch              builtin               Download the crates and advisory data for offline lint and test
+  fmt                builtin               Format the source for the project type
+  lint               project over builtin  Lint the fixture.
+  run                builtin               Run the project
+  test               builtin               Run the project's tests
 
 Share it
-  push            builtin               Push the trunk or current branch to the remote of record
-  abandon         builtin               Abandon an open Gerrit change by its number or Change-Id
-  branch          builtin               List, archive and prune branches by content
-  pull            builtin               Fetch the remote and rebase local work onto it
-  follow          builtin               Move the main checkout onto trunk
-  land            builtin               Land the workspace's card, or its change with no board
-  board           builtin               Read and update the project's board
+  abandon            builtin               Abandon an open Gerrit change by its number or Change-Id
+  follow             builtin               Move the main checkout onto trunk
+  land               builtin               Land the workspace's card, or its change with no board
+  pull               builtin               Fetch the remote and rebase local work onto it
+  push               builtin               Push the trunk or current branch to the remote of record
+  board              builtin               Read and update the project's board
+  branch             builtin               List, archive and prune branches by content
 
 Set up a machine or project
-  init            builtin               Set up a project's version control and remotes
-  config          builtin               Ask for the user config keys that are unset and write them
-  tools           builtin               Install and check the tools in .dev/tools.tsv
-  ws              builtin               Make, list and remove workspaces under one central root
+  completion         builtin               Print the shell completion script for bash, zsh, fish or powershell
+  config             builtin               Ask for the user config keys that are unset and write them
+  init               builtin               Set up a project's version control and remotes
+  tools              builtin               Install and check the tools in .dev/tools.tsv
+  ws                 builtin               Make, list and remove workspaces under one central root
 
 Boxes
-  connect         builtin               Attach to a box or machine, creating a box if needed
-  box             builtin               Create, show, stop, resume, extend, retag and delete dev boxes
-  ci              builtin               Read what ci recorded
+  connect            builtin               Attach to a box or machine, creating a box if needed
+  box                builtin               Create, show, stop, resume, extend, retag and delete dev boxes
+  ci                 builtin               Read what ci recorded
 
 Greeting
-  greet           project               Say hello.
+  greet              project               Say hello.
 
 help-project
-  seed            project               Seed the fixture data.
+  seed               project               Seed the fixture data.
 
 Widgets
-  widget          project               Manage the widget.
+  widget             project               Manage the widget.
 
 Hidden
-  help            builtin               Show the commands, the details of one command or a topic
-  plumbing        project               Internal helper for the other commands.
-  hello           global                Greet from the global commands.
-  __commands      builtin               List the commands with their descriptions, for shell completion
-  __subs          builtin               List the subcommands of a command, for shell completion
-  __flags         builtin               List the flags of a command, for shell completion
-  __args          builtin               List the values the next word can take, for shell completion
-  __topics check  builtin               Check the built-in and project topics against the real commands and flags
+  __complete         builtin               List what the last word can complete to, for shell completion
+  __pkg              builtin               Run the tools package driver, check or install
+  help               builtin               Show the commands, the details of one command or a help page
+  __board            builtin               The board's helper processes
+  __board keepalive  builtin               Renew a claim on Pomb every tick while its state file holds the fence
+  __board keychain   builtin               Get, put or drop the Keychain copy of a pass entry's token
+  __board passlock   builtin               Read a pass entry under the shared lock, the Keychain first
+  plumbing           project               Internal helper for the other commands.
+  hello              global                Greet from the global commands.
 
-Topics
-  commands                              How the fixture commands work
-  flags                                 The global flags of the fixture
-  overview                              What the fixture project is for and where to start
+Help pages
+  boards                                   Read and update a project's board, with every dev board subcommand
+  boxes                                    Dev boxes through ci box, and dev connect
+  commands                                 How the files in .dev/commands/ become commands
+  fixture                                  What the fixture project is for and where to start
+  flags                                    The global flags, help flags and how the launcher starts dev
+  forge                                    How dev push and dev pull pick a remote and a command
+  manifest                                 The tools manifest, install scopes and the package driver
+  modules                                  The dev modules, .dev commands and the test runner
+  overview                                 What dev is and where to start
+  porting                                  Port a .dev bash command to Luau
+  remote                                   Run a command somewhere else, by default or with --remote
 
-Run `dev help <command>` for one command and `dev help <topic>` for a topic.
+Run `dev help <command>` for one command and `dev help <page>` for a help page.
 exit 0

@@ -2,14 +2,15 @@
 
 ## Using dev
 
-`dev <command>` runs the script `.dev/<command>.lua` or `.dev/<command>.sh` at
-the repo root, or a built-in of the same name. Run `dev` for the curated help
-and `dev help <command>` for one command.
+`dev <command>` runs the script `.dev/commands/<command>.luau` or
+`.dev/commands/<command>.sh` at the repo root, or a built-in of the same
+name. Run `dev` for the curated help and `dev help <command>` for one
+command.
 
 `dev help -a` lists every command, hidden ones included, and marks a script
 that replaces a built-in with `(override)`. `dev help --topics` lists the
 topics and `dev help <topic>` prints one. The project's own topics are the
-`.md` files in `.dev/topics/`.
+`.md` files in `.dev/help/`.
 
 `-h` after a command prints its description, usage and flags. `--help` after a
 command prints the long form.
@@ -164,9 +165,10 @@ end
 
 ### A command
 
-`.dev/NAME.lua` is a command. A `.lua` file needs no exec bit and wins over a
-`.sh` file of the same name. dev loads the file and calls the chunk with one
-argument, the context, which `local ctx = ...` reads.
+`.dev/commands/NAME.luau` is a command. A `.luau` file needs no exec bit and
+wins over a `.sh` file of the same name. The file returns
+`require("dev.command")` called with a spec table, and its `run(opts, args,
+ctx)` gets the context third.
 
 - `ctx.name`: the command as typed
 - `ctx.words`: the command words
@@ -179,7 +181,7 @@ argument, the context, which `local ctx = ...` reads.
 - `ctx.after`: how many of `ctx.args` follow a `--`
 - `ctx.dashed`: whether a `--` was typed
 - `ctx.verbose`: 0, 1 or 2
-- `ctx.interpreter`: the luajit dev runs under
+- `ctx.interpreter`: the program dev runs under
 
 The chunk returns the exit code as an integer, and nothing means 0. A Lua
 error ends the run with `dev <name>: <message>` and exit 1.
@@ -203,11 +205,12 @@ return 0
 
 ### A subcommand
 
-`.dev/CMD/SUB.lua` runs as `dev CMD SUB`. A directory of scripts is a command
-with subcommands, and the first line of `.dev/CMD/DESCRIPTION` describes it.
+`.dev/commands/CMD/SUB.luau` runs as `dev CMD SUB`. A directory of scripts
+is a command with subcommands, and the first line of
+`.dev/commands/CMD/DESCRIPTION` describes it.
 
 Such a command with no subcommand, or an unknown one, exits 2 and lists the
-subcommands. Saved as `.dev/cache/show.lua`, this subcommand runs as
+subcommands. Saved as `.dev/commands/cache/show.luau`, this subcommand runs as
 `dev cache show` and prints `cache show`.
 
 ```lua
@@ -251,8 +254,8 @@ print(loud and "HELLO" or "hello")
 
 `group: <name>` sets the heading `dev help` lists the command under, and a
 command with none lands in a group named after the project directory. `hidden`
-keeps the command out of `dev help` and `dev help -a` still lists it. Scripts
-named `__*.sh` or `__*.lua` never appear in any listing.
+keeps the command out of `dev help` and `dev help -a` still lists it. Scripts in
+`helpers/` never appear in any listing.
 
 ```lua
 --[[
@@ -269,9 +272,9 @@ print("lint")
 
 ### Your own modules
 
-`.dev/lua/` is on `package.path` while a Lua command runs, so
-`.dev/lua/myproj/checks.lua` loads with `require("myproj.checks")`. dev never
-lists `lua` or `topics` as a command.
+`.dev/lib/` is on the module search path while a command runs, so
+`.dev/lib/myproj/checks.luau` loads with `require("myproj.checks")`. dev never
+lists `lib`, `helpers` or `help` as a command.
 
 ## Commands in this repo
 
@@ -287,8 +290,3 @@ These are the project commands in `.dev/`. Each lists the flags and
   parallel suite count.
 - `dev --remote soak [-- --runs N]`: run the signal tests in a loop beside CPU
   burners, on a ci host only. Flag: `--runs` (default 50).
-
-### Set up
-
-- `dev install`: publish this checkout as dev's snapshot and link
-  `~/.local/bin/dev` and `~/.local/share/dev` into it. No flags.

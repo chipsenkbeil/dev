@@ -8,7 +8,7 @@
 bats_require_minimum_version 1.5.0
 
 REPO="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
-PKG="$REPO/pkg.lua"
+DEV="${DEV_BIN:-$REPO/target/debug/dev}"
 
 setup() {
     STUBS="$BATS_TEST_TMPDIR/stubs"
@@ -24,7 +24,7 @@ setup() {
 
 @test "install refuses a repo with a leading dash, names the row and still installs the next" {
     printf 'name binary brew\nbad-repo zzz-bad tap:ok,repo:-x/y\nlast zzz-last last-formula\n' >"$MANIFEST"
-    run --separate-stderr luajit "$PKG" install --manifest "$MANIFEST"
+    run --separate-stderr "$DEV" __pkg install --manifest "$MANIFEST"
     [ "$status" -eq 1 ]
     [[ "$stderr" == *"! bad-repo: refusing the package or repo "* ]] || false
     [[ "$stderr" == *"install failed: bad-repo" ]] || false
@@ -34,7 +34,7 @@ setup() {
 
 @test "install refuses an option-like name, a name with a space and a bad repo, one line each" {
     printf 'name binary brew\nopt zzz-a -U\nspc zzz-b "a b"\nrepo zzz-c tap:ok,repo:a/b/c\nlast zzz-last last-formula\n' >"$MANIFEST"
-    run --separate-stderr luajit "$PKG" install --manifest "$MANIFEST"
+    run --separate-stderr "$DEV" __pkg install --manifest "$MANIFEST"
     [ "$status" -eq 1 ]
     [[ "$stderr" == *"! opt: refusing the package or repo "* ]] || false
     [[ "$stderr" == *"! spc: refusing the package or repo "* ]] || false
@@ -45,7 +45,7 @@ setup() {
 
 @test "install refuses a NUL byte in a package cell, processes the later rows and names the row" {
     printf 'name binary brew\nnul-cell zzz-a ripgre\0p\nlast zzz-last last-formula\n' >"$MANIFEST"
-    run --separate-stderr luajit "$PKG" install --manifest "$MANIFEST"
+    run --separate-stderr "$DEV" __pkg install --manifest "$MANIFEST"
     [ "$status" -eq 1 ]
     [[ "$stderr" == *"! nul-cell: refusing the package or repo "* ]] || false
     [[ "$stderr" == *"install failed: nul-cell" ]] || false
@@ -55,7 +55,7 @@ setup() {
 
 @test "install refuses a NUL byte in a name and in a binary" {
     printf 'name binary brew\nna\0me zzz-a first-formula\nnul-bin zzz\0b second-formula\nlast zzz-last last-formula\n' >"$MANIFEST"
-    run --separate-stderr luajit "$PKG" install --manifest "$MANIFEST"
+    run --separate-stderr "$DEV" __pkg install --manifest "$MANIFEST"
     [ "$status" -eq 1 ]
     [[ "$stderr" == *'! na\0me: refusing the package or repo '* ]] || false
     [[ "$stderr" == *"! nul-bin: refusing the package or repo "* ]] || false
@@ -66,7 +66,7 @@ setup() {
 
 @test "check refuses a NUL byte in a cell and a repo with a leading dash, and reports the later rows" {
     printf 'name binary brew\nnul-cell zzz-a ripgre\0p\nbad-repo zzz-b tap:ok,repo:-x/y\nlast zzz-last last-formula\n' >"$MANIFEST"
-    run --separate-stderr luajit "$PKG" check --manifest "$MANIFEST"
+    run --separate-stderr "$DEV" __pkg check --manifest "$MANIFEST"
     [ "$status" -eq 1 ]
     [[ "$output" == *"[ ] nul-cell"*"(refusing the package or repo "* ]] || false
     [[ "$output" == *"[ ] bad-repo"*"(refusing the package or repo "* ]] || false

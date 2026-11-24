@@ -1,28 +1,25 @@
 #!/usr/bin/env bash
-# Pure-bash tests for `dev tools install` and `dev tools check`. A fake project holds
-# .dev/tools.tsv, LUA_INIT loads tests/lua/fake_env.lua so FAKE_UID and FAKE_OS (Linux) set the uid and system
-# name, and uname (which pkg.lua reads) and pacman are stubs first on PATH, pacman recording every call and reporting nothing installed.
+# Pure-bash tests for `dev tools install` and `dev tools check`, run against the dev binary. A fake project holds
+# .dev/tools.tsv, the fake_root.luau fixture overrides the uid and the system name from FAKE_UID and FAKE_OS before it calls
+# dev.cli, and uname and pacman are stubs first on PATH, pacman recording every call and reporting nothing installed.
 set -o pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$DIR/../.." && pwd)"
-DEV="$REPO/bin/dev"
-
-# shellcheck source=tests/dev/stage.bash
-source "$DIR/stage.bash"
+DEV="${DEV_BIN:-$REPO/target/debug/dev}"
 unset DOTFILES VERBOSE CI
 export DEV_REMOTE=0
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 STUBS="$TMP/stubs"
-export LUA_INIT="@$REPO/tests/lua/fake_env.lua" FAKE_UID=1000 FAKE_OS=Linux
+export FAKE_UID=1000 FAKE_OS=Linux
 export CALLS="$TMP/calls" RECORD="$TMP/record"
 ROOT_REFUSAL="As root, dev runs only \`dev tools install\` and \`dev tools check\`."
 if [ "$EUID" -eq 0 ]; then REAL_ROOT=1; else REAL_ROOT=0; fi
 
 skip_user() {
-    printf 'SKIP user-only - runs as a user through FAKE_UID, which a real uid 0 never loads\n'
+    printf 'SKIP user-only - runs as a user through FAKE_UID, which a real uid 0 does not override\n'
 }
 mkdir -p "$STUBS"
 cat >"$STUBS/uname" <<'STUB'
@@ -36,6 +33,8 @@ echo "pacman $*" >>"$CALLS"
 STUB
 chmod +x "$STUBS"/*
 
+RUN="$REPO/tests/dev/fixtures/fake_root.luau"
+DEVRUN=("$DEV" -l "$RUN")
 fails=0
 
 assert_eq() {
@@ -75,7 +74,7 @@ tools() {
     local dir="$1"
     shift
     : >"$CALLS"
-    (cd "$dir" && PATH="$STUBS:$PATH" "$DEV" tools "$@")
+    (cd "$dir" && PATH="$STUBS:$PATH" "${DEVRUN[@]}" tools "$@")
 }
 
 cat >"$TMP/installer.sh" <<'STUB'
@@ -210,8 +209,7 @@ if [ "$REAL_ROOT" = 0 ]; then
     out="$(tools "$proj" check --bogus 2>&1)"
     assert_eq "check with a bad flag exits 2" "$?" "2"
     assert_contains "check names the bad flag" "$out" "dev tools check: Unknown flag --bogus"
-    assert_contains "check shows the curated help" "$out" "Set up a machine or project"
-
+    assert_contains "check prints its usage line after the bad flag" "$out" "usage: dev tools check [--group NAME]"
     hostile="$TMP/x'\$(touch PWNED)"
     mkdir -p "$hostile/.dev"
 
@@ -248,32 +246,33 @@ STUB
 else
     skip_user
 fi
+assert_eq "the old manifest path is gone" "$([ -e "$REPO/tools.tsv" ] && echo present || echo gone)" "gone"
 
-copy="$TMP/image/usr-local-lib-dev"
+copy="$TMP/image/usr-local-lib-dotfiles"
 mkdir -p "$copy/bin"
 cp "$DEV" "$copy/bin/dev"
-stage_share "$copy"
 chmod -R a-w "$copy"
 out="$(FAKE_UID=0 HOME="$TMP/nohome" tools "$proj" install --system --dry-run 2>&1)"
-out_copy="$(cd "$proj" && FAKE_UID=0 HOME="$TMP/nohome" PATH="$STUBS:$PATH" "$copy/bin/dev" tools install --system --dry-run 2>&1)"
-assert_eq "a read-only copy of dev gives the same plan" "$out_copy" "$out"
+out_copy="$(cd "$proj" && FAKE_UID=0 HOME="$TMP/nohome" PATH="$STUBS:$PATH" "$copy/bin/dev" -l "$RUN" tools install --system --dry-run 2>&1)"
+out_copy="${out_copy//"$copy/bin/dev"/$DEV}"
+assert_eq "a read-only copy of the binary gives the same plan" "$out_copy" "$out"
 assert_eq "a read-only copy leaves HOME unmade" "$([ -e "$TMP/nohome" ] && echo made || echo none)" "none"
 chmod -R u+w "$copy"
 
-mkdir -p "$proj/.dev/tools"
-cat >"$proj/.dev/tools/install.sh" <<'STUB'
+mkdir -p "$proj/.dev/commands/tools"
+cat >"$proj/.dev/commands/tools/install.sh" <<'STUB'
 #!/bin/sh
 echo "OVERRIDE RAN $*"
 STUB
-cat >"$proj/.dev/tools/extra.sh" <<'STUB'
+cat >"$proj/.dev/commands/tools/extra.sh" <<'STUB'
 #!/bin/sh
 echo "extra ran"
 STUB
-cat >"$proj/.dev/tools.sh" <<'STUB'
+cat >"$proj/.dev/commands/tools.sh" <<'STUB'
 #!/bin/sh
 echo "FLAT OVERRIDE RAN $*"
 STUB
-chmod +x "$proj/.dev/tools/install.sh" "$proj/.dev/tools/extra.sh" "$proj/.dev/tools.sh"
+chmod +x "$proj/.dev/commands/tools/install.sh" "$proj/.dev/commands/tools/extra.sh" "$proj/.dev/commands/tools.sh"
 if [ -x /usr/bin/pacman ] && [ "$EUID" -eq 0 ]; then
     out="$(FAKE_UID=0 tools "$proj" install --system --dry-run 2>&1)"
     assert_not_contains "a project script cannot replace a built-in tools subcommand" "$out" "OVERRIDE RAN"
@@ -284,9 +283,9 @@ fi
 if [ "$REAL_ROOT" = 0 ]; then
     out="$(tools "$proj" --help)"
     assert_contains "a built-in subcommand a project script replaces is marked as an override" "$out" "(override)"
-    out="$(cd "$proj" && PATH="$STUBS:$PATH" "$DEV" help)"
+    out="$(cd "$proj" && PATH="$STUBS:$PATH" "${DEVRUN[@]}" help)"
     assert_not_contains "dev help does not mark the noun as an override" "$out" "(override)"
-    out="$(cd "$proj" && PATH="$STUBS:$PATH" "$DEV" help tools install)"
+    out="$(cd "$proj" && PATH="$STUBS:$PATH" "${DEVRUN[@]}" help tools install)"
     assert_contains "dev help tools install names the built-in a project script replaces" "$out" "(project over builtin)"
     out="$(FAKE_UID=1000 tools "$proj" extra 2>&1)"
     assert_eq "a project-only tools subcommand runs as a user" "$out" "extra ran"
@@ -303,35 +302,35 @@ out="$(FAKE_UID=0 tools "$proj" extra 2>&1)"
 assert_eq "dev refuses a project tools subcommand as root" "$?" "2"
 assert_contains "the root refusal says what root may run" "$out" "$ROOT_REFUSAL"
 assert_not_contains "the root refusal runs nothing" "$out" "extra ran"
-printf '#!/bin/sh\necho flat ran\n' >"$proj/.dev/verify-prod.sh"
-chmod +x "$proj/.dev/verify-prod.sh"
+printf '#!/bin/sh\necho flat ran\n' >"$proj/.dev/commands/verify-prod.sh"
+chmod +x "$proj/.dev/commands/verify-prod.sh"
 if [ "$REAL_ROOT" = 0 ]; then
-    assert_eq "a flat project verb runs as a user" "$(cd "$proj" && FAKE_UID=1000 PATH="$STUBS:$PATH" "$DEV" verify-prod)" "flat ran"
+    assert_eq "a flat project verb runs as a user" "$(cd "$proj" && FAKE_UID=1000 PATH="$STUBS:$PATH" "${DEVRUN[@]}" verify-prod)" "flat ran"
 else
     skip_user
 fi
-out="$(cd "$proj" && FAKE_UID=0 PATH="$STUBS:$PATH" "$DEV" verify-prod 2>&1)"
+out="$(cd "$proj" && FAKE_UID=0 PATH="$STUBS:$PATH" "${DEVRUN[@]}" verify-prod 2>&1)"
 assert_eq "dev refuses a flat project verb as root" "$?" "2"
 assert_contains "the flat refusal says what root may run" "$out" "$ROOT_REFUSAL"
 out="$(FAKE_UID=0 tools "$proj" check 2>&1)"
-assert_not_contains "the built-in tools check ignores .dev/tools.sh" "$out" "FLAT OVERRIDE"
-rm -f "$proj/.dev/tools.sh" "$proj/.dev/tools/install.sh"
+assert_not_contains "the built-in tools check ignores .dev/commands/tools.sh" "$out" "FLAT OVERRIDE"
+rm -f "$proj/.dev/commands/tools.sh" "$proj/.dev/commands/tools/install.sh"
 if [ "$REAL_ROOT" = 0 ]; then
     out="$(tools "$proj" --help)"
     assert_contains "dev tools --help lists install" "$out" "install"
     assert_contains "dev tools --help lists check" "$out" "check"
     assert_not_contains "a built-in subcommand no script replaces is not marked as an override" "$out" "(override)"
-    out="$(cd "$proj" && PATH="$STUBS:$PATH" "$DEV" help tools install)"
+    out="$(cd "$proj" && PATH="$STUBS:$PATH" "${DEVRUN[@]}" help tools install)"
     assert_not_contains "dev help tools install is not an override without a project script" "$out" "(override)"
     out="$(tools "$proj" frobnicate 2>&1)"
     assert_eq "an unknown tools subcommand exits 2" "$?" "2"
     assert_contains "an unknown tools subcommand is named" "$out" "dev tools: unknown subcommand frobnicate"
-    out="$(cd "$proj" && PATH="$STUBS:$PATH" "$DEV" help)"
+    out="$(cd "$proj" && PATH="$STUBS:$PATH" "${DEVRUN[@]}" help)"
     assert_contains "dev help lists the tools noun" "$out" "tools"
-    out="$(cd "$proj" && "$DEV" --remote tools install 2>&1)"
+    out="$(cd "$proj" && "${DEVRUN[@]}" --remote tools install 2>&1)"
     assert_eq "--remote refuses tools install" "$?" "2"
     assert_contains "--remote names the refused subcommand" "$out" "dev tools install: runs on this machine only, so --remote does not apply"
-    out="$(cd "$proj" && "$DEV" --remote tools check 2>&1)"
+    out="$(cd "$proj" && "${DEVRUN[@]}" --remote tools check 2>&1)"
     assert_eq "--remote refuses tools check" "$?" "2"
 else
     skip_user
@@ -389,6 +388,9 @@ if [ -x /usr/bin/pacman ] && [ "$EUID" -eq 0 ]; then
     assert_not_contains "--system --group skips a cargo row" "$out" "crg-d"
     assert_not_contains "--system --group skips an ungrouped row" "$out" "oth-e"
     assert_contains "--system --group names the skipped AUR row" "$out" "skipped third-party rows (built into the image, not installed with root): aur-b (aur:)"
+    out="$(FAKE_UID=0 tools "$REPO" install --system --dry-run --group base 2>&1)"
+    assert_eq "dotfiles' manifest --system --group base exits 0" "$?" "0"
+    assert_not_contains "dotfiles' --group base leaves out a rust row" "$out" "cargo-nextest"
     out="$(FAKE_UID=0 tools "$gproj" install --system --group rust 2>&1)"
     assert_eq "--system --group rust with only user-scope rows exits 0" "$?" "0"
     assert_not_contains "--system --group rust installs nothing" "$out" "pacman -S"
@@ -407,6 +409,12 @@ if [ "$REAL_ROOT" = 0 ]; then
 else
     skip_user
 fi
+out="$(cd "$proj" && PATH="$STUBS:$PATH" "$DEV" __pkg 2>&1)"
+assert_eq "dev __pkg with no arguments prints its usage and exits 0" "$?" "0"
+assert_contains "dev __pkg usage names the driver" "$out" "usage: dev __pkg check"
+out="$(cd "$proj" && PATH="$STUBS:$PATH" "$DEV" __pkg frobnicate 2>&1)"
+assert_eq "dev __pkg with an unknown subcommand exits 2" "$?" "2"
+assert_contains "dev __pkg names the unknown subcommand" "$out" "unknown subcommand: frobnicate"
 if [ "$fails" -gt 0 ]; then
     printf '\n%d failure(s)\n' "$fails"
     exit 1

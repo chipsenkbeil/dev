@@ -6,7 +6,7 @@ usage
 
 flags
   --loud
-  --name
+  --name <string>
 
-Run `dev greet --help` for the script header and the command it runs.
+Run `dev greet --help` for every flag and argument.
 exit 0

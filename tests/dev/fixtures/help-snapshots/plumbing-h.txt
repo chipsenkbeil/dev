@@ -4,5 +4,5 @@ dev plumbing
 usage
   dev plumbing
 
-Run `dev plumbing --help` for the script header and the command it runs.
+Run `dev plumbing --help` for every flag and argument.
 exit 0

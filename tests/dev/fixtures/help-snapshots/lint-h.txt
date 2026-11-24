@@ -7,5 +7,5 @@ usage
 flags
   --fix
 
-Run `dev lint --help` for the script header and the command it runs.
+Run `dev lint --help` for every flag and argument.
 exit 0

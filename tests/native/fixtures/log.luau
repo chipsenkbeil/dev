@@ -1,0 +1,8 @@
+local log = require("dev.log")
+log.error("e")
+log.warn("w")
+log.info("i")
+log.debug("d")
+log.trace("t")
+local level, quiet = log.verbosity()
+print("out", level, quiet, log.enabled("debug"), log.xtrace())

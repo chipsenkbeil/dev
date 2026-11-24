@@ -1,0 +1,5 @@
+# The ci global that a pipeline file receives
+---
+globals:
+  ci:
+    any: true

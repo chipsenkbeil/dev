@@ -1,8 +1,9 @@
 # overview: What dev is and where to start
 
-dev is one entry point for every project. `dev <command>` runs the script
-`.dev/<command>.lua` or `.dev/<command>.sh` at the project root, or a built-in
-of the same name, so lint, test, build and push read the same everywhere.
+`dev` is one command for the work a repository needs: lint, test, format,
+build, push, pull, land and the project's task board. A project adds its own
+commands, help pages and settings under `.dev/`, and `dev` runs them beside
+its built-ins.
 
 ## Look around
 
@@ -12,11 +13,11 @@ dev help -a
 dev help --topics
 ```
 
-`dev` prints the curated help and `dev help -a` lists every command, hidden
-ones included. `dev help <topic>` prints one topic, and the project's own
-topics are the `.md` files in `.dev/topics/`.
+`dev` with no arguments prints the curated view, the commands grouped by
+purpose. `dev help -a` adds the hidden ones, and `dev help --topics` lists the
+help pages.
 
-## Check your work
+## Run a command
 
 ```
 dev lint
@@ -24,8 +25,15 @@ dev test
 dev --remote test
 ```
 
-`--remote` runs the command's job from `.ci/jobs.lua` on ci instead of here
-(`dev help remote`).
+A command runs in the project that holds the working directory, or in the one
+named by `-C DIR`. `--remote` sends a command with a ci job to the ci
+machine (`dev help remote`).
+
+## Add a command
+
+Put `NAME.luau` or `NAME.sh` in `.dev/commands/` and `dev <name>` runs it.
+`dev help commands` says how those files become commands, and
+`dev help porting` covers moving a bash command to Luau.
 
 ## Send it
 
@@ -38,9 +46,5 @@ dev follow
 `dev help forge` says which remote `dev push` picks and why. `dev follow` moves
 the main checkout onto trunk.
 
-## Work on dev itself
-
-The launcher in this checkout runs the snapshot that `dev install` publishes,
-so a change here reaches the running dev only after that install.
-`DEV_FROM=checkout dev ...` runs the checkout copy on purpose
-(`dev help flags`). `dev help modules` holds the rules for each module.
+`dev help modules` and `dev help flags` hold the rules for each module and
+global flag.

@@ -1,46 +1,55 @@
 dev: rust project at <root>
 
 Check your work
-  lint      (override)  Lint the fixture.
-  fmt                   Format the source for the project type
-  test                  Run the project's tests
-  build                 Build the project
-  run                   Run the project
-  fetch                 Download the crates and advisory data for offline lint and test
+  build                   Build the project
+  fetch                   Download the crates and advisory data for offline lint and test
+  fmt                     Format the source for the project type
+  lint        (override)  Lint the fixture.
+  run                     Run the project
+  test                    Run the project's tests
 
 Share it
-  push                  Push the trunk or current branch to the remote of record
-  abandon               Abandon an open Gerrit change by its number or Change-Id
-  branch                List, archive and prune branches by content
-  pull                  Fetch the remote and rebase local work onto it
-  follow                Move the main checkout onto trunk
-  land                  Land the workspace's card, or its change with no board
-  board                 Read and update the project's board
+  abandon                 Abandon an open Gerrit change by its number or Change-Id
+  follow                  Move the main checkout onto trunk
+  land                    Land the workspace's card, or its change with no board
+  pull                    Fetch the remote and rebase local work onto it
+  push                    Push the trunk or current branch to the remote of record
+  board                   Read and update the project's board
+  branch                  List, archive and prune branches by content
 
 Set up a machine or project
-  init                  Set up a project's version control and remotes
-  config                Ask for the user config keys that are unset and write them
-  tools                 Install and check the tools in .dev/tools.tsv
-  ws                    Make, list and remove workspaces under one central root
+  completion              Print the shell completion script for bash, zsh, fish or powershell
+  config                  Ask for the user config keys that are unset and write them
+  init                    Set up a project's version control and remotes
+  tools                   Install and check the tools in .dev/tools.tsv
+  ws                      Make, list and remove workspaces under one central root
 
 Boxes
-  connect               Attach to a box or machine, creating a box if needed
-  box                   Create, show, stop, resume, extend, retag and delete dev boxes
-  ci                    Read what ci recorded
+  connect                 Attach to a box or machine, creating a box if needed
+  box                     Create, show, stop, resume, extend, retag and delete dev boxes
+  ci                      Read what ci recorded
 
 Greeting
-  greet                 Say hello.
+  greet                   Say hello.
 
 help-project
-  seed                  Seed the fixture data.
+  seed                    Seed the fixture data.
 
 Widgets
-  widget                Manage the widget.
+  widget                  Manage the widget.
 
-Topics
-  commands              How the fixture commands work
-  flags                 The global flags of the fixture
-  overview              What the fixture project is for and where to start
+Help pages
+  boards                  Read and update a project's board, with every dev board subcommand
+  boxes                   Dev boxes through ci box, and dev connect
+  commands                How the files in .dev/commands/ become commands
+  fixture                 What the fixture project is for and where to start
+  flags                   The global flags, help flags and how the launcher starts dev
+  forge                   How dev push and dev pull pick a remote and a command
+  manifest                The tools manifest, install scopes and the package driver
+  modules                 The dev modules, .dev commands and the test runner
+  overview                What dev is and where to start
+  porting                 Port a .dev bash command to Luau
+  remote                  Run a command somewhere else, by default or with --remote
 
-Run `dev help -a` for all, `dev help <command>` for one, `dev help <topic>` for a topic.
+Run `dev help -a` for all, `dev help <command>` for one command and `dev help <page>` for a help page.
 exit 0

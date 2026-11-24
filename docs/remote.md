@@ -72,7 +72,8 @@ A command with no job is not an error.
 
 ### Commands that stay local
 
-A command script whose header has a `# local` line is never sent to ci by the
+A command whose spec sets `runs_local` (or whose header has a `# runs_local`
+line) is never sent to ci by the
 default. It suits a script that prepares something and then drives ci itself,
 beside a job of the same name.
 
@@ -81,7 +82,8 @@ under the default.
 
 ### Commands that fetch a built file
 
-A command script whose header has a `# fetch JOB FILE` line runs here, and under
+A command whose spec has `fetch`, or whose header has a `# fetch JOB FILE`
+line, runs here, and under
 the remote mode it first builds `FILE` on ci. `JOB` is a job of a pipeline in
 `.ci/`, and `FILE` is the artifact that job keeps with `ci.artifact`. The
 header is `# fetch client ci` for the job `client` that keeps `ci`.
@@ -108,7 +110,8 @@ label rides on every ci run the fetch starts, as for `--remote`.
 
 ### Commands that apply a patch from ci
 
-A command script whose header has a `# patch JOB FILE` line never runs here
+A command whose spec has `patch`, or whose header has a `# patch JOB FILE`
+line, never runs here
 under the remote mode. It suits a command that rewrites files, such as a
 formatter that must not run on the laptop. `JOB` is a job of a pipeline in
 `.ci/`, and `FILE` is the patch that job keeps with `ci.artifact`.
@@ -185,8 +188,8 @@ ci job is refused. It makes no difference what chose the laptop (`--local`,
 The refusal exits 2, prints a line that names the command and `--remote`, and
 runs nothing. The default remote run and `--remote` still go to ci.
 
-The refusal does not apply to a `# local` command, to a command that declares
-`remote: false`, or inside a ci job or dev box (`CI=true` or the box
+The refusal does not apply to a `runs_local` command, to a command that sets
+`remote = false`, or inside a ci job or dev box (`CI=true` or the box
 marker). An unset or empty `DEV_AGENT` changes nothing.
 
 When ci cannot be asked, the refusal fails with ci's error and the hint
@@ -200,7 +203,7 @@ agent is refused when a mutating command runs with its root in the
 primary checkout, the folder a workspace or worktree belongs to.
 
 The refused commands are the ones that declare `requires: workspace`, in the
-built-in row or the script header, and the line of a command with subcommands
+spec or header, and the line of a command with subcommands
 covers its subcommands. Every other command passes.
 
 The lead role is refused only for `land`, `board land`, `abandon`, `clean`,
@@ -275,10 +278,11 @@ for an agent that may call `dev` only.
 
 ## Replacing the runner
 
-A project replaces the runner with `.dev/__remote.lua`, a hidden helper. It is
+A project replaces the runner with `.dev/helpers/remote.luau`, a helper that dev
+never lists. It is
 a chunk that returns a function:
 
-```lua
+```luau
 return function(run)
     return 0
 end
@@ -307,16 +311,17 @@ A runner can reuse the default one with
 level. `opts.pipeline` names a pipeline under `.ci/`, so the job runs from
 `.ci/<pipeline>.lua` instead of the default pipeline.
 
-This repo's `.dev/__remote.lua` sends `soak` to `.ci/soak.lua`
+This repo's `.dev/helpers/remote.luau` sends `soak` to `.ci/soak.lua`
 (`dev --remote soak`, the signal tests in a loop under CPU load) and
 everything else to the default one.
 
 ## What it refuses
 
-A command that declares `remote: false`, in its built-in row or with a
+A command that sets `remote = false` in its spec, or with a
 `# remote: false` header line, exits 2 with `dev <command>: runs on this
 machine only, so --remote does not apply`, whatever the runner. The line of a
 command with subcommands covers its subcommands.
 
-A `remote: false` command whose script has a `# patch JOB FILE` line runs its
+A `remote = false` command whose spec has `patch` or whose header has a
+`# patch JOB FILE` line runs its
 job on ci and applies the patch here instead of exiting 2.

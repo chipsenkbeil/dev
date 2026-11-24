@@ -2,14 +2,14 @@ dev tools install
   Install the manifest's tools, by install scope
 
 usage
-  dev tools install [--system or --user] [--group NAME] [--dry-run] [--force] [tool...]
+  dev tools install [flags] [tool...]
 
 flags
   --dry-run
   --force
-  --group
+  --group <string>
   --system
   --user
 
-Run `dev tools install --help` for the script header and the command it runs.
+Run `dev tools install --help` for every flag and argument.
 exit 0

@@ -2,10 +2,10 @@ dev push
   Push the trunk or current branch to the remote of record
 
 usage
-  dev push [flags]
+  dev push [flags] [remote...]
 
 flags
-  --tag
+  --tag <string>
 
-Run `dev push --help` for the script header and the command it runs.
+Run `dev push --help` for every flag and argument.
 exit 0

@@ -2,11 +2,11 @@ dev init
   Set up a project's version control and remotes
 
 usage
-  dev init [--name N] [--dry-run]
+  dev init [flags]
 
 flags
-  --name
+  --name <string>
   --dry-run
 
-Run `dev init --help` for the script header and the command it runs.
+Run `dev init --help` for every flag and argument.
 exit 0

@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Pure-bash tests for .dev/lint.lua, run on scratch files.
-# The script is copied into a temp tree with the repo's lint set, so the repo is never linted.
+# Pure-bash tests for .dev/commands/lint.luau, run on scratch files copied into a temp tree so the repo is never linted.
 set -o pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -8,23 +7,24 @@ REPO="$(cd "$DIR/../.." && pwd)"
 export RIPGREP_CONFIG_PATH=/dev/null
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-DEV="$REPO/bin/dev"
-mkdir -p "$TMP/.dev/lua/devrepo" "$TMP/bin" "$TMP/tests"
-cp "$REPO/.dev/lint.lua" "$TMP/.dev/"
-cp "$REPO/.dev/lua/devrepo/checks.lua" "$TMP/.dev/lua/devrepo/"
-cp "$REPO/.dev/lua/lintset.lua" "$TMP/.dev/lua/"
+DEV="${DEV_BIN:-$REPO/target/debug/dev}"
+mkdir -p "$TMP/.dev/lib/devrepo" "$TMP/.dev/commands" "$TMP/scripts" "$TMP/tests" "$TMP/dotfiles/bin" "$TMP/dotfiles/jj/.config/jj/scripts" "$TMP/.ci"
+cp "$REPO/.dev/commands/lint.luau" "$TMP/.dev/commands/"
+cp "$REPO/stylua.toml" "$REPO/selene.toml" "$REPO/sgconfig.yml" "$REPO/ci.yml" "$TMP/"
+cp "$REPO/.dev/lib/devrepo/checks.luau" "$TMP/.dev/lib/devrepo/"
+cp "$REPO/.dev/lib/lintset.luau" "$TMP/.dev/lib/"
 cp -R "$REPO/.dev/ast-grep" "$TMP/.dev/"
-cp "$REPO/stylua.toml" "$REPO/selene.toml" "$REPO/luajit.yml" "$REPO/sgconfig.yml" "$TMP/"
-printf '#!/usr/bin/env bash\nset -euo pipefail\n\nif true; then\n    echo ok\nfi\n' >"$TMP/bin/clean.sh"
+printf '#!/usr/bin/env bash\nset -euo pipefail\n\nif true; then\n    echo ok\nfi\n' >"$TMP/scripts/clean.sh"
 
 fails=0
 
 assert_eq() {
-    local desc="$1" got="$2" want="$3"
+    local desc="$1" got="$2" want="$3" output="${4-}"
     if [ "$got" = "$want" ]; then
         printf 'ok   - %s\n' "$desc"
     else
         printf 'FAIL - %s\n       got:  %q\n       want: %q\n' "$desc" "$got" "$want"
+        [ -z "$output" ] || printf '       output: %q\n' "$output"
         fails=$((fails + 1))
     fi
 }
@@ -58,28 +58,28 @@ lint() {
 
 out="$(lint)"
 rc=$?
-assert_eq "a clean tree exits 0" "$rc" "0"
+assert_eq "a clean tree exits 0" "$rc" "0" "$out"
 
-printf '#!/usr/bin/env bash\nset -euo pipefail\n\nif true; then\n  echo drifted\nfi\n' >"$TMP/bin/drift.sh"
+printf '#!/usr/bin/env bash\nset -euo pipefail\n\nif true; then\n  echo drifted\nfi\n' >"$TMP/scripts/drift.sh"
 out="$(lint)"
 rc=$?
 assert_eq "shfmt drift exits non-zero" "$((rc != 0))" "1"
-assert_contains "shfmt drift names the file" "$out" "bin/drift.sh"
-rm "$TMP/bin/drift.sh"
+assert_contains "shfmt drift names the file" "$out" "scripts/drift.sh"
+rm "$TMP/scripts/drift.sh"
 
-printf '#!/usr/bin/env bash\nset -euo pipefail\n\nvalue=1\n# explains the next line\necho done\n' >"$TMP/bin/spacing.sh"
+printf '#!/usr/bin/env bash\nset -euo pipefail\n\nvalue=1\n# explains the next line\necho done\n' >"$TMP/scripts/spacing.sh"
 out="$(lint)"
 rc=$?
 assert_eq "a comment under code exits non-zero" "$((rc != 0))" "1"
-assert_contains "a comment under code names file and line" "$out" "bin/spacing.sh:5: full-line comment directly after code"
-rm "$TMP/bin/spacing.sh"
+assert_contains "a comment under code names file and line" "$out" "scripts/spacing.sh:5: full-line comment directly after code"
+rm "$TMP/scripts/spacing.sh"
 
-printf '#!/usr/bin/env bash\nset -euo pipefail\n\necho a \\\n    b\n# explains the next line\necho done\n' >"$TMP/bin/deeper.sh"
-printf '#!/usr/bin/env bash\nset -euo pipefail\n\ncase b in\na)\n    echo a\n    ;;\n# The b arm\nb)\n    echo b\n    ;;\nesac\n' >"$TMP/bin/arms.sh"
+printf '#!/usr/bin/env bash\nset -euo pipefail\n\necho a \\\n    b\n# explains the next line\necho done\n' >"$TMP/scripts/deeper.sh"
+printf '#!/usr/bin/env bash\nset -euo pipefail\n\ncase b in\na)\n    echo a\n    ;;\n# The b arm\nb)\n    echo b\n    ;;\nesac\n' >"$TMP/scripts/arms.sh"
 out="$(lint)"
-assert_contains "a comment under deeper code fails" "$out" "bin/deeper.sh:6: full-line comment directly after code"
-assert_not_contains "a comment heading the next case arm passes" "$out" "bin/arms.sh:"
-rm "$TMP/bin/deeper.sh" "$TMP/bin/arms.sh"
+assert_contains "a comment under deeper code fails" "$out" "scripts/deeper.sh:6: full-line comment directly after code"
+assert_not_contains "a comment heading the next case arm passes" "$out" "scripts/arms.sh:"
+rm "$TMP/scripts/deeper.sh" "$TMP/scripts/arms.sh"
 
 printf '@test "bare" {\n    true\n    [[ hi == *hi* ]]\n    true\n}\n' >"$TMP/tests/bare.bats"
 out="$(lint)"
@@ -89,40 +89,22 @@ assert_contains "a bare [[ ]] assertion names file and line" "$out" "tests/bare.
 printf '@test "guarded" {\n    [[ hi == *hi* ]] || false\n    run zsh -c "[[ -n x ]] && print ok"\n}\n' >"$TMP/tests/bare.bats"
 out="$(lint)"
 rc=$?
-assert_eq "a [[ ]] assertion ending in || false passes" "$rc" "0"
+assert_eq "a [[ ]] assertion ending in || false passes" "$rc" "0" "$out"
 assert_not_contains "a [[ ]] inside a command string passes" "$out" "tests/bare.bats"
 rm "$TMP/tests/bare.bats"
 
 if command -v selene >/dev/null 2>&1; then
-    printf 'local unused = 1\n' >"$TMP/.dev/x.lua"
+    printf 'local unused = 1\n' >"$TMP/.ci/x.lua"
     out="$(lint)"
     rc=$?
-    assert_eq "a lua violation under .dev exits non-zero" "$((rc != 0))" "1"
-    assert_contains "a lua violation under .dev is named by selene" "$out" ".dev/x.lua"
-    rm "$TMP/.dev/x.lua"
+    assert_eq "a lua violation under .ci exits non-zero" "$((rc != 0))" "1"
+    assert_contains "a lua violation under .ci is named by selene" "$out" ".ci/x.lua"
+    rm "$TMP/.ci/x.lua"
     out="$(lint)"
     rc=$?
-    assert_eq "the tree passes again once the .dev violation is gone" "$rc" "0"
+    assert_eq "the tree passes again once the .ci violation is gone" "$rc" "0" "$out"
 else
     printf 'skip - the .dev lua violation (needs selene)\n'
-fi
-
-BARE="$TMP/bare"
-mkdir -p "$BARE"
-for dir in /usr/bin /bin; do
-    for exe in "$dir"/*; do
-        case "${exe##*/}" in
-        ast-grep | sg | stylua | selene) continue ;;
-        esac
-        [ -x "$exe" ] && [ ! -e "$BARE/${exe##*/}" ] && ln -s "$exe" "$BARE/${exe##*/}"
-    done
-done
-if command -v luajit >/dev/null 2>&1; then
-    [ -e "$BARE/luajit" ] || ln -s "$(command -v luajit)" "$BARE/luajit"
-    out="$(cd "$TMP" && env -u CI PATH="$BARE" bash "$DEV" lint 2>&1)"
-    assert_contains "dev lint names a missing stylua in a sentence" "$out" "Tool stylua not found. The stylua check is skipped. Install it with brew install stylua."
-else
-    printf 'skip - the missing stylua note (needs luajit)\n'
 fi
 
 if [ "$fails" -gt 0 ]; then

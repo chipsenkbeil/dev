@@ -7,7 +7,7 @@
 bats_require_minimum_version 1.5.0
 
 REPO="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
-PKG="$REPO/pkg.lua"
+DEV="${DEV_BIN:-$REPO/target/debug/dev}"
 
 setup() {
     STUBS="$BATS_TEST_TMPDIR/stubs"
@@ -32,50 +32,35 @@ stub() {
 }
 
 @test "an installed formula is skipped without --force" {
-    run luajit "$PKG" install --manifest "$MANIFEST" formula-x
+    run "$DEV" __pkg install --manifest "$MANIFEST" formula-x
     [ "$status" -eq 0 ]
     [[ "$output" == *"formula-x already on PATH, skipping"* ]] || false
     [ "$(grep -c install "$LOG")" -eq 0 ]
 }
 
 @test "--force reinstalls a formula brew already lists" {
-    run luajit "$PKG" install --manifest "$MANIFEST" --force formula-x
+    run "$DEV" __pkg install --manifest "$MANIFEST" --force formula-x
     [ "$status" -eq 0 ]
     grep -qx 'brew reinstall fx-formula' "$LOG"
 }
 
 @test "--force installs a formula brew does not list" {
-    BREW_LISTED=0 run luajit "$PKG" install --manifest "$MANIFEST" --force formula-x
+    BREW_LISTED=0 run "$DEV" __pkg install --manifest "$MANIFEST" --force formula-x
     [ "$status" -eq 0 ]
     grep -qx 'brew install fx-formula' "$LOG"
 }
 
 @test "--force runs a script: installer that is on PATH and passes PKG_FORCE to it" {
-    run luajit "$PKG" install --manifest "$MANIFEST" --force script-y
+    run "$DEV" __pkg install --manifest "$MANIFEST" --force script-y
     [ "$status" -eq 0 ]
     grep -qx 'script PKG_FORCE=1' "$LOG"
 }
 
 @test "--force with no tool name is a usage error" {
-    run --separate-stderr luajit "$PKG" install --manifest "$MANIFEST" --force
+    run --separate-stderr "$DEV" __pkg install --manifest "$MANIFEST" --force
     [ "$status" -eq 2 ]
     [ "$stderr" = "--force needs at least one tool name" ]
     [ ! -s "$LOG" ]
-}
-
-@test "dev tools install --force plans a script rebuild even when the tool is on PATH" {
-    stub muchsync 'exit 0'
-    proj="$BATS_TEST_TMPDIR/proj"
-    mkdir -p "$proj/.dev"
-    printf 'name binary brew\nmuchsync muchsync script:scripts/install-muchsync.lua\n' >"$proj/.dev/tools.tsv"
-    cd "$proj"
-    run "$REPO/bin/dev" tools install --dry-run muchsync
-    [ "$status" -eq 0 ]
-    [[ "$output" == *"muchsync already on PATH, skipping"* ]] || false
-    run "$REPO/bin/dev" tools install --force --dry-run muchsync
-    [ "$status" -eq 0 ]
-    [[ "$output" == *"luajit scripts/install-muchsync.lua"* ]] || false
-    [[ "$output" != *"skipping"* ]] || false
 }
 
 @test "under force the other drivers reinstall instead of skipping" {
@@ -83,9 +68,8 @@ stub() {
     stub rpm 'exit 0'
     stub cargo 'exit 0'
     stub luarocks 'echo rock'
-    cat >"$BATS_TEST_TMPDIR/drive.lua" <<'LUA'
-package.path = arg[1] .. "/?.lua"
-local opts = { dry_run = true, force = true, log_file = "", interpreter = "luajit", modules = arg[1] }
+    cat >"$BATS_TEST_TMPDIR/drive.luau" <<'LUA'
+local opts = { dry_run = true, force = true, log_file = "" }
 local function row(name, package)
     return { name = name, binary = "fx", package = package, channel = "", repo = "" }
 end
@@ -94,7 +78,7 @@ require("dev.pkg.dnf").install(row("d", "d-pkg"), opts)
 require("dev.pkg.cargo").install(row("c", "c-crate"), opts)
 require("dev.pkg.luarocks").install(row("l", "rock"), opts)
 LUA
-    out="$(luajit "$BATS_TEST_TMPDIR/drive.lua" "$REPO/lua" 2>&1)"
+    out="$("$DEV" -l "$BATS_TEST_TMPDIR/drive.luau" 2>&1)"
     [[ "$out" == *"pacman -S --noconfirm -- p-pkg"* ]] || false
     [[ "$out" == *"dnf reinstall -y -- d-pkg"* ]] || false
     [[ "$out" == *"--force c-crate"* ]] || false

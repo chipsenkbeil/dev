@@ -1,0 +1,494 @@
+local dev_os = require("dev.os")
+local fs = require("dev.fs")
+local kinds = require("dev.pkg.kinds")
+local manifest = require("dev.manifest")
+local lib = require("dev.pkg.lib")
+local release = require("dev.pkg.release")
+local script = require("dev.pkg.script")
+local system = require("dev.pkg.system")
+local note = require("dev.command").note
+
+local stdout = dev_os.stdout
+local Channel, Scope, NO_PROBE_BINARY = kinds.Channel, kinds.Scope, kinds.NO_PROBE_BINARY
+local parse_cell, valid_package = lib.parse_cell, lib.valid_package
+
+local USAGE = "usage: dev __pkg check [--manifest FILE] [--group NAME]\n"
+    .. "       dev __pkg install [--manifest FILE] [--dry-run] [--force] [--group NAME]"
+    .. " [--scope system|user] [--log-file FILE] [name...]\n"
+local SHELL_SPECIAL = "[ \t\n!\"$&'()*;<>?%[\\%]^`{|}]"
+
+---@class dev.pkg.Opts
+---@field manifest string path of the manifest
+---@field group string? keep only the rows listing this group, an unknown group when empty
+---@field scope dev.pkg.Scope? install only the rows of this scope
+---@field dry_run boolean whether to print the commands without running them
+---@field force boolean whether to reinstall what is already present
+---@field log_file string the file the drivers append their commands' output to, empty for the
+---   terminal
+---@field names string[] install only these tools, every tool when empty
+
+---@class dev.pkg.InstallState
+---@field opts dev.pkg.Opts the run's options
+---@field manager dev.pkg.Manager the primary manager of this OS
+---@field failed string[] the names of the rows that failed
+---@field third_party string[] the rows skipped for a system run
+
+---@class dev.pkg
+local M = {}
+
+local function shell_quote(text)
+    if text == "" then
+        return "''"
+    end
+    if text:find("[%c\127]") then
+        local escaped = text:gsub("[\\']", "\\%0"):gsub("[%c\127]", function(char)
+            if char == "\n" then
+                return "\\n"
+            elseif char == "\t" then
+                return "\\t"
+            end
+            return string.format("\\%03o", char:byte())
+        end)
+        return "$'" .. escaped .. "'"
+    end
+    local quoted = text:gsub(SHELL_SPECIAL, "\\%0")
+    if quoted:find("^[#~]") then
+        quoted = "\\" .. quoted
+    end
+    return quoted
+end
+
+local function printable(name)
+    return (name:gsub("%z", "\\0"))
+end
+
+local function refusal(row, parsed)
+    for _, text in ipairs({ row.name, row.binary, row.cell }) do
+        if text:find("\0", 1, true) then
+            return shell_quote(row.name .. " " .. row.binary .. " " .. row.cell)
+        end
+    end
+    if not valid_package(parsed) then
+        return shell_quote(parsed.package .. " " .. parsed.repo)
+    end
+end
+
+local function detect_manager()
+    local kernel = dev_os.capture({ "uname" }):gsub("\n+$", "")
+    if kernel == "Darwin" then
+        local machine = dev_os.capture({ "uname", "-m" }):gsub("\n+$", "")
+        return machine == "x86_64" and kinds.Manager.DARWIN_X86_64 or kinds.Manager.BREW
+    elseif kernel == "Linux" then
+        for _, candidate in ipairs(kinds.LINUX_MANAGERS) do
+            if dev_os.which(candidate.binary) then
+                return candidate.manager
+            end
+        end
+    end
+end
+
+local DARWIN_X86_64_CHANNELS = {
+    [Channel.RELEASE] = true,
+    [Channel.SCRIPT] = true,
+    [Channel.CARGO] = true,
+    [Channel.SYSTEM] = true,
+}
+
+local function misplaced(manager, parsed)
+    if manager == kinds.Manager.DARWIN_X86_64 and not DARWIN_X86_64_CHANNELS[parsed.channel] then
+        return "a " .. manager .. " cell takes release:, script:, cargo: or system:"
+    end
+end
+
+local function load_rows(opts, manager)
+    local text = fs.read(opts.manifest)
+    local rows = text and manifest.parse(text)
+    local column = rows and manifest.column(rows, manager)
+    if not column then
+        note('Manager column "' .. manager .. '" not found in ' .. opts.manifest .. " header.")
+        return nil
+    end
+    return rows, column
+end
+
+local function select_rows(rows, select_opts)
+    local selected, err = manifest.select(rows, select_opts)
+    if not selected then
+        note(err)
+    end
+    return selected
+end
+
+local function driver_opts(opts)
+    return {
+        dry_run = opts.dry_run,
+        force = opts.force,
+        log_file = opts.log_file,
+        releases = fs.join(fs.dirname(opts.manifest), "releases.tsv"),
+    }
+end
+
+local function load_driver(name)
+    if kinds.DRIVERS[name] then
+        return require("dev.pkg." .. name)
+    end
+    note("No driver named " .. name .. ".")
+end
+
+local function check_script_row(opts, name, package)
+    if package:find("^https?://") then
+        stdout:write("[?] ", name, "\t(remote script, no probe)\n")
+        return true
+    elseif dev_os.getuid() == 0 then
+        stdout:write("[?] ", name, "\t(script row, never run as root)\n")
+        return true
+    elseif script.probe(package, driver_opts(opts)) then
+        stdout:write("[x] ", name, "\t(script --check)\n")
+        return true
+    end
+    stdout:write("[ ] ", name, "\n")
+    return false
+end
+
+local function check_row(ctx, row)
+    local opts, manager, driver = ctx.opts, ctx.manager, ctx.driver
+    local parsed = parse_cell(row.cell)
+    if not parsed then
+        return true
+    end
+    local name = printable(row.name)
+    local wrong = misplaced(manager, parsed)
+    if wrong then
+        stdout:write("[ ] ", name, "\t(", wrong, ")\n")
+        return false
+    end
+    local refused = refusal(row, parsed)
+    if refused then
+        stdout:write(
+            "[ ] ",
+            name,
+            "\t(refusing the package or repo ",
+            refused,
+            " in the manifest)\n"
+        )
+        return false
+    end
+    local binary = parsed.bin ~= "" and parsed.bin or row.binary
+    if parsed.channel == Channel.SCRIPT and binary == NO_PROBE_BINARY then
+        return check_script_row(opts, name, parsed.package)
+    end
+    if parsed.channel == Channel.RELEASE then
+        driver = release
+    elseif parsed.channel == Channel.SYSTEM or manager == kinds.Manager.DARWIN_X86_64 then
+        driver = system
+    end
+    return driver.check({
+        name = row.name,
+        binary = binary,
+        package = parsed.package,
+        channel = parsed.channel,
+        repo = parsed.repo,
+    }) == 0
+end
+
+---Report which of the manifest's tools are present.
+---@param opts dev.pkg.Opts the manifest, the drivers' directory and the group
+---@return integer code 0 with every tool present, 1 with one missing or the manifest unusable, 2
+---   for an unknown group
+function M.check(opts)
+    local manager = detect_manager()
+    if not manager then
+        note("No supported package manager is detected on this OS.")
+        return 1
+    end
+    local driver = system
+    if manager ~= kinds.Manager.DARWIN_X86_64 then
+        driver = load_driver(manager)
+        if not driver then
+            return 1
+        end
+    end
+    local rows, column = load_rows(opts, manager)
+    if not rows then
+        return 1
+    end
+    local selected = select_rows(rows, { column = column, group = opts.group })
+    if not selected then
+        return 1
+    end
+    if opts.group ~= nil and (opts.group == "" or #selected == 0) then
+        note("unknown group: " .. opts.group)
+        return 2
+    end
+    local missing = false
+    for _, row in ipairs(selected) do
+        missing = not check_row({ opts = opts, manager = manager, driver = driver }, row) or missing
+    end
+    return missing and 1 or 0
+end
+
+local function names_of(rows)
+    local names = {}
+    for _, row in ipairs(rows) do
+        names[row.name] = true
+    end
+    return names
+end
+
+local function wants(names, name)
+    if #names == 0 then
+        return true
+    end
+    for _, wanted in ipairs(names) do
+        if wanted == name then
+            return true
+        end
+    end
+    return false
+end
+
+local function skipped_by_scope(scope, row_scope)
+    return (scope == Scope.SYSTEM and row_scope == Scope.USER)
+        or (scope == Scope.USER and row_scope ~= Scope.USER)
+end
+
+local function install_row(state, row)
+    local opts = state.opts
+    local parsed = parse_cell(row.cell)
+    if not parsed then
+        return
+    end
+    local row_scope, handler = kinds.route(parsed.channel, state.manager)
+    if skipped_by_scope(opts.scope, row_scope) then
+        return
+    end
+    local name = printable(row.name)
+    local wrong = misplaced(state.manager, parsed)
+    if wrong then
+        note("  ! " .. name .. ": " .. wrong)
+        state.failed[#state.failed + 1] = name
+        return
+    end
+    if opts.scope == Scope.SYSTEM and row_scope == Scope.THIRD_PARTY then
+        state.third_party[#state.third_party + 1] = name .. " (" .. parsed.channel .. ":)"
+        return
+    end
+    local refused = refusal(row, parsed)
+    if refused then
+        note("  ! " .. name .. ": refusing the package or repo " .. refused .. " in the manifest")
+        state.failed[#state.failed + 1] = name
+        return
+    end
+    local driver = load_driver(handler)
+    if not driver then
+        state.failed[#state.failed + 1] = name
+        return
+    end
+    local status = driver.install({
+        name = row.name,
+        binary = parsed.bin ~= "" and parsed.bin or row.binary,
+        package = parsed.package,
+        channel = parsed.channel,
+        repo = parsed.repo,
+    }, driver_opts(opts))
+    if status ~= 0 then
+        state.failed[#state.failed + 1] = name
+        lib.flush_failure()
+    end
+end
+
+---Install the manifest's tools.
+---@param opts dev.pkg.Opts the manifest, the drivers' directory, the group, the scope and the flags
+---@return integer code 0 on success, 1 with a failed tool or an unusable manifest, 2 for an unknown
+---   group or tool
+function M.install(opts)
+    local manager = detect_manager()
+    if not manager then
+        note("No supported package manager is detected on this OS.")
+        return 1
+    end
+    local all_rows, column = load_rows(opts, manager)
+    if not all_rows then
+        return 1
+    end
+    local all = select_rows(all_rows, { column = column })
+    if not all then
+        return 1
+    end
+    local rows = all
+    if opts.group ~= nil then
+        rows = {}
+        if opts.group ~= "" then
+            rows = select_rows(all_rows, { column = column, group = opts.group })
+        end
+        if not rows or #rows == 0 then
+            note("unknown group: " .. opts.group)
+            return 2
+        end
+    end
+    if #rows == 0 then
+        return 0
+    end
+    local in_rows, in_all = names_of(rows), names_of(all)
+    for _, name in ipairs(opts.names) do
+        if not in_rows[name] then
+            if in_all[name] then
+                note("tool " .. name .. " is not in group " .. opts.group)
+            else
+                note("unknown tool: " .. name)
+            end
+            return 2
+        end
+    end
+
+    local state = { opts = opts, manager = manager, failed = {}, third_party = {} }
+    for _, row in ipairs(rows) do
+        if wants(opts.names, row.name) then
+            install_row(state, row)
+        end
+    end
+    if #state.third_party > 0 then
+        stdout:write(
+            "skipped third-party rows (built into the image, not installed with root): ",
+            table.concat(state.third_party, " "),
+            "\n"
+        )
+    end
+    if #state.failed > 0 then
+        note("install failed: " .. table.concat(state.failed, " "))
+        return 1
+    end
+    return 0
+end
+
+local function need_value(args, i)
+    if i + 1 > #args then
+        note(args[i] .. " needs a value")
+        return false
+    end
+    return true
+end
+
+local function parse_check(args, opts)
+    local i = 1
+    while i <= #args do
+        if args[i] == "--manifest" or args[i] == "--group" then
+            if not need_value(args, i) then
+                return false
+            end
+            local key = args[i] == "--manifest" and "manifest" or "group"
+            if opts[key] then
+                note("--" .. key .. " given twice")
+                return false
+            end
+            opts[key] = args[i + 1]
+            i = i + 2
+        else
+            note("unknown arg: " .. args[i])
+            return false
+        end
+    end
+    return true
+end
+
+local function parse_install(args, opts)
+    local i = 1
+    while i <= #args do
+        local arg = args[i]
+        if arg == "--dry-run" then
+            opts.dry_run = true
+            i = i + 1
+        elseif arg == "--force" then
+            opts.force = true
+            i = i + 1
+        elseif
+            arg == "--manifest"
+            or arg == "--group"
+            or arg == "--scope"
+            or arg == "--log-file"
+        then
+            if not need_value(args, i) then
+                return false
+            end
+            local value = args[i + 1]
+            if arg == "--scope" and value ~= Scope.SYSTEM and value ~= Scope.USER then
+                note("--scope takes system or user, got " .. value)
+                return false
+            end
+            local key = arg:sub(3):gsub("%-", "_")
+            if key == "manifest" and opts.manifest then
+                note("--manifest given twice")
+                return false
+            end
+            opts[key] = value
+            i = i + 2
+        elseif arg:sub(1, 1) == "-" then
+            note("unknown arg: " .. arg)
+            return false
+        else
+            opts.names[#opts.names + 1] = arg
+            i = i + 1
+        end
+    end
+    if opts.force and #opts.names == 0 then
+        note("--force needs at least one tool name")
+        return false
+    end
+    return true
+end
+
+local function tool_dirs()
+    local dirs = {}
+    local home = dev_os.getenv("HOME")
+    local cargo = dev_os.getenv("CARGO_HOME")
+    if not cargo or cargo == "" then
+        cargo = home and home ~= "" and fs.join(home, ".cargo") or nil
+    end
+    local bin = dev_os.getenv("DEV_TOOLS_BIN")
+    if not bin or bin == "" then
+        bin = home and home ~= "" and fs.join(home, ".local", "bin") or nil
+    end
+    for _, dir in ipairs({ cargo and fs.join(cargo, "bin"), bin }) do
+        if dir then
+            dirs[#dirs + 1] = dir
+        end
+    end
+    return dirs
+end
+
+---Run `check` or `install` from a command line.
+---@param argv string[] the arguments after the program name, starting with the subcommand
+---@return integer code the exit code
+function M.main(argv)
+    local sub = argv[1]
+    local args = { table.unpack(argv, 2) }
+    local opts = {
+        dry_run = false,
+        force = false,
+        log_file = "",
+        names = {},
+    }
+    if sub == nil or sub == "" or sub == "-h" or sub == "--help" then
+        stdout:write(USAGE)
+        return 0
+    end
+    if (sub == "check" or sub == "install") and dev_os.getuid() ~= 0 then
+        dev_os.append_path(tool_dirs())
+    end
+    if sub == "check" or sub == "install" then
+        local parse = sub == "check" and parse_check or parse_install
+        if not parse(args, opts) then
+            return 2
+        end
+        if not opts.manifest then
+            note("The " .. sub .. " subcommand needs `--manifest FILE`.")
+            return 2
+        end
+        return M[sub](opts)
+    end
+    note("unknown subcommand: " .. sub)
+    stdout:write(USAGE)
+    return 2
+end
+
+return M

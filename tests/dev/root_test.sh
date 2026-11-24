@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Pure-bash tests for dev as root. LUA_INIT loads tests/lua/fake_env.lua, so FAKE_UID says 0 and FAKE_OS says Linux, and jj and git are stubs
+# Pure-bash tests for dev as root. Off a real root, fixtures/fake_root.luau loads tests/lua/fake_env.luau, so FAKE_UID says 0, FAKE_OS says Linux and FAKE_SAFE_EXE passes the binary's ownership check, and jj and git are stubs
 # that log every call and fail,
 # so a log line means dev ran a VCS command with a project it must treat as data.
 set -o pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$DIR/../.." && pwd)"
-DEV="$REPO/bin/dev"
+
 unset DOTFILES VERBOSE
 
 TMP="$(mktemp -d)"
@@ -14,7 +14,15 @@ chmod 755 "$TMP"
 if [ "$EUID" -eq 0 ]; then REAL_ROOT=1; else REAL_ROOT=0; fi
 trap 'rm -rf "$TMP"' EXIT
 STUBS="$TMP/stubs"
-export LUA_INIT="@$REPO/tests/lua/fake_env.lua" FAKE_UID=0 FAKE_OS=Linux
+BIN="${DEV_BIN:-$REPO/target/debug/dev}"
+if [ "$REAL_ROOT" -eq 1 ]; then
+    DEV="$BIN"
+else
+    DEV="$TMP/fakedev"
+    printf '#!/bin/sh\nexec "%s" -l "%s" "$@"\n' "$BIN" "$REPO/tests/dev/fixtures/fake_root.luau" >"$DEV"
+    chmod +x "$DEV"
+    export FAKE_UID=0 FAKE_OS=Linux FAKE_SAFE_EXE=1
+fi
 export VCSLOG="$TMP/vcs.log" RECORD="$TMP/record"
 mkdir -p "$STUBS"
 for tool in jj git; do
@@ -84,14 +92,14 @@ printf 'SECRET-MARKER\n' >"$outside/shadow"
 printf '#!/bin/sh\n# SECRET-MARKER\n' >"$outside/dir/bar.sh"
 
 proj="$TMP/proj"
-mkdir -p "$proj/.jj" "$proj/.dev/n" "$proj/a/b"
+mkdir -p "$proj/.jj" "$proj/.dev/commands/n" "$proj/a/b"
 printf '%s\n' "$MANIFEST" >"$proj/.dev/tools.tsv"
-printf '#!/bin/sh\necho foo ran\n' >"$proj/.dev/foo.sh"
-chmod +x "$proj/.dev/foo.sh"
-ln -s "$outside/shadow" "$proj/.dev/n/DESCRIPTION"
-ln -s "$outside/dir" "$proj/.dev/linked"
-printf '#!/bin/sh\n' >"$proj/.dev/n/sub.sh"
-chmod +x "$proj/.dev/n/sub.sh"
+printf '#!/bin/sh\necho foo ran\n' >"$proj/.dev/commands/foo.sh"
+chmod +x "$proj/.dev/commands/foo.sh"
+ln -s "$outside/shadow" "$proj/.dev/commands/n/DESCRIPTION"
+ln -s "$outside/dir" "$proj/.dev/commands/linked"
+printf '#!/bin/sh\n' >"$proj/.dev/commands/n/sub.sh"
+chmod +x "$proj/.dev/commands/n/sub.sh"
 
 for verb in push lint fetch init foo test tools "tools frobnicate" help -h --help "" __commands __subs __flags "__subs n" "help n"; do
     # shellcheck disable=SC2086
@@ -106,38 +114,17 @@ done
 
 if [ "$REAL_ROOT" = 1 ]; then
     rm -f "$TMP/remote-marker"
-    printf 'return function() io.open("%s", "w"):close() return 0 end\n' "$TMP/remote-marker" >"$proj/.dev/__remote.lua"
+    mkdir -p "$proj/.dev/helpers"
+    printf 'local fs = require("dev.fs")\nfs.write("%s", "")\nreturn {}\n' "$TMP/remote-marker" >"$proj/.dev/helpers/remote.luau"
     for words in "tools check" "test" "-- tools check" "-- test"; do
         # shellcheck disable=SC2086
         out="$(dev "$proj/a" --remote $words 2>&1)"
         assert_eq "root dev --remote $words exits 2" "$?" "2"
     done
-    assert_eq "root never loads a project __remote.lua" "$([ -e "$TMP/remote-marker" ] && echo loaded || echo absent)" "absent"
-    rm -f "$proj/.dev/__remote.lua"
-    mkdir -p "$TMP/lc/bin"
-    sed "s|^SYSTEM_BIN_DIRS=.*|SYSTEM_BIN_DIRS=($TMP/nowhere)|" "$DEV" >"$TMP/lc/bin/dev"
-    chmod +x "$TMP/lc/bin/dev"
-    mkdir -p "$TMP/lc/share"
-    ln -s "$REPO" "$TMP/lc/share/dev"
-    printf 'return function() io.open("%s", "w"):close() return 0 end\n' "$TMP/remote-marker" >"$proj/.dev/__remote.lua"
-    out="$(cd "$proj/a" && "$TMP/lc/bin/dev" --remote tools install --dry-run 2>&1)"
-    assert_eq "root without luajit, dev --remote tools install exits 2" "$?" "2"
-    assert_eq "root without luajit, dev --remote says what root may run" "$out" "$ROOT_REFUSAL"
-    out="$(cd "$proj/a" && DEV_REMOTE=1 "$TMP/lc/bin/dev" tools check 2>&1)"
-    assert_eq "root without luajit, DEV_REMOTE=1 tools check exits 2" "$?" "2"
-    assert_eq "root without luajit, DEV_REMOTE=1 says what root may run" "$out" "$ROOT_REFUSAL"
-    out="$(cd "$proj/a" && "$TMP/lc/bin/dev" tools check 2>&1)"
-    assert_eq "root without luajit, tools check exits 1" "$?" "1"
-    assert_eq "root without luajit, tools check says it needs luajit" "$out" "The command \`dev tools\` needs luajit in /usr/bin or /usr/local/bin."
-    out="$(cd "$proj/a" && "$TMP/lc/bin/dev" tools install --system 2>&1)"
-    assert_eq "root without luajit, tools install exits 1" "$?" "1"
-    assert_eq "root without luajit, tools install says it needs luajit" "$out" "The command \`dev tools\` needs luajit in /usr/bin or /usr/local/bin."
-    out="$(cd "$proj/a" && "$TMP/lc/bin/dev" push 2>&1)"
-    assert_eq "root without luajit, push is still refused with exit 2" "$?" "2"
-    assert_eq "root without luajit runs no project __remote.lua" "$([ -e "$TMP/remote-marker" ] && echo loaded || echo absent)" "absent"
-    rm -f "$proj/.dev/__remote.lua"
+    assert_eq "root never loads a project helpers/remote.luau" "$([ -e "$TMP/remote-marker" ] && echo loaded || echo absent)" "absent"
+    rm -f "$proj/.dev/helpers/remote.luau"
 else
-    printf 'SKIP real-root - the __remote.lua root test needs real root\n'
+    printf 'SKIP real-root - the helpers/remote.luau root test needs real root\n'
 fi
 
 if [ "$REAL_ROOT" = 0 ]; then
@@ -263,7 +250,7 @@ if [ "$REAL_ROOT" = 1 ]; then
     assert_contains "the manifest variable is undefined for the package driver" "$out" "is undefined"
 
     evil="$TMP/evil"
-    mkdir -p "$evil"
+    mkdir -p "$evil/dotfiles/bin/.local/share/dev"
     printf 'io.write("EVIL-RAN\\n")\n' >"$evil/pkg.lua"
     out="$(DOTFILES="$evil" dev "$nojj" tools check 2>&1)"
     assert_not_contains "root does not run a package driver from DOTFILES" "$out" "EVIL-RAN"
@@ -273,11 +260,24 @@ if [ "$REAL_ROOT" = 1 ]; then
     printf 'name binary pacman\nsh-tool sh sh\n' >"$good/.dev/tools.tsv"
     out="$(BASH_ENV=/tmp/evil-bash-env PS4=evil-ps4 dev "$good" -vv tools check 2>&1)"
     assert_eq "root tools check -vv exits 0" "$?" "0"
-    assert_contains "-vv gives the driver dev's own trace file" "$out" "BASH_ENV=$REPO/xtrace.bash"
+    assert_contains "-vv gives the driver VERBOSE=2" "$out" "VERBOSE=2"
     assert_not_contains "-vv keeps the caller's BASH_ENV out of the driver" "$out" "evil-bash-env"
     assert_not_contains "-vv keeps the caller's PS4 out of the driver" "$out" "evil-ps4"
     out="$(dev "$good" tools check 2>&1)"
     assert_eq "root tools check passes for a present tool" "$?" "0"
+    rel="$TMP/rel"
+    mkdir -p "$rel/.dev"
+    printf 'name binary pacman\nrel-tool rel-zzz-none release:rel-tool\n' >"$rel/.dev/tools.tsv"
+
+    # shellcheck disable=SC2016  # the url holds a literal placeholder
+    printf 'name version sha256 url path\nrel-tool 1.0 %s https://example.test/rel-${version} -\n' "$(printf 'a%.0s' $(seq 1 64))" >"$rel/.dev/releases.tsv"
+    out="$(dev "$rel" tools check 2>&1)"
+    assert_eq "root checks a release row beside a pins file, which is missing the tool" "$?" "1"
+    assert_contains "the release row is reported" "$out" "rel-tool"
+    chmod 666 "$rel/.dev/releases.tsv"
+    out="$(dev "$rel" tools check 2>&1)"
+    assert_contains "root refuses a pins file writable by others" "$out" "The path $(cd "$rel" && pwd -P)/.dev/releases.tsv must be owned by root"
+    assert_eq "no temp copy is left after the release rows" "$(count_tmp)" "$before"
     assert_eq "no temp copy is left after success" "$(count_tmp)" "$before"
 
     big="$TMP/big"

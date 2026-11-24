@@ -1,26 +1,27 @@
 #!/usr/bin/env bash
 # Pure-bash tests for `dev box` and `dev connect`. ci and et are stubs first on PATH that
-# log their arguments, one per line, and ci answers from fixture files in $FX. LUA_INIT loads
-# tests/lua/fake_env.lua, where FAKE_PICK picks a box and PICK_LOG records the picker items. dev gets no jq.
+# log their arguments, one per line, and ci answers from fixture files in $FX. dev runs through
+# `dev -l` on a wrapper that loads tests/lua/fake_env.luau first, where FAKE_PICK picks a box and
+# PICK_LOG records the picker items. dev gets no jq.
 set -o pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$DIR/../.." && pwd)"
-DEV="$REPO/bin/dev"
+DEV_BIN="${DEV_BIN:-$REPO/target/debug/dev}"
 unset DOTFILES VERBOSE CI LOGNAME DEV_AGENT
 export DEV_REMOTE=0
 export USER=tester
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "${TMP:?}"' EXIT
-LUABIN="$TMP/luabin"
-mkdir -p "$LUABIN"
-ln -s "$(command -v luajit)" "$LUABIN/luajit"
+DEV="$TMP/dev"
+printf '#!/bin/sh\nexec "%s" 60 "%s" -l "%s" "$@"\n' "$(command -v timeout)" "$DEV_BIN" "$REPO/tests/dev/fixtures/fake_root.luau" >"$DEV"
+chmod +x "$DEV"
 STUBS="$TMP/stubs"
 FX="$TMP/fx"
 JQ="$(command -v jq)"
 export LOG="$TMP/log" ITEMS="$TMP/items" FX JQ
-export LUA_INIT="@$REPO/tests/lua/fake_env.lua" PICK_LOG="$TMP/items"
+export PICK_LOG="$TMP/items"
 export XDG_STATE_HOME="$TMP/state"
 KH="$TMP/state/ci/known_hosts"
 mkdir -p "$STUBS" "$FX"
@@ -64,7 +65,7 @@ STUB
 done
 chmod +x "$STUBS"/*
 
-BASE_PATH="$LUABIN:/usr/bin:/bin:/usr/sbin:/sbin"
+BASE_PATH="/usr/bin:/bin:/usr/sbin:/sbin"
 fails=0
 
 assert_eq() {
@@ -145,7 +146,8 @@ mkbox() {
 }
 
 answer_late() {
-    while printf '%s\n' "$1"; do sleep 0.2; done
+    sleep 2
+    while printf '%s\r' "$1"; do sleep 0.2; done
 }
 
 left_str() {
@@ -495,7 +497,7 @@ reset
 fx ls "$(lsdoc "$RUNNING")"
 mkdir -p "$TMP/noet"
 ln -sf "$STUBS/ci" "$STUBS/ssh" "$TMP/noet/"
-for tool in bash sh awk paste wc realpath dirname basename tr cut sed grep cat head sort id uname luajit env; do
+for tool in bash sh awk paste wc realpath dirname basename tr cut sed grep cat head sort id uname env; do
     found="$(PATH="$BASE_PATH" command -v "$tool")" && ln -sf "$found" "$TMP/noet/$tool"
 done
 if PATH="$TMP/noet" command -v et >/dev/null 2>&1; then
@@ -739,7 +741,7 @@ assert_eq "ci logs passes --job through" "$(calls)" "ci -C $PROJ logs 4711 --job
 reset
 out="$(inproj ci logs 2>&1)"
 assert_eq "ci logs with no RUN exits 2" "$?" "2"
-assert_contains "ci logs with no RUN is a usage error" "$out" "dev ci logs: Missing RUN."
+assert_contains "ci logs with no RUN is a usage error" "$out" "dev ci logs: The argument run is required."
 assert_eq "ci logs with no RUN calls no ci" "$(calls)" ""
 out="$(inproj ci logs 4711 --frob 2>&1)"
 assert_eq "ci logs rejects an unknown flag" "$?" "2"
@@ -761,22 +763,22 @@ for sub in ls create show stop resume extend tools delete connect; do
 done
 out="$(box help box create)"
 assert_contains "create help states the default lifetime" "$out" "4 hours"
-assert_contains "create help names the target and shape" "$out" "--target T] [--shape S]"
+assert_contains "create help names the target and shape" "$out" "--target <string>"
 assert_contains "create help lists --keep" "$out" "--keep"
-assert_eq "__subs box lists the subcommands" "$(box __subs box | cut -f1 | paste -sd' ' -)" "ls targets create show stop resume extend retag tools delete connect"
-assert_eq "__flags box create" "$(box __flags box create | paste -sd' ' -)" "--target --shape --arch --by --ttl --keep -v --verbose -vv --remote --local --detach --priority -C --agent --job-timeout"
-assert_eq "__flags box delete" "$(box __flags box delete | sed -n 1,2p | paste -sd' ' -)" "--yes -y"
-assert_eq "__flags connect" "$(box __flags connect | sed -n 1p)" "--ssh"
-assert_eq "__flags box ls" "$(box __flags box ls | sed -n 1p)" "--all"
+assert_eq "completion box lists the subcommands" "$(box __complete -- box "" | cut -f1 | paste -sd' ' -)" "connect create delete extend ls resume retag show stop targets tools"
+assert_eq "completion box create" "$(box __complete -- box create -- | cut -f1 | sed -n 1,6p | paste -sd' ' -)" "--target --shape --arch --by --ttl --keep"
+assert_eq "completion box delete" "$(box __complete -- box delete -- | cut -f1 | sed -n 1,3p | paste -sd' ' -)" "--yes --no-archive --help"
+assert_eq "completion connect" "$(box __complete -- connect -- | cut -f1 | sed -n 1p)" "--ssh"
+assert_eq "completion box ls" "$(box __complete -- box ls -- | cut -f1 | sed -n 1p)" "--all"
 TOPICPROJ="$TMP/topicproj"
-mkdir -p "$TOPICPROJ/.dev/topics" "$TOPICPROJ/.git"
+mkdir -p "$TOPICPROJ/.dev/help" "$TOPICPROJ/.git"
 FENCE="$(printf '\140\140\140')"
-printf '%s\n' '# frob: scratch' '' "$FENCE" 'dev box ls --all' 'dev box frob' 'dev box ls --nope' "$FENCE" >"$TOPICPROJ/.dev/topics/frob.md"
-out="$(cd "$TOPICPROJ" && "$DEV" __topics check 2>&1)"
-assert_eq "__topics check fails on a bad box line" "$?" "1"
-assert_contains "__topics check names the bad box subcommand" "$out" "dev box has no subcommand frob"
-assert_contains "__topics check names the bad box flag" "$out" "dev box ls takes no flag --nope"
-assert_not_contains "__topics check accepts a good box line" "$out" "--all"
+printf '%s\n' '# frob: scratch' '' "$FENCE" 'dev box ls --all' 'dev box frob' 'dev box ls --nope' "$FENCE" >"$TOPICPROJ/.dev/help/frob.md"
+out="$(cd "$TOPICPROJ" && "$DEV" help --check-topics 2>&1)"
+assert_eq "help --check-topics fails on a bad box line" "$?" "1"
+assert_contains "help --check-topics names the bad box subcommand" "$out" "dev box has no subcommand frob"
+assert_contains "help --check-topics names the bad box flag" "$out" "dev box ls takes no flag --nope"
+assert_not_contains "help --check-topics accepts a good box line" "$out" "--all"
 out="$(box box frobnicate 2>&1)"
 assert_eq "an unknown box subcommand exits 2" "$?" "2"
 assert_contains "an unknown box subcommand is named" "$out" "dev box: unknown subcommand frobnicate"
@@ -786,8 +788,8 @@ assert_eq "box install-tools is no longer a subcommand" "$?" "2"
 assert_contains "box install-tools is unknown" "$out" "dev box: unknown subcommand install-tools"
 out="$(box help box tools)"
 assert_contains "dev help box tools lists install" "$out" "  install "
-assert_eq "__subs box tools lists install" "$(box __subs box tools | cut -f1)" "install"
-assert_eq "__flags box tools install has no flag of its own" "$(box __flags box tools install | sed -n 1p)" "-v"
+assert_eq "completion box tools lists install" "$(box __complete -- box tools "" | cut -f1)" "install"
+assert_eq "completion box tools install has no flag of its own" "$(box __complete -- box tools install -- | cut -f1 | sed -n 1p)" "--help"
 
 if [ "$fails" -gt 0 ]; then
     printf '\n%d failure(s)\n' "$fails"
