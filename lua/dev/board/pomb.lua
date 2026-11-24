@@ -140,6 +140,7 @@ M.Reason = { BAD_URL = "bad_url" }
 ---@field private __secret string? the token, nil until the first request
 ---@field private __exports table<string, {at: integer, doc: table<string, any>}>? decoded export per board id, held 2 seconds and dropped by any write or wait
 ---@field private __issued string? the refusal text a 401 shows, set when the token came from DEV_BOARD_TOKEN or the role token file
+---@field private __keys table<string, string>? the wire key of each card field, read once
 ---@field private __healed boolean? nil until a refused Keychain token is replaced
 ---@field private __who string|false|nil the token's role name, false when it has none, nil until asked
 ---@field private __filed boolean? true when the token came from the role token file
@@ -875,8 +876,8 @@ local function holder(task)
     return name
 end
 
-local function runs_of(task)
-    local rows = type(task.fields) == "table" and task.fields[board.field_key(board.CHECKS_FIELD)]
+local function runs_of(task, key)
+    local rows = type(task.fields) == "table" and task.fields[key]
     local runs = {}
     if type(rows) == "table" then
         for _, row in ipairs(rows) do
@@ -890,7 +891,7 @@ local function runs_of(task)
 end
 
 local function field_names(task, key)
-    return board.names(type(task.fields) == "table" and task.fields[board.field_key(key)])
+    return board.names(type(task.fields) == "table" and task.fields[key])
 end
 
 local function table_rows(runs)
@@ -981,6 +982,20 @@ local function responsible_of(task)
     end
 end
 
+---Name the key the board gives a custom field, the same on every call of this backend.
+---@private
+---@param name string one of the card field names
+---@return string key the key on the wire
+function Backend:__field_key(name)
+    self.__keys = self.__keys or {}
+    local key = self.__keys[name]
+    if not key then
+        key = board.field_key(name)
+        self.__keys[name] = key
+    end
+    return key
+end
+
 function Backend:__card(task)
     local outcomes, readable = outcomes_of(task)
     return {
@@ -988,10 +1003,10 @@ function Backend:__card(task)
         responsible = responsible_of(task),
         due = type(task.due_at) == "string" and task.due_at:match("^%d%d%d%d%-%d%d%-%d%d") or nil,
         kind = task.kind == board.Kind.EPIC and board.Kind.EPIC or board.Kind.TASK,
-        checks = runs_of(task),
-        allow = field_names(task, board.ALLOW_FIELD),
-        tests = field_names(task, board.TESTS_FIELD),
-        files = field_names(task, board.FILES_FIELD),
+        checks = runs_of(task, self:__field_key(board.CHECKS_FIELD)),
+        allow = field_names(task, self:__field_key(board.ALLOW_FIELD)),
+        tests = field_names(task, self:__field_key(board.TESTS_FIELD)),
+        files = field_names(task, self:__field_key(board.FILES_FIELD)),
         outcomes = outcomes,
         outcomes_unreadable = not readable,
         claimant = holder(task),

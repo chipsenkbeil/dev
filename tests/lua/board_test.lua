@@ -7120,6 +7120,43 @@ testing.test("ls lists the cards in column order through pass and curl", functio
     testing.ok(calls:find("https://pomb.example/api/boards/board-1/export-data", 1, true), calls)
 end)
 
+---Run `ls` on an export of `extra` more cards and count its requests and its config file reads.
+---@param extra integer how many cards to add to the export
+---@return integer requests the curl calls the list made
+---@return integer reads the times the list checked the user config file
+local function ls_cost(extra)
+    local tasks = {}
+    for index = 1, extra do
+        tasks[#tasks + 1] = support.pomb_export_task({
+            id = string.format("%08x-eeee-4eee-8eee-eeeeeeeeeeee", index),
+            name = "Card " .. index,
+            column_id = READY_COLUMN,
+            position = index + 10,
+            color_id = "yellow-id",
+            fields = FIRST_CARD.fields,
+        })
+    end
+    local more = #tasks > 0 and (table.concat(tasks, ",") .. ",") or ""
+    local root, home = sandbox({ export = (EXPORT:gsub('^{"tasks":%[', '{"tasks":[' .. more, 1)) })
+    executable(
+        root .. "/bin/test",
+        '#!/bin/sh\nprintf "test %s\\n" "$*" >>"$ROOT/spawns"\ntest "$@"\n'
+    )
+    local out, code = dev(root, home, { "board", "ls" })
+    testing.eq(code, 0, out)
+    local _, requests = read(root, "calls"):gsub("curl [^\n]*", "")
+    local _, reads = read(root, "spawns"):gsub("config%.toml", "")
+    return requests, reads
+end
+
+testing.test("ls makes the same requests and config reads for 3 cards as for 60", function()
+    local few_requests, few_reads = ls_cost(0)
+    local many_requests, many_reads = ls_cost(57)
+    testing.eq(few_requests, 4)
+    testing.eq(many_requests, few_requests)
+    testing.eq(many_reads, few_reads)
+end)
+
 testing.test("the token reaches curl on stdin and nowhere else", function()
     local root, home = sandbox()
     local out = dev(root, home, { "-vv", "board", "ls" })
@@ -8179,6 +8216,19 @@ testing.test("move to board moves a Done card to the Done column of the other bo
     local calls = read(root, "calls")
     testing.ok(calls:find("/api/tasks/" .. ID_A .. "/move", 1, true), calls)
     testing.ok(calls:find('"column_id":"g-col-done"', 1, true), calls)
+end)
+
+testing.test("move to board reads no list of either board", function()
+    local root, home = across_sandbox({
+        export = export_with_first_card({ column_id = support.column_id(support.Column.DONE) }),
+    })
+    local out, code = move_across(root, home, "Done")
+    testing.eq(code, 0, out)
+    local calls = read(root, "calls")
+    testing.eq(calls:find("export-data", 1, true), nil, calls)
+    testing.eq(calls:find("/tasks?", 1, true), nil, calls)
+    local _, requests = calls:gsub("curl [^\n]*", "")
+    testing.eq(requests, 11, calls)
 end)
 
 testing.test("move to board refuses an open card a move into the Done column", function()
