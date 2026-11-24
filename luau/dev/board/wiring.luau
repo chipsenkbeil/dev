@@ -1318,7 +1318,7 @@ local function land_held(opts)
         return lost
     end
     local in_git = vcs.backend(backend.root) == vcs.GIT
-    local landed, output = scm.workspace(backend.root):merge_into_trunk()
+    local landed, output, dropped = scm.workspace(backend.root):merge_into_trunk()
     if not landed then
         local text = output:gsub("\n$", "")
         local touched = land.touched(backend.root, state.commit)
@@ -1335,6 +1335,7 @@ local function land_held(opts)
                 .. (drift and ("\n" .. drift) or "")
         )
     end
+    local dropped_text = if #dropped > 0 then "\n" .. table.concat(dropped, "\n") else ""
     local on_trunk = land.trunk_commit(backend.root, state.change)
     local commit = land.short(on_trunk or state.commit)
     local held = claims.read(card.id)
@@ -1439,7 +1440,7 @@ local function land_held(opts)
             lines[#lines + 1] = line
         end
         local tail = first_problem and "" or opts.clean_up(backend.root, short)
-        local refused = failure(table.concat(lines, " ") .. tail)
+        local refused = failure(table.concat(lines, " ") .. dropped_text .. tail)
         refused.landed = true
         return refused
     end
@@ -1453,7 +1454,9 @@ local function land_held(opts)
                 or " (the commit from before the land, which may differ: trunk could not be read)",
             together == "" and "it" or "them",
             target
-        ) .. opts.clean_up(backend.root, short),
+        )
+            .. dropped_text
+            .. opts.clean_up(backend.root, short),
     }
 end
 

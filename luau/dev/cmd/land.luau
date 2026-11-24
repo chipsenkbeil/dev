@@ -27,8 +27,11 @@ local function land_plain(ctx, workspace, flags)
         dev_command.note(text.sentence(problem))
         return 1
     end
-    local ok, output = workspace:merge_into_trunk()
+    local ok, output, dropped = workspace:merge_into_trunk()
     dev_command.relay(output)
+    for _, line in ipairs(dropped) do
+        dev_command.relay(line)
+    end
     return ok and 0 or 1
 end
 

@@ -78,6 +78,7 @@ end
 ---Land the working-copy change on trunk, with `jj land` or a push of the HEAD commit in git.
 ---@return boolean ok true when the land exited 0
 ---@return string output what the land printed
+---@return string[] dropped one line for each change abandoned, branch deleted or candidate kept
 function Workspace:merge_into_trunk()
     return land.run(self.root)
 end

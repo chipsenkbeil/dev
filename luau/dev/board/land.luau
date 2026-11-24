@@ -1987,19 +1987,227 @@ function M.template_drift(output, touched)
     )
 end
 
+---@class dev.board.land.Candidate
+---@field commit string the local commit id
+---@field change string the jj change id
+---@field trailer string? the Gerrit Change-Id trailer of the description
+
+local function jj_candidates(root)
+    local out = jj_out(
+        root,
+        "log",
+        "-r",
+        "::@ ~ ::trunk()",
+        "--no-graph",
+        "-T",
+        '"@@ " ++ commit_id ++ " " ++ change_id ++ "\\n" ++ description ++ "\\n"'
+    )
+    if out == nil then
+        return nil
+    end
+    local found = {}
+    for line in out:gmatch("[^\n]*") do
+        local commit, change = line:match("^@@ (%x+) (%S+)$")
+        if commit then
+            table.insert(found, 1, { commit = commit, change = change })
+        elseif found[1] then
+            local trailer = line:match("^Change%-Id: (I%x+)%s*$")
+            if trailer then
+                found[1].trailer = found[1].trailer or trailer
+            end
+        end
+    end
+    return found
+end
+
+local function candidate_name(candidate)
+    return "change "
+        .. candidate.change:sub(1, COMMIT_CHARS)
+        .. " (commit "
+        .. M.short(candidate.commit)
+        .. ")"
+end
+
+local function trunk_copy(root, candidate)
+    local matcher = string.format("change_id(%s)", candidate.change)
+    if candidate.trailer then
+        matcher = string.format('description(substring:"Change-Id: %s")', candidate.trailer)
+    end
+    local out =
+        jj_out(root, "log", "-r", matcher .. " & ::trunk()", "--no-graph", "-T", COMMIT_TEMPLATE)
+    return out and out:match("^(%x+)")
+end
+
+local function jj_ids(root, revset)
+    local out = jj_out(root, "log", "-r", revset, "--no-graph", "-T", COMMIT_TEMPLATE)
+    local ids = {}
+    for id in (out or ""):gmatch("%x+") do
+        ids[#ids + 1] = id
+    end
+    return ids
+end
+
+---@class dev.board.land.Drop
+---@field candidate dev.board.land.Candidate the landed change to abandon
+---@field copy string the trunk commit that holds the change
+---@field excluded string the revset suffix that leaves the other landed changes out of its children
+---@field lines string[] the lines to print, which the drop appends to
+
+local function rebase_children(root, drop, children)
+    local name, copy, lines = candidate_name(drop.candidate), drop.copy, drop.lines
+    local out, code =
+        dev_os.capture(jj(root, "rebase", "-s", children, "-d", copy), { stderr = "stdout" })
+    if code ~= 0 then
+        lines[#lines + 1] = `Kept {name}. The rebase of its unlanded children failed. `
+            .. out:gsub("\n$", "")
+        return false
+    end
+    local conflicts = out:match("New conflicts appeared[^\n]*\n(.*)")
+    local line = "Rebased the unlanded children of "
+        .. name
+        .. " onto trunk commit "
+        .. M.short(copy)
+        .. "."
+    if conflicts then
+        line = line .. " Their conflicts stay recorded in:\n" .. conflicts:gsub("\n$", "")
+    end
+    lines[#lines + 1] = line
+    return true
+end
+
+local function abandon_landed(root, drop)
+    local change, copy, lines = drop.candidate.change, drop.copy, drop.lines
+    local name = candidate_name(drop.candidate)
+    if #jj_ids(root, change .. " & (working_copies() ~ @)") > 0 then
+        lines[#lines + 1] = `Kept {name}, which another workspace holds.`
+        return
+    end
+    local children = "children(" .. change .. ")" .. drop.excluded
+    if #jj_ids(root, children) > 0 and not rebase_children(root, drop, children) then
+        return
+    end
+    if #jj_ids(root, change .. " & @") > 0 then
+        local _, code = dev_os.capture(jj(root, "new", copy), { stderr = "null" })
+        if code ~= 0 then
+            lines[#lines + 1] = `Kept {name}. A fresh working copy on trunk failed.`
+            return
+        end
+    end
+    local out, code = dev_os.capture(jj(root, "abandon", change), { stderr = "stdout" })
+    if code ~= 0 then
+        lines[#lines + 1] = `Kept {name}. The abandon failed. ` .. out:gsub("\n$", "")
+        return
+    end
+    lines[#lines + 1] = `Abandoned {name}, landed on trunk as {M.short(copy)}.`
+end
+
+local function drop_jj(root, candidates, lines)
+    local landed, changes = {}, {}
+    for _, candidate in ipairs(candidates) do
+        local copy = trunk_copy(root, candidate)
+        if copy == nil then
+            lines[#lines + 1] = `Kept {candidate_name(candidate)}, which trunk does not hold.`
+        elseif #jj_ids(root, candidate.change .. " ~ ::trunk()") > 0 then
+            landed[#landed + 1] = { candidate = candidate, copy = copy }
+            changes[#changes + 1] = candidate.change
+        end
+    end
+    local excluded = if #changes > 0 then ` ~ ({table.concat(changes, " | ")})` else ""
+    for _, drop in ipairs(landed) do
+        drop.excluded = excluded
+        drop.lines = lines
+        abandon_landed(root, drop)
+    end
+end
+
+local function git_branch(root)
+    local out = git_out(root, "symbolic-ref", "--short", "-q", "HEAD")
+    return out and out:match("^(%S+)")
+end
+
+local function drop_remote_branch(root, remote, branch, lines)
+    local out, code =
+        dev_os.capture(vcs.git_push(remote, { ":" .. branch }), { stderr = "stdout", cwd = root })
+    if code == 0 then
+        lines[#lines + 1] = `Deleted remote branch {branch}.`
+    else
+        lines[#lines + 1] = "Kept remote branch " .. branch .. ". " .. out:gsub("\n$", "")
+    end
+end
+
+local function drop_git(root, branch, lines)
+    local found = forge.resolve(root)
+    local ref = found and vcs.remote_trunk(root, found.remote)
+    if not found or not ref or not M.trunk_commit(root, "-") then
+        return
+    end
+    if ref:sub(#found.remote + 2) == branch then
+        return
+    end
+    local remote_ref = "refs/remotes/" .. found.remote .. "/" .. branch
+    if
+        git_out(root, "rev-parse", "--verify", "-q", remote_ref)
+        and git_out(root, "merge-base", "--is-ancestor", remote_ref, ref)
+    then
+        drop_remote_branch(root, found.remote, branch, lines)
+    end
+    if not git_out(root, "show-ref", "--verify", "-q", "refs/heads/" .. branch) then
+        return
+    end
+    if not git_out(root, "merge-base", "--is-ancestor", "refs/heads/" .. branch, ref) then
+        lines[#lines + 1] = "Kept branch " .. branch .. ", which trunk does not hold."
+        return
+    end
+    if git_branch(root) == branch then
+        git_out(root, "switch", "--detach", "-q")
+    end
+    local deleted, why = vcs.delete_branch(root, vcs.GIT, branch)
+    if deleted then
+        lines[#lines + 1] = `Deleted branch {branch}.`
+    elseif deleted == nil then
+        lines[#lines + 1] = "Kept branch " .. branch .. ". " .. why
+    end
+end
+
 ---Land the working-copy change with `jj land`, or push the HEAD commit to trunk in git.
+---
+---Once trunk is fetched and holds a candidate's Change-Id, the local original goes: in jj the
+---change is abandoned after its unlanded children move onto the trunk copy, and in git the landed
+---branch is deleted here and on the remote. A candidate that trunk does not hold stays.
 ---@param root string the project root
 ---@return boolean ok true when the land exited 0
 ---@return string output what the land printed
+---@return string[] dropped one line for each change abandoned, branch deleted or candidate kept
 function M.run(root)
-    if vcs.backend(root) == vcs.GIT then
-        return git_run(root)
+    local in_git = vcs.backend(root) == vcs.GIT
+    local candidates = not in_git and jj_candidates(root)
+    local branch = in_git and git_branch(root)
+    local ok, out
+    if in_git then
+        ok, out = git_run(root)
+    else
+        local printed, code = dev_os.capture(
+            vcs.with(vcs.base(root, vcs.JJ), "land", "--yes", "-r", "@"),
+            { stderr = "stdout", cwd = root, env = { DEV_BOARD_LAND = "1" } }
+        )
+        ok, out = code == 0, printed
     end
-    local out, code = dev_os.capture(
-        vcs.with(vcs.base(root, vcs.JJ), "land", "--yes", "-r", "@"),
-        { stderr = "stdout", cwd = root, env = { DEV_BOARD_LAND = "1" } }
-    )
-    return code == 0, out
+    local lines = {}
+    if not ok then
+        return false, out, lines
+    end
+    if in_git and branch then
+        drop_git(root, branch, lines)
+    elseif candidates and #candidates > 0 then
+        local found = forge.resolve(root)
+        local fetched = found and select(2, fetch(root, found.remote))
+        if fetched == 0 then
+            drop_jj(root, candidates, lines)
+        else
+            lines[#lines + 1] = "Kept the local changes. Trunk could not be fetched to confirm."
+        end
+    end
+    return true, out, lines
 end
 
 return M

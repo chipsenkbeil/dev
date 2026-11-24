@@ -2695,10 +2695,10 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         )
         testing.eq(code, 0, out)
 
-        -- Check the carried check note and the four reads
+        -- Check the carried check note and the five reads
         local list = comments(project.home)
         carried_note(list[#list].body, before)
-        testing.eq(fs.read(reads), "fetch\nfetch\nfetch\nfetch\n")
+        testing.eq(fs.read(reads), "fetch\nfetch\nfetch\nfetch\nfetch\n")
     end)
 
     local function recheck_project(row)
