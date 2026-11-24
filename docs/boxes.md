@@ -271,8 +271,10 @@ Every box is named by ci, and dev takes the host only from the box's
     a `Boxes` line with its `running` count and a `Memory` line
     `24 of 32 GiB used · 8 GiB free`. ci gives no per-machine cap yet
     (`max_boxes` is null).
-  - On the `Memory` line, used is `memory_limits_gib`, free is
-    `new_box_room_gib` and the bar's total is the two added. A machine with
+  - On the `Memory` line, used is `memory_limits_gib` and the total is
+    `host_total_gib`, or used plus the room when ci gives no total. The room
+    is `new_box_room_gib` as `8 GiB free`, or `overcommitted by 15 GiB` when it
+    is negative. A machine with
     `reachable: false` shows `unreachable` in dim instead.
   - Bars come from `dev.ui.bar`, so they appear on a terminal only. Piped
     output has the words alone with no color codes.

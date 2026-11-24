@@ -95,6 +95,49 @@ testing.test(
     end
 )
 
+local function memory_line(machine: string): string?
+    local listing = table.concat({
+        '{"ok":true,"boxes":[],"cap":{"running":1,"running_max":3},"machines":[',
+        machine,
+        "]}",
+    })
+    local root = sandbox(listing)
+    local out, code = support.dev(root, { "box", "ls" }, ENV)
+    testing.eq(code, 0)
+    fs.remove(root, { recursive = true })
+    return out:match("Memory  ([^\n]*)")
+end
+
+testing.test("ls takes the memory total from the machine and says overcommitted", function()
+    testing.eq(
+        memory_line(
+            '{"name":"hub","running":3,"memory_limits_gib":24,"new_box_room_gib":-15,"host_total_gib":9,"reachable":true}'
+        ),
+        "24 of 9 GiB used · overcommitted by 15 GiB"
+    )
+end)
+
+testing.test("ls prints the room as free memory beside the machine total", function()
+    testing.eq(
+        memory_line(
+            '{"name":"hub","running":1,"memory_limits_gib":16,"new_box_room_gib":46,"host_total_gib":93,"reachable":true}'
+        ),
+        "16 of 93 GiB used · 46 GiB free"
+    )
+    testing.eq(
+        memory_line(
+            '{"name":"hub","running":1,"memory_limits_gib":16,"new_box_room_gib":8,"host_total_gib":null,"reachable":true}'
+        ),
+        "16 of 24 GiB used · 8 GiB free"
+    )
+    testing.eq(
+        memory_line(
+            '{"name":"hub","running":1,"memory_limits_gib":16,"new_box_room_gib":-4,"reachable":true}'
+        ),
+        "16 of 16 GiB used · overcommitted by 4 GiB"
+    )
+end)
+
 testing.test("ls with no boxes still shows the room lines", function()
     local root = sandbox('{"ok":true,"boxes":[],"cap":{"running":0,"running_max":3},"machines":[]}')
     local out, code = support.dev(root, { "box", "ls" }, ENV)

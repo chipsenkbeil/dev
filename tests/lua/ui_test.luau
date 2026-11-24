@@ -51,6 +51,13 @@ testing.test("bar is fill then rest", function()
     )
 end)
 
+testing.test("bar never draws past full or below empty", function()
+    local full = string.rep("█", 21)
+    testing.eq(ui.bar(plain, { used = 24, total = 9, width = 21 }), full)
+    testing.eq(ui.bar(plain, { used = 5, total = 0, width = 21 }), string.rep("░", 21))
+    testing.eq(ui.bar(plain, { used = -3, total = 9, width = 21 }), string.rep("░", 21))
+end)
+
 testing.test("bar is empty when not interactive", function()
     local ctx = ui.context({ color = false, interactive = false, width = 80 })
     testing.eq(ui.bar(ctx, { used = 2, total = 3, width = 21 }), "")

@@ -78,7 +78,8 @@ local State, Exit = M.State, M.Exit
 ---@field name string the machine's name
 ---@field running integer boxes running on it
 ---@field memory_limits_gib number memory promised to its running boxes
----@field new_box_room_gib number memory a new box could still get
+---@field new_box_room_gib number memory a new box could still get, negative when overcommitted
+---@field host_total_gib number|dev.json.Null memory the machine has, null where it reads no meminfo
 ---@field reachable boolean whether ci could ask the machine
 
 ---@class dev.cmd.box.Installed
@@ -740,17 +741,16 @@ local function room_lines(screen, doc)
             lines[#lines + 1] = head .. string.format("Boxes   %d running", machine.running)
             local used = machine.memory_limits_gib
             local free = machine.new_box_room_gib
+            local total = present(machine.host_total_gib) or used + math.max(free, 0)
+            local room = if free < 0
+                then string.format("overcommitted by %g GiB", -free)
+                else string.format("%g GiB free", free)
             lines[#lines + 1] = blank
                 .. "Memory  "
                 .. bar_line(screen, {
                     used = used,
-                    total = used + free,
-                    words = string.format(
-                        "%g of %g GiB used · %g GiB free",
-                        used,
-                        used + free,
-                        free
-                    ),
+                    total = total,
+                    words = string.format("%g of %g GiB used · %s", used, total, room),
                 })
         end
     end
