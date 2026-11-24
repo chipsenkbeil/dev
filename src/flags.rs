@@ -16,6 +16,9 @@ const ROOT_PATH: &str = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin
 /// Variables dev drops as root, since each can steer the shells and programs it starts.
 const ROOT_UNSET: [&str; 4] = ["DEV_UID", "DEV_OS", "BASH_ENV", "ENV"];
 
+/// Version dev prints for `--version`: the release tag of a release build, else the crate's.
+pub const VERSION: &str = env!("DEV_VERSION");
+
 /// What a global flag does, and so what it takes from the words after it.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum FlagsKind {
@@ -37,12 +40,16 @@ pub enum FlagsKind {
     Script,
     /// `-v` runs, `--verbose`, `-q` and `--quiet`, which also count after the first command word.
     Verbosity,
+    /// `--version` and `-V`: print dev's version and exit.
+    Version,
 }
 
 /// Every global flag by its word; a new global flag is one row here and one arm in [`parse`].
 ///
 /// The `-v` runs are matched by [`log::word_effect`] rather than listed.
-pub const GLOBALS: [(&str, FlagsKind); 11] = [
+pub const GLOBALS: [(&str, FlagsKind); 13] = [
+    ("--version", FlagsKind::Version),
+    ("-V", FlagsKind::Version),
     ("--remote", FlagsKind::Remote),
     ("--local", FlagsKind::Local),
     ("--detach", FlagsKind::Detach),
@@ -150,6 +157,8 @@ pub struct Flags {
     pub agent: Option<String>,
     /// File `-l` runs.
     pub script: Option<FlagsScript>,
+    /// Whether `--version` or `-V` was given.
+    pub version: bool,
 }
 
 impl Flags {
@@ -239,6 +248,7 @@ pub fn parse(argv: Vec<String>, env: &FlagsEnv) -> Result<Flags, FlagsError> {
                 });
             }
             FlagsKind::Verbosity => flags.leading.push(word),
+            FlagsKind::Version => flags.version = true,
         }
     }
 
@@ -446,10 +456,7 @@ mod tests {
 
     #[test]
     fn parse_should_refuse_an_unknown_flag_before_the_first_command_word() {
-        assert_eq!(
-            refused("--version"),
-            FlagsError::Unknown("--version".to_owned())
-        );
+        assert_eq!(refused("--nope"), FlagsError::Unknown("--nope".to_owned()));
         assert_eq!(refused("-x test"), FlagsError::Unknown("-x".to_owned()));
         assert_eq!(refused("-vx test"), FlagsError::Unknown("-vx".to_owned()));
         let sentence = FlagsError::Unknown("-x".to_owned()).to_string();
@@ -556,6 +563,22 @@ mod tests {
         assert!(!flags.remote);
         assert!(flags.args.is_empty());
         assert!(flags.stripped.is_empty());
+    }
+
+    #[test]
+    fn parse_should_set_version_for_either_word_before_the_command() {
+        for word in ["--version", "-V"] {
+            let flags = parsed(&format!("{word} test"));
+            assert!(flags.version, "{word}");
+            assert_eq!(flags.args, words("test"));
+        }
+        assert!(!parsed("test -V").version);
+    }
+
+    #[test]
+    fn version_should_name_the_crate_without_a_release_tag() {
+        assert!(!VERSION.is_empty());
+        assert!(option_env!("DEV_RELEASE_TAG").is_some() || VERSION == env!("CARGO_PKG_VERSION"));
     }
 
     #[test]

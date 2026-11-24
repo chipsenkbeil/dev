@@ -9,7 +9,17 @@ local WORD = "^[A-Za-z0-9_-]+$"
 local stderr = dev_os.stderr
 local HIDDEN_GROUP = "hidden"
 local BUILTIN_BASE = "luau/dev/commands"
-local BARE_FLAGS = { "-v", "--verbose", "-vv", "--remote", "--local", "--detach", "--priority" }
+local BARE_FLAGS = {
+    "-v",
+    "--verbose",
+    "-vv",
+    "--remote",
+    "--local",
+    "--detach",
+    "--priority",
+    "--version",
+    "-V",
+}
 local VALUE_FLAGS = { "-C", "--agent", "--job-timeout" }
 local GLOBAL_FLAGS = {}
 local EXTENSIONS = { luau = 1, sh = 2, ps1 = 3 }

@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 use std::ffi::OsString;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::{env, fs, process};
 
@@ -32,6 +33,10 @@ fn main() {
     };
     let flags =
         flags::load(args, &FlagsEnv::from_environment()).unwrap_or_else(|error| usage(&error));
+    if flags.version {
+        let _ = io::stdout().write_all(format!("dev {}\n", flags::VERSION).as_bytes());
+        process::exit(0);
+    }
     let lua = match start(&flags) {
         Ok(lua) => lua,
         Err(error) => {

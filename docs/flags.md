@@ -37,6 +37,11 @@ also count after it.
 - `--agent NAME`: export `DEV_AGENT=NAME` to the command. dev sets it
   before any Luau runs, so a plain `dev -C DIR --agent NAME board land CARD`
   names its claimant with no `export` or env prefix in the call.
+- `--version` or `-V`: print the word dev and the version, such as
+  dev 0.1.0, and exit 0, whatever words follow. The version is the release
+  tag a release build was made from, else the crate version in `Cargo.toml`.
+  A build reads the tag from `DEV_RELEASE_TAG` at compile time, and an empty
+  or unset variable leaves the crate version.
 
 A missing `DIR` or an empty word after `-C` is a usage error (exit 2), and so is
 a missing or empty `NAME` after `--agent`. dev takes the word after
