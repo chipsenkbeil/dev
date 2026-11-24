@@ -670,6 +670,6 @@ testing.test("the driver refuses a repeated --manifest in check and install", fu
             { stderr = "stdout" }
         )
         testing.eq(code, 2)
-        testing.ok(out:find("--manifest given twice", 1, true), out)
+        testing.ok(out:find("`--manifest` was given more than once", 1, true), out)
     end
 end)

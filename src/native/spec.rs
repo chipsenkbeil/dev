@@ -536,6 +536,9 @@ fn collect(
         Ok(value) => value,
         Err(message) => return Ok(Err(message)),
     };
+    if !flag.repeatable && slot.is_some() {
+        return Ok(Err(format!("The flag `{shown}` was given more than once.")));
+    }
     if flag.repeatable {
         match slot {
             Some(Collected::Many(values)) => values.push(value),
@@ -949,6 +952,42 @@ mod tests {
             "--label=a --label b",
         );
         assert_eq!(out, Ok("label=a,b wait=30 |  | nil".to_owned()));
+    }
+
+    #[test]
+    fn parse_should_refuse_a_value_flag_given_twice() {
+        let source = "{ flags = { { name = 'name', short = 'n' }, \
+                      { name = 'wait', kind = 'number' } } }";
+        for argv in ["--name a --name b", "--name=a -n b", "-n a -nb"] {
+            let out = parsed(source, argv);
+            assert!(
+                out.as_ref()
+                    .is_err_and(|message| message.ends_with("was given more than once.")),
+                "{argv}: {out:?}"
+            );
+        }
+        assert_eq!(
+            parsed(source, "--wait 1 --wait 2"),
+            Err("The flag `--wait` was given more than once.".to_owned())
+        );
+    }
+
+    #[test]
+    fn parse_should_accept_a_boolean_flag_given_twice() {
+        let out = parsed(
+            "{ flags = { { name = 'force', short = 'f', kind = 'boolean' } } }",
+            "--force -f",
+        );
+        assert_eq!(out, Ok("force=true |  | nil".to_owned()));
+    }
+
+    #[test]
+    fn parse_should_accept_a_repeatable_flag_given_twice() {
+        let out = parsed(
+            "{ flags = { { name = 'label', short = 'l', repeatable = true } } }",
+            "-l a --label b",
+        );
+        assert_eq!(out, Ok("label=a,b |  | nil".to_owned()));
     }
 
     #[test]

@@ -202,7 +202,10 @@ The fields:
   a patch job, as `dev help remote` describes.
 - `flags`: each has a `name`, an optional one-letter `short`, a `kind` of
   `string`, `number` or `boolean`, `default`, `choices` (strings only),
-  `repeatable`, `required`, `hidden`, `help` and `complete`.
+  `repeatable`, `required`, `hidden`, `help` and `complete`. A `string` or
+  `number` flag without `repeatable` that appears twice is a usage error, exit
+  2 with a sentence naming the flag and then the usage line. A `boolean` flag
+  given twice is accepted.
 - `args`: each has a `name`, `required`, `list` (the last one only), `rest`,
   `help` and `complete`. `rest` needs `list`: from its first word on, the arg
   takes every word verbatim, so a word that starts with `-` stays text.
