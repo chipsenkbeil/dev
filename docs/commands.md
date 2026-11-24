@@ -97,6 +97,55 @@ A source other than `builtin` or `global`, or a command the source lacks, exits
 
 There is no `project:` prefix.
 
+## The built-in project commands
+
+`dev lint`, `dev fmt` and `dev test` are built-ins that run a fixed sequence
+for the project's type. `dev build`, `dev run` and `dev fetch` work the same
+way. dev reads the type from the files at the project root, and the first
+match in this order wins:
+
+1. `Cargo.toml`: rust
+2. `main.lua` and `conf.lua` together: love2d
+3. `project.godot`: godot
+4. `package.json`: node
+5. a `.lua` file within four folders of the root, skipping hidden folders,
+   `node_modules` and `target`: lua
+6. `Makefile`: make
+
+A project that matches none is undetected. Every built-in then prints `There
+is no built-in COMMAND for an undetected project.` and exits 1. A type with no
+sequence for one command prints `There is no built-in COMMAND for TYPE
+projects.` and exits 1 the same way.
+
+What each type runs:
+
+- rust, `lint`: `cargo +nightly fmt --check`, then `cargo clippy --all-targets
+  --all-features -- -D warnings`, then `ast-grep scan` when `sgconfig.yml`
+  exists.
+- rust, `fmt`: `cargo +nightly fmt`.
+- rust, `test`: `cargo nextest run --all-features`, then `cargo test --doc
+  --all-features`.
+- love2d, `lint` and `test`: `make lint` or `make test`, so the Makefile needs
+  that target. `fmt` runs stylua over the project's `.lua` files.
+- lua, `fmt`: stylua over the project's `.lua` files. `lint` and `test` run
+  the Makefile target of that name.
+- make: `make -C ROOT lint`, `fmt` or `test`, refused when the Makefile has no
+  such target.
+- node: `npm --prefix ROOT run lint`, `fmt` or `test`, refused when
+  `package.json` has no script of that name.
+- godot: no `lint`, `fmt` or `test`.
+
+A sequence stops at the first step that fails and exits with that step's code.
+The words after the command, and everything after `--`, reach the last step as
+typed, and both steps of rust `test`. Rust `lint` ignores them. A `fmt` with no
+`.lua` file to format says so and exits 0. `dev help lint` prints the lines the
+built-in would run in the current project.
+
+A file named `lint`, `fmt` or `test` in `.dev/commands/` replaces the built-in
+for that project, as the three layers above describe, and the built-in no
+longer runs there. dev's own repo does this, so its checks differ from the
+sequence above. `CONTRIBUTING.md` describes them.
+
 ## The dev.command spec
 
 A `.luau` command file returns `dev_command({...})`, where

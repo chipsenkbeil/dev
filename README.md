@@ -58,7 +58,7 @@ lists them.
 
 - `docs/overview.md`: what dev is and where to start
 - `docs/commands.md`: how the files in `.dev/commands/` become commands
-- `docs/modules.md`: the dev modules, `.dev` commands and the test runner
+- `docs/modules.md`: the dev modules a command can require
 - `docs/porting.md`: port a `.dev` bash command to Luau
 - `docs/flags.md`: the global flags, help flags and how the launcher
   starts dev
@@ -68,7 +68,8 @@ lists them.
 - `docs/forge.md`, `docs/manifest.md` and `docs/boxes.md`: `dev push` and
   `dev pull`, the tools manifest, and dev boxes
 
-`.dev/README.md` lists the commands this repo defines.
+`.dev/README.md` lists the commands this repo defines, and `CONTRIBUTING.md`
+describes the checks that run over the repo.
 
 ## License
 

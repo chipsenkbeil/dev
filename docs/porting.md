@@ -249,6 +249,22 @@ A project with no `.dev/tests` prints `SKIP .dev/tests (none)` and returns 0.
   `root` with `root/bin` first on PATH and `opts.env`, and returns
   `out, code, err`
 
+### A golden-output harness
+
+dev has no golden or snapshot helper, and `command` takes only `env` in its
+`opts`, so it cannot set a working folder or feed standard input. A project that
+compares a command's output with stored files keeps that harness as its own
+library under `.dev/lib`, which a test loads with `require`. The harness runs
+the program through `dev.os`:
+
+- `capture(argv, opts)` returns `out, code`
+- `capture_input(argv, input, opts)` adds standard input
+- `capture_timed(argv, secs, opts)` adds a time limit
+
+`opts` takes `cwd` and `env` there. The harness reads the stored file with
+`dev.fs.read`, compares it with the output, and registers one `dev.testing`
+case per golden file, so each file passes or fails on its own.
+
 ## One command before and after
 
 A command that lists targets, first in bash:

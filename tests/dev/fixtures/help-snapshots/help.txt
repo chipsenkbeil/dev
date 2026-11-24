@@ -46,7 +46,7 @@ Help pages
   flags                   The global flags, help flags and how the launcher starts dev
   forge                   How dev push and dev pull pick a remote and a command
   manifest                The tools manifest, install scopes and the package driver
-  modules                 The dev modules, .dev commands and the test runner
+  modules                 The dev modules a command can require
   overview                What dev is and where to start
   porting                 Port a .dev bash command to Luau
   remote                  Run a command somewhere else, by default or with --remote
