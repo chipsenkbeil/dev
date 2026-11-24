@@ -66,11 +66,11 @@ local VERSION_WORD = "^[A-Za-z0-9._+][A-Za-z0-9._+%-]*$"
 local NAME_WORD = "^[A-Za-z0-9@._+][A-Za-z0-9@._+%-]*$"
 local SHA256_WORD = "^%x+$"
 
----Report whether a pin url uses https, or plain http to a loopback host on any port.
+---Report whether a pin url uses https, a local file, or plain http to a loopback host.
 ---@param url string the pin's url
 ---@return boolean allowed whether the scheme and host are allowed
 local function scheme_allowed(url)
-    if url:find("^https://") then
+    if url:find("^https://") or url:find("^file:///") then
         return true
     end
     local authority = url:match("^http://([^/]+)")
@@ -94,7 +94,7 @@ local function pin_of(fields, line)
     end
     url = url:gsub("%${version}", (version:gsub("%%", "%%%%")))
     if not url:find("^%S+$") or not scheme_allowed(url) or url:find("[%c\"'`$\\]") then
-        return nil, line .. ": the url of " .. name .. " must be https and a plain word"
+        return nil, line .. ": the url of " .. name .. " must be https or file:// and a plain word"
     elseif path ~= NO_PATH and bad_path(path) then
         return nil, line .. ": bad archive path " .. path
     elseif is_archive(url) == (path == NO_PATH) then

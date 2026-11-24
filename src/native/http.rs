@@ -459,7 +459,7 @@ impl From<Failure> for Stop {
 fn fetch(
     call: Call<'_>,
     path: &str,
-    mut progress: impl FnMut(u64, Option<u64>) -> bool,
+    progress: impl FnMut(u64, Option<u64>) -> bool,
 ) -> Result<Reply, Stop> {
     let url = call.url.to_owned();
     let mut response = send(call)?;
@@ -474,9 +474,45 @@ fn fetch(
         return Ok(reply);
     }
     let total = response.body().content_length();
-    let mut file =
-        File::create(path).map_err(|error| other_failure(&url, format!("{path}: {error}")))?;
     let mut reader = response.body_mut().with_config().limit(u64::MAX).reader();
+    stream_to_file(&mut reader, total, &url, path, progress)?;
+    Ok(reply)
+}
+
+/// Copies the local file behind a `file://` URL to `path` as a 200 reply, calling
+/// `progress(done, total)`. A file that cannot be opened fails with kind `other`.
+fn fetch_local(
+    url: &str,
+    path: &str,
+    progress: impl FnMut(u64, Option<u64>) -> bool,
+) -> Result<Reply, Stop> {
+    let source = url.strip_prefix("file://").unwrap_or(url);
+    if !source.starts_with('/') {
+        return Err(other_failure(url, "a file:// URL needs an absolute path").into());
+    }
+    let mut file =
+        File::open(source).map_err(|error| other_failure(url, format!("{source}: {error}")))?;
+    let total = file.metadata().ok().map(|meta| meta.len());
+    stream_to_file(&mut file, total, url, path, progress)?;
+    Ok(Reply {
+        status: 200,
+        headers: Vec::new(),
+        body: Vec::new(),
+    })
+}
+
+/// Writes everything `reader` yields to `path`, calling `progress(done, total)` per chunk.
+///
+/// A failure or a `false` from `progress` removes the partial file.
+fn stream_to_file(
+    reader: &mut impl Read,
+    total: Option<u64>,
+    url: &str,
+    path: &str,
+    mut progress: impl FnMut(u64, Option<u64>) -> bool,
+) -> Result<(), Stop> {
+    let mut file =
+        File::create(path).map_err(|error| other_failure(url, format!("{path}: {error}")))?;
     let mut chunk = vec![0_u8; CHUNK_BYTES];
     let mut done = 0_u64;
     let streamed: Result<(), Failure> = loop {
@@ -484,7 +520,7 @@ fn fetch(
             Ok(0) => break Ok(()),
             Ok(count) => {
                 if let Err(error) = file.write_all(&chunk[..count]) {
-                    break Err(other_failure(&url, format!("{path}: {error}")));
+                    break Err(other_failure(url, format!("{path}: {error}")));
                 }
                 done += count as u64;
                 if !progress(done, total) {
@@ -501,7 +537,7 @@ fn fetch(
                     "other"
                 };
                 break Err(Failure {
-                    reason: format!("{}: {error}", host_of(&url)),
+                    reason: format!("{}: {error}", host_of(url)),
                     kind,
                 });
             }
@@ -512,7 +548,7 @@ fn fetch(
         drop(std::fs::remove_file(path));
         return Err(Stop::Failed(failed));
     }
-    Ok(reply)
+    Ok(())
 }
 
 /// Builds the `{status, headers}` table, and `body` when given.
@@ -575,8 +611,9 @@ native_fn! {
 }
 
 native_fn! {
-    /// Streams a URL to a file, following redirects, and returns the status and headers. The
-    /// file is written only for a 2xx status. `progress(done, total?)` is called as it goes.
+    /// Streams a URL to a file, following redirects, and returns the status and headers. A
+    /// `file://` URL copies the local file as status 200. The file is written only for a 2xx
+    /// status. `progress(done, total?)` is called as it goes.
     #[luau = "(opts: { url: string, path: string, headers: { [string]: string }?, timeout: number?, connect_timeout: number?, progress: ((number, number?) -> ())? }) -> ({ status: number, headers: { [string]: string } }?, string?, string?)"]
     pub fn download(lua: &Lua, opts: DownloadOptions) -> mlua::Result<MultiValue> {
         let headers = header_pairs(opts.headers);
@@ -590,7 +627,7 @@ native_fn! {
         };
         let progress = opts.progress;
         let mut raised = None;
-        let outcome = fetch(call, &opts.path, |done, total| {
+        let report = |done, total| {
             let Some(function) = &progress else {
                 return true;
             };
@@ -601,7 +638,12 @@ native_fn! {
                     false
                 }
             }
-        });
+        };
+        let outcome = if opts.url.starts_with("file://") {
+            fetch_local(&opts.url, &opts.path, report)
+        } else {
+            fetch(call, &opts.path, report)
+        };
         match outcome {
             Ok(reply) => reply_table(lua, reply, false)?.into_lua_multi(lua),
             Err(Stop::Aborted) => Err(raised.unwrap_or_else(|| mlua::Error::runtime("download stopped"))),
@@ -790,6 +832,39 @@ mod tests {
         assert_eq!(got.unwrap().status, 404);
         assert!(!path.exists());
         server.join().unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn fetch_local_should_copy_the_file_as_a_200_with_progress() {
+        let dir = std::env::temp_dir().join(format!("dev-http-local-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let source = dir.join("in.bin");
+        let path = dir.join("out.bin");
+        std::fs::write(&source, b"payload").unwrap();
+        let url = format!("file://{}", source.display());
+        let mut calls = Vec::new();
+        let got = fetch_local(&url, path.to_str().unwrap(), |done, total| {
+            calls.push((done, total));
+            true
+        });
+        assert_eq!(got.unwrap().status, 200);
+        assert_eq!(std::fs::read(&path).unwrap(), b"payload");
+        assert_eq!(calls.last(), Some(&(7, Some(7))));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn fetch_local_should_fail_for_a_missing_file_or_a_relative_path() {
+        let dir = std::env::temp_dir().join(format!("dev-http-local-miss-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("out.bin");
+        let missing = format!("file://{}/none", dir.display());
+        let got = fetch_local(&missing, path.to_str().unwrap(), |_, _| true);
+        assert!(matches!(got, Err(Stop::Failed(failed)) if failed.kind == "other"));
+        let relative = fetch_local("file://rel/x", path.to_str().unwrap(), |_, _| true);
+        assert!(matches!(relative, Err(Stop::Failed(_))));
+        assert!(!path.exists());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

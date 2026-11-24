@@ -258,6 +258,12 @@ A project with no `.dev/tests` prints `SKIP .dev/tests (none)` and returns 0.
   `root` with `root/bin` first on PATH and `opts.env`, and returns
   `out, code, err`
 
+`dev.http` does the fetching, so a test cannot stub a download with a fake
+`curl`. A `release:` pin or a `script:` source takes a `file://` url with an
+absolute path (`file://` plus `root/mirror/tool.tar.gz`), which is copied
+through the same sha256 check and unpacking as an https download. A test writes
+the archive under its temp directory and points the pin at it.
+
 ### A golden-output harness
 
 dev has no golden or snapshot helper, and `command` takes only `env` in its

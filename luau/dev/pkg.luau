@@ -136,7 +136,7 @@ local function load_driver(name)
 end
 
 local function check_script_row(opts, name, package)
-    if package:find("^https?://") then
+    if package:find("^https?://") or package:find("^file:///") then
         stdout:write("[?] ", name, "\t(remote script, no probe)\n")
         return true
     elseif dev_os.getuid() == 0 then

@@ -104,6 +104,18 @@ testing.test("any other source runs under bash", function()
     fs.remove(dir, { recursive = true })
 end)
 
+testing.test("a file:// source is copied and runs like a downloaded one", function()
+    local dir = sandbox()
+    local out = dir .. "/out"
+    assert(fs.write(dir .. "/x.sh", 'printf "%s" "$*" >"' .. out .. '"\n'))
+    local _, code = script_row(dir, "file://" .. dir .. "/x.sh", " a b")
+    testing.eq(code, 0)
+    testing.eq(fs.read(out), "a b")
+    local missing = script_row(dir, "file://" .. dir .. "/none.sh")
+    testing.ok(missing:find("failed to download file://" .. dir .. "/none.sh", 1, true), missing)
+    fs.remove(dir, { recursive = true })
+end)
+
 testing.test("the dry run prints dev -l for a .lua source and bash for the rest", function()
     local dir = sandbox()
     local lua = script_row(dir, "/x/y.lua", " --flag", { dry_run = true })

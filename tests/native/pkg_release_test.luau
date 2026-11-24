@@ -31,7 +31,7 @@ end
 local function refused(url)
     local pins, err = read_pin(url)
     assert(pins == nil, url .. " was accepted")
-    assert(tostring(err):find("must be https and a plain word", 1, true), tostring(err))
+    assert(tostring(err):find("must be https or file:// and a plain word", 1, true), tostring(err))
 end
 
 check("an https url is allowed", function()

@@ -198,7 +198,7 @@ only root can enter, and the driver reads the pins from that folder.
 
 The file is checked when it is read:
 
-- The url is https.
+- The url is https, or `file://` followed by an absolute path.
 - The sha256 is 64 hex digits.
 - The path is present exactly when the url is an archive, and holds no `..`.
 
@@ -208,6 +208,12 @@ The file is checked when it is read:
 `curl -fsSL --connect-timeout 15 --max-time 600`. It checks the sha256 with
 `shasum -a 256` or else `sha256sum`. The url's suffix picks the unpacking:
 `.tar.gz`, `.tgz` and `.tar.xz` use `tar`, and `.zip` uses `unzip`.
+
+A `file://` url, such as `file:///srv/mirror/tool-1.2.3.tar.gz`, is copied from
+the local path instead of fetched, then checked, unpacked and installed like an
+https download. A project can serve a pin from an offline mirror this way, and a
+test can serve one from a temp directory. A `script:` source takes the same
+`file://` url as an `https://` one: it is copied to a temp file and run.
 
 A mismatch deletes the download and fails with
 `The sha256 of <url> does not match the pin. Expected <sum>, got <sum>.`

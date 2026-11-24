@@ -105,7 +105,9 @@ A table of the parsed global flags: `args`, `after`, `dashed`, `remote`,
   is a normal result. `kind` is `resolve`, `connect`, `timeout`, `tls` or
   `other`.
 - `download{ url, path, headers?, timeout?, progress? }` returns `{ status,
-  headers }` or `nil, reason, kind`.
+  headers }` or `nil, reason, kind`. A `file://` url with an absolute path is
+  copied with status 200 and no headers, and `progress` is called as for a
+  fetch.
 
 ### dev.json
 

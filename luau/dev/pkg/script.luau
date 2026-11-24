@@ -9,6 +9,7 @@ local stdout = dev_os.stdout
 
 local LUA_SUFFIX = "%.luau?$"
 local URL = "^https?://"
+local FILE_URL = "^file:///"
 local DOWNLOAD_SECONDS = 300
 
 ---@class dev.pkg.script
@@ -130,7 +131,7 @@ function M.install(row, opts)
         return 0
     end
     local cell = split(row.package)
-    if cell.source:find(URL) then
+    if cell.source:find(URL) or cell.source:find(FILE_URL) then
         return install_remote(row, opts, cell)
     end
     local exec, shown = runner(cell)
