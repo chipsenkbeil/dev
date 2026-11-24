@@ -1,0 +1,69 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+env:
+  DEV_RELEASE_TAG: ${{ github.ref_name }}
+
+jobs:
+  build:
+    name: build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+            cargo: zigbuild
+          - os: macos-15
+            target: aarch64-apple-darwin
+            cargo: build
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            cargo: build
+    steps:
+      - uses: actions/checkout@v7
+      - name: Add the Rust target
+        run: rustup target add ${{ matrix.target }}
+      - uses: mlugg/setup-zig@v2
+        if: matrix.cargo == 'zigbuild'
+      - uses: taiki-e/install-action@v2
+        if: matrix.cargo == 'zigbuild'
+        with:
+          tool: cargo-zigbuild
+      - name: Build the release binary
+        run: cargo ${{ matrix.cargo }} --release --locked --target ${{ matrix.target }}
+      - name: Test the release binary
+        run: |
+          binary=target/${{ matrix.target }}/release/dev
+          ./$binary release test $binary --tag "$DEV_RELEASE_TAG"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dev-${{ github.ref_name }}-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/dev
+          if-no-files-found: error
+
+  publish:
+    name: publish
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+      - name: Publish the release
+        run: |
+          dev=artifacts/dev-$DEV_RELEASE_TAG-x86_64-unknown-linux-musl/dev
+          chmod +x "$dev"
+          "./$dev" release publish "$DEV_RELEASE_TAG" --dir artifacts

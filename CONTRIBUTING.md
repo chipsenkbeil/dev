@@ -133,6 +133,25 @@ it runs prints a line starting `SKIP real-root` (a case that needs real root or
 the real pacman). A line starting `SKIP user-only` (a case that runs as a user
 through `FAKE_UID` or `FAKE_OS`) still passes.
 
+## Releasing
+
+A release is a pushed tag. `.github/workflows/release.yml` runs on a `v*` tag
+and on nothing else, never on a push or a pull request.
+
+1. Push the tag from a workspace: `jj tag set vX.Y.Z -r REV`, then
+   `dev push --tag vX.Y.Z`. Gerrit mirrors it to GitHub.
+2. One job per platform (Linux x86_64 musl, macOS aarch64, macOS x86_64) builds
+   with `DEV_RELEASE_TAG` set to the tag, so `dev --version` prints it, runs
+   `dev release test` on the binary and uploads it.
+3. A last job runs the built Linux binary's `dev release publish`, which writes
+   `SHA256SUMS` and creates the GitHub release, as a pre-release when the tag
+   holds `-pre.`.
+
+`dev release build`, `test` and `publish` hold the logic, so the workflow only
+sets up the toolchain, the one bootstrap `cargo build` and the calls. A
+published release is never deleted or overwritten. A failed run is fixed
+forward with the next tag.
+
 ## The lint-set template rule
 
 The rule covers the synced lint templates. A change making a synced

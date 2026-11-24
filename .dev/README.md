@@ -293,8 +293,15 @@ These are the project commands in `.dev/`. Each lists the flags and
 
 ### Release
 
-- `dev publish TAG [--prerelease]`: start the `targets` job of both `.ci`
-  pipelines at the pushed tag, pull the two binaries and create the GitHub
-  release for TAG with them and a `SHA256SUMS` file. Push the tag first with
-  `dev push --tag TAG`. The ci targets come from the user config keys
-  `ci.rust_target` and `ci.macos_target`. Flag: `--prerelease`.
+The workflow in `.github/workflows/release.yml` runs these on a pushed `v*`
+tag. Push the tag with `dev push --tag TAG`.
+
+- `dev release build TARGET [--tag TAG] [--zigbuild]`: run `cargo build
+  --release --locked --target TARGET` with `DEV_RELEASE_TAG` set to TAG, and
+  print the binary's path. Flags: `--tag`, `--zigbuild`.
+- `dev release test BINARY [--tag TAG]`: run `BINARY --version`, which must
+  print `dev TAG`, then the native suite on BINARY. Flag: `--tag`.
+- `dev release publish TAG [--dir DIR]`: write `SHA256SUMS` over the
+  `dev-TAG-TRIPLE` binaries under DIR, then create the GitHub release for TAG
+  or upload to it, as a pre-release when TAG holds `-pre.`. It refuses to
+  overwrite an asset. Flag: `--dir` (default `artifacts`).

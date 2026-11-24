@@ -1,6 +1,5 @@
 -- Run each job on the Arch Linux target
 local CARGO = "export PATH=$HOME/.cargo/bin:$PATH; "
-local RELEASE_TAG = "DEV_RELEASE_TAG=$(git describe --tags --exact-match 2>/dev/null) "
 local NIGHTLY_RUSTFMT =
     "cargo +nightly fmt --version || rustup toolchain install nightly --profile minimal -c rustfmt"
 local PACMAN_PACKAGES =
@@ -126,7 +125,7 @@ return {
                     { name = "Add the " .. triple .. " target" }
                 )
                 ci.sh(
-                    CARGO .. RELEASE_TAG .. "cargo zigbuild --locked --release --target " .. triple,
+                    CARGO .. "cargo zigbuild --locked --release --target " .. triple,
                     { name = "Build for " .. triple }
                 )
                 local binary = "target/" .. triple .. "/release/dev"
