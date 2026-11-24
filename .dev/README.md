@@ -290,3 +290,11 @@ These are the project commands in `.dev/`. Each lists the flags and
   parallel suite count.
 - `dev --remote soak [-- --runs N]`: run the signal tests in a loop beside CPU
   burners, on a ci host only. Flag: `--runs` (default 50).
+
+### Release
+
+- `dev publish TAG [--prerelease]`: start the `targets` job of both `.ci`
+  pipelines at the pushed tag, pull the two binaries and create the GitHub
+  release for TAG with them and a `SHA256SUMS` file. Push the tag first with
+  `dev push --tag TAG`. The ci targets come from the user config keys
+  `ci.rust_target` and `ci.macos_target`. Flag: `--prerelease`.
