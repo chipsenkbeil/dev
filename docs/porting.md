@@ -87,6 +87,10 @@ message and exit code the old command gave: one sentence, then the usage line
 drawn from the spec, on standard error, exit 2. A command needs no check of
 its own, and a test that pinned the old wording pins the spec's instead.
 
+A golden file that pinned the old wording of a refusal is recaptured with the
+real `dev` binary, never edited by hand. The change description states the
+reason, that the spec's refusal replaced the old message and exit code.
+
 ### Passing words on to another tool
 
 A command that hands its words to another tool, as `dev test` and `dev build`
@@ -235,6 +239,11 @@ prints the same `ok` and `not ok` lines and exits 1 when a case fails. A file
 that returns a non-zero number exits with it. This is also how a ci step runs
 one named project test: the step's command is
 `dev -l .dev/tests/NAME_test.luau`, and its exit code is the step's result.
+
+Every word after the file belongs to the file, so `dev -l FILE a b` reaches it
+in two places. The global `arg` holds the path at `arg[0]` and the words at
+`arg[1]` and `arg[2]`. The chunk's varargs `...` hold the words alone, `a` and
+`b`. A word that starts with `-` is passed on like any other.
 
 A project with no `.dev/tests` prints `SKIP .dev/tests (none)` and returns 0.
 
