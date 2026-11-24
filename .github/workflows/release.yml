@@ -80,7 +80,7 @@ jobs:
       - name: Build and test inside FreeBSD
         uses: vmactions/freebsd-vm@v1.6.0
         with:
-          release: '15.0'
+          release: '15.1'
           arch: x86_64
           envs: DEV_RELEASE_TAG
           prepare: |
