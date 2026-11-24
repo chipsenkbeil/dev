@@ -399,3 +399,9 @@ testing.test("with_files joins two file lists in order without changing either",
     testing.eq(lua_files, { "a.lua", "b.lua" })
     testing.eq(dev_files, { ".dev/c.lua" })
 end)
+
+testing.test("split_lua gives selene the .lua files and luau-analyze the .luau files", function()
+    local lua, luau = lintset.split_lua({ "a.lua", "b.luau", "c.txt", ".ci/d.lua", "e/f.luau" })
+    testing.eq(lua, { "a.lua", ".ci/d.lua" })
+    testing.eq(luau, { "b.luau", "e/f.luau" })
+end)

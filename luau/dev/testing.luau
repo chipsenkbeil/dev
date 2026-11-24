@@ -10,7 +10,7 @@ local registered = {}
 
 local function render(value, seen)
     if type(value) == "string" then
-        return string.format("%q", value)
+        return string.format("%q", value :: string)
     end
     if type(value) ~= "table" then
         return tostring(value)

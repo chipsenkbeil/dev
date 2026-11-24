@@ -236,7 +236,7 @@ end
 ---is allowed.
 ---@param row string the row as the card holds it
 ---@return string? message why the row is refused, nil when it is a plain command
-function M.refusal(row)
+function M.refusal(row: string)
     row = row:match(NEGATED) or row
     local bad = row:match(SHELL_CHARS)
     if bad then
@@ -324,7 +324,7 @@ end
 ---@param row string the row as the card holds it
 ---@param root string the workspace the row runs in
 ---@return string? message why the row cannot run, nil when it can
-function M.unrunnable(row, root)
+function M.unrunnable(row: string, root)
     row = row:match(NEGATED) or row
     local words = split_words(row)
     local first = words[1]

@@ -604,6 +604,34 @@ function Lint:files(globs, opts)
     return files_jj(self, query) or files_git(self, query) or files_rg(self, query)
 end
 
+---Split Lua files by extension, so selene and the Lua rules get `.lua` and luau-analyze gets `.luau`.
+---@param files string[] paths of `.lua` and `.luau` files
+---@return string[] lua the `.lua` files, in order
+---@return string[] luau the `.luau` files, in order
+function M.split_lua(files)
+    local lua, luau = {}, {}
+    for _, file in ipairs(files) do
+        if file:find("%.luau$") then
+            luau[#luau + 1] = file
+        elseif file:find("%.lua$") then
+            lua[#lua + 1] = file
+        end
+    end
+    return lua, luau
+end
+
+---Type-check the `.luau` files among the paths with luau-analyze in its default non-strict mode.
+---
+---A `.lua` file in the list is left to selene, and a list with no `.luau` file runs nothing.
+---@param files string[] paths of `.lua` and `.luau` files
+function Lint:luau_analyze(files)
+    local _, luau = M.split_lua(files)
+    if #luau == 0 or not self:have("luau-analyze", "brew install luau") then
+        return
+    end
+    self:check("luau-analyze", M.with_files({ "luau-analyze" }, luau))
+end
+
 ---List the Lua files under the project's `.dev` and `.ci` directories, and no other Lua.
 ---
 ---The list holds them whether or not hidden paths are skipped, and `.dev/lint-ignore` still leaves

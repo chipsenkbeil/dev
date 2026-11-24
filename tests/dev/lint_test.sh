@@ -10,7 +10,7 @@ trap 'rm -rf "$TMP"' EXIT
 DEV="${DEV_BIN:-$REPO/target/debug/dev}"
 mkdir -p "$TMP/.dev/lib/devrepo" "$TMP/.dev/commands" "$TMP/scripts" "$TMP/tests" "$TMP/dotfiles/bin" "$TMP/dotfiles/jj/.config/jj/scripts" "$TMP/.ci"
 cp "$REPO/.dev/commands/lint.luau" "$TMP/.dev/commands/"
-cp "$REPO/stylua.toml" "$REPO/selene.toml" "$REPO/sgconfig.yml" "$REPO/ci.yml" "$TMP/"
+cp "$REPO/stylua.toml" "$REPO/selene.toml" "$REPO/sgconfig.yml" "$REPO/ci.yml" "$REPO/.luaurc" "$TMP/"
 cp "$REPO/.dev/lib/devrepo/checks.luau" "$TMP/.dev/lib/devrepo/"
 cp "$REPO/.dev/lib/lintset.luau" "$TMP/.dev/lib/"
 cp -R "$REPO/.dev/ast-grep" "$TMP/.dev/"
@@ -93,12 +93,36 @@ assert_eq "a [[ ]] assertion ending in || false passes" "$rc" "0" "$out"
 assert_not_contains "a [[ ]] inside a command string passes" "$out" "tests/bare.bats"
 rm "$TMP/tests/bare.bats"
 
+if command -v luau-analyze >/dev/null 2>&1; then
+    mkdir -p "$TMP/tests/lua"
+    printf 'local unused = 1\nreturn arg\n' >"$TMP/tests/lua/ok.luau"
+    out="$(lint)"
+    rc=$?
+    assert_eq "a luau file with a global from the definitions file passes" "$rc" "0" "$out"
+    assert_contains "a luau file is type-checked" "$out" "Type-checking luau with luau-analyze"
+    assert_not_contains "a luau file never reaches selene" "$out" "Linting lua with selene"
+    assert_not_contains "a luau file never reaches ast-grep" "$out" "Linting lua with ast-grep"
+    rm "$TMP/tests/lua/ok.luau"
+
+    printf 'return no_such_global\n' >"$TMP/tests/lua/bad.luau"
+    out="$(lint)"
+    rc=$?
+    assert_eq "a luau type error exits non-zero" "$((rc != 0))" "1"
+    assert_contains "a luau type error is named by luau-analyze" "$out" "tests/lua/bad.luau(1,"
+    assert_contains "a luau type error carries luau-analyze's message" "$out" "Unknown global 'no_such_global'"
+    rm "$TMP/tests/lua/bad.luau"
+else
+    printf 'skip - the luau type check (needs luau-analyze)\n'
+fi
+
 if command -v selene >/dev/null 2>&1; then
     printf 'local unused = 1\n' >"$TMP/.ci/x.lua"
     out="$(lint)"
     rc=$?
     assert_eq "a lua violation under .ci exits non-zero" "$((rc != 0))" "1"
     assert_contains "a lua violation under .ci is named by selene" "$out" ".ci/x.lua"
+    assert_contains "a lua file under .ci gets selene" "$out" "Linting lua with selene"
+    assert_not_contains "a lua file under .ci is never type-checked" "$out" "x.lua(1,"
     rm "$TMP/.ci/x.lua"
     out="$(lint)"
     rc=$?

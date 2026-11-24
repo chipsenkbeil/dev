@@ -271,7 +271,7 @@ end
 ---@param column string the board's Done column name the refusal names
 ---@return dev.cmd.board.Result? err the refusal, nil when every outcome is ticked
 local function done_refusal(card, column)
-    local id = card.id:sub(1, board.MIN_PREFIX)
+    local id: string = card.id:sub(1, board.MIN_PREFIX)
     local unreadable = unreadable_refusal(card, column)
     if unreadable then
         return unqueued(unreadable)

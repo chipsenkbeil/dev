@@ -34,6 +34,8 @@ This repo's own `dev lint`, `dev fmt` and `dev test` are
   `stylua.toml`, which sets the syntax to Luau
 - the comment checks over the Luau files: no full-line comment directly after
   code, and no run of three or more consecutive prose comment lines
+- luau-analyze over the Luau files, in its default non-strict mode, with
+  root `.luaurc` naming the globals dev's runtime adds
 - selene and ast-grep over the `.ci` Lua files, with the repo's `selene.toml`
   and `sgconfig.yml`
 - the standalone shell check
@@ -42,10 +44,11 @@ This repo's own `dev lint`, `dev fmt` and `dev test` are
 The Luau roots are `luau/dev`, `tests/lua` and `.dev`. `dev fmt` runs
 `cargo +nightly fmt`, then stylua over the Luau files with the same config.
 
-Luau lint coverage is narrower than it looks. A `.luau` file gets stylua and
-the comment checks and nothing else. selene and ast-grep read Lua only, so they
-run on `.ci/*.lua` alone and never see a `.luau` file. A type checker for Luau
-(luau-analyze) is not wired in yet.
+A `.luau` file gets stylua, the comment checks and luau-analyze. selene and
+ast-grep read Lua only, so they run on `.ci/*.lua` alone and never see a
+`.luau` file. The `.luaurc` at the root turns luau-analyze's style lints off,
+so it reports type errors and syntax errors only. The `--!strict` header and
+typed `@param` rules are not part of the set.
 
 selene runs with `--no-exclude`. The set's `exclude = [".*/**"]` would hide
 `.dev` otherwise.

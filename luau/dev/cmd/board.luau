@@ -1446,7 +1446,7 @@ local function unnoted(backend, card, column)
         return failure(why)
     end
     if board.noted_since_claim(past, card.claimant) == false then
-        local short = card.id:sub(1, board.MIN_PREFIX)
+        local short: string = card.id:sub(1, board.MIN_PREFIX)
         return failure(
             string.format(
                 "Card %s has no note from its claimant %s since the claim. "

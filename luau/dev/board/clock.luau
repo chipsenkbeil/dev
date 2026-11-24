@@ -36,7 +36,7 @@ M.WORDS = { [START] = true, [STOP] = true }
 ---Trim a role flag and refuse a blank one or one with control characters.
 ---@param flag string? the `--as` value
 ---@return string? role the role, nil when the flag is missing or unusable
-function M.role(flag)
+function M.role(flag: string?)
     local role = flag and flag:match("^%s*(.-)%s*$")
     if not role or role == "" or role:find("%c") then
         return nil
@@ -91,7 +91,7 @@ end
 ---Count the minutes a stretch logs, rounded and held within 1 to 1440.
 ---@param seconds integer the elapsed seconds
 ---@return integer minutes the minutes
-function M.minutes(seconds)
+function M.minutes(seconds: number)
     local minutes = math.floor(seconds / SECONDS_PER_MINUTE + 0.5)
     return math.min(M.MAX_MINUTES, math.max(1, minutes))
 end
@@ -145,7 +145,7 @@ end
 ---@param running dev.board.clock.State the clock
 ---@param now integer the epoch seconds the caller counts to
 ---@return integer ended the epoch seconds the clock stopped counting
-function M.ended(card, running, now)
+function M.ended(card, running, now: number)
     local text = fs.read(M.beat_path(card.id))
     local beat = text and tonumber(text:match("^%d+"))
     if beat and beat < running.start then
@@ -168,7 +168,7 @@ end
 ---@param note string? the note stored with the entry
 ---@param at integer? the epoch seconds to count to, now when nil
 ---@return dev.cmd.board.Result result the refusal, or the line naming the logged minutes
-function M.stop(backend, card, note, at)
+function M.stop(backend, card, note, at: number?)
     local prefix = card.id:sub(1, board.MIN_PREFIX)
     local running = M.read(card.id)
     if not running then
@@ -199,7 +199,7 @@ end
 ---@param now integer the epoch seconds to count to
 ---@return dev.board.clock.Running[] running the clocks still counting
 ---@return string[] warnings why a clock could not be stopped
-function M.sweep(backend, cards, now)
+function M.sweep(backend, cards, now: number)
     local running, warnings = {}, {}
     if backend.timed == false then
         return running, warnings

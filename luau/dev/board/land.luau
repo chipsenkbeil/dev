@@ -31,7 +31,7 @@ local KEY_REFUSAL = "agent refused operation"
 ---Shorten a commit id for a message.
 ---@param commit string the full commit id
 ---@return string short the first characters
-function M.short(commit)
+function M.short(commit: string): string
     return commit:sub(1, COMMIT_CHARS)
 end
 

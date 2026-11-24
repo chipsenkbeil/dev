@@ -4,7 +4,7 @@ local RELEASE_TAG = "DEV_RELEASE_TAG=$(git describe --tags --exact-match 2>/dev/
 local NIGHTLY_RUSTFMT =
     "cargo +nightly fmt --version || rustup toolchain install nightly --profile minimal -c rustfmt"
 local PACMAN_PACKAGES =
-    "git jujutsu bats shellcheck shfmt stylua selene ast-grep jq go-yq dash stow ripgrep fd sd man-db zsh unzip"
+    "git jujutsu bats shellcheck shfmt stylua selene luau ast-grep jq go-yq dash stow ripgrep fd sd man-db zsh unzip"
 local ROOT_CLONE = "/root/dev"
 
 local function real_root(file, name)

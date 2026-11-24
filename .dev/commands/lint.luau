@@ -35,14 +35,14 @@ return dev_command({
             end
         end
 
-        local function missing(tool)
+        local function missing(tool, package)
             dev_command.note(
                 "Tool "
                     .. tool
                     .. " not found. The "
                     .. tool
                     .. " check is skipped. Install it with brew install "
-                    .. tool
+                    .. (package or tool)
                     .. "."
             )
         end
@@ -99,6 +99,12 @@ return dev_command({
                     run_checked(checks.with_files(checks.with_files(prefix, files), ci_files))
                 else
                     missing("stylua")
+                end
+                if dev_os.which("luau-analyze") then
+                    dev_command.say("> Type-checking luau with luau-analyze")
+                    run_checked(checks.with_files({ "luau-analyze" }, files))
+                else
+                    missing("luau-analyze", "luau")
                 end
             end
             for _, row in ipairs(LUA_TOOLS) do
