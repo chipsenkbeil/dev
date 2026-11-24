@@ -12,46 +12,68 @@ env:
 
 jobs:
   build:
-    name: build ${{ matrix.target }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: true
-      matrix:
-        include:
-          - os: ubuntu-24.04
-            target: x86_64-unknown-linux-musl
-            cargo: zigbuild
-          - os: macos-15
-            target: aarch64-apple-darwin
-            cargo: build
-          - os: macos-15-intel
-            target: x86_64-apple-darwin
-            cargo: build
+    name: build x86_64-unknown-linux-musl
+    runs-on: ubuntu-24.04
+    env:
+      TARGET: x86_64-unknown-linux-musl
     steps:
       - uses: actions/checkout@v7
       - name: Add the Rust target
-        run: rustup target add ${{ matrix.target }}
+        run: rustup target add "$TARGET"
       - uses: mlugg/setup-zig@v2
-        if: matrix.cargo == 'zigbuild'
       - uses: taiki-e/install-action@v2
-        if: matrix.cargo == 'zigbuild'
         with:
           tool: cargo-zigbuild
       - name: Build the release binary
-        run: cargo ${{ matrix.cargo }} --release --locked --target ${{ matrix.target }}
+        run: cargo zigbuild --release --locked --target "$TARGET"
       - name: Test the release binary
         run: |
-          binary=target/${{ matrix.target }}/release/dev
+          binary=target/$TARGET/release/dev
           ./$binary release test $binary --tag "$DEV_RELEASE_TAG"
       - uses: actions/upload-artifact@v7
         with:
-          name: dev-${{ github.ref_name }}-${{ matrix.target }}
-          path: target/${{ matrix.target }}/release/dev
+          name: dev-${{ github.ref_name }}-x86_64-unknown-linux-musl
+          path: target/x86_64-unknown-linux-musl/release/dev
+          if-no-files-found: error
+
+  build-macos:
+    name: build both macOS targets
+    runs-on: macos-26
+    env:
+      ARM: aarch64-apple-darwin
+      INTEL: x86_64-apple-darwin
+    steps:
+      - uses: actions/checkout@v7
+      - name: Add the Rust targets
+        run: rustup target add "$ARM" "$INTEL"
+      - name: Require Rosetta
+        run: arch -x86_64 /usr/bin/true
+      - name: Build the aarch64 binary
+        run: cargo build --release --locked --target "$ARM"
+      - name: Build the x86_64 binary
+        run: ./target/$ARM/release/dev release build "$INTEL" --tag "$DEV_RELEASE_TAG"
+      - name: Test the aarch64 binary
+        run: |
+          binary=target/$ARM/release/dev
+          ./$binary release test $binary --tag "$DEV_RELEASE_TAG"
+      - name: Test the x86_64 binary under Rosetta
+        run: |
+          binary=target/$INTEL/release/dev
+          arch -x86_64 ./$binary release test $binary --tag "$DEV_RELEASE_TAG"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dev-${{ github.ref_name }}-aarch64-apple-darwin
+          path: target/aarch64-apple-darwin/release/dev
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dev-${{ github.ref_name }}-x86_64-apple-darwin
+          path: target/x86_64-apple-darwin/release/dev
           if-no-files-found: error
 
   publish:
     name: publish
-    needs: build
+    needs: [build, build-macos]
     runs-on: ubuntu-24.04
     permissions:
       contents: write

@@ -140,9 +140,10 @@ and on nothing else, never on a push or a pull request.
 
 1. Push the tag from a workspace: `jj tag set vX.Y.Z -r REV`, then
    `dev push --tag vX.Y.Z`. Gerrit mirrors it to GitHub.
-2. One job per platform (Linux x86_64 musl, macOS aarch64, macOS x86_64) builds
-   with `DEV_RELEASE_TAG` set to the tag, so `dev --version` prints it, runs
-   `dev release test` on the binary and uploads it.
+2. A Linux x86_64 musl job and one macOS job build with `DEV_RELEASE_TAG` set
+   to the tag, so `dev --version` prints it, run `dev release test` on each
+   binary and upload it. The macOS job runs on an Apple-chip runner, builds
+   aarch64 natively and cross-compiles x86_64, which it tests under Rosetta.
 3. A last job runs the built Linux binary's `dev release publish`, which writes
    `SHA256SUMS` and creates the GitHub release, as a pre-release when the tag
    holds `-pre.`.
