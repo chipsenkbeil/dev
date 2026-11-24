@@ -1,10 +1,10 @@
-local testing = require("dev.testing")
-local board = require("dev.board")
-local cmd_board = require("dev.cmd.board")
-local fs = require("dev.fs")
-local json = require("dev.json")
-local review = require("dev.board.review")
-local support = require("support")
+local testing = require("@dev/testing")
+local board = require("@dev/board")
+local cmd_board = require("@dev/cmd/board")
+local fs = require("@dev/fs")
+local json = require("@dev/json")
+local review = require("@dev/board/review")
+local support = require("./support")
 
 ---Board column names the lint tests use
 local NAME = support.COLUMN_NAME

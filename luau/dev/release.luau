@@ -1,6 +1,6 @@
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local http = require("dev.http")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local http = require("@dev/http")
 
 local stdout, stderr = dev_os.stdout, dev_os.stderr
 

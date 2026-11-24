@@ -1,6 +1,6 @@
-local cli = require("dev.cli")
-local dev_os = require("dev.os")
-local runtime = require("dev.runtime")
+local cli = require("@dev/cli")
+local dev_os = require("@dev/os")
+local runtime = require("@dev/runtime")
 
 local repo = arg[0]:match("^(.*)/tests/dev/fixtures/[^/]*$") or "."
 runtime.dofile(repo .. "/tests/lua/fake_env.luau")

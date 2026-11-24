@@ -1,7 +1,7 @@
-local dev_command = require("dev.command")
-local complete = require("dev.complete")
-local help = require("dev.help")
-local registry = require("dev.registry")
+local dev_command = require("@dev/command")
+local complete = require("@dev/complete")
+local help = require("@dev/help")
+local registry = require("@dev/registry")
 
 local function targets(ctx)
     if #ctx.positional > 0 then

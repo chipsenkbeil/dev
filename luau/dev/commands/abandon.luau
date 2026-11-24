@@ -1,5 +1,5 @@
-local abandon = require("dev.cmd.abandon")
-local dev_command = require("dev.command")
+local abandon = require("@dev/cmd/abandon")
+local dev_command = require("@dev/command")
 
 return dev_command({
     summary = "Abandon an open Gerrit change by its number or Change-Id",

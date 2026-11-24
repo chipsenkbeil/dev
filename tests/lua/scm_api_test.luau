@@ -1,9 +1,9 @@
-local testing = require("dev.testing")
-local dev_os = require("dev.os")
-local runtime = require("dev.runtime")
-local fs = require("dev.fs")
-local scm = require("dev.scm")
-local support = require("support")
+local testing = require("@dev/testing")
+local dev_os = require("@dev/os")
+local runtime = require("@dev/runtime")
+local fs = require("@dev/fs")
+local scm = require("@dev/scm")
+local support = require("./support")
 
 local function git(root, ...)
     local argv = {

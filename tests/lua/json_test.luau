@@ -1,5 +1,5 @@
-local testing = require("dev.testing")
-local json = require("dev.json")
+local testing = require("@dev/testing")
+local json = require("@dev/json")
 
 local TARGET = "linux-x86-base"
 local JOBS = '{"jobs":[{"name":"lint","targets":["' .. TARGET .. '"]}],"pipeline":"./.ci/jobs.lua"}'

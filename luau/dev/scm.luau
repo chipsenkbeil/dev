@@ -1,7 +1,7 @@
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local land = require("dev.board.land")
-local vcs = require("dev.vcs")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local land = require("@dev/board/land")
+local vcs = require("@dev/vcs")
 
 ---The source control API of dev: a workspace and what a command does to it.
 ---@class dev.scm

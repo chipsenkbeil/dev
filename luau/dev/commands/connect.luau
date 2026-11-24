@@ -1,5 +1,5 @@
-local connect = require("dev.cmd.connect")
-local dev_command = require("dev.command")
+local connect = require("@dev/cmd/connect")
+local dev_command = require("@dev/command")
 
 return dev_command({
     summary = "Attach to a box or machine, creating a box if needed",

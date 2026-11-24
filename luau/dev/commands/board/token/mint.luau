@@ -1,4 +1,4 @@
-local dev_command = require("dev.command")
+local dev_command = require("@dev/command")
 
 return dev_command({
     group = "Share it",
@@ -11,6 +11,6 @@ return dev_command({
         { name = "renew", kind = "boolean", help = "Renew a token that is already issued" },
     },
     run = function(_opts, _args, ctx)
-        return require("dev.cmd.board").invoke("token mint", ctx)
+        return require("@dev/cmd/board").invoke("token mint", ctx)
     end,
 })

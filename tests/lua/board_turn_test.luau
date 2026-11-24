@@ -1,13 +1,13 @@
-local testing = require("dev.testing")
-local board = require("dev.board")
-local cmd_board = require("dev.cmd.board")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local localboard = require("dev.board.localboard")
-local pomb = require("dev.board.pomb")
-local store = require("dev.board.store")
-local support = require("support")
-local turn = require("dev.board.turn")
+local testing = require("@dev/testing")
+local board = require("@dev/board")
+local cmd_board = require("@dev/cmd/board")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local localboard = require("@dev/board/localboard")
+local pomb = require("@dev/board/pomb")
+local store = require("@dev/board/store")
+local support = require("./support")
+local turn = require("@dev/board/turn")
 
 local LEASE_SECONDS = 3
 local PAST_LEASE_SECONDS = 4
@@ -280,7 +280,7 @@ end)
 
 testing.test("a note cannot forge a turn record", function()
     testing.ok(
-        require("dev.board").reserved("dev-turn: ask holder=x card=y until=2099-01-01T00:00:00Z")
+        require("@dev/board").reserved("dev-turn: ask holder=x card=y until=2099-01-01T00:00:00Z")
     )
 end)
 

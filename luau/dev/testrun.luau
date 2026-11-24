@@ -1,6 +1,6 @@
-local fs = require("dev.fs")
-local runtime = require("dev.runtime")
-local testing = require("dev.testing")
+local fs = require("@dev/fs")
+local runtime = require("@dev/runtime")
+local testing = require("@dev/testing")
 
 ---@class dev.testrun
 local M = {}
@@ -61,7 +61,6 @@ function M.run(root)
         print("SKIP .dev/tests (none)")
         return 0
     end
-    runtime.add_path(root .. "/.dev/lib")
     local names, message = fs.list(dir)
     if not names then
         print("not ok - list .dev/tests")

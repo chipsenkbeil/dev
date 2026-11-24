@@ -1,8 +1,8 @@
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local http = require("dev.http")
-local keychain = require("dev.board.keychain")
-local passlock = require("dev.board.passlock")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local http = require("@dev/http")
+local keychain = require("@dev/board/keychain")
+local passlock = require("@dev/board/passlock")
 
 local CONNECT_SECONDS = 10
 local REQUEST_SECONDS = 30

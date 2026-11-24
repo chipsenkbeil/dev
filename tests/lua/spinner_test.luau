@@ -1,7 +1,7 @@
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local testing = require("dev.testing")
-local ui = require("dev.ui")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local testing = require("@dev/testing")
+local ui = require("@dev/ui")
 
 local INTERRUPTED_CODE = 130
 

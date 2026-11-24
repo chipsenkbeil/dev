@@ -1,4 +1,4 @@
-local log = require("dev.log")
+local log = require("@dev/log")
 log.error("e")
 log.warn("w")
 log.info("i")

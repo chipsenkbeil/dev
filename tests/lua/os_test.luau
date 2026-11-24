@@ -1,26 +1,26 @@
-local testing = require("dev.testing")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local support = require("support")
-local turn = require("dev.board.turn")
+local testing = require("@dev/testing")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local support = require("./support")
+local turn = require("@dev/board/turn")
 
-local runtime = require("dev.runtime")
+local runtime = require("@dev/runtime")
 local WAIT_TICKS = 100
 local COMMAND_WAIT_TICKS = 300
 local COMMAND_POLL_SECS = 0.1
 local WAIT_POLL_SECS = "0.1"
 local CLEANUP_COMMAND = "-- Register a cleanup.\n"
     .. [[
-local dev_os = require("dev.os")
+local dev_os = require("@dev/os")
 local dir = dev_os.getenv("CLEANUP_DIR")
 dev_os.on_exit(function()
-    assert(require("dev.fs").append(dir .. "/ran", "cleanup\n"))
+    assert(require("@dev/fs").append(dir .. "/ran", "cleanup\n"))
 end)
 ]]
 local WAIT_COMMAND = CLEANUP_COMMAND
     .. string.format(
         [[
-assert(require("dev.fs").write(dir .. "/ready", ""))
+assert(require("@dev/fs").write(dir .. "/ready", ""))
 for _ = 1, %d do
     dev_os.nap(%s)
 end
@@ -95,7 +95,7 @@ testing.test("getuid matches id -u", function()
 end)
 
 testing.test("isatty is false for stdin from /dev/null", function()
-    local snippet = 'require("dev.os").stdout:write(tostring(require("dev.os").isatty(0)))'
+    local snippet = 'require("@dev/os").stdout:write(tostring(require("@dev/os").isatty(0)))'
     local out = dev_os.capture({
         "sh",
         "-c",
@@ -123,7 +123,7 @@ testing.test("capture passes a newline and a leading dash through", function()
 end)
 
 testing.test("run and capture flush Lua output before the child writes", function()
-    local snippet = "local o = require('dev.os'); "
+    local snippet = "local o = require('@dev/os'); "
         .. "o.stdout:write('a'); o.run({'printf', 'b'}); o.stdout:write('c'); "
         .. "local out = o.capture({'printf', 'd'}); o.stdout:write(out)"
     local out = dev_os.capture({
@@ -190,7 +190,7 @@ testing.test("stdout and stderr null drop the streams", function()
 end)
 
 testing.test("stdout and stderr append to a file", function()
-    local file = assert(require("dev.fs").mktemp({ prefix = "os-log" }))
+    local file = assert(require("@dev/fs").mktemp({ prefix = "os-log" }))
     dev_os.run({ "sh", "-c", "echo out; echo err >&2" }, { stdout = file, stderr = file })
     dev_os.run({ "sh", "-c", "echo more" }, { stdout = file })
     local text = fs.read(file)
@@ -199,7 +199,7 @@ testing.test("stdout and stderr append to a file", function()
 end)
 
 testing.test("show writes the quoted command to stderr first", function()
-    local snippet = "local o = require('dev.os'); "
+    local snippet = "local o = require('@dev/os'); "
         .. "o.defaults.show = true; o.run({'printf', '%s', 'x'}); o.capture({'true'})"
     local out = dev_os.capture({
         "sh",
@@ -213,7 +213,7 @@ testing.test("show writes the quoted command to stderr first", function()
 end)
 
 testing.test("exec honours env, cwd and stdin null", function()
-    local snippet = [[require('dev.os').exec({'sh', '-c', 'printf "%s|%s|" "$X" "$(pwd -P)"; cat'}, ]]
+    local snippet = [[require('@dev/os').exec({'sh', '-c', 'printf "%s|%s|" "$X" "$(pwd -P)"; cat'}, ]]
         .. [[{env = {X = 'a b'}, cwd = '/', stdin = 'null'})]]
     local out =
         dev_os.capture({ "sh", "-c", [["$1" -l "$2"]], "sh", runtime.exe, support.script(snippet) })
@@ -221,8 +221,8 @@ testing.test("exec honours env, cwd and stdin null", function()
 end)
 
 testing.test("exec appends output to a file", function()
-    local file = assert(require("dev.fs").mktemp({ prefix = "os-log" }))
-    local snippet = ("require('dev.os').exec({'printf', 'hi'}, {stdout = %q})"):format(file)
+    local file = assert(require("@dev/fs").mktemp({ prefix = "os-log" }))
+    local snippet = ("require('@dev/os').exec({'printf', 'hi'}, {stdout = %q})"):format(file)
     dev_os.run(support.eval(snippet))
     local text = fs.read(file)
     dev_os.run({ "rm", "-f", "--", file })
@@ -237,7 +237,7 @@ end)
 testing.test("fake_env fakes the uid and the OS from the environment", function()
     local root = arg[0]:match("^(.*)/tests/lua/") or "."
     local FAKE_ENV = root .. "/tests/lua/fake_env.luau"
-    local snippet = ("require('dev.runtime').dofile(%q); local o = require('dev.os'); "):format(
+    local snippet = ("require('@dev/runtime').dofile(%q); local o = require('@dev/os'); "):format(
         FAKE_ENV
     ) .. "o.stdout:write(o.getuid(), o.name())"
     local out = dev_os.capture(support.eval(snippet), {
@@ -250,7 +250,7 @@ testing.test("fake_env fakes the uid and the OS from the environment", function(
 end)
 
 local function child(snippet, opts)
-    local code = "local o = require('dev.os'); " .. snippet
+    local code = "local o = require('@dev/os'); " .. snippet
     return dev_os.capture(support.eval(code), opts)
 end
 
@@ -500,7 +500,7 @@ end)
 local CAPTURE_TIMED_LIMIT_SECS = 600
 
 local function launch_capture_timed(command, tmp)
-    local snippet = ("require('dev.os').capture_timed({ 'sh', '-c', %q }, %d)"):format(
+    local snippet = ("require('@dev/os').capture_timed({ 'sh', '-c', %q }, %d)"):format(
         command,
         CAPTURE_TIMED_LIMIT_SECS
     )
@@ -620,7 +620,7 @@ testing.test("capture_timed starts no process while its command runs", function(
 end)
 
 local function capture_timed_in(tmp, body, bin)
-    local snippet = "local dev_os = require('dev.os'); " .. body
+    local snippet = "local dev_os = require('@dev/os'); " .. body
     local env = { TMPDIR = tmp }
     if bin then
         env.PATH = bin .. ":" .. dev_os.getenv("PATH")
@@ -635,7 +635,7 @@ local function timed_dirs_gone(tmp)
 end
 
 local function stderr_of_capture_timed(body)
-    local snippet = "local dev_os = require('dev.os'); " .. body
+    local snippet = "local dev_os = require('@dev/os'); " .. body
     return dev_os.capture({
         "sh",
         "-c",
@@ -699,7 +699,7 @@ testing.test("capture_timed with no seconds sets no limit and runs to completion
 end)
 
 local function command(body)
-    return 'local dev_command = require("dev.command")\n'
+    return 'local dev_command = require("@dev/command")\n'
         .. "return dev_command({\n"
         .. '    summary = "Register a cleanup.",\n'
         .. "    run = function()\n"
@@ -822,10 +822,10 @@ end)
 
 testing.test("cleanups run newest first and one that raises does not stop the rest", function()
     local root = cleanup_project("-- Register cleanups.\n" .. [=[
-local dev_os = require("dev.os")
+local dev_os = require("@dev/os")
 local dir = dev_os.getenv("CLEANUP_DIR")
 local function note(text)
-    assert(require("dev.fs").append(dir .. "/ran", text .. "\n"))
+    assert(require("@dev/fs").append(dir .. "/ran", text .. "\n"))
 end
 dev_os.on_exit(function()
     note("first")

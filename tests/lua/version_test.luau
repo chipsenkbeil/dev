@@ -1,5 +1,5 @@
-local testing = require("dev.testing")
-local version = require("dev.version")
+local testing = require("@dev/testing")
+local version = require("@dev/version")
 
 testing.test("compare orders versions by major, then minor, then patch", function()
     testing.eq(version.compare("0.1.0", "0.1.0"), 0)

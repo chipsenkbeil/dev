@@ -1,7 +1,7 @@
-local board = require("dev.board")
-local dev_os = require("dev.os")
-local guards = require("dev.board.guards")
-local runner = require("dev.board.runner")
+local board = require("@dev/board")
+local dev_os = require("@dev/os")
+local guards = require("@dev/board/guards")
+local runner = require("@dev/board/runner")
 
 local usage = guards.usage
 local failure = guards.failure

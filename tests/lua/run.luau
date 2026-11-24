@@ -1,9 +1,7 @@
-local dev_os = require("dev.os")
-local runtime = require("dev.runtime")
+local dev_os = require("@dev/os")
+local runtime = require("@dev/runtime")
 
-runtime.dofile((arg[0]:match("^(.*)/[^/]*$") or ".") .. "/boot.luau")
-
-local testrun = require("dev.testrun")
+local testrun = require("@dev/testrun")
 
 local file = arg[1]
 local only = arg[2]

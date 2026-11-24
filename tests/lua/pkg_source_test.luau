@@ -1,9 +1,9 @@
-local testing = require("dev.testing")
-local runtime = require("dev.runtime")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local hash = require("dev.hash")
-local support = require("support")
+local testing = require("@dev/testing")
+local runtime = require("@dev/runtime")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local hash = require("@dev/hash")
+local support = require("./support")
 
 local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local VERSION = "9.9.9"

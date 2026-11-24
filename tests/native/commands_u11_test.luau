@@ -1,5 +1,5 @@
-local dev_os = require("dev.os")
-local runtime = require("dev.runtime")
+local dev_os = require("@dev/os")
+local runtime = require("@dev/runtime")
 
 local failures = 0
 

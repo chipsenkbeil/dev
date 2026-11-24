@@ -1,15 +1,15 @@
-local board = require("dev.board")
-local board_wait = require("dev.board.wait")
-local clock = require("dev.board.clock")
-local box = require("dev.cmd.box")
-local fs = require("dev.fs")
-local guards = require("dev.board.guards")
-local runner = require("dev.board.runner")
-local store = require("dev.board.store")
+local board = require("@dev/board")
+local board_wait = require("@dev/board/wait")
+local clock = require("@dev/board/clock")
+local box = require("@dev/cmd/box")
+local fs = require("@dev/fs")
+local guards = require("@dev/board/guards")
+local runner = require("@dev/board/runner")
+local store = require("@dev/board/store")
 
 local usage = guards.usage
 local failure = guards.failure
-local index_of = require("dev.text").index_of
+local index_of = require("@dev/text").index_of
 
 ---The stale command, which lists the cards that sat too long where they are.
 ---@class dev.board.stale

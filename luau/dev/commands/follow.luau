@@ -1,5 +1,5 @@
-local dev_command = require("dev.command")
-local follow = require("dev.cmd.follow")
+local dev_command = require("@dev/command")
+local follow = require("@dev/cmd/follow")
 
 return dev_command({
     summary = "Move the main checkout onto trunk",

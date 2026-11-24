@@ -1,5 +1,5 @@
-local dev_os = require("dev.os")
-local toml = require("dev.toml")
+local dev_os = require("@dev/os")
+local toml = require("@dev/toml")
 
 local failures = 0
 

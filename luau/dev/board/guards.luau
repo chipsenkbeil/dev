@@ -1,10 +1,10 @@
-local board = require("dev.board")
-local board_init = require("dev.board.init")
-local check = require("dev.board.check")
-local land = require("dev.board.land")
-local dev_os = require("dev.os")
-local text = require("dev.text")
-local vcs = require("dev.vcs")
+local board = require("@dev/board")
+local board_init = require("@dev/board/init")
+local check = require("@dev/board/check")
+local land = require("@dev/board/land")
+local dev_os = require("@dev/os")
+local text = require("@dev/text")
+local vcs = require("@dev/vcs")
 
 ---The refusals and guards a board change runs before it acts.
 ---@class dev.board.guards

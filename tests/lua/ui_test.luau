@@ -1,10 +1,10 @@
-local testing = require("dev.testing")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local support = require("support")
-local term = require("dev.term")
-local text = require("dev.text")
-local ui = require("dev.ui")
+local testing = require("@dev/testing")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local support = require("./support")
+local term = require("@dev/term")
+local text = require("@dev/text")
+local ui = require("@dev/ui")
 
 local plain = ui.context({ color = false, interactive = true, width = 80 })
 
@@ -202,10 +202,10 @@ end)
 
 local function page_output(rows, opts)
     local code = string.format(
-        'local ui = require("dev.ui"); '
+        'local ui = require("@dev/ui"); '
             .. "local paged = ui.page(string.rep('row\\n', %d), "
             .. "{ pager = %q, interactive = true, rows = 24, fallback = %s }); "
-            .. "require('dev.os').stdout:write(tostring(paged))",
+            .. "require('@dev/os').stdout:write(tostring(paged))",
         rows,
         opts.pager,
         opts.fallback and string.format("%q", opts.fallback) or "nil"

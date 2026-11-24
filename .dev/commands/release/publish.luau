@@ -1,8 +1,8 @@
-local dev_command = require("dev.command")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local hash = require("dev.hash")
-local json = require("dev.json")
+local dev_command = require("@dev/command")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local hash = require("@dev/hash")
+local json = require("@dev/json")
 
 local REPO = "chipsenkbeil/dev"
 local PRERELEASE_MARK = "-pre."

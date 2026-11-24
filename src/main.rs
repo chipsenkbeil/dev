@@ -2,7 +2,7 @@
 
 use std::ffi::OsString;
 use std::io::{self, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::{env, fs, process};
 
 use dev::flags::{self, Flags, FlagsEnv, FlagsScript};
@@ -14,16 +14,16 @@ use mlua::{Error, ErrorContext, Function, Lua, Table, Value, Variadic};
 const USAGE_EXIT: i32 = 2;
 
 /// Module whose `main` runs a dev command line.
-const CLI_MODULE: &str = "dev.cli";
+const CLI_MODULE: &str = "@dev/cli";
 
 /// Module that holds the parsed global flags.
-const GLOBALS_MODULE: &str = "dev.globals";
+const GLOBALS_MODULE: &str = "@dev/globals";
 
 /// Module whose loading marks a file as a suite of registered cases.
-const TESTING_MODULE: &str = "dev.testing";
+const TESTING_MODULE: &str = "@dev/testing";
 
 /// Module whose `finish` runs the registered cases.
-const TESTRUN_MODULE: &str = "dev.testrun";
+const TESTRUN_MODULE: &str = "@dev/testrun";
 
 /// Runs dev's command line and exits with its status.
 fn main() {
@@ -81,17 +81,7 @@ fn run_file(lua: &Lua, script: &FlagsScript) -> i32 {
 }
 
 /// Loads the file at `path` with `args` in the global `arg`, runs it and returns what it returned.
-///
-/// The path gets the file's folder first, then the `.dev/lib` of the project that holds the file.
 fn file_chunk(lua: &Lua, path: &str, args: &[String]) -> mlua::Result<Value> {
-    let folder = Path::new(path)
-        .parent()
-        .filter(|dir| !dir.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new("."));
-    if let Some(lib) = project_lib(folder) {
-        runtime::add_path(lua, lib)?;
-    }
-    runtime::add_path(lua, folder)?;
     let arg = lua.create_sequence_from(args.iter().map(String::as_str))?;
     arg.raw_set(0, path)?;
     lua.globals()
@@ -133,21 +123,12 @@ fn run_registered_cases(lua: &Lua, value: Value) -> mlua::Result<Value> {
     })
 }
 
-/// Returns the `.dev/lib` folder of the nearest project at or above `folder`, if it has one.
-fn project_lib(folder: &Path) -> Option<PathBuf> {
-    let start = folder.canonicalize().ok()?;
-    start
-        .ancestors()
-        .map(|dir| dir.join(".dev").join("lib"))
-        .find(|lib| lib.is_dir())
-}
-
-/// Runs `dev.cli`'s `main` on `dev.globals` and returns its exit status.
+/// Runs `@dev/cli`'s `main` on `@dev/globals` and returns its exit status.
 fn run_cli(lua: &Lua) -> i32 {
     finish(lua, cli_main(lua))
 }
 
-/// Calls `require("dev.cli").main(require("dev.globals"))`.
+/// Calls `require("@dev/cli").main(require("@dev/globals"))`.
 fn cli_main(lua: &Lua) -> mlua::Result<Value> {
     let globals = runtime::require(lua, GLOBALS_MODULE)?;
     let cli: Table = runtime::require(lua, CLI_MODULE)?
@@ -158,7 +139,7 @@ fn cli_main(lua: &Lua) -> mlua::Result<Value> {
         })?;
     let main: Function = cli
         .get("main")
-        .context("Failed to read `main` of dev.cli")?;
+        .context("Failed to read `main` of @dev/cli")?;
     main.call(globals)
 }
 

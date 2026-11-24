@@ -1,6 +1,6 @@
-local dev_os = require("dev.os")
-local registry = require("dev.registry")
-local topics = require("dev.topics")
+local dev_os = require("@dev/os")
+local registry = require("@dev/registry")
+local topics = require("@dev/topics")
 
 local VALUE_FLAGS = registry.VALUE_FLAGS
 local HELP_FLAGS = { "-h", "--help" }
@@ -37,7 +37,7 @@ local function items_of(list)
 end
 
 local function provider(name)
-    local ok, module = pcall(require, "dev.complete." .. name:gsub("-", "_"))
+    local ok, module = pcall(require, "@dev/complete/" .. name:gsub("-", "_"))
     return ok and module or nil
 end
 

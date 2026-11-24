@@ -1,10 +1,10 @@
-local board = require("dev.board")
-local cmd_board = require("dev.cmd.board")
-local config = require("dev.config")
-local guards = require("dev.board.guards")
-local scm = require("dev.scm")
-local text = require("dev.text")
-local dev_command = require("dev.command")
+local board = require("@dev/board")
+local cmd_board = require("@dev/cmd/board")
+local config = require("@dev/config")
+local guards = require("@dev/board/guards")
+local scm = require("@dev/scm")
+local text = require("@dev/text")
+local dev_command = require("@dev/command")
 
 ---@class dev.cmd.land
 local M = {}

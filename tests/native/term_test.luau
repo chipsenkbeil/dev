@@ -1,5 +1,5 @@
-local dev_os = require("dev.os")
-local term = require("dev.term")
+local dev_os = require("@dev/os")
+local term = require("@dev/term")
 
 local failures = 0
 

@@ -1,6 +1,6 @@
-local testing = require("dev.testing")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
+local testing = require("@dev/testing")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
 
 local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local LUA_ROOT = REPO .. "/luau/dev/"

@@ -1,8 +1,8 @@
-local testing = require("dev.testing")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local support = require("support")
-local vcs = require("dev.vcs")
+local testing = require("@dev/testing")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local support = require("./support")
+local vcs = require("@dev/vcs")
 
 local function project(...)
     local root = assert(fs.realpath(support.tempdir()))

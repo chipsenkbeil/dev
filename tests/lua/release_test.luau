@@ -1,9 +1,9 @@
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local hash = require("dev.hash")
-local testenv = require("dev.testenv")
-local testing = require("dev.testing")
-local support = require("support")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local hash = require("@dev/hash")
+local testenv = require("@dev/testenv")
+local testing = require("@dev/testing")
+local support = require("./support")
 
 local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local TAG = "v0.1.0-pre.1"

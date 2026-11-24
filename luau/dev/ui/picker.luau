@@ -1,6 +1,6 @@
-local term = require("dev.term")
-local text = require("dev.text")
-local ui = require("dev.ui")
+local term = require("@dev/term")
+local text = require("@dev/text")
+local ui = require("@dev/ui")
 
 local Key = term.Key
 local Style = ui.Style

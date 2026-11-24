@@ -1,5 +1,5 @@
-local box = require("dev.cmd.box")
-local dev_os = require("dev.os")
+local box = require("@dev/cmd/box")
+local dev_os = require("@dev/os")
 
 ---@class dev.cmd.ci
 local M = {}

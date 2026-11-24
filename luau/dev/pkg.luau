@@ -1,12 +1,12 @@
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local kinds = require("dev.pkg.kinds")
-local manifest = require("dev.manifest")
-local lib = require("dev.pkg.lib")
-local release = require("dev.pkg.release")
-local script = require("dev.pkg.script")
-local system = require("dev.pkg.system")
-local note = require("dev.command").note
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local kinds = require("@dev/pkg/kinds")
+local manifest = require("@dev/manifest")
+local lib = require("@dev/pkg/lib")
+local release = require("@dev/pkg/release")
+local script = require("@dev/pkg/script")
+local system = require("@dev/pkg/system")
+local note = require("@dev/command").note
 
 local stdout = dev_os.stdout
 local Channel, Scope, NO_PROBE_BINARY = kinds.Channel, kinds.Scope, kinds.NO_PROBE_BINARY
@@ -130,7 +130,7 @@ end
 
 local function load_driver(name)
     if kinds.DRIVERS[name] then
-        return require("dev.pkg." .. name)
+        return require("@dev/pkg/" .. name)
     end
     note("No driver named " .. name .. ".")
 end

@@ -1,9 +1,9 @@
-local testing = require("dev.testing")
-local board = require("dev.board")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local json = require("dev.json")
-local support = require("support")
+local testing = require("@dev/testing")
+local board = require("@dev/board")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local json = require("@dev/json")
+local support = require("./support")
 
 local GIT_IDENT = support.GIT_IDENT
 local git = support.git

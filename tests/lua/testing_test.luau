@@ -1,4 +1,4 @@
-local testing = require("dev.testing")
+local testing = require("@dev/testing")
 
 testing.test("eq compares nested tables deeply", function()
     testing.eq({ a = { 1, 2 } }, { a = { 1, 2 } })

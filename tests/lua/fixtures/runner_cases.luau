@@ -1,4 +1,4 @@
-local testing = require("dev.testing")
+local testing = require("@dev/testing")
 
 testing.test("alpha case", function()
     testing.eq(1, 1)

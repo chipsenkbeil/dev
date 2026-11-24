@@ -1,7 +1,7 @@
-local testing = require("dev.testing")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local support = require("support")
+local testing = require("@dev/testing")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local support = require("./support")
 
 local function scratch()
     local dir = assert(fs.mktemp({ prefix = "fs-test", dir = true }))
@@ -116,9 +116,9 @@ end)
 
 testing.test("a relative path that starts with a dash works everywhere", function()
     local dir = scratch()
-    local snippet = "local fs = require('dev.fs'); "
+    local snippet = "local fs = require('@dev/fs'); "
         .. "assert(fs.write('-x', 'abc')); assert(fs.mkdir('-d')); assert(fs.write('-d/in', ''))"
-        .. "; require('dev.os').stdout:write(tostring(fs.exists('-x')), tostring(fs.is_file('-x')), tostring(fs.is_dir('-d')), "
+        .. "; require('@dev/os').stdout:write(tostring(fs.exists('-x')), tostring(fs.is_file('-x')), tostring(fs.is_dir('-d')), "
         .. "fs.stat('-x').size, table.concat(fs.list('-d'), ','))"
     local out = dev_os.capture(support.eval(snippet), { cwd = dir })
     testing.eq(out, "truetruetrue3in")

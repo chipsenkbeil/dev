@@ -31,7 +31,7 @@ it before `run` starts. `dev help commands` has every field and the header
 grammar of a `.sh` file. A command looks like this:
 
 ```luau
-local dev_command = require("dev.command")
+local dev_command = require("@dev/command")
 
 return dev_command({
     summary = "Print the installable default targets",
@@ -67,7 +67,7 @@ another code, return it, or call `dev_os.exit`.
 
 ### The command helpers
 
-`require("dev.command")` holds the helpers a command needs:
+`require("@dev/command")` holds the helpers a command needs:
 
 - `dev_command.usage_error(ctx, msg)`: print `dev <name>: <msg>`, then the
   command's usage line drawn from its spec, on standard error and exit 2
@@ -140,33 +140,61 @@ ignored where dev can read that (Linux), and `SIGTERM` is always handled.
 
 ## Modules
 
-Every module below is `require`d by its dotted name. `dev help modules` lists
-the native ones function by function.
+Every module below is `require`d as `@dev/NAME`, such as
+`require("@dev/os")`, and a nested one is `@dev/ui/picker`. The old dotted
+form, `require("dev.os")`, is refused with a message that names the `@dev/`
+form. `dev help modules` lists the native ones function by function.
 
-- `dev.os`: run and capture commands (`run`, `capture`, `capture_input`,
+- `@dev/os`: run and capture commands (`run`, `capture`, `capture_input`,
   `capture_timed`, `spawn`), `which`, `exec`, `getuid`, `isatty`, `quote`, and
   `on_exit(fn)` for a cleanup in place of a bash `trap` on `EXIT`
-- `dev.fs`: `exists`, `is_dir`, `is_file`, `is_link`, `is_exec`, `read`,
+- `@dev/fs`: `exists`, `is_dir`, `is_file`, `is_link`, `is_exec`, `read`,
   `write`, `append`, `mkdir`, `remove`, `move`, `list`, `stat`, `realpath`,
   `readlink`, `mktemp`, `symlink`, `join`, `dirname`, `basename`
-- `dev.json`: `decode` and `encode`
-- `dev.toml`: `parse`, `set` and `encode`
-- `dev.config`: `get(root, "a.b")` reads `~/.config/dev/config.toml` and then
+- `@dev/json`: `decode` and `encode`
+- `@dev/toml`: `parse`, `set` and `encode`
+- `@dev/config`: `get(root, "a.b")` reads `~/.config/dev/config.toml` and then
   `<root>/.dev/config.toml` over it, `prefer_user(root, "a.b")` lets the user
   file win, and `user("a.b")` reads the user file alone
-- `dev.text`: `width`, `fit`, `words`, `wrap`, `trim`, `contains`
-- `dev.term`: raw mode that is always restored, key decoding and `size`
-- `dev.ui`: `context`, colors through `paint` and `mark`, `table`, `bar`,
+- `@dev/text`: `width`, `fit`, `words`, `wrap`, `trim`, `contains`
+- `@dev/term`: raw mode that is always restored, key decoding and `size`
+- `@dev/ui`: `context`, colors through `paint` and `mark`, `table`, `bar`,
   `confirm` and `spin`
-- `dev.ui.picker`: the list picker, `run(ctx, items, opts)`
-- `dev.project`: `root` and `detect_type`
-- `dev.testing`, `dev.testrun` and `dev.testenv`: the test registry, the
+- `@dev/ui/picker`: the list picker, `run(ctx, items, opts)`
+- `@dev/project`: `root` and `detect_type`
+- `@dev/testing`, `@dev/testrun` and `@dev/testenv`: the test registry, the
   runner and the helpers (see "Testing a command")
 
 ## Your own modules
 
-A folder `.dev/lib/` is on the `require` path while a Luau command runs.
-`.dev/lib/myproj/checks.luau` therefore loads with `require("myproj.checks")`.
+A Luau file loads another with the same require-by-string rule that
+`luau-analyze` and editors follow, so they can follow the call too:
+
+- `require("./x")` and `require("../x")` load `x.luau`, or `x/init.luau`,
+  from the folder of the file that calls `require`. A file named `init.luau`
+  counts as any other file here, so its `./x` is the `x` beside it, and dev
+  does not read the `@self` alias.
+- `require("@alias/x")` loads `x.luau` from the folder the alias names. dev
+  reads the aliases of the nearest `.luaurc` that defines the alias, searching
+  from the requiring file's folder upward. It never reads the `.luaurc` of the
+  project dev started in, so a file copied into another tree loads from that
+  tree.
+- `require("@dev/NAME")` loads a dev module and needs no `.luaurc`.
+- A dotted or bare name, such as `require("myproj.checks")`, is refused with a
+  message that names the `./` or `@alias/` form to write.
+
+A project that keeps modules under `.dev/lib/` needs this `.luaurc` at its
+root, which `dev init` writes and merges into an existing file:
+
+```json
+{ "aliases": { "lib": ".dev/lib" } }
+```
+
+`.dev/lib/myproj/checks.luau` then loads with
+`require("@lib/myproj/checks")`, from a command, a test or another library
+file. A command in `~/.config/dev/commands` finds its own library through a
+`.luaurc` in `~/.config/dev`. dev reads the file as plain JSON, so keep
+comments out of it.
 
 Scripts that a command calls but that are not commands live in
 `.dev/helpers/`. dev never lists, completes or runs anything there as a
@@ -223,20 +251,20 @@ helper a runner can reuse.
 ## Testing a command
 
 A project's Luau command tests live in `.dev/tests/NAME_test.luau`. Each file
-requires `dev.testing` and registers cases with `t.test(name, fn)`, then
+requires `@dev/testing` and registers cases with `t.test(name, fn)`, then
 asserts with `t.eq`, `t.ok` and `t.raises`.
 
 The project's `test` command ends with
-`return require("dev.testrun").run(ctx.root)`, so `dev --remote test` runs
+`return require("@dev/testrun").run(ctx.root)`, so `dev --remote test` runs
 these files on ci. Cargo and the project's other suites never see them.
 
-`run` loads the files in sorted order with `.dev/lib` on the `require` path.
-It prints `ok - NAME` or `not ok - NAME` with the error, and returns 1 when a
-case fails or a file fails to load.
+`run` loads the files in sorted order. Each finds `.dev/lib` through the
+project's `.luaurc`. It prints `ok - NAME` or `not ok - NAME` with the error,
+and returns 1 when a case fails or a file fails to load.
 
-A single file runs with `dev -l .dev/tests/NAME_test.luau`. `dev -l` puts the
-file's folder and the `.dev/lib` of the project that holds it on the `require`
-path, runs the file, then runs every `dev.testing` case the file registered. It
+A single file runs with `dev -l .dev/tests/NAME_test.luau`. `dev -l` runs the
+file, which finds its modules by the rules above, then runs every
+`@dev/testing` case the file registered. It
 prints the same `ok` and `not ok` lines and exits 1 when a case fails. A file
 that returns a non-zero number exits with it. This is also how a ci step runs
 one named project test: the step's command is
@@ -249,7 +277,7 @@ in two places. The global `arg` holds the path at `arg[0]` and the words at
 
 A project with no `.dev/tests` prints `SKIP .dev/tests (none)` and returns 0.
 
-`dev.testenv` helps a test drive a command:
+`@dev/testenv` helps a test drive a command:
 
 - `tempdir()` makes a scratch directory
 - `fake(root, name, {code, out, err})` writes an executable `root/bin/NAME`
@@ -271,8 +299,8 @@ the archive under its temp directory and points the pin at it.
 dev has no golden or snapshot helper, and `command` takes only `env` in its
 `opts`, so it cannot set a working folder or feed standard input. A project that
 compares a command's output with stored files keeps that harness as its own
-library under `.dev/lib`, which a test loads with `require`. The harness runs
-the program through `dev.os`:
+library under `.dev/lib`, which a test loads with `require("@lib/...")`. The
+harness runs the program through `@dev/os`:
 
 - `capture(argv, opts)` returns `out, code`
 - `capture_input(argv, input, opts)` adds standard input
@@ -300,8 +328,8 @@ done
 and the same command in Luau:
 
 ```luau
-local dev_command = require("dev.command")
-local dev_os = require("dev.os")
+local dev_command = require("@dev/command")
+local dev_os = require("@dev/os")
 
 return dev_command({
     summary = "Print the installable default targets",

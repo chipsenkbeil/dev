@@ -1,14 +1,14 @@
-local testing = require("dev.testing")
-local runtime = require("dev.runtime")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local support = require("support")
+local testing = require("@dev/testing")
+local runtime = require("@dev/runtime")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local support = require("./support")
 
 local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local MODULES = REPO .. "/luau"
 
-local DRIVE = 'local dev_os = require("dev.os")\n'
-    .. 'local driver = require("dev.pkg." .. arg[2])\n'
+local DRIVE = 'local dev_os = require("@dev/os")\n'
+    .. 'local driver = require("@dev/pkg/" .. arg[2])\n'
     .. "local row = { name = arg[3], binary = arg[4], package = arg[5], channel = arg[6], repo = arg[7] }\n"
     .. 'local opts = { dry_run = arg[8] == "1", force = arg[9] == "1", log_file = "" }\n'
     .. "dev_os.stdout:flush()\n"
@@ -81,9 +81,9 @@ testing.test("a .lua source runs under dev -l with dev's modules available", fun
     assert(
         fs.write(
             dir .. "/x.lua",
-            'local lib = require("dev.pkg.lib")\n'
-                .. 'local dev_os = require("dev.os")\n'
-                .. 'assert(require("dev.fs").write("'
+            'local lib = require("@dev/pkg/lib")\n'
+                .. 'local dev_os = require("@dev/os")\n'
+                .. 'assert(require("@dev/fs").write("'
                 .. out
                 .. '", type(lib.parse_cell) .. "|" .. table.concat(arg, ",") .. "|" .. dev_os.getenv("PKG_FORCE")))\n'
         )
@@ -164,7 +164,7 @@ end)
 local LINE = "aurbuild ALL=(root) NOPASSWD: /usr/bin/pacman"
 
 local function guarded(dir, build)
-    local pacman = require("dev.pkg.pacman")
+    local pacman = require("@dev/pkg/pacman")
     return pacman.guarded_build(dir .. "/99-aurbuild", LINE, build)
 end
 
@@ -224,7 +224,7 @@ testing.test(
 testing.test("the sudoers path and line reach the wrapper as arguments, not script text", function()
     local dir = sandbox()
     local hostile = dir .. "/x'; touch " .. dir .. "/PWNED; '"
-    local pacman = require("dev.pkg.pacman")
+    local pacman = require("@dev/pkg/pacman")
     local argv = pacman.guarded_build(hostile, "$(touch " .. dir .. "/PWNED2)", { "true" })
     testing.eq(dev_os.run(argv, { stderr = "null" }), 1)
     testing.ok(

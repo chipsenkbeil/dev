@@ -1,22 +1,23 @@
-local testing = require("dev.testing")
-local board = require("dev.board")
-local check = require("dev.board.check")
-local claims = require("dev.board.claims")
-local role_clock = require("dev.board.clock")
-local review = require("dev.board.review")
-local board_wait = require("dev.board.wait")
-local box = require("dev.cmd.box")
-local cmd_board = require("dev.cmd.board")
-local dev_os = require("dev.os")
-local runtime = require("dev.runtime")
-local fs = require("dev.fs")
-local guards = require("dev.board.guards")
-local json = require("dev.json")
-local pomb = require("dev.board.pomb")
-local queue_store = require("dev.board.queue")
-local runner = require("dev.board.runner")
-local ui = require("dev.ui")
-local support = require("support")
+--!nocheck
+local testing = require("@dev/testing")
+local board = require("@dev/board")
+local check = require("@dev/board/check")
+local claims = require("@dev/board/claims")
+local role_clock = require("@dev/board/clock")
+local review = require("@dev/board/review")
+local board_wait = require("@dev/board/wait")
+local box = require("@dev/cmd/box")
+local cmd_board = require("@dev/cmd/board")
+local dev_os = require("@dev/os")
+local runtime = require("@dev/runtime")
+local fs = require("@dev/fs")
+local guards = require("@dev/board/guards")
+local json = require("@dev/json")
+local pomb = require("@dev/board/pomb")
+local queue_store = require("@dev/board/queue")
+local runner = require("@dev/board/runner")
+local ui = require("@dev/ui")
+local support = require("./support")
 
 ---The ask flag and key that name the taste list
 local ASK_TASTE = { "--list", "taste" }
@@ -7398,7 +7399,7 @@ end)
 testing.test("a process reads each pass entry once", function()
     local root, home = sandbox()
     local script = string.format(
-        "local pomb = require('dev.board.pomb'); "
+        "local pomb = require('@dev/board/pomb'); "
             .. "local a = pomb.token('pass:secrets/worker/token/pomb'); "
             .. "local b = pomb.token('pass:secrets/worker/token/pomb'); "
             .. "print(a == b and a ~= nil)"
@@ -7708,7 +7709,7 @@ testing.test("pomb refusals are full sentences", function()
     local root, home = sandbox()
     refuse_connections(root)
     local script = string.format(
-        "local pomb = require('dev.board.pomb'); "
+        "local pomb = require('@dev/board/pomb'); "
             .. "local b = assert(pomb.new({url = '%s', token = 'pass:secrets/worker/token/pomb', name = 'dotfiles'})); "
             .. "local _, message = b:whoami(); print(message)",
         base_url(root)
@@ -7781,7 +7782,7 @@ testing.test("a pomb backend records why its latest request failed", function()
             override(root, { { path = "*", status = mode, body = '{"message":"down"}' } })
         end
         local script = string.format(
-            "local pomb = require('dev.board.pomb'); local json = require('dev.json'); "
+            "local pomb = require('@dev/board/pomb'); local json = require('@dev/json'); "
                 .. "local b = assert(pomb.new({url = '%s', token = 'pass:secrets/worker/token/pomb', name = 'dotfiles'})); "
                 .. "local _, m = %s; %s; local f = b:failure(%s); "
                 .. "print(json.encode({reason = f and f.reason or false, code = f and f.detail.code, status = f and f.detail.status}))",
@@ -10181,7 +10182,7 @@ end)
 testing.test("capture_input leaves no temporary file behind", function()
     local dir = support.tempdir()
     local script = string.format(
-        "local o = require('dev.os'); o.capture_input({'cat'}, 'x'); o.capture_input({'sh', '-c', 'cat >/dev/null; exit 3'}, 'x')"
+        "local o = require('@dev/os'); o.capture_input({'cat'}, 'x'); o.capture_input({'sh', '-c', 'cat >/dev/null; exit 3'}, 'x')"
     )
     local _, code = dev_os.capture(support.eval(script), { env = { TMPDIR = dir } })
     testing.eq(code, 0)
@@ -11668,8 +11669,8 @@ end)
 do
     local function claimants_at(root, home, now)
         local script = string.format(
-            "local pomb = require('dev.board.pomb'); local json = require('dev.json'); "
-                .. "require('dev.board.store').now = function() return %d end; "
+            "local pomb = require('@dev/board/pomb'); local json = require('@dev/json'); "
+                .. "require('@dev/board/store').now = function() return %d end; "
                 .. "local b = assert(pomb.new({url = 'https://pomb.example', token = 'pass:secrets/worker/token/pomb', name = 'dotfiles'})); "
                 .. "local held = 'nobody'; "
                 .. "for _, card in ipairs(assert(b:cards())) do held = card.claimant or held end; "
@@ -11704,7 +11705,7 @@ do
 
     local function card_read(root, home, id)
         local script = string.format(
-            "local pomb = require('dev.board.pomb'); local json = require('dev.json'); "
+            "local pomb = require('@dev/board/pomb'); local json = require('@dev/json'); "
                 .. "local b = assert(pomb.new({url = 'https://pomb.example', token = 'pass:secrets/worker/token/pomb', name = 'dotfiles'})); "
                 .. "local card, message = b:card(%q); "
                 .. "print(json.encode({name = card and card.name, done = card and card.done, "
@@ -11824,7 +11825,7 @@ end)
 
 local function export_fetches(root, home, steps)
     local script = string.format(
-        "local pomb = require('dev.board.pomb'); "
+        "local pomb = require('@dev/board/pomb'); "
             .. "local b = assert(pomb.new({url = 'https://pomb.example', token = 'pass:secrets/worker/token/pomb', name = 'dotfiles'})); "
             .. "%s",
         steps
@@ -12355,7 +12356,7 @@ local function waiting(root, home, call, status)
         { { path = "*/events/wait*", body = WAIT[root], status = tonumber(status) or 200 } }
     )
     local script = string.format(
-        "local pomb = require('dev.board.pomb'); local json = require('dev.json'); "
+        "local pomb = require('@dev/board/pomb'); local json = require('@dev/json'); "
             .. "local b = assert(pomb.new({url = 'https://pomb.example', token = 'pass:secrets/worker/token/pomb', name = 'dotfiles'})); "
             .. "local got, message, oldest, refused = b:wait(%s); "
             .. "print(json.encode({got = got, message = message, oldest = oldest, refused = refused}))",
@@ -12372,7 +12373,7 @@ local function waiting(root, home, call, status)
         stderr = "stdout",
     })
     testing.eq(code, 0, out)
-    return assert(require("dev.json").decode(out), out)
+    return assert(require("@dev/json").decode(out), out)
 end
 
 local function wait_route(root, reply)
@@ -12500,9 +12501,9 @@ do
         steps[#steps + 1] = { prepend = { { path = "*", body = '{"name":"x"}' } } }
         override(root, { steps = steps })
         local script = string.format(
-            "local dev_os = require('dev.os'); local naps = {}; "
+            "local dev_os = require('@dev/os'); local naps = {}; "
                 .. "dev_os.nap = function(seconds) naps[#naps + 1] = seconds end; "
-                .. "local pomb = require('dev.board.pomb'); local json = require('dev.json'); "
+                .. "local pomb = require('@dev/board/pomb'); local json = require('@dev/json'); "
                 .. "local b = assert(pomb.new({url = 'https://pomb.example', token = 'pass:secrets/worker/token/pomb', name = 'dotfiles'})); "
                 .. "local got, message = b:whoami(); "
                 .. "print(json.encode({name = got and got.name, message = message, naps = naps}))"
@@ -12517,7 +12518,7 @@ do
             stderr = "stdout",
         })
         testing.eq(code, 0, out)
-        local result = assert(require("dev.json").decode(out), out)
+        local result = assert(require("@dev/json").decode(out), out)
         result.calls = request_count(requests(root))
         return result
     end

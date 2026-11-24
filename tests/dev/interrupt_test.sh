@@ -40,6 +40,7 @@ seed_project() {
     sed 's/which("tmux")/which("tmux-not-installed")/' "$REPO/.dev/commands/test.luau" >"$dir/.dev/commands/test.luau"
     cp "$REPO/.dev/lib/devrepo/checks.luau" "$REPO/.dev/lib/devrepo/supervise.luau" "$dir/.dev/lib/devrepo/"
     cp "$REPO/.dev/lib/lintset.luau" "$dir/.dev/lib/"
+    cp "$REPO/.luaurc" "$dir/"
 }
 
 assert_eq() {

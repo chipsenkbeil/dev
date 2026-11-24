@@ -1,11 +1,11 @@
-local testing = require("dev.testing")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local support = require("support")
-local help = require("dev.help")
-local registry = require("dev.registry")
-local runtime = require("dev.runtime")
-local ui = require("dev.ui")
+local testing = require("@dev/testing")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local support = require("./support")
+local help = require("@dev/help")
+local registry = require("@dev/registry")
+local runtime = require("@dev/runtime")
+local ui = require("@dev/ui")
 
 local function project(files)
     local root = support.tempdir()
@@ -137,7 +137,7 @@ testing.test("see_also ends the help with one pointer per listed page", function
     local root = project({
         ["one.sh"] = "#!/usr/bin/env bash\n# One.\n# see_also: boards\n",
         ["two.sh"] = "#!/usr/bin/env bash\n# Two.\n# see_also: boards flags\n",
-        ["three.luau"] = 'return require("dev.command")({ summary = "Three.", '
+        ["three.luau"] = 'return require("@dev/command")({ summary = "Three.", '
             .. 'see_also = { "boards", "flags", "remote" }, run = function() return 0 end })\n',
     })
     local out = dev(root, { "help", "one" })
@@ -159,7 +159,7 @@ testing.test("--no-pager is accepted by help and changes nothing off a terminal"
 end)
 
 local function styled(root, width)
-    local reg = require("dev.registry").load(root)
+    local reg = require("@dev/registry").load(root)
     local c = ui.context({ color = true, interactive = false, width = width })
     return help.overview_text({ root = root, args = {}, name = "help" }, reg, c)
 end
@@ -175,7 +175,7 @@ testing.test(
         testing.ok(out:find("\27[2mHelp pages\27[0m\n", 1, true), out)
         testing.ok(out:find("  \27[1ma", 1, true), out)
         testing.ok(out:find("  \27[1mt", 1, true), out)
-        local text = require("dev.text")
+        local text = require("@dev/text")
         for line in out:gmatch("[^\n]+") do
             testing.ok(text.width((line:gsub("\27%[[%d;]*m", ""))) <= 40, line)
         end
@@ -243,8 +243,8 @@ local function parent_fixture()
 end
 
 testing.test("parent command help wraps a long subcommand description under its column", function()
-    local text = require("dev.text")
-    local reg = require("dev.registry").load(parent_fixture())
+    local text = require("@dev/text")
+    local reg = require("@dev/registry").load(parent_fixture())
     local c = ui.context({ color = true, interactive = false, width = 40 })
     local plain = help.parent_text(reg, c, { "n" }):gsub("\27%[[%d;]*m", "")
     testing.ok(
@@ -261,7 +261,7 @@ testing.test("parent command help wraps a long subcommand description under its 
 end)
 
 testing.test("parent command help keeps a short subcommand description on one line", function()
-    local reg = require("dev.registry").load(parent_fixture())
+    local reg = require("@dev/registry").load(parent_fixture())
     local c = ui.context({ color = true, interactive = false, width = 40 })
     local plain = help.parent_text(reg, c, { "n" }):gsub("\27%[[%d;]*m", "")
     testing.ok(plain:find("\n  bb  Short.\n", 1, true), plain)
@@ -350,7 +350,7 @@ testing.test("help of one command names its source and the one it replaces", fun
     testing.ok(dev(root, { "help", "hello" }, env):find("^dev hello\n"))
 end)
 
-local WAIT_SPEC = [[return require("dev.command")({
+local WAIT_SPEC = [[return require("@dev/command")({
     summary = "Wait for a card",
     group = "Check your work",
     flags = {

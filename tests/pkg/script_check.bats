@@ -52,7 +52,7 @@ setup() {
     export FAKE_UID=0 FAKE_OS=Darwin
     printf 'name binary brew\nprobe-tool - script:probe.sh\n' >"$MANIFEST"
     cd "$ROOT"
-    printf 'require("dev.runtime").dofile("%s/tests/lua/fake_env.luau")\nrequire("dev.os").exit(require("dev.pkg").main({ table.unpack(arg) }))\n' "$REPO" >"$BATS_TEST_TMPDIR/driver.luau"
+    printf 'require("@dev/runtime").dofile("%s/tests/lua/fake_env.luau")\nrequire("@dev/os").exit(require("@dev/pkg").main({ table.unpack(arg) }))\n' "$REPO" >"$BATS_TEST_TMPDIR/driver.luau"
     run "$DEV" -l "$BATS_TEST_TMPDIR/driver.luau" check --manifest "$MANIFEST"
     [ "$status" -eq 0 ]
     [[ "$output" == *$'[?] probe-tool\t(script row, never run as root)'* ]] || false

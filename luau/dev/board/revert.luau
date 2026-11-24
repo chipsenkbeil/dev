@@ -1,5 +1,5 @@
-local dev_os = require("dev.os")
-local vcs = require("dev.vcs")
+local dev_os = require("@dev/os")
+local vcs = require("@dev/vcs")
 
 ---The red notes a red ship leaves on its suspects, and the revert of a suspect's landed commit.
 ---@class dev.board.revert

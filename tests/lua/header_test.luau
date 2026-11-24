@@ -1,5 +1,5 @@
-local testing = require("dev.testing")
-local header = require("dev.header")
+local testing = require("@dev/testing")
+local header = require("@dev/header")
 
 local function sh(...)
     local entries = { "#!/usr/bin/env bash", ... }

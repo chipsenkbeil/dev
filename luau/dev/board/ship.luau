@@ -1,12 +1,12 @@
-local board = require("dev.board")
-local check = require("dev.board.check")
-local config = require("dev.config")
-local follow = require("dev.cmd.follow")
-local guards = require("dev.board.guards")
-local land = require("dev.board.land")
-local revert = require("dev.board.revert")
-local dev_command = require("dev.command")
-local wiring = require("dev.board.wiring")
+local board = require("@dev/board")
+local check = require("@dev/board/check")
+local config = require("@dev/config")
+local follow = require("@dev/cmd/follow")
+local guards = require("@dev/board/guards")
+local land = require("@dev/board/land")
+local revert = require("@dev/board/revert")
+local dev_command = require("@dev/command")
+local wiring = require("@dev/board/wiring")
 
 local usage = guards.usage
 local failure = guards.failure
@@ -64,7 +64,7 @@ end
 ---failed row
 ---@return dev.cmd.board.Result? err the failure naming the command, nil when every one passed
 local function ship_ran(backend, runs, name_suspects)
-    local remote = require("dev.remote")
+    local remote = require("@dev/remote")
     local rows = {}
     for i, one in ipairs(runs) do
         dev_command.note(string.format("Running row %d of %d with `%s`.", i, #runs, one.run))
@@ -368,7 +368,7 @@ function Ship.suspects(backend, opts)
             end
         end
     end
-    local lines, named = require("dev.board.suspects").lines(backend.root, files, entries)
+    local lines, named = require("@dev/board/suspects").lines(backend.root, files, entries)
     for _, line in ipairs(Ship.settle(backend, named, commit, opts.cases or {})) do
         lines[#lines + 1] = line
     end

@@ -1,6 +1,6 @@
-local config = require("dev.config")
-local dev_os = require("dev.os")
-local text = require("dev.text")
+local config = require("@dev/config")
+local dev_os = require("@dev/os")
+local text = require("@dev/text")
 
 local DEFAULT_FIELD_PREFIX = "dev"
 
@@ -11,32 +11,32 @@ local M = {}
 
 -- dev.board.claims requires this module, so the require waits for the first call
 local function claims_module()
-    return require("dev.board.claims")
+    return require("@dev/board/claims")
 end
 
 -- dev.cmd.board requires this module, so the require waits for the first call
 local function cmd_board()
-    return require("dev.cmd.board")
+    return require("@dev/cmd/board")
 end
 
 -- dev.board.wiring requires this module, so the require waits for the first call
 local function wiring()
-    return require("dev.board.wiring")
+    return require("@dev/board/wiring")
 end
 
 -- dev.board.land requires this module, so the require waits for the first call
 local function land_module()
-    return require("dev.board.land")
+    return require("@dev/board/land")
 end
 
 -- dev.board.check requires this module, so the require waits for the first call
 local function check_module()
-    return require("dev.board.check")
+    return require("@dev/board/check")
 end
 
 -- dev.board.review requires this module, so the require waits for the first call
 local function review_module()
-    return require("dev.board.review")
+    return require("@dev/board/review")
 end
 
 ---@class dev.board.claim.Opts

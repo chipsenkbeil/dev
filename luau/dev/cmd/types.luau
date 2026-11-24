@@ -1,8 +1,8 @@
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local json = require("dev.json")
-local project = require("dev.project")
-local dev_command = require("dev.command")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local json = require("@dev/json")
+local project = require("@dev/project")
+local dev_command = require("@dev/command")
 
 local Kind = project.Kind
 

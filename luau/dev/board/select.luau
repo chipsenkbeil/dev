@@ -1,5 +1,5 @@
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
 
 ---The test suites a change touches, which a card's check runs in place of the whole suite.
 ---@class dev.board.select

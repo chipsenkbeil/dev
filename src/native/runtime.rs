@@ -75,17 +75,6 @@ native_fn! {
 }
 
 native_fn! {
-    /// Adds `dir` to the folders `require` searches, ahead of every folder added before it.
-    ///
-    /// # Errors
-    ///
-    /// Returns the Lua error when the search state is missing.
-    pub fn add_path(lua: &Lua, dir: String) -> mlua::Result<()> {
-        runtime::add_path(lua, dir)
-    }
-}
-
-native_fn! {
     /// Returns the embedded file at `path`, such as `docs/flags.md`, or `nil`.
     ///
     /// # Errors
@@ -206,7 +195,7 @@ pub fn register(lua: &Lua) -> mlua::Result<Table> {
     let table = lua.create_table()?;
     load::register(lua, NAME, &table)?;
     dofile::register(lua, NAME, &table)?;
-    add_path::register(lua, NAME, &table)?;
+
     asset::register(lua, NAME, &table)?;
     assets::register(lua, NAME, &table)?;
     signatures::register(lua, NAME, &table)?;

@@ -1,5 +1,5 @@
-local testing = require("dev.testing")
-local pipelines = require("dev.pipelines")
+local testing = require("@dev/testing")
+local pipelines = require("@dev/pipelines")
 
 testing.test("the base pipeline runs on the target it is given", function()
     local text = pipelines.jobs(false, "linux-x86-dev")

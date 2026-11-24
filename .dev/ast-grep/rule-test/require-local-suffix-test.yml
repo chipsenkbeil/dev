@@ -1,17 +1,17 @@
 id: require-local-suffix
 valid:
   - |
-    local grid = require("arena.grid")
+    local grid = require("./arena/grid")
   - |
-    local TastyPotato = require("arena.tasty_potato")
+    local TastyPotato = require("./arena/tasty_potato")
   - |
-    local util = require("app.util")
+    local util = require("./app/util")
   - |
     local grid_cache = {}
 invalid:
   - |
-    local grid_cache = require("arena.grid")
+    local grid_cache = require("./arena/grid")
   - |
-    local grid_module = require("arena.grid")
+    local grid_module = require("./arena/grid")
   - |
-    local str_util = require "app.str"
+    local str_util = require "./app/str"

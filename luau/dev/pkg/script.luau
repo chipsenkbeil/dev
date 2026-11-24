@@ -1,9 +1,9 @@
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local http = require("dev.http")
-local lib = require("dev.pkg.lib")
-local note = require("dev.command").note
-local runtime = require("dev.runtime")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local http = require("@dev/http")
+local lib = require("@dev/pkg/lib")
+local note = require("@dev/command").note
+local runtime = require("@dev/runtime")
 
 local stdout = dev_os.stdout
 

@@ -1,5 +1,5 @@
-local box = require("dev.cmd.box")
-local dev_command = require("dev.command")
+local box = require("@dev/cmd/box")
+local dev_command = require("@dev/command")
 
 return dev_command({
     summary = "Create a box for 4 hours by default and wait until it runs",

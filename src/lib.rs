@@ -15,6 +15,8 @@ pub mod modules;
 pub mod native;
 /// The environment overlay dev and the programs it starts see.
 pub mod overlay;
+/// The require-by-string rule: relative paths, `.luaurc` aliases and the built-in `@dev`.
+pub mod resolve;
 /// The Luau state: `require`, chunks, output, interrupts, cleanups and exit.
 pub mod runtime;
 

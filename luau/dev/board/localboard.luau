@@ -1,7 +1,7 @@
-local board = require("dev.board")
-local claims = require("dev.board.claims")
-local json = require("dev.json")
-local store = require("dev.board.store")
+local board = require("@dev/board")
+local claims = require("@dev/board/claims")
+local json = require("@dev/json")
+local store = require("@dev/board/store")
 
 local present = json.present
 local SECONDS_PER_MINUTE = 60

@@ -1,7 +1,7 @@
-local dev_command = require("dev.command")
-local dev_lock = require("dev.lock")
-local dev_os = require("dev.os")
-local keychain = require("dev.board.keychain")
+local dev_command = require("@dev/command")
+local dev_lock = require("@dev/lock")
+local dev_os = require("@dev/os")
+local keychain = require("@dev/board/keychain")
 
 local PASS_SECONDS = 10
 local WAIT_SECONDS = 120

@@ -1,4 +1,4 @@
-local remote = require("dev.remote")
+local remote = require("@dev/remote")
 
 local PIPELINES = { soak = "soak" }
 

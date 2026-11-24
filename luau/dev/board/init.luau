@@ -1,5 +1,5 @@
-local board = require("dev.board")
-local dev_command = require("dev.command")
+local board = require("@dev/board")
+local dev_command = require("@dev/command")
 
 ---The standard board: the nine columns, the size palette and names without
 ---size words, laid out one step at a time. Each step adds or fixes what is

@@ -1,4 +1,4 @@
-local spec_check = require("dev.spec")
+local spec_check = require("@dev/spec")
 
 ---The header words dev took before the spec fields existed, and what replaces each.
 local GONE = {

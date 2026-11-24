@@ -1,5 +1,5 @@
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
 
 if dev_os.stderr == nil or fs.mktemp == nil then
     print("SKIP the native os and fs modules are not built into this binary yet")
@@ -18,7 +18,7 @@ local function check(name, body)
     end
 end
 
-local release = require("dev.pkg.release")
+local release = require("@dev/pkg/release")
 local SHA = string.rep("a", 64)
 local dir = assert(fs.mktemp({ prefix = "pins", dir = true }))
 
@@ -56,7 +56,7 @@ check("an http url to any other host is refused", function()
 end)
 
 check("root refuses a binary that its group or others can write", function()
-    local tools = require("dev.cmd.tools")
+    local tools = require("@dev/cmd/tools")
     local path = dir .. "/dev"
     assert(fs.write(path, "x"))
     assert(fs.chmod(path, 438))
@@ -64,7 +64,7 @@ check("root refuses a binary that its group or others can write", function()
 end)
 
 check("root accepts a binary and a folder it owns that nobody else can write", function()
-    local tools = require("dev.cmd.tools")
+    local tools = require("@dev/cmd/tools")
     assert(tools.unsafe_binary("/usr/bin/env") == nil)
 end)
 

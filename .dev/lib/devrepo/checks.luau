@@ -1,6 +1,6 @@
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local lintset = require("lintset")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local lintset = require("@lib/lintset")
 
 ---@class devrepo.checks
 ---@field lint_dir string directory of the Lua lint configs, relative to the project root

@@ -1,6 +1,6 @@
-local board = require("dev.board")
-local dev_os = require("dev.os")
-local vcs = require("dev.vcs")
+local board = require("@dev/board")
+local dev_os = require("@dev/os")
+local vcs = require("@dev/vcs")
 
 ---@class dev.board.review
 local M = {}

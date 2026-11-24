@@ -1,6 +1,6 @@
-local testing = require("dev.testing")
-local fs = require("dev.fs")
-local support = require("support")
+local testing = require("@dev/testing")
+local fs = require("@dev/fs")
+local support = require("./support")
 
 local Column = support.Column
 

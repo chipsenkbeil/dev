@@ -1,6 +1,6 @@
-local testing = require("dev.testing")
-local dev_os = require("dev.os")
-local runtime = require("dev.runtime")
+local testing = require("@dev/testing")
+local dev_os = require("@dev/os")
+local runtime = require("@dev/runtime")
 local FIXTURE = "tests/lua/fixtures/runner_cases.luau"
 
 local function run(name)

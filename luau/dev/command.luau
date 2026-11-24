@@ -1,7 +1,7 @@
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local runtime = require("dev.runtime")
-local spec_check = require("dev.spec")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local runtime = require("@dev/runtime")
+local spec_check = require("@dev/spec")
 
 local stderr = dev_os.stderr
 local stdout = dev_os.stdout

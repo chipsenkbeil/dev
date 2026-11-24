@@ -1,8 +1,8 @@
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local hash = require("dev.hash")
-local lock = require("dev.lock")
-local runtime = require("dev.runtime")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local hash = require("@dev/hash")
+local lock = require("@dev/lock")
+local runtime = require("@dev/runtime")
 
 local FRESH_SECONDS = 60
 local LOCK_SECONDS = 20

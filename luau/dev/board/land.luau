@@ -1,15 +1,15 @@
-local abandon = require("dev.cmd.abandon")
-local board = require("dev.board")
-local check = require("dev.board.check")
-local config = require("dev.config")
-local dev_os = require("dev.os")
-local forge = require("dev.forge")
-local fs = require("dev.fs")
-local json = require("dev.json")
-local dev_remote = require("dev.remote")
-local review = require("dev.board.review")
-local board_select = require("dev.board.select")
-local vcs = require("dev.vcs")
+local abandon = require("@dev/cmd/abandon")
+local board = require("@dev/board")
+local check = require("@dev/board/check")
+local config = require("@dev/config")
+local dev_os = require("@dev/os")
+local forge = require("@dev/forge")
+local fs = require("@dev/fs")
+local json = require("@dev/json")
+local dev_remote = require("@dev/remote")
+local review = require("@dev/board/review")
+local board_select = require("@dev/board/select")
+local vcs = require("@dev/vcs")
 
 ---@class dev.board.land
 local M = {}
@@ -1320,11 +1320,13 @@ function M.dev_calls(text)
     text = table.concat(kept, "\n")
     local found = {}
     local alias = {}
-    for name, module in text:gmatch('local ([%a_][%w_]*) = require%("(dev%.[%w_.]+)"%)') do
+    for name, path in text:gmatch('local ([%a_][%w_]*) = require%("(@dev/[%w_/]+)"%)') do
+        local module = path:sub(2):gsub("/", ".")
         alias[name] = module
         found[module] = true
     end
-    for module, fn in text:gmatch('require%("(dev%.[%w_.]+)"%)%.([%a_][%w_]*)') do
+    for path, fn in text:gmatch('require%("(@dev/[%w_/]+)"%)%.([%a_][%w_]*)') do
+        local module = path:sub(2):gsub("/", ".")
         found[module] = true
         found[module .. "." .. fn] = true
     end

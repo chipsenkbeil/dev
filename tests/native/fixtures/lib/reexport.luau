@@ -1,1 +1,1 @@
-return require("calls")
+return require("./calls")

@@ -1,5 +1,5 @@
-local box = require("dev.cmd.box")
-local dev_command = require("dev.command")
+local box = require("@dev/cmd/box")
+local dev_command = require("@dev/command")
 
 return dev_command({
     summary = "Archive a box's projects and delete it",

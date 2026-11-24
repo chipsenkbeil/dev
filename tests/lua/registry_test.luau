@@ -1,9 +1,9 @@
-local testing = require("dev.testing")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local project = require("dev.project")
-local registry = require("dev.registry")
-local support = require("support")
+local testing = require("@dev/testing")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local project = require("@dev/project")
+local registry = require("@dev/registry")
+local support = require("./support")
 
 local function scripted(dir, rel, text, mode)
     local path = fs.join(dir, rel)
@@ -21,7 +21,7 @@ local function words(rows)
     return names
 end
 
-local SPEC_A = 'local dev_command = require("dev.command")\n'
+local SPEC_A = 'local dev_command = require("@dev/command")\n'
     .. "return dev_command({\n"
     .. '    summary = "From the Luau command.",\n'
     .. '    flags = { { name = "lua", kind = "boolean" } },\n'
@@ -470,8 +470,8 @@ testing.test(
 )
 
 local function root_from(dir, opts)
-    local code = (opts.uid0 and "require('dev.os').getuid = function() return 0 end; " or "")
-        .. "print(require('dev.project').root())"
+    local code = (opts.uid0 and "require('@dev/os').getuid = function() return 0 end; " or "")
+        .. "print(require('@dev/project').root())"
     return dev_os.capture(support.eval(code), { cwd = dir, env = opts.env })
 end
 

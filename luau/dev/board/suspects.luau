@@ -1,6 +1,6 @@
-local config = require("dev.config")
-local fs = require("dev.fs")
-local land = require("dev.board.land")
+local config = require("@dev/config")
+local fs = require("@dev/fs")
+local land = require("@dev/board/land")
 
 ---The landed cards of a red ship batch that touched a failing test's files.
 ---@class dev.board.suspects

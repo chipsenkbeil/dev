@@ -1,8 +1,8 @@
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local json = require("dev.json")
-local remote = require("dev.remote")
-local dev_command = require("dev.command")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local json = require("@dev/json")
+local remote = require("@dev/remote")
+local dev_command = require("@dev/command")
 
 ---@class dev.fetch
 local M = {}

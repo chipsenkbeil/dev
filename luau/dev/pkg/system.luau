@@ -1,4 +1,4 @@
-local lib = require("dev.pkg.lib")
+local lib = require("@dev/pkg/lib")
 
 ---@class dev.pkg.system
 local M = {}

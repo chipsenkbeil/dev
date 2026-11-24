@@ -1,8 +1,8 @@
-local testing = require("dev.testing")
-local board = require("dev.board")
-local fs = require("dev.fs")
-local json = require("dev.json")
-local support = require("support")
+local testing = require("@dev/testing")
+local board = require("@dev/board")
+local fs = require("@dev/fs")
+local json = require("@dev/json")
+local support = require("./support")
 
 local Column = support.Column
 

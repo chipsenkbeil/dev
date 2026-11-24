@@ -1,5 +1,5 @@
-local config = require("dev.config")
-local runtime = require("dev.runtime")
+local config = require("@dev/config")
+local runtime = require("@dev/runtime")
 
 ---@class dev.pipelines
 local M = {}

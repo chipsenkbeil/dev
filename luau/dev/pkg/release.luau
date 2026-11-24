@@ -1,10 +1,10 @@
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local hash = require("dev.hash")
-local http = require("dev.http")
-local lib = require("dev.pkg.lib")
-local manifest = require("dev.manifest")
-local note = require("dev.command").note
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local hash = require("@dev/hash")
+local http = require("@dev/http")
+local lib = require("@dev/pkg/lib")
+local manifest = require("@dev/manifest")
+local note = require("@dev/command").note
 
 local stdout = dev_os.stdout
 

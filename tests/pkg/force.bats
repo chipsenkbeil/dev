@@ -73,10 +73,10 @@ local opts = { dry_run = true, force = true, log_file = "" }
 local function row(name, package)
     return { name = name, binary = "fx", package = package, channel = "", repo = "" }
 end
-require("dev.pkg.pacman").install(row("p", "p-pkg"), opts)
-require("dev.pkg.dnf").install(row("d", "d-pkg"), opts)
-require("dev.pkg.cargo").install(row("c", "c-crate"), opts)
-require("dev.pkg.luarocks").install(row("l", "rock"), opts)
+require("@dev/pkg/pacman").install(row("p", "p-pkg"), opts)
+require("@dev/pkg/dnf").install(row("d", "d-pkg"), opts)
+require("@dev/pkg/cargo").install(row("c", "c-crate"), opts)
+require("@dev/pkg/luarocks").install(row("l", "rock"), opts)
 LUA
     out="$("$DEV" -l "$BATS_TEST_TMPDIR/drive.luau" 2>&1)"
     [[ "$out" == *"pacman -S --noconfirm -- p-pkg"* ]] || false

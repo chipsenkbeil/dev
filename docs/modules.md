@@ -6,20 +6,20 @@ The native and Luau modules of `dev`, one per item.
 
 ## Native modules
 
-The Rust host registers these modules under `dev.*` before any Luau runs, and
-`require("dev.NAME")` returns them first. An expected failure returns `nil,
+The Rust host registers these modules under `@dev/*` before any Luau runs, and
+`require("@dev/NAME")` returns them first. A nested module is `@dev/a/b`. The
+old dotted form `require("dev.NAME")` is refused with a message that names the
+`@dev/` spelling. An expected failure returns `nil,
 reason`, and misuse (a wrong argument type) raises `bad argument #N to 'fn'`. An
 error a native function raises reaches Luau as userdata, so call `tostring` on
 it before string methods. At `-vvv` every native call writes `+ dev.MODULE.FN`
 to standard error.
 
-### dev.runtime
+### @dev/runtime
 
 - `load(source, chunkname?, env?)`: compile a chunk, `nil, err` on a syntax
   error. With `env` the chunk runs in that table.
 - `dofile(path)`: run a file and return its values, raising on any error.
-- `add_path(dir)`: put `DIR/a/b.luau` and `DIR/a/b/init.luau` on the `require`
-  path, newest folder first.
 - `asset(path)`: an embedded file (`luau/dev/...`, `docs/...` or `init/...`) or
   nil.
 - `assets(path)`: the sorted names of the direct children of an embedded
@@ -34,15 +34,16 @@ to standard error.
   the binary does.
 - `exe`: the canonical path of the running binary.
 - `version`: the crate version, which `dev.version` reads.
-- `loaded`: the `require` cache.
+- `loaded`: the `require` cache, keyed by `@dev/NAME` for a dev module and by
+  the file's real path for any other.
 
-### dev.globals
+### @dev/globals
 
 A table of the parsed global flags: `args`, `after`, `dashed`, `remote`,
 `detach`, `priority`, `job_timeout`, `local_flag`, `env_local`, `conflict`,
 `level`, `quiet`, `stripped` and `agent`. `dev.cli.main` receives it.
 
-### dev.os
+### @dev/os
 
 - `getenv(name)`, `setenv(name, value?)` (nil unsets) and `vars()`.
 - `name()` is `Darwin`, `Linux` or `Windows`. `arch()`, `getpid()`, `getuid()`
@@ -84,7 +85,7 @@ A table of the parsed global flags: `args`, `after`, `dashed`, `remote`,
 - `exit(code?)`, `on_exit(fn)`, `run_cleanups()`, `interrupt_code()`,
   `SIGNAL_EXIT_BASE` (128) and `EXEC_FAILED` (126).
 
-### dev.fs
+### @dev/fs
 
 - `exists`, `is_dir`, `is_file`, `is_link` and `is_exec` test a path.
 - `read(path)`, `write(path, text, { mode?, atomic? })` (`mode` is a decimal
@@ -98,19 +99,19 @@ A table of the parsed global flags: `args`, `after`, `dashed`, `remote`,
   following a link.
 - `Kind` names the kinds of a path.
 
-### dev.lock
+### @dev/lock
 
 - `lock(path, { shared?, timeout?, mode? })` waits for a file lock and returns
   a handle.
 - `try_lock(path, opts)` returns at once.
 - `handle:release()` frees the lock.
 
-### dev.hash
+### @dev/hash
 
 - `sha256(text)` returns the hex digest.
 - `sha256_file(path)` returns it for a file, or `nil, reason`.
 
-### dev.http
+### @dev/http
 
 - `request{ method, url, headers?, body?, file?, timeout?, connect_timeout? }`
   returns `{ status, headers, body }`, or `nil, reason, kind`. A non-2xx status
@@ -121,25 +122,25 @@ A table of the parsed global flags: `args`, `after`, `dashed`, `remote`,
   copied with status 200 and no headers, and `progress` is called as for a
   fetch.
 
-### dev.json
+### @dev/json
 
 - `decode(text)` and `encode(value)`.
 - `null` is the null sentinel, `object()` makes an object, and `is_object` and
   `present` test values.
 
-### dev.toml
+### @dev/toml
 
 - `parse(text)` returns a tree, or `nil, "LINE: reason"`.
 - `set(text, key, value)` sets a dotted key, and `SetRefusal` names why it
   refuses.
 - `encode(tree)` writes a tree as TOML.
 
-### dev.manifest
+### @dev/manifest
 
 - `parse(text)` reads a tools manifest, and `column` and `select` read one
   column of a row and pick the rows.
 
-### dev.term
+### @dev/term
 
 - `TTY_PATH`, `DEFAULT_COLS` and `Key`.
 - `raw`, `silent`, `open_tty` and `close` manage raw mode, which is always
@@ -149,7 +150,7 @@ A table of the parsed global flags: `args`, `after`, `dashed`, `remote`,
   did. `move_to(row, col)`, `clear()` and `alt_screen(on)` move the cursor and
   switch the screen.
 
-### dev.spec
+### @dev/spec
 
 - `validate(spec)` checks a `dev.command` spec and returns it, or `nil,
   reason`. When the spec declares a flag that takes `--help` or `-h`, a third
@@ -162,22 +163,22 @@ A table of the parsed global flags: `args`, `after`, `dashed`, `remote`,
 
 ### Commands and dispatch
 
-- `dev.cli`: dispatch.
-- `dev.command`: the command spec contract (`dev_command({...})`, the helpers
+- `@dev/cli`: dispatch.
+- `@dev/command`: the command spec contract (`dev_command({...})`, the helpers
   `usage_error`, `no_args`, `say`, `relay`, `note`, `die`, `show`, `need`).
-- `dev.cmd.types`: the project type's built-ins and the command lines
+- `@dev/cmd/types`: the project type's built-ins and the command lines
   `dev help <command>` prints for them.
-- `dev.cmd.tools`: `tools install` and `tools check`.
-- `dev.cmd.land`: `land`, which reads the card from the workspace name through
+- `@dev/cmd/tools`: `tools install` and `tools check`.
+- `@dev/cmd/land`: `land`, which reads the card from the workspace name through
   `dev.scm` and `dev.board`, refuses it through the card's `land_problem`,
   hands it to the `board land` command, or lands a plain change when the
   project has no board.
-- `dev.cmd.box`: the `box` subcommands, the time-left text and the `ci box`
+- `@dev/cmd/box`: the `box` subcommands, the time-left text and the `ci box`
   call.
-- `dev.cmd.config`: `config`, the first-run wizard for the user config. See
+- `@dev/cmd/config`: `config`, the first-run wizard for the user config. See
   `dev help flags`, the config command section.
-- `dev.cmd.connect`: `connect` and `box connect`.
-- `dev.cmd.init`: `init` with `--name` and `--dry-run`. It sets up version
+- `@dev/cmd/connect`: `connect` and `box connect`.
+- `@dev/cmd/init`: `init` with `--name` and `--dry-run`. It sets up version
   control, the `[board]` section of `.dev/config.toml` named for the project
   and the `origin` remote hint, prints the `would create:`, `created:` and
   `skipped:` lines and the summary, then the Pomb board hint and its note that
@@ -189,9 +190,9 @@ A table of the parsed global flags: `args`, `after`, `dashed`, `remote`,
 
 ### Board
 
-- `dev.cmd.board`: the `board` subcommands and the one place that turns a
+- `@dev/cmd/board`: the `board` subcommands and the one place that turns a
   result into output and an exit code.
-- `dev.board`: the column names and short forms, the card-id prefix match, the
+- `@dev/board`: the column names and short forms, the card-id prefix match, the
   size label, the table lines and the `dev.board.Backend` interface the
   commands call. It is also the board half of dev's public API for commands.
   `board.find(workspace)` returns a board with `find_card`, `release_column`
@@ -202,25 +203,25 @@ A table of the parsed global flags: `args`, `after`, `dashed`, `remote`,
   onto a rebased commit. `move_to` into Release or Done refuses a card its
   check, reviews and outcomes do not prove, read at the working-copy commit or
   at the state a caller passes. A command calls them in its own order.
-- `dev.scm`: the source control half of that API, a new module over `dev.vcs`
+- `@dev/scm`: the source control half of that API, a new module over `dev.vcs`
   and `dev.board.land`. `scm.workspace(root)` returns a workspace with `name`,
   `is_dirty`, `touched`, `holds`, `state`, `rebase` and `merge_into_trunk`.
   `board land` runs on it.
-- `dev.board.render`: the color terminal table and summary `board ls` prints.
-- `dev.board.guards`: the refusals and guards the `board` subcommands run before
-  they act, and the usage and failure results they return.
-- `dev.board.runner`: a runner's size limit and refusals, the full-column result
-  and the claim a `take` makes.
-- `dev.board.wait`, `dev.board.ship`, `dev.board.stale`, `dev.board.runcard`,
-  `dev.board.setup`: the `board wait`, `ship`, `stale` and `run` subcommands
-  and the board setup helpers, split out of `dev.cmd.board` to keep it below
-  the local-variable limit of one chunk.
-- `dev.board.wiring`: the flag parsing and rows behind `board check`, and the
+- `@dev/board/render`: the color terminal table and summary `board ls` prints.
+- `@dev/board/guards`: the refusals and guards the `board` subcommands run
+  before they act, and the usage and failure results they return.
+- `@dev/board/runner`: a runner's size limit and refusals, the full-column
+  result and the claim a `take` makes.
+- `@dev/board/wait`, `@dev/board/ship`, `@dev/board/stale`,
+  `@dev/board/runcard`, `@dev/board/setup`: the `board wait`, `ship`, `stale`
+  and `run` subcommands and the board setup helpers, split out of
+  `@dev/cmd/board` to keep it below the local-variable limit of one chunk.
+- `@dev/board/wiring`: the flag parsing and rows behind `board check`, and the
   landing problems, turn wait and held landing behind `board land`.
-- `dev.board.pomb`: that interface over curl. The token comes from
+- `@dev/board/pomb`: that interface over curl. The token comes from
   `DEV_BOARD_TOKEN`, then the file for `DEV_AGENT`, then `pass`, and goes to
   curl on standard input.
-- `dev.board.tokenfile`: the role token files `dev board token mint` writes.
+- `@dev/board/tokenfile`: the role token files `dev board token mint` writes.
   It holds the directory, the name by a hash of the agent, the 0600 write,
   the read, the delete and the sweep of expired files.
 
@@ -406,57 +407,57 @@ card's bookmark.
 
 ### Project setup and configuration
 
-- `dev.toml`: native, see above. `toml.set` adds a string, integer or list of
+- `@dev/toml`: native, see above. `toml.set` adds a string, integer or list of
   strings under its section by a dotted key and makes the section when
   absent. It returns a `toml.SetRefusal` reason when the key is set, is not a
   plain dotted key, or would leave a file that does not parse.
-- `dev.config`: `config.get(root, "a.b")` reads `~/.config/dev/config.toml`
+- `@dev/config`: `config.get(root, "a.b")` reads `~/.config/dev/config.toml`
   and then `<root>/.dev/config.toml` over it. `config.user("a.b")` reads the
   user file alone. `config.prefer_user(root, key)` reads the user file first
   and the project file second. A malformed file is
   `<path>:<line>: <reason>` with exit 1, and as root no file is read.
-- `dev.root`: the command words dev may run as root (`tools install` and
+- `@dev/root`: the command words dev may run as root (`tools install` and
   `tools check`) and the checked manifest copy.
-- `dev.remote`: `--remote`.
-- `dev.fetch`: the `# fetch JOB FILE` and `# patch JOB FILE` command
+- `@dev/remote`: `--remote`.
+- `@dev/fetch`: the `# fetch JOB FILE` and `# patch JOB FILE` command
   headers. `fetch.pull(root, spec)` runs the job on ci for this host's
   platform and returns the pulled file, and `dev.cli` hands it to the command in
   `DEV_FETCHED`. `fetch.apply(root, spec)` runs a patch job on its first listed
   target and applies the pulled patch at the project root (`dev help remote`).
-- `dev.registry`: the registry of commands.
-- `dev.version`: `current` reads `dev.runtime.version`, and
+- `@dev/registry`: the registry of commands.
+- `@dev/version`: `current` reads `dev.runtime.version`, and
   `compare` orders two `MAJOR.MINOR.PATCH` strings. `dev.cli` refuses a
   project whose `[dev] min_version` is newer (`dev help flags`).
-- `dev.xdg`: `state_home`, the one place that resolves `XDG_STATE_HOME`. It
+- `@dev/xdg`: `state_home`, the one place that resolves `XDG_STATE_HOME`. It
   falls back to `$HOME/.local/state` when the variable is unset or not
   absolute. The board claims, the board store, `dev.board.tokenfile` and
   `connect` append their own subpath.
 
 ### Help and completion
 
-- `dev.help`: `dev help` and the help every command's `-h` and `--help`
+- `@dev/help`: `dev help` and the help every command's `-h` and `--help`
   print, drawn from the command's spec. `dev.cli` and `dev.command` turn an
   `interrupted!` error into exit 130 with nothing on standard error.
-- `dev.complete`: what `dev __complete` prints. It walks the typed words
+- `@dev/complete`: what `dev __complete` prints. It walks the typed words
   through the registry and the command spec, and completes command words, flag
   names, flag values and arguments. `dev.complete.board_card`, `board_column`,
   `box` and `file` are the providers a spec names in `complete`, and
   `dev.complete.scripts` holds the four shell scripts `dev completion` prints.
   A provider that errors prints nothing. See `dev help commands`.
-- `dev.topics`: the help page files, read from the embedded `docs/` and the
+- `@dev/topics`: the help page files, read from the embedded `docs/` and the
   project's `.dev/help/`, and the check behind `dev help --check-topics`.
 
 ### Test support
 
-- `dev.testing`: `test(name, fn)` registers a case, and `eq`, `ok` and
+- `@dev/testing`: `test(name, fn)` registers a case, and `eq`, `ok` and
   `raises` assert. These moved from `tests/lua/testing.lua`.
-- `dev.testrun`: `run(root)` runs every `root/.dev/tests/*_test.luau` sorted,
-  with `root/.dev/lib` on the `require` path. It prints `ok - NAME` and
-  `not ok - NAME` with the error, and returns 1 when a case failed or a file
-  failed to load. When the directory is missing it prints
+- `@dev/testrun`: `run(root)` runs every `root/.dev/tests/*_test.luau` sorted,
+  and each file finds the project's `.dev/lib` through its `.luaurc`. It
+  prints `ok - NAME` and `not ok - NAME` with the error, and returns 1 when a
+  case failed or a file failed to load. When the directory is missing it prints
   `SKIP .dev/tests (none)` and returns 0. `execute(from, only)` is the loop
   `tests/lua/run.luau` calls.
-- `dev.testenv`: the helpers a project test uses.
+- `@dev/testenv`: the helpers a project test uses.
   - `tempdir`: a temporary directory for one test.
   - `fake(root, name, {code, out, err})`: writes an executable
     `root/bin/NAME` that prints `out` and `err`, appends its arguments to
@@ -470,25 +471,25 @@ card's bookmark.
 
 ### System, release and terminal
 
-- `dev.os`: native, see above.
-- `dev.release`: the session the release installers under `scripts/` share.
+- `@dev/os`: native, see above.
+- `@dev/release`: the session the release installers under `scripts/` share.
   It holds the parsing of `--dry-run [version]`, the latest-tag lookup, the
   platform names, `step` that runs or prints a command, and a scratch
   directory removed at the end.
   A `die` prints `  ! install-<tool>: <message>` and exits 1.
-- `dev.term`: native, see above. It adds the built-in pager and cursor moves.
-- `dev.text`: display width, `fit`, `trim`, `words`, `index_of`, `contains`
+- `@dev/term`: native, see above. It adds the built-in pager and cursor moves.
+- `@dev/text`: display width, `fit`, `trim`, `words`, `index_of`, `contains`
   and `wrap`. `wrap` is the one greedy word wrap that confirm and
   `dev.ui.markdown` share, and it leaves a word wider than the width on a line
   of its own.
 
 ### Terminal UI
 
-- `dev.ui`: colors, tables, bars, confirm and spin. Confirm wraps the
+- `@dev/ui`: colors, tables, bars, confirm and spin. Confirm wraps the
   consequence to the terminal width above the `[y/N]` question.
-- `dev.ui.markdown`: one function, `markdown(text, {width, color})`, that
+- `@dev/ui/markdown`: one function, `markdown(text, {width, color})`, that
   returns the text styled for a terminal.
-- `dev.ui.picker`: a list picker, with the keys and windowing below.
+- `@dev/ui/picker`: a list picker, with the keys and windowing below.
 
 `dev.ui.markdown` styles these parts:
 
@@ -526,38 +527,39 @@ functions listed under each. The list is what `.dev` calls
 today, and the test `tests/lua/modules_contract_test.luau` reads it, so it
 fails when a listed module or function goes away.
 
-- `dev.command`: `die`, `need`, `no_args`, `note`, `say`, `show`,
+- `@dev/command`: `die`, `need`, `no_args`, `note`, `say`, `show`,
   `usage_error`.
-- `dev.config`: `get`, `user`.
-- `dev.fs`: `basename`, `dirname`, `exists`, `is_dir`, `is_exec`, `is_file`,
+- `@dev/config`: `get`, `user`.
+- `@dev/fs`: `basename`, `dirname`, `exists`, `is_dir`, `is_exec`, `is_file`,
   `is_link`, `join`, `list`, `mkdir`, `mktemp`, `read`, `readlink`, `realpath`,
   `remove`, `symlink`, `write`.
-- `dev.help`: `bad_argument`, `overview_text`, `page`, `topic_text`,
+- `@dev/help`: `bad_argument`, `overview_text`, `page`, `topic_text`,
   `usage_error`.
-- `dev.json`: `decode`, `encode`.
-- `dev.os`: `capture`, `capture_input`, `capture_timed`, `command`, `exec`,
+- `@dev/json`: `decode`, `encode`.
+- `@dev/os`: `capture`, `capture_input`, `capture_timed`, `command`, `exec`,
   `getenv`, `getpid`, `getuid`, `isatty`, `name`, `nap`, `on_exit`, `quote`,
   `run`, `which`.
-- `dev.pipelines`: `jobs`.
-- `dev.project`: `detect_type`, `root`.
-- `dev.registry`: `load`.
-- `dev.release`: `env`.
-- `dev.remote`: `ci_runner`, `is_remote_host`.
-- `dev.runtime`: `add_path`, `asset`, `assets`, `dofile`, `load`,
+- `@dev/pipelines`: `jobs`.
+- `@dev/project`: `detect_type`, `root`.
+- `@dev/registry`: `load`.
+- `@dev/release`: `env`.
+- `@dev/remote`: `ci_runner`, `is_remote_host`.
+- `@dev/runtime`: `asset`, `assets`, `dofile`, `load`,
   `parse_globals`, `signatures`.
-- `dev.standalone`: `problems`.
-- `dev.testenv`: `calls`, `command`, `fake`, `tempdir`.
-- `dev.testing`: `eq`, `ok`, `raises`, `test`.
-- `dev.testrun`: `execute`, `run`.
-- `dev.text`: `fit`, `trim`, `words`, `wrap`.
-- `dev.ui`: `confirm`, `context`, `table`.
-- `dev.ui.picker`: `run`.
-- `dev.vcs`: `backend`, `base`, `branches`, `files`, `remotes`, `require`,
+- `@dev/standalone`: `problems`.
+- `@dev/testenv`: `calls`, `command`, `fake`, `tempdir`.
+- `@dev/testing`: `eq`, `ok`, `raises`, `test`.
+- `@dev/testrun`: `execute`, `run`.
+- `@dev/text`: `fit`, `trim`, `words`, `wrap`.
+- `@dev/ui`: `confirm`, `context`, `table`.
+- `@dev/ui/picker`: `run`.
+- `@dev/vcs`: `backend`, `base`, `branches`, `files`, `remotes`, `require`,
   `with`.
-- `dev.xdg`: `state_home`.
+- `@dev/xdg`: `state_home`.
 
-`dev.runtime.exe` is a string, not a function: the path of the running dev
-binary, which a command passes to `dev.os.run` to start dev again.
+`@dev/runtime` field `exe` is a string, not a function: the path of the
+running dev binary, which a command passes to `@dev/os` `run` to start dev
+again.
 
 Every other module under `dev` is internal and may change without notice.
 

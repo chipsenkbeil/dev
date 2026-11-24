@@ -315,7 +315,7 @@ leading `-`, no spaces), else the row fails. The pacman and dnf commands put
 ### script rows
 
 A `script:` source ending in `.lua` or `.luau` runs as `dev -l <path> <args>`,
-with dev's modules on the `require` path. Any other source runs as
+with dev's modules available as `@dev/NAME`. Any other source runs as
 `bash <path> <args>`. The dry-run line prints whichever was chosen.
 
 The arguments split on blanks and are never glob-expanded, and no shell sees

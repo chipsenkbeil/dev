@@ -1,8 +1,8 @@
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local runtime = require("dev.runtime")
-local root = require("dev.root")
-local dev_command = require("dev.command")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local runtime = require("@dev/runtime")
+local root = require("@dev/root")
+local dev_command = require("@dev/command")
 
 local ROOT_ENV = {
     "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
@@ -12,7 +12,7 @@ local ROOT_ENV = {
 local REMOVE_COPY =
     "copy=$1; shift; trap 'rm -rf -- \"${copy%/*}\"' EXIT; trap 'exit 130' INT; trap 'exit 143' TERM; \"$@\""
 
-local Scope = require("dev.pkg.kinds").Scope
+local Scope = require("@dev/pkg/kinds").Scope
 
 ---@class dev.cmd.tools
 local M = {}

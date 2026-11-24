@@ -1,12 +1,12 @@
-local board = require("dev.board")
-local config = require("dev.config")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local json = require("dev.json")
-local registry = require("dev.registry")
-local review = require("dev.board.review")
-local vcs = require("dev.vcs")
-local dev_command = require("dev.command")
+local board = require("@dev/board")
+local config = require("@dev/config")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local json = require("@dev/json")
+local registry = require("@dev/registry")
+local review = require("@dev/board/review")
+local vcs = require("@dev/vcs")
+local dev_command = require("@dev/command")
 
 ---@class dev.board.check
 local M = {}

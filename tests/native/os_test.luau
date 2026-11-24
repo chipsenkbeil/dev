@@ -1,5 +1,5 @@
-local dev_os = require("dev.os")
-local runtime = require("dev.runtime")
+local dev_os = require("@dev/os")
+local runtime = require("@dev/runtime")
 
 local here = arg[0]:match("^(.*)/[^/]*$") or "."
 local failures = 0

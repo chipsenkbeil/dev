@@ -1,5 +1,5 @@
-local dev_command = require("dev.command")
-local dev_os = require("dev.os")
+local dev_command = require("@dev/command")
+local dev_os = require("@dev/os")
 
 local function execute(opts, args, ctx)
     local tool = if opts.zigbuild then "zigbuild" else "build"

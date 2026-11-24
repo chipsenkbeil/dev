@@ -1,4 +1,4 @@
-local dev_command = require("dev.command")
+local dev_command = require("@dev/command")
 
 return dev_command({
     group = "Share it",
@@ -8,6 +8,6 @@ return dev_command({
         { name = "as", kind = "string", help = "The runner whose token to revoke" },
     },
     run = function(_opts, _args, ctx)
-        return require("dev.cmd.board").invoke("token revoke", ctx)
+        return require("@dev/cmd/board").invoke("token revoke", ctx)
     end,
 })

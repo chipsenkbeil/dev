@@ -1,5 +1,5 @@
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
 
 ---@class dev.project
 local M = {}

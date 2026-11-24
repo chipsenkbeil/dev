@@ -1,14 +1,13 @@
-local testing = require("dev.testing")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local dev_command = require("dev.command")
-local support = require("support")
+local testing = require("@dev/testing")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local dev_command = require("@dev/command")
+local support = require("./support")
 
 local STYLE = ".dev/lib"
 local here = dev_os.capture({ "pwd" }):gsub("\n$", "")
-require("dev.runtime").add_path(here .. "/" .. STYLE)
 
-local lintset = require("lintset")
+local lintset = require("@lib/lintset")
 
 local function lint_for(root)
     return lintset.new({ root = root, verbose = 0 })
@@ -320,15 +319,15 @@ end)
 
 testing.test("the closing note names each failed check once", function()
     local root = support.tempdir()
-    local code = "local lint = require('lintset').new({ root = %q, verbose = 0 }); "
+    local code = "local lint = require('@lib/lintset').new({ root = %q, verbose = 0 }); "
         .. "lint:fail('a', 'one'); lint:fail('b', 'two'); lint:fail('a', 'three'); "
-        .. "require('dev.os').exit(lint:finish())"
-    local snippet = ("require('dev.runtime').add_path(%q); " .. code):format(
-        here .. "/" .. STYLE,
-        root
-    )
+        .. "require('@dev/os').exit(lint:finish())"
+    local snippet = code:format(root)
     local stderr_path = root .. "/stderr.txt"
-    dev_os.capture(support.eval(snippet), { stderr = stderr_path })
+    dev_os.capture(
+        support.eval_aliased({ lib = here .. "/" .. STYLE }, snippet),
+        { stderr = stderr_path }
+    )
     testing.eq(assert(fs.read(stderr_path)), "one\ntwo\nthree\nThese checks failed: a, b.\n")
     fs.remove(root, { recursive = true })
 end)
@@ -379,13 +378,13 @@ testing.test("standalone writes each problem line to standard error", function()
     assert(fs.mkdir(root .. "/.dev", { parents = true }), "mkdir failed")
     assert(fs.write(root .. "/.dev/x.sh", "#!/bin/sh\n"), "fixture setup failed")
     assert(fs.write(root .. "/.dev/y.sh", "#!/bin/sh\n"), "fixture setup failed")
-    local code = "require('lintset').new({ root = %q, verbose = 0 }):standalone()"
-    local snippet = ("require('dev.runtime').add_path(%q); " .. code):format(
-        here .. "/" .. STYLE,
-        root
-    )
+    local code = "require('@lib/lintset').new({ root = %q, verbose = 0 }):standalone()"
+    local snippet = code:format(root)
     local stderr_path = root .. "/stderr.txt"
-    local out = dev_os.capture(support.eval(snippet), { stderr = stderr_path })
+    local out = dev_os.capture(
+        support.eval_aliased({ lib = here .. "/" .. STYLE }, snippet),
+        { stderr = stderr_path }
+    )
     testing.eq(out, "> standalone shell\n")
     local reason = "shell outside .dev/standalone, port it to Lua (dev help porting)\n"
     testing.eq(assert(fs.read(stderr_path)), ".dev/x.sh: " .. reason .. ".dev/y.sh: " .. reason)

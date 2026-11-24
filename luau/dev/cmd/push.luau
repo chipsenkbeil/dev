@@ -1,8 +1,8 @@
-local dev_os = require("dev.os")
-local forge = require("dev.forge")
-local text = require("dev.text")
-local vcs = require("dev.vcs")
-local dev_command = require("dev.command")
+local dev_os = require("@dev/os")
+local forge = require("@dev/forge")
+local text = require("@dev/text")
+local vcs = require("@dev/vcs")
+local dev_command = require("@dev/command")
 
 local REMOTE_NAMES = { "origin", "gerrit" }
 

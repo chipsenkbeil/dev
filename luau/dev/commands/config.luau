@@ -1,5 +1,5 @@
-local config = require("dev.cmd.config")
-local dev_command = require("dev.command")
+local config = require("@dev/cmd/config")
+local dev_command = require("@dev/command")
 
 return dev_command({
     summary = "Ask for the user config keys that are unset and write them",

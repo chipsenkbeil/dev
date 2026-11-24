@@ -1,5 +1,5 @@
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
 
 local uid = dev_os.getenv("FAKE_UID")
 if uid and dev_os.getuid() ~= 0 then
@@ -28,7 +28,7 @@ end
 
 local pick = dev_os.getenv("FAKE_PICK")
 if pick then
-    local picker = require("dev.ui.picker")
+    local picker = require("@dev/ui/picker")
     local queue = {}
     for word in pick:gmatch("%S+") do
         queue[#queue + 1] = word
@@ -77,7 +77,7 @@ end
 
 local tty = dev_os.getenv("FAKE_TTY")
 if tty then
-    require("dev.cmd.box").interactive = function()
+    require("@dev/cmd/box").interactive = function()
         return tty == "1"
     end
     local real_isatty = dev_os.isatty
@@ -90,7 +90,7 @@ if tty then
 end
 
 if dev_os.getenv("FAKE_SAFE_EXE") then
-    require("dev.cmd.tools").unsafe_binary = function()
+    require("@dev/cmd/tools").unsafe_binary = function()
         return nil
     end
 end

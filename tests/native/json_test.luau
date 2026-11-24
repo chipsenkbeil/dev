@@ -1,5 +1,5 @@
-local dev_os = require("dev.os")
-local json = require("dev.json")
+local dev_os = require("@dev/os")
+local json = require("@dev/json")
 
 local failures = 0
 

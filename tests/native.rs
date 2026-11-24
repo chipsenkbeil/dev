@@ -232,11 +232,11 @@ fn verbosity_4_should_trace_calls_between_luau_modules() {
     assert_eq!(text(&output.stdout), "2\tcalls\ttrue\n");
     assert_eq!(
         text(&output.stderr),
-        "+ dev.runtime.add_path\n+ calls.one\n+ calls.twice\n"
+        "+ dev.runtime.assets\n+ calls.one\n+ calls.twice\n"
     );
     let quiet = dev(&["-vvv", "-l", &fixture("calls.luau")]);
     assert_eq!(text(&quiet.stdout), "2\tcalls\ttrue\n");
-    assert_eq!(text(&quiet.stderr), "+ dev.runtime.add_path\n");
+    assert_eq!(text(&quiet.stderr), "+ dev.runtime.assets\n");
 }
 
 /// Folders whose `.luau` files must all compile: what dev embeds, and the Luau test suites.

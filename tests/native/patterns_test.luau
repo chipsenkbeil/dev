@@ -1,4 +1,4 @@
-local dev_os = require("dev.os")
+local dev_os = require("@dev/os")
 
 local failures = 0
 

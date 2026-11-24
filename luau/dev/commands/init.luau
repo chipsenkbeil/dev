@@ -1,5 +1,5 @@
-local dev_command = require("dev.command")
-local init = require("dev.cmd.init")
+local dev_command = require("@dev/command")
+local init = require("@dev/cmd/init")
 
 return dev_command({
     summary = "Set up a project's version control and remotes",

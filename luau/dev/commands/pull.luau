@@ -1,5 +1,5 @@
-local dev_command = require("dev.command")
-local pull = require("dev.cmd.pull")
+local dev_command = require("@dev/command")
+local pull = require("@dev/cmd/pull")
 
 return dev_command({
     summary = "Fetch the remote and rebase local work onto it",

@@ -1,7 +1,7 @@
-local dev_os = require("dev.os")
-local header = require("dev.header")
-local registry = require("dev.registry")
-local spec = require("dev.spec")
+local dev_os = require("@dev/os")
+local header = require("@dev/header")
+local registry = require("@dev/registry")
+local spec = require("@dev/spec")
 
 local here = arg[0]:match("^(.*)/[^/]*$") or "."
 local failures = 0
@@ -106,8 +106,8 @@ end)
 
 local registry_ready = type(dev_os.setenv) == "function"
     and type(dev_os.getuid) == "function"
-    and type(require("dev.fs").list) == "function"
-    and type(require("dev.fs").read) == "function"
+    and type(require("@dev/fs").list) == "function"
+    and type(require("@dev/fs").read) == "function"
 
 local function check_registry(name, body)
     if registry_ready then

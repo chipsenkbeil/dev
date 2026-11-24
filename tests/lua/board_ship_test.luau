@@ -1,12 +1,12 @@
-local testing = require("dev.testing")
-local board = require("dev.board")
-local revert = require("dev.board.revert")
-local cmd_board = require("dev.cmd.board")
-local dev_os = require("dev.os")
-local localboard = require("dev.board.localboard")
-local fs = require("dev.fs")
-local json = require("dev.json")
-local support = require("support")
+local testing = require("@dev/testing")
+local board = require("@dev/board")
+local revert = require("@dev/board/revert")
+local cmd_board = require("@dev/cmd/board")
+local dev_os = require("@dev/os")
+local localboard = require("@dev/board/localboard")
+local fs = require("@dev/fs")
+local json = require("@dev/json")
+local support = require("./support")
 
 local IDENT = { JJ_USER = "t", JJ_EMAIL = "t@example.com" }
 local BOARD = "mine"

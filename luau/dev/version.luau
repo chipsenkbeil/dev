@@ -1,4 +1,4 @@
-local runtime = require("dev.runtime")
+local runtime = require("@dev/runtime")
 
 ---@enum dev.version.Reason
 local Reason = { UNREADABLE = "unreadable", MALFORMED = "malformed" }

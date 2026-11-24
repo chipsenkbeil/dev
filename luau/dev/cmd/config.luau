@@ -1,10 +1,10 @@
-local config = require("dev.config")
-local dev_command = require("dev.command")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local term = require("dev.term")
-local text = require("dev.text")
-local toml = require("dev.toml")
+local config = require("@dev/config")
+local dev_command = require("@dev/command")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local term = require("@dev/term")
+local text = require("@dev/text")
+local toml = require("@dev/toml")
 
 local PASS_ENTRY = "^[%w_./][%w_. /-]*$"
 local MAX_PORT = 65535

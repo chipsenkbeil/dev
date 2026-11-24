@@ -1,11 +1,11 @@
-local testing = require("dev.testing")
-local dev_os = require("dev.os")
-local runtime = require("dev.runtime")
-local fs = require("dev.fs")
-local kinds = require("dev.pkg.kinds")
-local manifest = require("dev.manifest")
-local lib = require("dev.pkg.lib")
-local support = require("support")
+local testing = require("@dev/testing")
+local dev_os = require("@dev/os")
+local runtime = require("@dev/runtime")
+local fs = require("@dev/fs")
+local kinds = require("@dev/pkg/kinds")
+local manifest = require("@dev/manifest")
+local lib = require("@dev/pkg/lib")
+local support = require("./support")
 
 local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local VARS = assert(fs.read(REPO .. "/tests/pkg/fixtures/vars.tsv"))
@@ -19,8 +19,8 @@ local function cell_of(selected, name)
 end
 
 local PROBE = [=[
-local dev_os = require("dev.os")
-local manifest = require("dev.manifest")
+local dev_os = require("@dev/os")
+local manifest = require("@dev/manifest")
 local selected, err = manifest.select(manifest.parse(arg[1]), { column = tonumber(arg[2]) })
 if not selected then
     dev_os.stdout:write("ERR\t", err)
@@ -235,7 +235,7 @@ testing.test(
     "a failed logged command prints the last 20 lines of its output under the failure",
     function()
         local dir = assert(fs.realpath(support.tempdir()))
-        local probe = 'local lib = require("dev.pkg.lib")\n'
+        local probe = 'local lib = require("@dev/pkg/lib")\n'
             .. "local opts = { log_file = arg[1] }\n"
             .. 'assert(lib.run({ "echo", "earlier" }, opts) == 0)\n'
             .. 'local code = lib.run({ "sh", "-c", "seq 1 30; echo broke >&2; exit 3" }, opts)\n'

@@ -1,8 +1,8 @@
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local json = require("dev.json")
-local runtime = require("dev.runtime")
-local board = require("dev.board")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local json = require("@dev/json")
+local runtime = require("@dev/runtime")
+local board = require("@dev/board")
 
 ---@class support
 local M = {}
@@ -265,6 +265,18 @@ end
 ---@return string[] argv the command line
 function M.eval(code, ...)
     return { runtime.exe, "-l", M.script(code), ... }
+end
+
+---Return the command line that runs a Luau snippet that sits beside a `.luaurc` with `aliases`.
+---@param aliases table<string, string> the alias names and the folders they stand for
+---@param code string the snippet
+---@param ... string the words the snippet reads from `arg`
+---@return string[] argv the command line
+function M.eval_aliased(aliases, code, ...)
+    local dir = M.tempdir()
+    assert(fs.write(dir .. "/.luaurc", json.encode({ aliases = aliases })))
+    assert(fs.write(dir .. "/snippet.luau", code))
+    return { runtime.exe, "-l", dir .. "/snippet.luau", ... }
 end
 
 ---Return the local backend's board file path for a test home.

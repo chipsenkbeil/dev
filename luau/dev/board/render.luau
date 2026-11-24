@@ -1,6 +1,6 @@
-local board = require("dev.board")
-local dev_text = require("dev.text")
-local ui = require("dev.ui")
+local board = require("@dev/board")
+local dev_text = require("@dev/text")
+local ui = require("@dev/ui")
 
 ---The terminal table and summary the `board ls` command prints.
 ---@class dev.board.render

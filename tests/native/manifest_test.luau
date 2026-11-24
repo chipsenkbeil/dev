@@ -1,5 +1,5 @@
-local dev_os = require("dev.os")
-local manifest = require("dev.manifest")
+local dev_os = require("@dev/os")
+local manifest = require("@dev/manifest")
 
 local failures = 0
 

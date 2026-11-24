@@ -1,7 +1,7 @@
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local toml = require("dev.toml")
-local dev_command = require("dev.command")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local toml = require("@dev/toml")
+local dev_command = require("@dev/command")
 
 ---Read dev's config files: `~/.config/dev/config.toml`, overridden key by key
 ---by `<project>/.dev/config.toml`.

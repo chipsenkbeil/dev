@@ -1,7 +1,7 @@
-local testing = require("dev.testing")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local support = require("support")
+local testing = require("@dev/testing")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local support = require("./support")
 
 local TOKEN = "pomb_SECRETtoken0123456789"
 local POMB = '[board]\nbackend = "pomb"\nname = "dotfiles"\n'

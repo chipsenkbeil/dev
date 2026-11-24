@@ -1,5 +1,5 @@
-local dev_command = require("dev.command")
-local land = require("dev.cmd.land")
+local dev_command = require("@dev/command")
+local land = require("@dev/cmd/land")
 
 return dev_command({
     summary = "Land the workspace's card, or its change with no board",

@@ -1,40 +1,40 @@
-local board = require("dev.board")
-local board_setup = require("dev.board.setup")
-local check = require("dev.board.check")
-local claims = require("dev.board.claims")
-local role_clock = require("dev.board.clock")
-local config = require("dev.config")
-local dev_config = require("dev.cmd.config")
-local device = require("dev.board.device")
-local dev_os = require("dev.os")
-local follow = require("dev.cmd.follow")
-local fs = require("dev.fs")
-local guards = require("dev.board.guards")
-local init = require("dev.board.init")
-local json = require("dev.json")
-local land = require("dev.board.land")
-local lint = require("dev.board.lint")
-local localboard = require("dev.board.localboard")
-local pomb = require("dev.board.pomb")
-local queue = require("dev.board.queue")
-local render = require("dev.board.render")
-local review = require("dev.board.review")
-local runcard = require("dev.board.runcard")
-local runner = require("dev.board.runner")
-local ship = require("dev.board.ship")
-local stale = require("dev.board.stale")
-local store = require("dev.board.store")
-local tokenfile = require("dev.board.tokenfile")
-local dev_text = require("dev.text")
+local board = require("@dev/board")
+local board_setup = require("@dev/board/setup")
+local check = require("@dev/board/check")
+local claims = require("@dev/board/claims")
+local role_clock = require("@dev/board/clock")
+local config = require("@dev/config")
+local dev_config = require("@dev/cmd/config")
+local device = require("@dev/board/device")
+local dev_os = require("@dev/os")
+local follow = require("@dev/cmd/follow")
+local fs = require("@dev/fs")
+local guards = require("@dev/board/guards")
+local init = require("@dev/board/init")
+local json = require("@dev/json")
+local land = require("@dev/board/land")
+local lint = require("@dev/board/lint")
+local localboard = require("@dev/board/localboard")
+local pomb = require("@dev/board/pomb")
+local queue = require("@dev/board/queue")
+local render = require("@dev/board/render")
+local review = require("@dev/board/review")
+local runcard = require("@dev/board/runcard")
+local runner = require("@dev/board/runner")
+local ship = require("@dev/board/ship")
+local stale = require("@dev/board/stale")
+local store = require("@dev/board/store")
+local tokenfile = require("@dev/board/tokenfile")
+local dev_text = require("@dev/text")
 local text_width = dev_text.width
-local turn = require("dev.board.turn")
-local ui = require("dev.ui")
-local vcs = require("dev.vcs")
-local dev_command = require("dev.command")
-local dev_spec = require("dev.spec")
-local runtime = require("dev.runtime")
-local board_wait = require("dev.board.wait")
-local wiring = require("dev.board.wiring")
+local turn = require("@dev/board/turn")
+local ui = require("@dev/ui")
+local vcs = require("@dev/vcs")
+local dev_command = require("@dev/command")
+local dev_spec = require("@dev/spec")
+local runtime = require("@dev/runtime")
+local board_wait = require("@dev/board/wait")
+local wiring = require("@dev/board/wiring")
 
 local NO_BOARD = "This project has no board."
 local UNKNOWN_COLUMN = "?"
@@ -83,7 +83,7 @@ end
 
 local unqueued = guards.unqueued
 local agent_name = guards.agent_name
-local index_of = require("dev.text").index_of
+local index_of = require("@dev/text").index_of
 local owner_holds = runner.owner_holds
 local claimant = runner.claimant
 local claim_card = runner.claim_card
@@ -683,7 +683,7 @@ local function add_card(backend, opts, args, held)
         if not ok then
             return err
         end
-        local denied = require("dev.standalone").label_problem(label)
+        local denied = require("@dev/standalone").label_problem(label)
         if denied then
             return failure(denied)
         end
@@ -2489,7 +2489,7 @@ function commands.size(backend, _, args)
 end
 
 function commands.time(backend, opts, args)
-    local clock = require("dev.board.clock")
+    local clock = require("@dev/board/clock")
     local positional = {}
     for _, word in ipairs({ args.first, args.second }) do
         positional[#positional + 1] = word
@@ -2598,7 +2598,7 @@ function commands.label(backend, opts, args, _now, _screen, raw)
                     .. " which posts the question and sets the label in one write."
             )
         end
-        local denied = require("dev.standalone").label_problem(change.word)
+        local denied = require("@dev/standalone").label_problem(change.word)
         if change.add and denied then
             return failure(denied)
         end
@@ -2883,7 +2883,7 @@ local function outcomes_locked_refusal(backend, card, what)
             failure("Cannot read the board's columns to check its outcome lock: " .. tostring(why))
         )
     end
-    local locked = require("dev.board.outcome_lock").refusal(rows, card.column, what)
+    local locked = require("@dev/board/outcome_lock").refusal(rows, card.column, what)
     if locked then
         return unqueued(failure(locked))
     end
@@ -3696,7 +3696,7 @@ end
 ---@param short string the card's short id, which names both
 ---@return string lines what was deleted, removed or kept, each on its own line
 function M.clean_up(root, short)
-    local ws = require("dev.cmd.ws")
+    local ws = require("@dev/cmd/ws")
     local kind = vcs.backend(root)
     local lines = {}
     local function add(line)

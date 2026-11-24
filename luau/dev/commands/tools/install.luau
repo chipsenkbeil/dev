@@ -1,5 +1,5 @@
-local dev_command = require("dev.command")
-local tools = require("dev.cmd.tools")
+local dev_command = require("@dev/command")
+local tools = require("@dev/cmd/tools")
 
 return dev_command({
     summary = "Install the manifest's tools, by install scope",

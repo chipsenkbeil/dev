@@ -1,7 +1,7 @@
-local dev_os = require("dev.os")
-local kinds = require("dev.pkg.kinds")
-local lib = require("dev.pkg.lib")
-local note = require("dev.command").note
+local dev_os = require("@dev/os")
+local kinds = require("@dev/pkg/kinds")
+local lib = require("@dev/pkg/lib")
+local note = require("@dev/command").note
 
 local stdout = dev_os.stdout
 local Channel, Verb = kinds.Channel, kinds.Verb

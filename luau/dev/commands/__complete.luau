@@ -1,7 +1,7 @@
-local dev_command = require("dev.command")
-local board_card = require("dev.complete.board_card")
-local complete = require("dev.complete")
-local registry = require("dev.registry")
+local dev_command = require("@dev/command")
+local board_card = require("@dev/complete/board_card")
+local complete = require("@dev/complete")
+local registry = require("@dev/registry")
 
 return dev_command({
     summary = "List what the last word can complete to, for shell completion",

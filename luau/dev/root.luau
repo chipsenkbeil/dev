@@ -1,5 +1,5 @@
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
 
 ---The reasons `manifest_copy` refuses a manifest
 ---@enum dev.root.Reason

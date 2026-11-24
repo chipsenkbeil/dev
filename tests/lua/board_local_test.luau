@@ -1,12 +1,12 @@
-local testing = require("dev.testing")
-local dev_os = require("dev.os")
-local runtime = require("dev.runtime")
-local board = require("dev.board")
-local localboard = require("dev.board.localboard")
-local store = require("dev.board.store")
-local fs = require("dev.fs")
-local json = require("dev.json")
-local support = require("support")
+local testing = require("@dev/testing")
+local dev_os = require("@dev/os")
+local runtime = require("@dev/runtime")
+local board = require("@dev/board")
+local localboard = require("@dev/board/localboard")
+local store = require("@dev/board/store")
+local fs = require("@dev/fs")
+local json = require("@dev/json")
+local support = require("./support")
 
 local Column = support.Column
 local READY_COLUMN = support.column_id(Column.READY)
@@ -3713,7 +3713,7 @@ testing.test("a change that cannot be queued prints both sentences once", functi
 end)
 
 testing.test("a malformed queue file hands drain and push the malformed reason", function()
-    local queue = require("dev.board.queue")
+    local queue = require("@dev/board/queue")
     local pending = queue.new("unit")
     pending.path = support.tempdir() .. "/unit.queue"
     assert(fs.write(pending.path, "not json"))
@@ -3957,7 +3957,7 @@ testing.test(
 )
 
 testing.test("wait on a local board answers at once that there is nothing to wait on", function()
-    local backend = require("dev.board.localboard").new({ name = "mine" })
+    local backend = require("@dev/board/localboard").new({ name = "mine" })
     local got, message = backend:wait("1", { "task_added" }, 5)
     testing.eq(got, nil)
     testing.eq(message, "A local board has nothing to wait on.")

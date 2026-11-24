@@ -1,6 +1,6 @@
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local runtime = require("dev.runtime")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local runtime = require("@dev/runtime")
 
 local MAX_TMP_BASE_CHARS = 40
 

@@ -1,5 +1,5 @@
-local dev_os = require("dev.os")
-local source = require("dev.pkg.source")
+local dev_os = require("@dev/os")
+local source = require("@dev/pkg/source")
 
 dev_os.exit(source.main({
     tool = "stow",

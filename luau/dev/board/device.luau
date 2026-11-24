@@ -1,7 +1,7 @@
-local board = require("dev.board")
-local dev_os = require("dev.os")
-local http = require("dev.http")
-local json = require("dev.json")
+local board = require("@dev/board")
+local dev_os = require("@dev/os")
+local http = require("@dev/http")
+local json = require("@dev/json")
 
 ---@enum dev.board.device.Reason
 local Reason = {

@@ -1,7 +1,7 @@
-local testing = require("dev.testing")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local support = require("support")
+local testing = require("@dev/testing")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local support = require("./support")
 
 dev_os.defaults.env = {
     GIT_CONFIG_GLOBAL = "/dev/null",

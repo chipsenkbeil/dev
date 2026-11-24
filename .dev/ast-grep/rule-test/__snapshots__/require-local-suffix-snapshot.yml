@@ -1,5 +1,35 @@
 id: require-local-suffix
 snapshots:
+  "local grid_cache = require(\"./arena/grid\")\n":
+    labels:
+    - source: local grid_cache = require("./arena/grid")
+      style: primary
+      start: 0
+      end: 42
+    - source: grid_cache
+      style: secondary
+      start: 6
+      end: 16
+    - source: grid_cache
+      style: secondary
+      start: 6
+      end: 16
+    - source: require
+      style: secondary
+      start: 19
+      end: 26
+    - source: require("./arena/grid")
+      style: secondary
+      start: 19
+      end: 42
+    - source: require("./arena/grid")
+      style: secondary
+      start: 19
+      end: 42
+    - source: grid_cache = require("./arena/grid")
+      style: secondary
+      start: 6
+      end: 42
   "local grid_cache = require(\"arena.grid\")\n":
     labels:
     - source: local grid_cache = require("arena.grid")
@@ -30,6 +60,36 @@ snapshots:
       style: secondary
       start: 6
       end: 40
+  "local grid_module = require(\"./arena/grid\")\n":
+    labels:
+    - source: local grid_module = require("./arena/grid")
+      style: primary
+      start: 0
+      end: 43
+    - source: grid_module
+      style: secondary
+      start: 6
+      end: 17
+    - source: grid_module
+      style: secondary
+      start: 6
+      end: 17
+    - source: require
+      style: secondary
+      start: 20
+      end: 27
+    - source: require("./arena/grid")
+      style: secondary
+      start: 20
+      end: 43
+    - source: require("./arena/grid")
+      style: secondary
+      start: 20
+      end: 43
+    - source: grid_module = require("./arena/grid")
+      style: secondary
+      start: 6
+      end: 43
   "local grid_module = require(\"arena.grid\")\n":
     labels:
     - source: local grid_module = require("arena.grid")
@@ -60,6 +120,36 @@ snapshots:
       style: secondary
       start: 6
       end: 41
+  "local str_util = require \"./app/str\"\n":
+    labels:
+    - source: local str_util = require "./app/str"
+      style: primary
+      start: 0
+      end: 36
+    - source: str_util
+      style: secondary
+      start: 6
+      end: 14
+    - source: str_util
+      style: secondary
+      start: 6
+      end: 14
+    - source: require
+      style: secondary
+      start: 17
+      end: 24
+    - source: require "./app/str"
+      style: secondary
+      start: 17
+      end: 36
+    - source: require "./app/str"
+      style: secondary
+      start: 17
+      end: 36
+    - source: str_util = require "./app/str"
+      style: secondary
+      start: 6
+      end: 36
   "local str_util = require \"app.str\"\n":
     labels:
     - source: local str_util = require "app.str"

@@ -1,4 +1,4 @@
-local dev_command = require("dev.command")
+local dev_command = require("@dev/command")
 
 return dev_command({
     group = "Share it",
@@ -16,6 +16,6 @@ return dev_command({
         { name = "max-size", kind = "string", help = "Skip cards bigger than this size" },
     },
     run = function(_opts, _args, ctx)
-        return require("dev.cmd.board").invoke("next", ctx)
+        return require("@dev/cmd/board").invoke("next", ctx)
     end,
 })

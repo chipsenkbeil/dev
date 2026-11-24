@@ -1,3 +1,3 @@
-local projmod = require("projmod")
+local projmod = require("@lib/projmod")
 
 return projmod.code

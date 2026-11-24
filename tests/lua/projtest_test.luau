@@ -1,18 +1,18 @@
-local testing = require("dev.testing")
-local testenv = require("dev.testenv")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local runtime = require("dev.runtime")
+local testing = require("@dev/testing")
+local testenv = require("@dev/testenv")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local runtime = require("@dev/runtime")
 
 local ENV = { CI = "true", DEV_REMOTE = "0" }
-local TEST_COMMAND = 'local dev_command = require("dev.command")\n'
+local TEST_COMMAND = 'local dev_command = require("@dev/command")\n'
     .. "return dev_command({\n"
     .. '    summary = "Run the tests",\n'
     .. "    run = function(_, _, ctx)\n"
-    .. '        return require("dev.testrun").run(ctx.root)\n'
+    .. '        return require("@dev/testrun").run(ctx.root)\n'
     .. "    end,\n"
     .. "})\n"
-local TEST_HEADER = 'local t = require("dev.testing")\n'
+local TEST_HEADER = 'local t = require("@dev/testing")\n'
 
 local function project(tests)
     local root = assert(fs.realpath(testenv.tempdir()))
@@ -68,11 +68,11 @@ testing.test(
     function()
         local root = project()
         testenv.fake(root, "tool", { code = 3, out = "hello", err = "oops" })
-        local probe = 'local dev_command = require("dev.command")\n'
+        local probe = 'local dev_command = require("@dev/command")\n'
             .. "return dev_command({\n"
             .. '    summary = "Run the tool",\n'
             .. "    run = function()\n"
-            .. '        return require("dev.os").run({ "tool", "a", "b" })\n'
+            .. '        return require("@dev/os").run({ "tool", "a", "b" })\n'
             .. "    end,\n"
             .. "})\n"
         assert(fs.write(root .. "/.dev/commands/probe.luau", probe))
@@ -100,9 +100,9 @@ testing.test("a dev -l script that ran its own cases is not run a second time", 
     assert(fs.write(
         script,
         table.concat({
-            'local t = require("dev.testing")',
+            'local t = require("@dev/testing")',
             't.test("once", function() print("body ran") end)',
-            'require("dev.testrun").execute(0)',
+            'require("@dev/testrun").execute(0)',
             "",
         }, "\n")
     ))

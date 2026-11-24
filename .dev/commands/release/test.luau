@@ -1,5 +1,5 @@
-local dev_command = require("dev.command")
-local dev_os = require("dev.os")
+local dev_command = require("@dev/command")
+local dev_os = require("@dev/os")
 
 local SUITE = "tests/native/runtime_test.luau"
 

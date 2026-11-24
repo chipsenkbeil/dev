@@ -1,13 +1,13 @@
-local testing = require("dev.testing")
-local fs = require("dev.fs")
-local support = require("support")
+local testing = require("@dev/testing")
+local fs = require("@dev/fs")
+local support = require("./support")
 
 local DOC = "docs/modules.md"
 local HEADING = "### Modules a command may require"
 
 local PROBE = [=[
 local entries = %s
-return require("dev.command")({
+return require("@dev/command")({
     summary = "Check the modules a command may require.",
     run = function()
         local missing = {}
@@ -46,7 +46,7 @@ local function entries()
 
     -- Join each bullet with its continuation lines and refuse a malformed bullet
     for line in section():gmatch("[^\n]+") do
-        local module, tail = line:match("^%- `([%w_.]+)`:(.*)$")
+        local module, tail = line:match("^%- `([%w_./@]+)`:(.*)$")
         if module then
             current = { module = module, text = tail }
             items[#items + 1] = current

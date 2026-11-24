@@ -18,8 +18,8 @@ through `tests/dev/pty.bash`.
 
 This repo's own `dev lint`, `dev fmt` and `dev test` are
 `.dev/commands/lint.luau`, `fmt.luau` and `test.luau`. The shared code is in
-`.dev/lib/devrepo/checks.luau`, and project commands get `.dev/lib` on the
-`require` path.
+`.dev/lib/devrepo/checks.luau`, and the root `.luaurc` aliases `lib` to
+`.dev/lib`, so a command loads it with `require("@lib/devrepo/checks")`.
 
 ### dev lint and dev fmt
 
@@ -162,7 +162,7 @@ the ci images are rebuilt from a rev that holds it.
 `.dev/baked.txt` lists the dev modules (`dev.fs`) and functions
 (`dev.fs.exists`) the dev baked into ci's images provides, and
 `dev.board.land.dev_calls` reads the same entries from a template file's
-`require("dev.x")` locals, skipping full-line comments. The `sync.templates`
+`require("@dev/x")` locals, skipping full-line comments. The `sync.templates`
 and `sync.baked` keys of `.dev/config.toml` name the template path prefixes
 and the list file. `dev board land` refuses a commit that changes a Lua
 template file calling an entry the list lacks, with the dev change in the same

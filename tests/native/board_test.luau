@@ -1,5 +1,5 @@
-local dev_os = require("dev.os")
-local runtime = require("dev.runtime")
+local dev_os = require("@dev/os")
+local runtime = require("@dev/runtime")
 
 local failures = 0
 
@@ -51,14 +51,14 @@ check("%z splits NUL-separated output the way the board's git readers expect", f
 end)
 
 check("the checks fingerprint keeps the LuaJIT values under bit32", function()
-    local board_check = require("dev.board.check")
+    local board_check = require("@dev/board/check")
     same(board_check.fingerprint({}), "811c9dc5")
     same(board_check.fingerprint({ "a" }), "2524c6d2")
     same(board_check.fingerprint({ "dev lint", "dev test" }), "29343d7a")
 end)
 
 check("a dev.http failure kind names the curl exit the messages keep", function()
-    local board = require("dev.board")
+    local board = require("@dev/board")
     same(board.curl_exit("resolve"), 6)
     same(board.curl_exit("connect"), 7)
     same(board.curl_exit("timeout"), 28)

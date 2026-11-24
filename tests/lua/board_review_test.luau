@@ -1,11 +1,11 @@
-local testing = require("dev.testing")
-local board = require("dev.board")
-local tokenfile = require("dev.board.tokenfile")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local json = require("dev.json")
-local pomb = require("dev.board.pomb")
-local support = require("support")
+local testing = require("@dev/testing")
+local board = require("@dev/board")
+local tokenfile = require("@dev/board/tokenfile")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local json = require("@dev/json")
+local pomb = require("@dev/board/pomb")
+local support = require("./support")
 
 local has_jj = dev_os.which("jj") ~= nil
 local IDENT = { JJ_USER = "t", JJ_EMAIL = "t@example.com" }
@@ -506,7 +506,7 @@ testing.test("review recheck needs of code or style, and of goes with no other k
 end)
 
 testing.test("review recheck record carries of and parse reads it back", function()
-    local review = require("dev.board.review")
+    local review = require("@dev/board/review")
     local rev = { commit = "abc123", change = "chg" }
     local body = review.record("recheck", "r", rev, "clean", "style")
     testing.eq(
@@ -636,7 +636,7 @@ testing.test("a review that cannot be written is never reported as recorded", fu
     function backend:note()
         return nil, "Curl exit 28."
     end
-    local result = require("dev.cmd.board").run(
+    local result = require("@dev/cmd/board").run(
         "review",
         { "11111111", "--kind", "code", "--by", "r", "--rev", "HEAD", "--verdict", "clean" },
         backend
@@ -686,7 +686,7 @@ local function seat_backend(root, refusal, reason)
 end
 
 local function review_as(backend, kind, verdict, by)
-    return require("dev.cmd.board").run(
+    return require("@dev/cmd/board").run(
         "review",
         { "11111111", "--kind", kind, "--by", by or "r", "--rev", "HEAD", "--verdict", verdict },
         backend
@@ -782,7 +782,7 @@ testing.test("review with a live token file adds no missing token sentence", fun
 end)
 
 local function recheck_of(backend, of)
-    return require("dev.cmd.board").run("review", {
+    return require("@dev/cmd/board").run("review", {
         "11111111",
         "--kind",
         "recheck",
@@ -865,7 +865,7 @@ testing.test("a review still writes the dev-review comment", function()
 end)
 
 local function pomb_seats(answers)
-    local backend = assert(require("dev.board.pomb").new({
+    local backend = assert(require("@dev/board/pomb").new({
         url = "https://pomb.example",
         token = "pass:x",
         name = "mine",

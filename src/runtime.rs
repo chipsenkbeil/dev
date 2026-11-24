@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use std::io::{self, ErrorKind, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicUsize, Ordering};
 use std::sync::{Arc, LazyLock};
 use std::{fs, process};
@@ -8,6 +8,7 @@ use std::{fs, process};
 use mlua::{Error, Function, Lua, LuaString, MultiValue, Table, Value, VmState};
 use signal_hook::consts::{SIGINT, SIGPIPE};
 
+use crate::resolve::{DEV_ALIAS, Target, resolve};
 use crate::{Error as DevError, embed, log};
 
 /// Exit status of a process killed by signal n, which is this plus n.
@@ -54,9 +55,6 @@ return function(name, f)
 end
 ";
 
-/// Prefix of a module name served from the embedded tree.
-pub const DEV_PREFIX: &str = "dev.";
-
 /// Folder of the embedded tree that holds dev's Luau modules.
 const EMBEDDED_MODULES: &str = "luau/dev";
 
@@ -74,11 +72,9 @@ static RAISED: AtomicBool = AtomicBool::new(false);
 /// Whether standard output's reader went away, after which output is dropped.
 static PIPE_CLOSED: AtomicBool = AtomicBool::new(false);
 
-/// Module search state kept beside the Lua state.
+/// Module state kept beside the Lua state.
 #[derive(Debug, Default)]
 struct SearchState {
-    /// Folders `require` searches after the embedded tree, oldest first.
-    paths: Vec<PathBuf>,
     /// Modules whose chunk is running, to catch a require loop.
     loading: HashSet<String>,
 }
@@ -99,7 +95,7 @@ pub fn new() -> mlua::Result<Lua> {
     let globals = lua.globals();
     globals.set(
         "require",
-        lua.create_function(|lua, name: String| require(lua, &name))?,
+        lua.create_function(|lua, name: String| require_from(lua, &name, &caller_folder(lua)))?,
     )?;
     let tostring: Function = globals.get("tostring")?;
     let print =
@@ -201,49 +197,82 @@ pub fn add_native(lua: &Lua, name: &str, table: Table) -> mlua::Result<()> {
     natives.raw_set(name, table)
 }
 
-/// Adds `dir` to the folders `require` searches, ahead of every folder added before it.
+/// Returns the folder of the Luau file that called `require`, or the working folder when the
+/// caller is a chunk with no file.
+fn caller_folder(lua: &Lua) -> PathBuf {
+    for level in 1.. {
+        let source = lua.inspect_stack(level, |debug| {
+            debug.source().source.map(std::borrow::Cow::into_owned)
+        });
+        match source {
+            None => break,
+            Some(Some(source)) if source.starts_with('@') => {
+                let path = Path::new(&source[1..]);
+                let folder = match path.parent() {
+                    Some(parent) if !parent.as_os_str().is_empty() => parent,
+                    _ => Path::new("."),
+                };
+                return std::path::absolute(folder).unwrap_or_else(|_| folder.to_path_buf());
+            }
+            Some(Some(source)) if source != "=[C]" => break,
+            Some(_) => {}
+        }
+    }
+    std::env::current_dir().unwrap_or_default()
+}
+
+/// Loads module `name` for a chunk with no file, so `./` paths start at the working folder.
 ///
 /// # Errors
 ///
-/// Returns the Lua error when the search state is missing.
-pub fn add_path(lua: &Lua, dir: impl Into<PathBuf>) -> mlua::Result<()> {
-    let dir = dir.into();
-    with_state(lua, |state| state.paths.push(dir))
+/// Returns the errors of [`require_from`].
+pub fn require(lua: &Lua, name: &str) -> mlua::Result<Value> {
+    require_from(lua, name, &std::env::current_dir().unwrap_or_default())
 }
 
 /// Loads module `name` once and returns what its chunk returned, as Lua's `require` does.
 ///
-/// A native module comes first, then `dev.X` from the embedded tree as `luau/dev/X.luau` or
-/// `luau/dev/X/init.luau`, then each folder from [`add_path`], newest first.
+/// `@dev/X` is a native module, else `luau/dev/X.luau` or `luau/dev/X/init.luau` of the embedded
+/// tree. Any other name is a path or `.luaurc` alias that [`resolve`] reads against `origin`,
+/// loaded from `.luau` or `init.luau`.
 ///
 /// # Errors
 ///
-/// Returns an error naming every place tried when no module is found, and the chunk's own
-/// error when loading it fails.
-pub fn require(lua: &Lua, name: &str) -> mlua::Result<Value> {
+/// Returns the sentence of [`resolve`] for a name that is not a Luau path, an error naming
+/// every place tried when no module is found, and the chunk's own error when loading it fails.
+pub fn require_from(lua: &Lua, name: &str, origin: &Path) -> mlua::Result<Value> {
+    let target = resolve(name, origin).map_err(|error| Error::runtime(error.to_string()))?;
     let loaded = loaded(lua)?;
-    let cached: Value = loaded.raw_get(name)?;
+    if let Target::Dev(rest) = &target {
+        let key = format!("{DEV_ALIAS}{rest}");
+        let cached: Value = loaded.raw_get(key.as_str())?;
+        if !cached.is_nil() {
+            return Ok(cached);
+        }
+        let natives: Table = lua.named_registry_value(NATIVES_KEY)?;
+        let native: Value = natives.raw_get(key.as_str())?;
+        if !native.is_nil() {
+            loaded.raw_set(key.as_str(), &native)?;
+            return Ok(native);
+        }
+    }
+    let (source, chunkname, key) = find(name, &target)?;
+    let cached: Value = loaded.raw_get(key.as_str())?;
     if !cached.is_nil() {
         return Ok(cached);
     }
-    let natives: Table = lua.named_registry_value(NATIVES_KEY)?;
-    let native: Value = natives.raw_get(name)?;
-    if !native.is_nil() {
-        loaded.raw_set(name, &native)?;
-        return Ok(native);
-    }
 
     // Run the module's chunk, refusing a module that requires itself while it loads
-    let (source, chunkname) = find(lua, name)?;
-    if !with_state(lua, |state| state.loading.insert(name.to_owned()))? {
+    if !with_state(lua, |state| state.loading.insert(key.clone()))? {
         return Err(Error::runtime(format!(
             "loop or previous error loading module '{name}'"
         )));
     }
-    let result = load(lua, &source, &chunkname, None).and_then(|chunk| chunk.call::<Value>(name));
-    with_state(lua, |state| state.loading.remove(name))?;
+    let result =
+        load(lua, &source, &chunkname, None).and_then(|chunk| chunk.call::<Value>(key.as_str()));
+    with_state(lua, |state| state.loading.remove(&key))?;
     let value = match result? {
-        Value::Nil => match loaded.raw_get::<Value>(name)? {
+        Value::Nil => match loaded.raw_get::<Value>(key.as_str())? {
             Value::Nil => Value::Boolean(true),
             set => set,
         },
@@ -252,10 +281,27 @@ pub fn require(lua: &Lua, name: &str) -> mlua::Result<Value> {
     if let Value::Table(module) = &value
         && log::module_calls()
     {
-        trace_module_calls(lua, name, module)?;
+        trace_module_calls(lua, &trace_name(&key), module)?;
     }
-    loaded.raw_set(name, &value)?;
+    loaded.raw_set(key.as_str(), &value)?;
     Ok(value)
+}
+
+/// Returns `dev.X.Y` for the key `@dev/X/Y`, and the file's name without `.luau` for a file, or
+/// its folder's name for an `init.luau`.
+fn trace_name(key: &str) -> String {
+    if let Some(rest) = key.strip_prefix(DEV_ALIAS) {
+        return format!("dev.{}", rest.replace('/', "."));
+    }
+    let path = Path::new(key);
+    let module = match path.file_stem().and_then(|stem| stem.to_str()) {
+        Some("init") => path.parent().and_then(Path::file_name),
+        _ => path.file_stem(),
+    };
+    module.map_or_else(
+        || key.to_owned(),
+        |name| name.to_string_lossy().into_owned(),
+    )
 }
 
 /// Wraps every function field of module table `module` so each call is traced as `NAME.FIELD`.
@@ -288,32 +334,41 @@ fn trace_module_calls(lua: &Lua, name: &str, module: &Table) -> mlua::Result<()>
     Ok(())
 }
 
-/// Finds the source of module `name` and the chunk name it loads under.
-fn find(lua: &Lua, name: &str) -> mlua::Result<(Vec<u8>, String)> {
+/// Finds the source of the module `target` names, the chunk name it loads under and its cache key.
+fn find(name: &str, target: &Target) -> mlua::Result<(Vec<u8>, String, String)> {
     let mut tried = Vec::new();
-    if let Some(rest) = name.strip_prefix(DEV_PREFIX) {
-        let rest = rest.replace('.', "/");
-        for candidate in [
-            format!("{EMBEDDED_MODULES}/{rest}.luau"),
-            format!("{EMBEDDED_MODULES}/{rest}/init.luau"),
-        ] {
-            if let Some(bytes) = embed::file(&candidate) {
-                return Ok((bytes.to_vec(), format!("@{candidate}")));
+    match target {
+        Target::Dev(rest) => {
+            for candidate in [
+                format!("{EMBEDDED_MODULES}/{rest}.luau"),
+                format!("{EMBEDDED_MODULES}/{rest}/init.luau"),
+            ] {
+                if let Some(bytes) = embed::file(&candidate) {
+                    return Ok((
+                        bytes.to_vec(),
+                        format!("@{candidate}"),
+                        format!("{DEV_ALIAS}{rest}"),
+                    ));
+                }
+                tried.push(format!("no embedded file '{candidate}'"));
             }
-            tried.push(format!("no embedded file '{candidate}'"));
         }
-    }
-    let relative = name.replace('.', "/");
-    let paths = with_state(lua, |state| state.paths.clone())?;
-    for dir in paths.iter().rev() {
-        for candidate in [
-            dir.join(format!("{relative}.luau")),
-            dir.join(&relative).join("init.luau"),
-        ] {
-            if let Ok(bytes) = fs::read(&candidate) {
-                return Ok((bytes, format!("@{}", candidate.display())));
+        Target::Disk(base) => {
+            let mut stem = base.clone().into_os_string();
+            stem.push(".luau");
+            for candidate in [PathBuf::from(stem), base.join("init.luau")] {
+                if let Ok(bytes) = fs::read(&candidate) {
+                    let key = candidate
+                        .canonicalize()
+                        .unwrap_or_else(|_| candidate.clone());
+                    return Ok((
+                        bytes,
+                        format!("@{}", candidate.display()),
+                        key.display().to_string(),
+                    ));
+                }
+                tried.push(format!("no file '{}'", candidate.display()));
             }
-            tried.push(format!("no file '{}'", candidate.display()));
         }
     }
     Err(Error::runtime(format!(

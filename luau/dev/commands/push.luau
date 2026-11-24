@@ -1,5 +1,5 @@
-local dev_command = require("dev.command")
-local push = require("dev.cmd.push")
+local dev_command = require("@dev/command")
+local push = require("@dev/cmd/push")
 
 return dev_command({
     summary = "Push the trunk or current branch to the remote of record",

@@ -115,7 +115,7 @@ done
 if [ "$REAL_ROOT" = 1 ]; then
     rm -f "$TMP/remote-marker"
     mkdir -p "$proj/.dev/helpers"
-    printf 'local fs = require("dev.fs")\nfs.write("%s", "")\nreturn {}\n' "$TMP/remote-marker" >"$proj/.dev/helpers/remote.luau"
+    printf 'local fs = require("@dev/fs")\nfs.write("%s", "")\nreturn {}\n' "$TMP/remote-marker" >"$proj/.dev/helpers/remote.luau"
     for words in "tools check" "test" "-- tools check" "-- test"; do
         # shellcheck disable=SC2086
         out="$(dev "$proj/a" --remote $words 2>&1)"

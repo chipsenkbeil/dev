@@ -35,7 +35,7 @@ after the first `--` reaches the script untouched.
 
 ## The dev modules
 
-A Lua command loads each module below with `require` by its dotted name. The
+A Lua command loads each module below with `require("@dev/NAME")`. The
 doc comments of the module hold every function.
 
 ### dev.command
@@ -46,7 +46,7 @@ refuses any positional argument, `note(msg)` writes to standard error,
 `need(binary, install)` exits 1 when `binary` is not on `PATH`.
 
 ```lua
-local dev_command = require("dev.command")
+local dev_command = require("@dev/command")
 
 local ctx = ...
 dev_command.no_args(ctx)
@@ -62,7 +62,7 @@ File and path helpers: `exists`, `is_dir`, `is_file`, `is_link`, `is_exec`,
 returns nil and a message.
 
 ```lua
-local fs = require("dev.fs")
+local fs = require("@dev/fs")
 
 local path = fs.join(ctx.root, ".dev", "config.toml")
 if fs.is_file(path) then
@@ -78,7 +78,7 @@ Run and capture commands with `run`, `capture`, `capture_input` and
 and `quote` live here too.
 
 ```lua
-local dev_os = require("dev.os")
+local dev_os = require("@dev/os")
 
 local out, code = dev_os.capture({ "git", "-C", ctx.root, "status", "--short" })
 if code == 0 and out ~= "" then
@@ -93,7 +93,7 @@ Terminal drawing: `context`, colors through `paint` and `mark`, `table`, `bar`,
 `NO_COLOR` is empty or unset and `TERM` is not `dumb`.
 
 ```lua
-local ui = require("dev.ui")
+local ui = require("@dev/ui")
 
 local view = ui.context()
 local rows = { { "lint", "ok" }, { "test", "ok" } }
@@ -109,7 +109,7 @@ Display-width text helpers: `width`, `fit`, `words`, `wrap`, `trim` and
 the width on a line of its own.
 
 ```lua
-local text = require("dev.text")
+local text = require("@dev/text")
 
 local lines = text.wrap(text.words("one two three four"), 10)
 for _, line in ipairs(lines) do
@@ -124,7 +124,7 @@ Reads `~/.config/dev/config.toml` and then `<root>/.dev/config.toml` over it.
 user file win, and `user("a.b")` reads the user file alone.
 
 ```lua
-local config = require("dev.config")
+local config = require("@dev/config")
 
 local mode = config.get(ctx.root, "remote.default")
 print(mode or "unset")
@@ -136,7 +136,7 @@ print(mode or "unset")
 language from the files in its root, and `share` is dev's own share directory.
 
 ```lua
-local project = require("dev.project")
+local project = require("@dev/project")
 
 local root = project.root()
 print(root, project.detect_type(root) or "no type")
@@ -149,8 +149,8 @@ the jj or git backend, and `remotes(root, backend)` and
 `branches(root, backend)` list names.
 
 ```lua
-local vcs = require("dev.vcs")
-local dev_command = require("dev.command")
+local vcs = require("@dev/vcs")
+local dev_command = require("@dev/command")
 
 local backend, err = vcs.backend(ctx.root)
 if not backend then
@@ -167,7 +167,7 @@ end
 
 `.dev/commands/NAME.luau` is a command. A `.luau` file needs no exec bit and
 wins over a `.sh` file of the same name. The file returns
-`require("dev.command")` called with a spec table, and its `run(opts, args,
+`require("@dev/command")` called with a spec table, and its `run(opts, args,
 ctx)` gets the context third.
 
 - `ctx.name`: the command as typed
@@ -195,7 +195,7 @@ or `flags:` line is the description in `dev help`. This command runs as
 Print a greeting.
 usage: greet [NAME=who]
 ]]
-local dev_command = require("dev.command")
+local dev_command = require("@dev/command")
 
 local ctx = ...
 dev_command.no_args(ctx)
@@ -217,7 +217,7 @@ subcommands. Saved as `.dev/commands/cache/show.luau`, this subcommand runs as
 --[[
 Print the command's state.
 ]]
-local dev_command = require("dev.command")
+local dev_command = require("@dev/command")
 
 local ctx = ...
 dev_command.no_args(ctx)
@@ -236,7 +236,7 @@ Print a greeting.
 usage: greet [--loud]
 flags: --loud
 ]]
-local dev_command = require("dev.command")
+local dev_command = require("@dev/command")
 
 local ctx = ...
 local loud = false
@@ -263,7 +263,7 @@ group: Check your work
 hidden
 Print the checks this repo runs.
 ]]
-local dev_command = require("dev.command")
+local dev_command = require("@dev/command")
 
 local ctx = ...
 dev_command.no_args(ctx)
@@ -272,9 +272,9 @@ print("lint")
 
 ### Your own modules
 
-`.dev/lib/` is on the module search path while a command runs, so
-`.dev/lib/myproj/checks.luau` loads with `require("myproj.checks")`. dev never
-lists `lib`, `helpers` or `help` as a command.
+The `lib` alias of the project's `.luaurc` names `.dev/lib/`, so
+`.dev/lib/myproj/checks.luau` loads with `require("@lib/myproj/checks")`. dev
+never lists `lib`, `helpers` or `help` as a command.
 
 ## Commands in this repo
 

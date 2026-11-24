@@ -1,5 +1,5 @@
-local dev_command = require("dev.command")
-local keepalive = require("dev.board.keepalive")
+local dev_command = require("@dev/command")
+local keepalive = require("@dev/board/keepalive")
 
 return dev_command({
     summary = "Renew a claim on Pomb every tick while its state file holds the fence",

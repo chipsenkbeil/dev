@@ -1,6 +1,6 @@
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local lib = require("dev.pkg.lib")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local lib = require("@dev/pkg/lib")
 
 local stdout = dev_os.stdout
 

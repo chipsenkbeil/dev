@@ -1,5 +1,5 @@
-local dev_command = require("dev.command")
-local ws = require("dev.cmd.ws")
+local dev_command = require("@dev/command")
+local ws = require("@dev/cmd/ws")
 
 return dev_command({
     summary = "Remove a workspace of this project and move its folder to the trash",

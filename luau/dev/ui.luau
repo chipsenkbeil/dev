@@ -1,7 +1,7 @@
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local term = require("dev.term")
-local text = require("dev.text")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local term = require("@dev/term")
+local text = require("@dev/text")
 
 ---@class dev.ui.Style
 ---@field BOLD string bold weight

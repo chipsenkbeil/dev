@@ -680,7 +680,7 @@ mkdir -p "$cip/.dev/helpers"
 mkdir -p "$cip/.dev/commands"
 cat >"$cip/.dev/helpers/remote.luau" <<'LUA'
 return function(run)
-    require("dev.os").stdout:write(table.concat(run.words, " "), "|", table.concat(run.args, ","), "|", tostring(run.detach), "|", run.root, "\n")
+    require("@dev/os").stdout:write(table.concat(run.words, " "), "|", table.concat(run.args, ","), "|", tostring(run.detach), "|", run.root, "\n")
     return 5
 end
 LUA

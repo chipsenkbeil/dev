@@ -1,8 +1,8 @@
-local testing = require("dev.testing")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local support = require("support")
-local toml = require("dev.toml")
+local testing = require("@dev/testing")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local support = require("./support")
+local toml = require("@dev/toml")
 
 local function tree(project, user)
     local root = support.tempdir()
@@ -20,7 +20,7 @@ end
 
 local function get(root, home, key)
     local script = string.format(
-        "local v = require('dev.config').get(%q, %q); require('dev.os').stdout:write(type(v), ':', tostring(v))",
+        "local v = require('@dev/config').get(%q, %q); require('@dev/os').stdout:write(type(v), ':', tostring(v))",
         root,
         key
     )

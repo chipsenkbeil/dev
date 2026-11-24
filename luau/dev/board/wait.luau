@@ -1,16 +1,16 @@
-local board = require("dev.board")
-local box = require("dev.cmd.box")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local guards = require("dev.board.guards")
-local pomb = require("dev.board.pomb")
-local store = require("dev.board.store")
-local turn = require("dev.board.turn")
-local dev_command = require("dev.command")
+local board = require("@dev/board")
+local box = require("@dev/cmd/box")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local guards = require("@dev/board/guards")
+local pomb = require("@dev/board/pomb")
+local store = require("@dev/board/store")
+local turn = require("@dev/board/turn")
+local dev_command = require("@dev/command")
 
 local usage = guards.usage
 local failure = guards.failure
-local index_of = require("dev.text").index_of
+local index_of = require("@dev/text").index_of
 local HUMAN_ACTOR = "human"
 
 ---The wait command and the owner reads the other board commands share.

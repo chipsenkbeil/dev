@@ -1,9 +1,9 @@
-local testing = require("dev.testing")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local json = require("dev.json")
-local support = require("support")
-local cmd_ws = require("dev.cmd.ws")
+local testing = require("@dev/testing")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local json = require("@dev/json")
+local support = require("./support")
+local cmd_ws = require("@dev/cmd/ws")
 
 local DONE_ID = "aaaaaaaa"
 local OPEN_ID = "bbbbbbbb"

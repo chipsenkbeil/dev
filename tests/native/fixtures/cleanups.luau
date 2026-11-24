@@ -1,4 +1,4 @@
-local dev_os = require("dev.os")
+local dev_os = require("@dev/os")
 dev_os.on_exit(function()
     print("first")
 end)

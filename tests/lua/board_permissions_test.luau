@@ -1,7 +1,7 @@
-local testing = require("dev.testing")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local support = require("support")
+local testing = require("@dev/testing")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local support = require("./support")
 
 local WORKER = "pomb_WORKERtoken0123456789"
 local function user_config(url)

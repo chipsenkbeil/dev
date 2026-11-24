@@ -1,8 +1,8 @@
-local board = require("dev.board")
-local claims = require("dev.board.claims")
-local dev_os = require("dev.os")
-local guards = require("dev.board.guards")
-local limits = require("dev.board.limits")
+local board = require("@dev/board")
+local claims = require("@dev/board/claims")
+local dev_os = require("@dev/os")
+local guards = require("@dev/board/guards")
+local limits = require("@dev/board/limits")
 
 ---The size limit, the refusals and the claim a board runner takes a card with.
 ---@class dev.board.runner
@@ -14,7 +14,7 @@ local M = { FLAG = "--max-size", FULL = 3, limits = limits }
 local usage = guards.usage
 local failure = guards.failure
 local CLAIMANT_CHARS = guards.CLAIMANT_CHARS
-local index_of = require("dev.text").index_of
+local index_of = require("@dev/text").index_of
 
 ---Build the result of a move into a full column.
 ---@param message string the refusal

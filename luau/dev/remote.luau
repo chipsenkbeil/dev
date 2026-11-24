@@ -1,11 +1,11 @@
-local config = require("dev.config")
-local runtime = require("dev.runtime")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local json = require("dev.json")
-local dev_command = require("dev.command")
-local pipelines = require("dev.pipelines")
-local project = require("dev.project")
+local config = require("@dev/config")
+local runtime = require("@dev/runtime")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local json = require("@dev/json")
+local dev_command = require("@dev/command")
+local pipelines = require("@dev/pipelines")
+local project = require("@dev/project")
 
 local stderr = dev_os.stderr
 
@@ -287,7 +287,7 @@ local function file_runner(path, run)
     if not source then
         dev_command.die("The file " .. path .. " cannot be read: " .. tostring(reason) .. ".")
     end
-    local chunk, message = runtime.load(source, "=" .. path)
+    local chunk, message = runtime.load(source, "@" .. path)
     local ok, runner = false, message
     if chunk then
         ok, runner = pcall(chunk)

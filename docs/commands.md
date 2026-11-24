@@ -25,9 +25,9 @@ A project's `.dev/` holds these and nothing else dev reads:
 - `config.toml`: the project's settings.
 - `commands/`: the only place dev looks for the project's commands.
 - `help/`: help pages, one `.md` file each. See "Project help pages".
-- `lib/`: Lua modules. It is on the `require` path while a `.luau` command
-  runs, so `.dev/lib/myproj/checks.luau` loads with
-  `require("myproj.checks")`.
+- `lib/`: Lua modules. The `lib` alias of the project's `.luaurc` names it, so
+  `.dev/lib/myproj/checks.luau` loads with `require("@lib/myproj/checks")`.
+  `dev init` writes that alias. `dev help porting` has the require forms.
 - `tests/`: the project's own `*_test.luau` suites, which `dev test` runs.
 - `helpers/`: scripts that commands call. dev never lists them, never runs
   them as commands and never completes them. They have no `__` prefix.
@@ -150,10 +150,10 @@ sequence above. `CONTRIBUTING.md` describes them.
 ## The dev.command spec
 
 A `.luau` command file returns `dev_command({...})`, where
-`dev_command = require("dev.command")` validates the table and returns it.
+`dev_command = require("@dev/command")` validates the table and returns it.
 
 ```luau
-local dev_command = require("dev.command")
+local dev_command = require("@dev/command")
 
 return dev_command({
     summary = "Wait for a card",
@@ -280,7 +280,8 @@ A `.sh` file needs the exec bit. dev also sets `DEV_ROOT`, the absolute project
 root, so `"$DEV_ROOT/.dev/helpers/NAME"` finds a helper from any folder.
 
 The global Lua library folder is `~/.config/dev/lib`, the global match for
-`.dev/lib/`.
+`.dev/lib/`. A global command reaches it through a `.luaurc` in `~/.config/dev`
+that aliases `lib` to `lib`.
 
 ## Completion
 

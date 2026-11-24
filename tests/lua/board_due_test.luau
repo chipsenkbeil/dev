@@ -1,8 +1,8 @@
-local testing = require("dev.testing")
-local fs = require("dev.fs")
-local json = require("dev.json")
-local pomb = require("dev.board.pomb")
-local support = require("support")
+local testing = require("@dev/testing")
+local fs = require("@dev/fs")
+local json = require("@dev/json")
+local pomb = require("@dev/board/pomb")
+local support = require("./support")
 
 local ID = "aaaaaaaa-1111-4aaa-8aaa-aaaaaaaaaaaa"
 

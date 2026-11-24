@@ -4,6 +4,8 @@ use crate::flags::Flags;
 use crate::native::{
     fs, globals, hash, http, json, lock, log, manifest, os, runtime, spec, term, toml,
 };
+use crate::resolve::DEV_ALIAS;
+use crate::runtime::add_native;
 
 /// Registers every native module under `dev.*`, in the order later modules may rely on.
 ///
@@ -30,7 +32,7 @@ pub fn register(lua: &Lua, flags: &Flags) -> mlua::Result<()> {
     add(lua, spec::NAME, spec::register(lua)?)
 }
 
-/// Makes `table` the module `require("dev.NAME")` returns.
+/// Makes `table` the module `require("@dev/NAME")` returns.
 fn add(lua: &Lua, name: &str, table: Table) -> mlua::Result<()> {
-    crate::runtime::add_native(lua, &format!("{}{name}", crate::runtime::DEV_PREFIX), table)
+    add_native(lua, &format!("{DEV_ALIAS}{name}"), table)
 }

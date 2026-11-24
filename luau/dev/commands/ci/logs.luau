@@ -1,5 +1,5 @@
-local ci = require("dev.cmd.ci")
-local dev_command = require("dev.command")
+local ci = require("@dev/cmd/ci")
+local dev_command = require("@dev/command")
 
 return dev_command({
     summary = "Print a ci run's log",

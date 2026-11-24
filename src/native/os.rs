@@ -571,7 +571,7 @@ fn argv_of(argv: &Table) -> mlua::Result<Vec<LuaString>> {
 
 /// Returns the verbosity level of this run.
 fn level(lua: &Lua) -> u8 {
-    runtime::require(lua, "dev.globals")
+    runtime::require(lua, "@dev/globals")
         .ok()
         .and_then(|value| value.as_table().cloned())
         .and_then(|table| table.get::<Option<u8>>("level").ok().flatten())

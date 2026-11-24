@@ -1,9 +1,9 @@
-local testing = require("dev.testing")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local registry = require("dev.registry")
-local support = require("support")
-local topics = require("dev.topics")
+local testing = require("@dev/testing")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local registry = require("@dev/registry")
+local support = require("./support")
+local topics = require("@dev/topics")
 
 local function project(files)
     local root = support.tempdir()
@@ -119,7 +119,7 @@ end)
 
 testing.test("a .luau spec that declares -h is reported", function()
     local root = project({
-        ["a.luau"] = 'return require("dev.command")({ summary = "A.", flags = { { name = "ok", kind = "boolean" }, { name = "x", short = "h", kind = "boolean" } }, run = function() return 0 end })\n',
+        ["a.luau"] = 'return require("@dev/command")({ summary = "A.", flags = { { name = "ok", kind = "boolean" }, { name = "x", short = "h", kind = "boolean" } }, run = function() return 0 end })\n',
     })
     testing.eq(problems(root), {
         ".dev/commands/a.luau:1: the spec declares -h or --help, which dev reserves before --",

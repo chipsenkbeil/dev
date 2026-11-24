@@ -1,9 +1,9 @@
-local checks = require("devrepo.checks")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local lintset = require("lintset")
-local standalone = require("dev.standalone")
-local dev_command = require("dev.command")
+local checks = require("@lib/devrepo/checks")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local lintset = require("@lib/lintset")
+local standalone = require("@dev/standalone")
+local dev_command = require("@dev/command")
 
 local DOC_COLUMNS = 80
 

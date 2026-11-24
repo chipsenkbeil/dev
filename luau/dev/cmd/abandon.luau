@@ -1,9 +1,9 @@
-local dev_os = require("dev.os")
-local forge = require("dev.forge")
-local json = require("dev.json")
-local text = require("dev.text")
-local vcs = require("dev.vcs")
-local dev_command = require("dev.command")
+local dev_os = require("@dev/os")
+local forge = require("@dev/forge")
+local json = require("@dev/json")
+local text = require("@dev/text")
+local vcs = require("@dev/vcs")
+local dev_command = require("@dev/command")
 
 ---@class dev.cmd.abandon
 local M = {}

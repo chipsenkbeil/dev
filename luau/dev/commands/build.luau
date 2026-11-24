@@ -1,5 +1,5 @@
-local dev_command = require("dev.command")
-local types = require("dev.cmd.types")
+local dev_command = require("@dev/command")
+local types = require("@dev/cmd/types")
 
 return dev_command({
     summary = "Build the project",

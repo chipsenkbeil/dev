@@ -1,8 +1,8 @@
-local testing = require("dev.testing")
-local text = require("dev.text")
-local ui = require("dev.ui")
-local picker = require("dev.ui.picker")
-local term = require("dev.term")
+local testing = require("@dev/testing")
+local text = require("@dev/text")
+local ui = require("@dev/ui")
+local picker = require("@dev/ui/picker")
+local term = require("@dev/term")
 
 local Key = term.Key
 local plain = ui.context({ color = false, interactive = true, width = 80 })

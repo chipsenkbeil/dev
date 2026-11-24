@@ -1,12 +1,12 @@
-local testing = require("dev.testing")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local registry = require("dev.registry")
-local support = require("support")
+local testing = require("@dev/testing")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local registry = require("@dev/registry")
+local support = require("./support")
 
 local RAN = "#!/usr/bin/env bash\n# summary: Run x.\n# flag: now kind=boolean -- Right away\n"
     .. '# arg: words list\necho ran-x "$@"\n'
-local RAN_Y = 'local dev_command = require("dev.command")\n'
+local RAN_Y = 'local dev_command = require("@dev/command")\n'
     .. 'return dev_command({ summary = "Run y.", run = function() print("ran-y") return 0 end })\n'
 
 local function project(files)

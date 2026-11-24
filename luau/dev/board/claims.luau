@@ -1,7 +1,7 @@
-local board = require("dev.board")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local xdg = require("dev.xdg")
+local board = require("@dev/board")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local xdg = require("@dev/xdg")
 
 local STATE_NAME = "dev/board"
 local LOOP_MARK = "__board keepalive"

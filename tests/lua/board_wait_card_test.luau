@@ -1,8 +1,8 @@
-local testing = require("dev.testing")
-local board = require("dev.board")
-local cmd_board = require("dev.cmd.board")
-local fs = require("dev.fs")
-local support = require("support")
+local testing = require("@dev/testing")
+local board = require("@dev/board")
+local cmd_board = require("@dev/cmd/board")
+local fs = require("@dev/fs")
+local support = require("./support")
 
 local CARD_ID = "5af0e005-0000-4000-8000-000000000005"
 local ID_B = "11111111-bbbb-4bbb-8bbb-bbbbbbbbbbbb"

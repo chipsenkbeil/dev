@@ -1,4 +1,4 @@
-local dev_os = require("dev.os")
+local dev_os = require("@dev/os")
 
 local TIMEOUT_SECONDS = 3
 local NOT_FOUND = 44

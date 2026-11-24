@@ -1,7 +1,7 @@
-local board = require("dev.board")
-local claims = require("dev.board.claims")
-local fs = require("dev.fs")
-local guards = require("dev.board.guards")
+local board = require("@dev/board")
+local claims = require("@dev/board/claims")
+local fs = require("@dev/fs")
+local guards = require("@dev/board/guards")
 
 local SUFFIX = ".clock"
 local BEAT_SUFFIX = ".beat"

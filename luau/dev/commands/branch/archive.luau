@@ -1,5 +1,5 @@
-local branch = require("dev.cmd.branch")
-local dev_command = require("dev.command")
+local branch = require("@dev/cmd/branch")
+local dev_command = require("@dev/command")
 
 return dev_command({
     summary = "Push a revision to refs/archive/DATE/NAME on every remote",

@@ -1,15 +1,15 @@
-local testing = require("dev.testing")
-local board = require("dev.board")
-local check = require("dev.board.check")
-local claims = require("dev.board.claims")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local localboard = require("dev.board.localboard")
-local runner = require("dev.board.runner")
-local store = require("dev.board.store")
-local support = require("support")
-local turn = require("dev.board.turn")
-local wiring = require("dev.board.wiring")
+local testing = require("@dev/testing")
+local board = require("@dev/board")
+local check = require("@dev/board/check")
+local claims = require("@dev/board/claims")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local localboard = require("@dev/board/localboard")
+local runner = require("@dev/board/runner")
+local store = require("@dev/board/store")
+local support = require("./support")
+local turn = require("@dev/board/turn")
+local wiring = require("@dev/board/wiring")
 
 local WAIT_SECONDS = 20
 local HOLD_SECONDS = 1000
@@ -271,7 +271,7 @@ testing.test("a land with a local claim sends the release with its fence", funct
 end)
 
 testing.test("a land whose release is refused with a reason prints the sentence", function()
-    local dev_command = require("dev.command")
+    local dev_command = require("@dev/command")
     local stub = {
         release = function()
             return nil, nil, board.ReleaseReason.NOT_HELD, "dddd4444"

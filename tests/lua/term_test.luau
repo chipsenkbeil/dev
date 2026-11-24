@@ -1,5 +1,5 @@
-local testing = require("dev.testing")
-local term = require("dev.term")
+local testing = require("@dev/testing")
+local term = require("@dev/term")
 
 local Key = term.Key
 

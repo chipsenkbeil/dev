@@ -1,5 +1,5 @@
-local testing = require("dev.testing")
-local text = require("dev.text")
+local testing = require("@dev/testing")
+local text = require("@dev/text")
 
 testing.test("width counts codepoints", function()
     testing.eq(text.width("é●a"), 3)

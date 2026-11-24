@@ -1,6 +1,6 @@
-local dev_os = require("dev.os")
-local text = require("dev.text")
-local vcs = require("dev.vcs")
+local dev_os = require("@dev/os")
+local text = require("@dev/text")
+local vcs = require("@dev/vcs")
 
 ---@enum dev.forge.Kind
 local Kind = { GERRIT = "gerrit", GITHUB = "github", PLAIN = "plain" }

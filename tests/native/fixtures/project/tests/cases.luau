@@ -1,5 +1,5 @@
-local testing = require("dev.testing")
-local projmod = require("projmod")
+local testing = require("@dev/testing")
+local projmod = require("@lib/projmod")
 
 testing.test("the project library loads", function()
     testing.eq(projmod.code, 3)

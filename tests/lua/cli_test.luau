@@ -1,18 +1,20 @@
-local testing = require("dev.testing")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local registry = require("dev.registry")
-local support = require("support")
-local version = require("dev.version")
+local testing = require("@dev/testing")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local registry = require("@dev/registry")
+local support = require("./support")
+local version = require("@dev/version")
 
 local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local FIXTURES = REPO .. "/tests/lua/fixtures/commands/"
 
 local OUTSIDE_COMMANDS = { ["config.toml"] = true }
+local LUAURC = '{ "aliases": { "lib": ".dev/lib" } }\n'
 
 local function project(files)
     local root = support.tempdir()
     assert(fs.mkdir(root .. "/.dev", { parents = true }))
+    assert(fs.write(root .. "/.luaurc", LUAURC))
     for name, source in pairs(files) do
         local inside = OUTSIDE_COMMANDS[name] or name:find("^helpers/") or name:find("^lib/")
         local path = root .. "/.dev/" .. (inside and "" or "commands/") .. name
@@ -26,7 +28,7 @@ local function project(files)
 end
 
 local function luau(spec_body, run_body)
-    return 'local dev_command = require("dev.command")\n'
+    return 'local dev_command = require("@dev/command")\n'
         .. "return dev_command({\n"
         .. spec_body
         .. "\n    run = function(opts, args, ctx)\n"
@@ -127,9 +129,10 @@ testing.test("a .luau command finds modules under .dev/lib", function()
     testing.eq(dev(root, { "helper" }), "HI\n")
 end)
 
-testing.test("a global .luau command requires from the global lib folder", function()
+testing.test("a global .luau command requires through the global .luaurc", function()
     local config = support.tempdir()
     assert(fs.mkdir(config .. "/dev/lib/tools", { parents = true }))
+    assert(fs.write(config .. "/dev/.luaurc", '{ "aliases": { "lib": "lib" } }\n'))
     assert(
         fs.write(
             config .. "/dev/lib/tools/shout.luau",
@@ -205,8 +208,8 @@ testing.test("a .luau command's children see VERBOSE only when it is on", functi
     local root = project({
         ["e.luau"] = luau(
             '    summary = "Show VERBOSE.",',
-            '        local seen = require("dev.os").capture({ "sh", "-c", \'printf %s "${VERBOSE-unset}"\' })\n'
-                .. '        require("dev.os").stdout:write(seen, "|", tostring(ctx.verbose))'
+            '        local seen = require("@dev/os").capture({ "sh", "-c", \'printf %s "${VERBOSE-unset}"\' })\n'
+                .. '        require("@dev/os").stdout:write(seen, "|", tostring(ctx.verbose))'
         ),
     })
     testing.eq(dev(root, { "e" }, { VERBOSE = "no" }), "unset|0")
@@ -331,13 +334,13 @@ local function undeclared_project()
         }, "\n"),
         ["l.luau"] = luau(
             '    summary = "Touch.",\n    flags = { { name = "days" } },\n    args = { { name = "words", list = true } },\n    passthrough = true,',
-            '        require("dev.fs").write(require("dev.os").getenv("MARKER"), "")\n'
+            '        require("@dev/fs").write(require("@dev/os").getenv("MARKER"), "")\n'
                 .. '        print("luau", table.concat(args.words, ","), table.concat(ctx.passthrough or {}, ","), opts.days)'
         ),
         ["n/x.sh"] = touching("days"),
         ["n/y.luau"] = luau(
             '    summary = "Touch.",',
-            '        require("dev.fs").write(require("dev.os").getenv("MARKER"), "")'
+            '        require("@dev/fs").write(require("@dev/os").getenv("MARKER"), "")'
         ),
     })
     return root, { MARKER = root .. "/marker" }

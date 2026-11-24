@@ -1,7 +1,7 @@
-local testing = require("dev.testing")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local support = require("support")
+local testing = require("@dev/testing")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local support = require("./support")
 
 local REPO = arg[0]:match("^(.*)/tests/lua/") or "."
 
@@ -389,7 +389,7 @@ testing.test(
     function()
         local root, base = setup({
             ["helpers/remote.luau"] = [[return function(run)
-    require("dev.os").stdout:write(table.concat(run.words, " "), "|", table.concat(run.args, ","), "|", tostring(run.detach), "|", run.root, "\n")
+    require("@dev/os").stdout:write(table.concat(run.words, " "), "|", table.concat(run.args, ","), "|", tostring(run.detach), "|", run.root, "\n")
     return 5
 end
 ]],
@@ -621,7 +621,7 @@ testing.test(
     "runs_local also works in a luau spec and a parent command subcommand, and shows under -h",
     function()
         local root, base = setup({
-            ["widget/save.luau"] = 'local c = require("dev.command")\nreturn c({ summary = "Save it.", runs_local = true, run = function() print("ran-lua") end })\n',
+            ["widget/save.luau"] = 'local c = require("@dev/command")\nreturn c({ summary = "Save it.", runs_local = true, run = function() print("ran-lua") end })\n',
         })
         local out, code, log = dev(root, base, { "widget", "save" })
         testing.eq(out, "ran-lua\n")
@@ -705,14 +705,14 @@ testing.test("--remote passes --priority to ci run only when DEV_CI_PRIORITY is 
 end)
 
 testing.test("a word holding a dot or an underscore is not a job", function()
-    local remote = require("dev.remote")
+    local remote = require("@dev/remote")
     local root = setup()
     testing.eq(remote.has_default_job(root, { "a.b" }), false)
     testing.eq(remote.has_default_job(root, { "widget", "save_it" }), false)
 end)
 
 testing.test("run label is unset for a bare run in a terminal", function()
-    local remote = require("dev.remote")
+    local remote = require("@dev/remote")
     local root = setup()
     with_empty_home(function()
         local terminal = { tty = true }
@@ -723,7 +723,7 @@ testing.test("run label is unset for a bare run in a terminal", function()
 end)
 
 testing.test("run label keeps check and release labels in a terminal", function()
-    local remote = require("dev.remote")
+    local remote = require("@dev/remote")
     local root = setup()
     with_empty_home(function()
         local check = { DEV_CI_COMMAND = remote.Command.CHECK, DEV_CI_CARD = "d9f0e004" }
@@ -739,7 +739,7 @@ testing.test("run label keeps check and release labels in a terminal", function(
 end)
 
 testing.test("run label names a check run even under an agent DEV_AGENT", function()
-    local remote = require("dev.remote")
+    local remote = require("@dev/remote")
     local root = setup()
     with_empty_home(function()
         local agent = "dotfiles/implementer/d9f0e004"

@@ -1,8 +1,8 @@
-local testing = require("dev.testing")
-local dev_os = require("dev.os")
-local runtime = require("dev.runtime")
-local fs = require("dev.fs")
-local support = require("support")
+local testing = require("@dev/testing")
+local dev_os = require("@dev/os")
+local runtime = require("@dev/runtime")
+local fs = require("@dev/fs")
+local support = require("./support")
 
 local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local SHA = string.rep("a", 64)

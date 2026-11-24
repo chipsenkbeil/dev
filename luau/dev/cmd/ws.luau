@@ -1,10 +1,10 @@
-local cmd_board = require("dev.cmd.board")
-local dev_os = require("dev.os")
-local forge = require("dev.forge")
-local fs = require("dev.fs")
-local dev_text = require("dev.text")
-local vcs = require("dev.vcs")
-local dev_command = require("dev.command")
+local cmd_board = require("@dev/cmd/board")
+local dev_os = require("@dev/os")
+local forge = require("@dev/forge")
+local fs = require("@dev/fs")
+local dev_text = require("@dev/text")
+local vcs = require("@dev/vcs")
+local dev_command = require("@dev/command")
 
 ---@class dev.cmd.ws
 ---@field Refusal table<string, dev.cmd.ws.Refusal> the reasons a removal stops

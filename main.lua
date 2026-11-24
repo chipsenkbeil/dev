@@ -8,8 +8,8 @@ end
 
 local INTERRUPTED = 130
 local ok, cli = pcall(function()
-    local loaded = require("dev.cli")
-    require("dev.os").catch_term()
+    local loaded = require("@dev/cli")
+    require("@dev/os").catch_term()
     return loaded
 end)
 if not ok then

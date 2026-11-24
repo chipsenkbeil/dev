@@ -1,9 +1,6 @@
-local dev_os = require("dev.os")
-local runtime = require("dev.runtime")
+local dev_os = require("@dev/os")
 
-runtime.dofile(arg[0]:match("^(.*)/fixtures/[^/]*$") .. "/boot.luau")
-
-local ui = require("dev.ui")
+local ui = require("@dev/ui")
 
 local yes =
     ui.confirm(ui.context(), arg[1] or "Delete box?", arg[2] or "Its projects are archived first.")

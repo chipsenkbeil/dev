@@ -1,9 +1,6 @@
-local dev_os = require("dev.os")
-local runtime = require("dev.runtime")
+local dev_os = require("@dev/os")
 
-runtime.dofile(arg[0]:match("^(.*)/fixtures/[^/]*$") .. "/boot.luau")
-
-local term = require("dev.term")
+local term = require("@dev/term")
 
 local restore = term.raw(0)
 local keys = {}

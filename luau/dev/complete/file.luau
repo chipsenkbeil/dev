@@ -1,4 +1,4 @@
-local fs = require("dev.fs")
+local fs = require("@dev/fs")
 
 ---@class dev.complete.file
 local M = {}

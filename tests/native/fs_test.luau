@@ -1,5 +1,5 @@
-local fs = require("dev.fs")
-local dev_os = require("dev.os")
+local fs = require("@dev/fs")
+local dev_os = require("@dev/os")
 
 local failed = false
 local function check(name, fn)

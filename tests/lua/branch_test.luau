@@ -1,7 +1,7 @@
-local testing = require("dev.testing")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local support = require("support")
+local testing = require("@dev/testing")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local support = require("./support")
 
 local IDENT = { JJ_CONFIG = "/dev/null", JJ_USER = "t", JJ_EMAIL = "t@t" }
 local has_jj = dev_os.which("jj") ~= nil

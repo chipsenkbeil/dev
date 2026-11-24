@@ -1,5 +1,5 @@
-local testing = require("dev.testing")
-local toml = require("dev.toml")
+local testing = require("@dev/testing")
+local toml = require("@dev/toml")
 
 testing.test("parse reads a table, a string and a trailing comment", function()
     local input = table.concat({

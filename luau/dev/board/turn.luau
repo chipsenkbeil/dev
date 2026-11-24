@@ -1,6 +1,6 @@
-local board = require("dev.board")
-local dev_os = require("dev.os")
-local store = require("dev.board.store")
+local board = require("@dev/board")
+local dev_os = require("@dev/os")
+local store = require("@dev/board/store")
 
 local ENTROPY_BYTES = 4
 

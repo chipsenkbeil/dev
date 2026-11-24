@@ -1,5 +1,5 @@
-local dev_command = require("dev.command")
-local pkg = require("dev.pkg")
+local dev_command = require("@dev/command")
+local pkg = require("@dev/pkg")
 
 return dev_command({
     summary = "Run the tools package driver, check or install",

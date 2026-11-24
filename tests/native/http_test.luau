@@ -1,6 +1,6 @@
-local fs = require("dev.fs")
-local http = require("dev.http")
-local dev_os = require("dev.os")
+local fs = require("@dev/fs")
+local http = require("@dev/http")
+local dev_os = require("@dev/os")
 
 local failed = false
 local function check(name, fn)

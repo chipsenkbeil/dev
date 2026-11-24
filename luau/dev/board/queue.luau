@@ -1,7 +1,7 @@
-local board = require("dev.board")
-local fs = require("dev.fs")
-local json = require("dev.json")
-local store = require("dev.board.store")
+local board = require("@dev/board")
+local fs = require("@dev/fs")
+local json = require("@dev/json")
+local store = require("@dev/board/store")
 
 local PRIVATE = { private = true }
 local FILE_NAME_UNSAFE = "[^%w._-]"

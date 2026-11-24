@@ -1,7 +1,7 @@
-local dev_os = require("dev.os")
-local remote = require("dev.remote")
-local runtime = require("dev.runtime")
-local dev_command = require("dev.command")
+local dev_os = require("@dev/os")
+local remote = require("@dev/remote")
+local runtime = require("@dev/runtime")
+local dev_command = require("@dev/command")
 
 local DEFAULT_RUNS = 50
 local BURNERS_PER_CORE = 2

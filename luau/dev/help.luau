@@ -1,16 +1,16 @@
-local dev_command = require("dev.command")
-local dev_os = require("dev.os")
-local follow = require("dev.cmd.follow")
-local markdown = require("dev.ui.markdown")
-local project = require("dev.project")
-local pull = require("dev.cmd.pull")
-local push = require("dev.cmd.push")
-local registry = require("dev.registry")
-local term = require("dev.term")
-local text = require("dev.text")
-local topics = require("dev.topics")
-local types = require("dev.cmd.types")
-local ui = require("dev.ui")
+local dev_command = require("@dev/command")
+local dev_os = require("@dev/os")
+local follow = require("@dev/cmd/follow")
+local markdown = require("@dev/ui/markdown")
+local project = require("@dev/project")
+local pull = require("@dev/cmd/pull")
+local push = require("@dev/cmd/push")
+local registry = require("@dev/registry")
+local term = require("@dev/term")
+local text = require("@dev/text")
+local topics = require("@dev/topics")
+local types = require("@dev/cmd/types")
+local ui = require("@dev/ui")
 
 local Style = ui.Style
 local NAME = "^[A-Za-z0-9_-]+$"
@@ -19,7 +19,7 @@ local HIDDEN = "Hidden"
 local OVERRIDE = "(override)"
 ---The built-in commands whose help lists the commands they run.
 local LISTED = { push = push, pull = pull, follow = follow }
-local SEE_ALSO_FIELD = require("dev.spec").SEE_ALSO_FIELD
+local SEE_ALSO_FIELD = require("@dev/spec").SEE_ALSO_FIELD
 local TOPIC_WIDTH = 100
 local LESS_FILTER = " -+F"
 local FILTER_HINT = "& filters · / searches · q quits"

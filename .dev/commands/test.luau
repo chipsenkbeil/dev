@@ -1,9 +1,9 @@
-local checks = require("devrepo.checks")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local runtime = require("dev.runtime")
-local dev_command = require("dev.command")
-local supervise = require("devrepo.supervise")
+local checks = require("@lib/devrepo/checks")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local runtime = require("@dev/runtime")
+local dev_command = require("@dev/command")
+local supervise = require("@lib/devrepo/supervise")
 
 local SKIPPED = 3
 local SIGINT = 2

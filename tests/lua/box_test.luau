@@ -1,8 +1,8 @@
-local testing = require("dev.testing")
-local box = require("dev.cmd.box")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local support = require("support")
+local testing = require("@dev/testing")
+local box = require("@dev/cmd/box")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local support = require("./support")
 
 local NOW = 1792000000
 

@@ -1,6 +1,6 @@
-local dev_command = require("dev.command")
-local dev_os = require("dev.os")
-local scripts = require("dev.complete.scripts")
+local dev_command = require("@dev/command")
+local dev_os = require("@dev/os")
+local scripts = require("@dev/complete/scripts")
 
 return dev_command({
     summary = "Print the shell completion script for bash, zsh, fish or powershell",

@@ -1,6 +1,6 @@
-local testing = require("dev.testing")
-local board_select = require("dev.board.select")
-local support = require("support")
+local testing = require("@dev/testing")
+local board_select = require("@dev/board/select")
+local support = require("./support")
 
 local LIB = "lua/dev/"
 

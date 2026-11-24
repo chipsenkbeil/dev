@@ -1,7 +1,7 @@
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local standalone = require("dev.standalone")
-local dev_command = require("dev.command")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local standalone = require("@dev/standalone")
+local dev_command = require("@dev/command")
 
 ---@class lintset.Lint
 ---@field root string absolute project root

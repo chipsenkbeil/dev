@@ -1,7 +1,7 @@
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local release = require("dev.release")
-local pins = require("dev.pkg.release")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local release = require("@dev/release")
+local pins = require("@dev/pkg/release")
 
 local stdout = dev_os.stdout
 

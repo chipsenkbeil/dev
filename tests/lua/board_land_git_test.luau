@@ -1,11 +1,11 @@
-local testing = require("dev.testing")
-local dev_os = require("dev.os")
-local runtime = require("dev.runtime")
-local fs = require("dev.fs")
-local check = require("dev.board.check")
-local land = require("dev.board.land")
-local support = require("support")
-local vcs = require("dev.vcs")
+local testing = require("@dev/testing")
+local dev_os = require("@dev/os")
+local runtime = require("@dev/runtime")
+local fs = require("@dev/fs")
+local check = require("@dev/board/check")
+local land = require("@dev/board/land")
+local support = require("./support")
+local vcs = require("@dev/vcs")
 
 local function git(root, ...)
     local argv = {
@@ -191,7 +191,7 @@ testing.test("git template problem reads the template listing", function()
     local root = repo({
         [".dev/config.toml"] = '[sync]\ntemplates = ["tpl"]\nbaked = ".dev/baked.txt"\n',
     })
-    write(root, "tpl/lint.lua", 'local fs = require("dev.fs")\n')
+    write(root, "tpl/lint.lua", 'local fs = require("@dev/fs")\n')
     git(root, "add", "-A")
     git(root, "commit", "-q", "-m", "feat: template")
     local touched = assert(land.touched(root, head(root)))
@@ -203,7 +203,7 @@ testing.test("git template problem skips a synced file that is not Lua", functio
     local root = repo({
         [".dev/config.toml"] = '[sync]\ntemplates = ["tpl"]\nbaked = ".dev/baked.txt"\n',
     })
-    write(root, "tpl/README.md", 'local ui = require("dev.ui")\n')
+    write(root, "tpl/README.md", 'local ui = require("@dev/ui")\n')
     git(root, "add", "-A")
     git(root, "commit", "-q", "-m", "docs: template")
     local touched = assert(land.touched(root, head(root)))

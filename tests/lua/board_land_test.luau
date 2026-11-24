@@ -1,19 +1,19 @@
-local testing = require("dev.testing")
-local board = require("dev.board")
-local check = require("dev.board.check")
-local cmd_board = require("dev.cmd.board")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local json = require("dev.json")
-local land = require("dev.board.land")
-local localboard = require("dev.board.localboard")
-local review = require("dev.board.review")
-local store = require("dev.board.store")
-local support = require("support")
-local turn = require("dev.board.turn")
-local vcs = require("dev.vcs")
-local wiring = require("dev.board.wiring")
-local ws = require("dev.cmd.ws")
+local testing = require("@dev/testing")
+local board = require("@dev/board")
+local check = require("@dev/board/check")
+local cmd_board = require("@dev/cmd/board")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local json = require("@dev/json")
+local land = require("@dev/board/land")
+local localboard = require("@dev/board/localboard")
+local review = require("@dev/board/review")
+local store = require("@dev/board/store")
+local support = require("./support")
+local turn = require("@dev/board/turn")
+local vcs = require("@dev/vcs")
+local wiring = require("@dev/board/wiring")
+local ws = require("@dev/cmd/ws")
 
 local has_jj = dev_os.which("jj") ~= nil
 local IDENT = { JJ_USER = "t", JJ_EMAIL = "t@example.com" }
@@ -2174,7 +2174,7 @@ esac
         return verified_card(project)
     end
 
-    local CALLS_EXISTS = 'local fs = require("dev.fs")\nreturn fs.exists("x")\n'
+    local CALLS_EXISTS = 'local fs = require("@dev/fs")\nreturn fs.exists("x")\n'
 
     local function template_project()
         return jj_project(
@@ -2255,10 +2255,10 @@ esac
 
     testing.test("dev_calls lists the modules and functions a template takes from dev", function()
         local text = table.concat({
-            'local fs = require("dev.fs")',
-            'local dev_os = require("dev.os")',
-            'local standalone = require("dev.standalone")',
-            'local x = require("dev.command").say',
+            'local fs = require("@dev/fs")',
+            'local dev_os = require("@dev/os")',
+            'local standalone = require("@dev/standalone")',
+            'local x = require("@dev/command").say',
             "return fs.exists(a) and dev_os.run(b) and self.fs.read(c) and other.run(d)",
             "",
         }, "\n")
@@ -2275,7 +2275,7 @@ esac
 
     testing.test("dev_calls ignores a call named only in a comment", function()
         local text = table.concat({
-            'local ui = require("dev.ui")',
+            'local ui = require("@dev/ui")',
             "-- see ui.confirm",
             "    --- also ui.ask",
             "",
@@ -2526,14 +2526,14 @@ esac
     end)
 
     local CARRY_SCRIPT = [=[
-local dev_command = require("dev.command")
+local dev_command = require("@dev/command")
 return dev_command({
     summary = "A test command",
     args = { { name = "card", required = true } },
     run = function(_, args, ctx)
         ctx = { root = ctx.root, args = { args.card } }
-local board = require("dev.board")
-local scm = require("dev.scm")
+local board = require("@dev/board")
+local scm = require("@dev/scm")
 
 local found = assert(board.find(scm.workspace(ctx.root)))
 local card = assert(found:find_card(ctx.args[1]))

@@ -1,5 +1,5 @@
-local board = require("dev.board")
-local review = require("dev.board.review")
+local board = require("@dev/board")
+local review = require("@dev/board/review")
 
 ---The rules `dev board lint` holds every card to, with no read of the board of its own.
 ---@class dev.board.lint

@@ -1,10 +1,10 @@
-local testing = require("dev.testing")
-local runtime = require("dev.runtime")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local kinds = require("dev.pkg.kinds")
-local release = require("dev.pkg.release")
-local support = require("support")
+local testing = require("@dev/testing")
+local runtime = require("@dev/runtime")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local kinds = require("@dev/pkg/kinds")
+local release = require("@dev/pkg/release")
+local support = require("./support")
 
 local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local MODULES = REPO .. "/luau"
@@ -14,8 +14,8 @@ local URL_BASE = ""
 local SERVERS = {}
 local ROUTES = {}
 
-local DRIVE = 'local dev_os = require("dev.os")\n'
-    .. 'local driver = require("dev.pkg.release")\n'
+local DRIVE = 'local dev_os = require("@dev/os")\n'
+    .. 'local driver = require("@dev/pkg/release")\n'
     .. "local row = { name = arg[2], binary = arg[3], package = arg[4], channel = 'release', repo = '' }\n"
     .. 'local opts = { dry_run = arg[5] == "1", force = arg[6] == "1", log_file = "", releases = arg[7] }\n'
     .. "dev_os.stdout:flush()\n"
@@ -27,7 +27,7 @@ local function write_executable(path, text)
 end
 
 local function sha256(file)
-    return require("dev.hash").sha256_file(file)
+    return require("@dev/hash").sha256_file(file)
 end
 
 local function sandbox()
@@ -428,8 +428,8 @@ testing.test("release rows route to the user scope and the release driver", func
     testing.ok(kinds.DRIVERS.release, "release must have a driver")
 end)
 
-local MAIN = 'local dev_os = require("dev.os")\n'
-    .. 'local code = require("dev.pkg").main({ table.unpack(arg, 2) })\n'
+local MAIN = 'local dev_os = require("@dev/os")\n'
+    .. 'local code = require("@dev/pkg").main({ table.unpack(arg, 2) })\n'
     .. "dev_os.stdout:flush()\n"
     .. "dev_os.exit(code)\n"
 

@@ -1,4 +1,4 @@
-local dev_os = require("dev.os")
+local dev_os = require("@dev/os")
 
 local unique = tonumber(dev_os.getenv("DEV_TEST_UNIQUE"))
 dev_os.stdout:write("ready\n")

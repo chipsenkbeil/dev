@@ -1,8 +1,8 @@
-local testing = require("dev.testing")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local runtime = require("dev.runtime")
-local support = require("support")
+local testing = require("@dev/testing")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local runtime = require("@dev/runtime")
+local support = require("./support")
 
 local function project(files)
     local root = support.tempdir()
@@ -44,7 +44,7 @@ local function values(out)
     return list
 end
 
-local SPEC = [[return require("dev.command")({
+local SPEC = [[return require("@dev/command")({
     summary = "Wait for a thing",
     flags = {
         { name = "wait", short = "w", kind = "number", default = 30, help = "Seconds to wait" },
@@ -57,7 +57,7 @@ local SPEC = [[return require("dev.command")({
 ]]
 
 local FILE_SPEC = table.concat({
-    'return require("dev.command")({',
+    'return require("@dev/command")({',
     '    summary = "Take a file",',
     '    args = { { name = "path", complete = "file" } },',
     "    run = function() return 0 end,",
@@ -143,7 +143,7 @@ end)
 testing.test("the card cache gives ids and a stale one is not an error", function()
     local root = project({})
     local cache = support.tempdir()
-    local board_card = require("dev.complete.board_card")
+    local board_card = require("@dev/complete/board_card")
     dev_os.setenv("XDG_CACHE_HOME", cache)
     local file = board_card.cache_file(root)
     assert(fs.mkdir(fs.dirname(file), { parents = true }))
@@ -251,7 +251,7 @@ end
 
 local function bash_script(root)
     local path = root .. "/dev-completion.bash"
-    assert(fs.write(path, require("dev.complete.scripts").for_shell("bash")))
+    assert(fs.write(path, require("@dev/complete/scripts").for_shell("bash")))
     return path
 end
 
@@ -285,7 +285,7 @@ testing.test("-C through the leading flags completes with that project's command
 end)
 
 testing.test("a fresh refresh lock keeps a second Tab from starting another refresh", function()
-    local board_card = require("dev.complete.board_card")
+    local board_card = require("@dev/complete/board_card")
     local root = support.tempdir()
     local cache = support.tempdir()
     dev_os.setenv("XDG_CACHE_HOME", cache)

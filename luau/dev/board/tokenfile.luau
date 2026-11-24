@@ -1,8 +1,8 @@
-local board = require("dev.board")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local hash = require("dev.hash")
-local xdg = require("dev.xdg")
+local board = require("@dev/board")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local hash = require("@dev/hash")
+local xdg = require("@dev/xdg")
 
 local TOKENS_DIR = "dev/tokens"
 local SOON_SECONDS = 3600

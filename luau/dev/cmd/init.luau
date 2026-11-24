@@ -1,16 +1,17 @@
-local pomb = require("dev.board.pomb")
-local config = require("dev.config")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local http = require("dev.http")
-local json = require("dev.json")
-local vcs = require("dev.vcs")
-local dev_command = require("dev.command")
-local dev_text = require("dev.text")
-local setup = require("dev.board.setup")
+local pomb = require("@dev/board/pomb")
+local config = require("@dev/config")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local http = require("@dev/http")
+local json = require("@dev/json")
+local vcs = require("@dev/vcs")
+local dev_command = require("@dev/command")
+local dev_text = require("@dev/text")
+local setup = require("@dev/board/setup")
 
 local BOARD_SECONDS = 5
 local BOARD_REFUSED = 401
+local LIB_FOLDER = ".dev/lib"
 
 ---@class dev.cmd.init
 local M = {}
@@ -87,6 +88,52 @@ local function init_vcs(run)
             run.hint = "git remote add"
             skipped(run, ".jj (jj not installed, git only)")
         end
+    end
+end
+
+---Add the alias `lib` for `.dev/lib` to a project's `.luaurc`, keeping every key already there.
+---
+---An existing file is read as plain JSON and written back as compact JSON. A file that holds
+---comments or another alias `lib` is left as it is.
+---@param root string the project root
+---@param dry boolean whether nothing may be written
+---@return "created"|"skipped"|"left" outcome what happened
+---@return string? message the reason a file was left, or the failure of the write
+function M.write_luaurc(root, dry)
+    local path = root .. "/.luaurc"
+    local doc = {}
+    if fs.exists(path) then
+        local decoded = json.decode(fs.read(path) or "")
+        if type(decoded) ~= "table" or type(decoded.aliases or {}) ~= "table" then
+            return "left", ".luaurc is not plain JSON with an aliases object"
+        end
+        doc = decoded
+        if doc.aliases and doc.aliases.lib ~= nil then
+            return "skipped"
+        end
+    end
+    doc.aliases = doc.aliases or {}
+    doc.aliases.lib = LIB_FOLDER
+    if not dry then
+        local ok, message = fs.write(path, assert(json.encode(doc)) .. "\n")
+        if not ok then
+            return "left", tostring(message)
+        end
+    end
+    return "created"
+end
+
+local function init_luaurc(run)
+    local outcome, message = M.write_luaurc(run.root, run.dry)
+    if outcome == "created" then
+        created(run, ".luaurc (aliases lib = " .. LIB_FOLDER .. ")")
+    elseif outcome == "skipped" then
+        skipped(run, ".luaurc aliases lib exists")
+    else
+        leave(
+            run,
+            "add the alias lib = " .. LIB_FOLDER .. " to .luaurc, since " .. tostring(message)
+        )
     end
 end
 
@@ -236,6 +283,7 @@ function M.run(opts, ctx)
     }
     dev_command.say("init " .. run.name .. ": dry run " .. (run.dry and "1" or "0"))
     init_vcs(run)
+    init_luaurc(run)
     init_board_section(run)
     init_remotes(run)
     init_board_hint(run)

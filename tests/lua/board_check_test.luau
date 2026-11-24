@@ -1,12 +1,12 @@
-local testing = require("dev.testing")
-local board = require("dev.board")
-local check = require("dev.board.check")
-local cmd_board = require("dev.cmd.board")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local json = require("dev.json")
-local land = require("dev.board.land")
-local support = require("support")
+local testing = require("@dev/testing")
+local board = require("@dev/board")
+local check = require("@dev/board/check")
+local cmd_board = require("@dev/cmd/board")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local json = require("@dev/json")
+local land = require("@dev/board/land")
+local support = require("./support")
 
 local has_jj = dev_os.which("jj") ~= nil
 local IDENT = { JJ_USER = "t", JJ_EMAIL = "t@example.com" }

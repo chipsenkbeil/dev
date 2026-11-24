@@ -1,10 +1,10 @@
-local board = require("dev.board")
-local config = require("dev.config")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local toml = require("dev.toml")
-local vcs = require("dev.vcs")
-local dev_command = require("dev.command")
+local board = require("@dev/board")
+local config = require("@dev/config")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local toml = require("@dev/toml")
+local vcs = require("@dev/vcs")
+local dev_command = require("@dev/command")
 
 ---The settings and checks `dev board init` and the first board of a project share.
 ---@class dev.board.setup

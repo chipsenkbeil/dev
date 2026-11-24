@@ -1,6 +1,6 @@
-local testing = require("dev.testing")
-local fs = require("dev.fs")
-local support = require("support")
+local testing = require("@dev/testing")
+local fs = require("@dev/fs")
+local support = require("./support")
 
 testing.test("deploy is an unknown command without a script", function()
     local root = support.sandbox({}, {})

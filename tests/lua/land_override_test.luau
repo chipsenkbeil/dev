@@ -1,8 +1,8 @@
-local testing = require("dev.testing")
-local registry = require("dev.registry")
-local support = require("support")
+local testing = require("@dev/testing")
+local registry = require("@dev/registry")
+local support = require("./support")
 
-local SCRIPT = 'local dev_command = require("dev.command")\n'
+local SCRIPT = 'local dev_command = require("@dev/command")\n'
     .. "return dev_command({\n"
     .. '    summary = "Land the project\'s own way.",\n'
     .. '    run = function() print("project land ran") end,\n'

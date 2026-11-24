@@ -1,7 +1,7 @@
-local checks = require("devrepo.checks")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local dev_command = require("dev.command")
+local checks = require("@lib/devrepo/checks")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local dev_command = require("@dev/command")
 
 return dev_command({
     summary = "Format the Rust and Luau code",

@@ -313,7 +313,7 @@ exit code.` and exit 1. A Lua error is printed as `<message>` with exit 1.
 ### Reusing the default runner
 
 A runner can reuse the default one with
-`require("dev.remote").ci_runner(run, opts)`. `opts.verbosity` is the `-v`
+`require("@dev/remote").ci_runner(run, opts)`. `opts.verbosity` is the `-v`
 level. `opts.pipeline` names a pipeline under `.ci/`, so the job runs from
 `.ci/<pipeline>.lua` instead of the default pipeline.
 

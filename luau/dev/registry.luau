@@ -1,9 +1,9 @@
-local command = require("dev.command")
-local fs = require("dev.fs")
-local header = require("dev.header")
-local runtime = require("dev.runtime")
-local dev_os = require("dev.os")
-local xdg = require("dev.xdg")
+local command = require("@dev/command")
+local fs = require("@dev/fs")
+local header = require("@dev/header")
+local runtime = require("@dev/runtime")
+local dev_os = require("@dev/os")
+local xdg = require("@dev/xdg")
 
 local WORD = "^[A-Za-z0-9_-]+$"
 local stderr = dev_os.stderr
@@ -562,10 +562,6 @@ end
 ---   error by default
 ---@return dev.Registry registry the registry of the project
 function M.load(root, opts)
-    if dev_os.getuid() ~= 0 then
-        runtime.add_path(fs.dirname(M.global_dir()) .. "/lib")
-        runtime.add_path(fs.join(root, ".dev", "lib"))
-    end
     return setmetatable({
         root = root,
         global = M.global_dir(),

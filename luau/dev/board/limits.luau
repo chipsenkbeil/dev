@@ -1,4 +1,4 @@
-local board = require("dev.board")
+local board = require("@dev/board")
 
 ---The in-flight limits Pomb holds, and the refusal an agent gets at one.
 ---@class dev.board.limits

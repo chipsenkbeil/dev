@@ -1,6 +1,6 @@
-local testing = require("dev.testing")
-local markdown = require("dev.ui.markdown")
-local text = require("dev.text")
+local testing = require("@dev/testing")
+local markdown = require("@dev/ui/markdown")
+local text = require("@dev/text")
 
 local DOC = table.concat({
     "# demo: a topic",

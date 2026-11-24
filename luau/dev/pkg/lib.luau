@@ -1,7 +1,7 @@
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local kinds = require("dev.pkg.kinds")
-local note = require("dev.command").note
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local kinds = require("@dev/pkg/kinds")
+local note = require("@dev/command").note
 
 local stdout = dev_os.stdout
 local Channel, NO_PROBE_BINARY = kinds.Channel, kinds.NO_PROBE_BINARY

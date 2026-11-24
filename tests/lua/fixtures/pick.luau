@@ -1,10 +1,7 @@
-local dev_os = require("dev.os")
-local runtime = require("dev.runtime")
+local dev_os = require("@dev/os")
 
-runtime.dofile(arg[0]:match("^(.*)/fixtures/[^/]*$") .. "/boot.luau")
-
-local picker = require("dev.ui.picker")
-local ui = require("dev.ui")
+local picker = require("@dev/ui/picker")
+local ui = require("@dev/ui")
 
 local items = {}
 for line in (dev_os.stdin:read("*a") or ""):gmatch("[^\n]+") do

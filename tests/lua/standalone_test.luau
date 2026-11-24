@@ -1,7 +1,7 @@
-local testing = require("dev.testing")
-local fs = require("dev.fs")
-local standalone = require("dev.standalone")
-local support = require("support")
+local testing = require("@dev/testing")
+local fs = require("@dev/fs")
+local standalone = require("@dev/standalone")
+local support = require("./support")
 
 local function project(files)
     local root = support.tempdir()

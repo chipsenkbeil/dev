@@ -1,9 +1,9 @@
-local testing = require("dev.testing")
-local box = require("dev.cmd.box")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local json = require("dev.json")
-local support = require("support")
+local testing = require("@dev/testing")
+local box = require("@dev/cmd/box")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local json = require("@dev/json")
+local support = require("./support")
 
 local ENV = { env = { USER = "tester", NO_COLOR = "" } }
 

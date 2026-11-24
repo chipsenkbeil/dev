@@ -1,5 +1,5 @@
-local text = require("dev.text")
-local ui = require("dev.ui")
+local text = require("@dev/text")
+local ui = require("@dev/ui")
 
 local Style = ui.Style
 local INDENT = "  "

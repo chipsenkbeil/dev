@@ -1,4 +1,4 @@
-local board = require("dev.board")
+local board = require("@dev/board")
 
 ---@class dev.complete.board_column
 local M = {}

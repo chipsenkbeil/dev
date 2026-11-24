@@ -1,9 +1,9 @@
-local fs = require("dev.fs")
-local registry = require("dev.registry")
-local spec_check = require("dev.spec")
+local fs = require("@dev/fs")
+local registry = require("@dev/registry")
+local spec_check = require("@dev/spec")
 local SEE_ALSO_FIELD = spec_check.SEE_ALSO_FIELD
-local runtime = require("dev.runtime")
-local text_width = require("dev.text").width
+local runtime = require("@dev/runtime")
+local text_width = require("@dev/text").width
 
 local MAX_WIDTH = 80
 local CODEPOINT = "[%z\1-\127\194-\244][\128-\191]*"

@@ -1,8 +1,8 @@
-local testing = require("dev.testing")
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local registry = require("dev.registry")
-local support = require("support")
+local testing = require("@dev/testing")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local registry = require("@dev/registry")
+local support = require("./support")
 
 local REPO = arg[0]:match("^(.*)/tests/lua/") or "."
 
@@ -44,8 +44,8 @@ end
 
 testing.test("--local exports DEV_LOCAL to a command and no flag leaves it unset", function()
     local root = project({
-        ["probe.luau"] = 'local dev_command = require("dev.command")\n'
-            .. 'local dev_os = require("dev.os")\n'
+        ["probe.luau"] = 'local dev_command = require("@dev/command")\n'
+            .. 'local dev_os = require("@dev/os")\n'
             .. 'return dev_command({ summary = "Probe", run = function()\n'
             .. '    print("DEV_LOCAL=" .. tostring(dev_os.getenv("DEV_LOCAL")))\n'
             .. "end })\n",

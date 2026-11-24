@@ -1,19 +1,19 @@
-local testing = require("dev.testing")
-local board = require("dev.board")
-local cmd_board = require("dev.cmd.board")
-local localboard = require("dev.board.localboard")
-local pomb = require("dev.board.pomb")
-local dev_os = require("dev.os")
-local runtime = require("dev.runtime")
-local fs = require("dev.fs")
-local json = require("dev.json")
-local scm = require("dev.scm")
-local support = require("support")
+local testing = require("@dev/testing")
+local board = require("@dev/board")
+local cmd_board = require("@dev/cmd/board")
+local localboard = require("@dev/board/localboard")
+local pomb = require("@dev/board/pomb")
+local dev_os = require("@dev/os")
+local runtime = require("@dev/runtime")
+local fs = require("@dev/fs")
+local json = require("@dev/json")
+local scm = require("@dev/scm")
+local support = require("./support")
 
 local BOARD = "mine"
 
 local function command(body)
-    return 'local dev_command = require("dev.command")\n'
+    return 'local dev_command = require("@dev/command")\n'
         .. "return dev_command({\n"
         .. '    summary = "A test command",\n'
         .. '    args = { { name = "card", required = true }, { name = "mode" } },\n'
@@ -27,8 +27,8 @@ end
 
 local LAND_SCRIPT = command([=[
 local ctx = ...
-local board = require("dev.board")
-local scm = require("dev.scm")
+local board = require("@dev/board")
+local scm = require("@dev/scm")
 
 local workspace = scm.workspace(ctx.root)
 local found = assert(board.find(workspace))
@@ -42,10 +42,10 @@ print("landed " .. found:release_column() .. " " .. found:done_column())
 
 local PROVE_SCRIPT = command([=[
 local ctx = ...
-local board = require("dev.board")
-local check = require("dev.board.check")
-local review = require("dev.board.review")
-local scm = require("dev.scm")
+local board = require("@dev/board")
+local check = require("@dev/board/check")
+local review = require("@dev/board/review")
+local scm = require("@dev/scm")
 
 local workspace = scm.workspace(ctx.root)
 local found = assert(board.find(workspace))
@@ -63,8 +63,8 @@ end
 
 local MOVE_SCRIPT = command([=[
 local ctx = ...
-local board = require("dev.board")
-local scm = require("dev.scm")
+local board = require("@dev/board")
+local scm = require("@dev/scm")
 
 local found = assert(board.find(scm.workspace(ctx.root)))
 local card = assert(found:find_card(ctx.args[1]))
@@ -78,8 +78,8 @@ print((ok and "moved" or "refused") .. ": " .. tostring(message))
 
 local PROOF_SCRIPT = command([=[
 local ctx = ...
-local board = require("dev.board")
-local scm = require("dev.scm")
+local board = require("@dev/board")
+local scm = require("@dev/scm")
 
 local found = assert(board.find(scm.workspace(ctx.root)))
 local card = assert(found:find_card(ctx.args[1]))

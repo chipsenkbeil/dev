@@ -1,8 +1,8 @@
-local dev_os = require("dev.os")
-local fs = require("dev.fs")
-local text = require("dev.text")
-local vcs = require("dev.vcs")
-local dev_command = require("dev.command")
+local dev_os = require("@dev/os")
+local fs = require("@dev/fs")
+local text = require("@dev/text")
+local vcs = require("@dev/vcs")
+local dev_command = require("@dev/command")
 
 local SHORT_CHARS = 12
 local MAIN_WORKSPACE = "default"

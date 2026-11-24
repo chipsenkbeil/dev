@@ -1,4 +1,4 @@
-local dev_command = require("dev.command")
+local dev_command = require("@dev/command")
 
 return dev_command({
     group = "Share it",
@@ -16,6 +16,6 @@ return dev_command({
         { name = "text", help = "The note text", list = true, rest = true },
     },
     run = function(_opts, _args, ctx)
-        return require("dev.cmd.board").invoke("note", ctx)
+        return require("@dev/cmd/board").invoke("note", ctx)
     end,
 })

@@ -1,9 +1,9 @@
-local testing = require("dev.testing")
-local dev_os = require("dev.os")
-local forge = require("dev.forge")
-local fs = require("dev.fs")
-local support = require("support")
-local vcs = require("dev.vcs")
+local testing = require("@dev/testing")
+local dev_os = require("@dev/os")
+local forge = require("@dev/forge")
+local fs = require("@dev/fs")
+local support = require("./support")
+local vcs = require("@dev/vcs")
 
 local has_jj = dev_os.which("jj") ~= nil
 
