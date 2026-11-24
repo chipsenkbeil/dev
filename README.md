@@ -15,6 +15,8 @@ binary per target, named `dev-TAG-TRIPLE`, and a `SHA256SUMS` file:
 
 - `dev-TAG-x86_64-unknown-linux-musl`
 - `dev-TAG-aarch64-apple-darwin`
+- `dev-TAG-x86_64-apple-darwin`
+- `dev-TAG-x86_64-unknown-freebsd`
 - `SHA256SUMS`
 
 Download the binary for your machine and `SHA256SUMS` with the `gh` client.
