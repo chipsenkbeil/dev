@@ -2192,8 +2192,12 @@ local function move_across(backend, flags, words)
     end
     local held = claims.read(card.id)
     local name, column = flags["--to-board"], table.concat(words, " ", 2)
-    local ok, message, reason, detail =
-        backend:move_to_board(card.id, name, column, { fence = held and held.fence })
+    local ok, message, reason, detail = backend:move_to_board(
+        card.id,
+        name,
+        column,
+        { fence = held and held.fence, closed = card.done }
+    )
     if not ok then
         return failure(reason and board.cross_move_refusal(reason, detail, name, column) or message)
     end

@@ -4180,8 +4180,10 @@ same key.
   It refuses with exit 1 and no write when NAME has a colour or label the
   card's board lacks or the other way round, naming each one, when NAME lacks a
   field key of the card's board, naming each key, when NAME has no such column,
-  and when the column is a Done column, since the move would skip the outcome
-  check.
+  and when the column is a Done column and the card is not already in its own
+  board's Done column, since the move would skip the outcome check. A card that
+  is already Done moves to a Done column of NAME and stays closed, with its
+  outcomes and comments intact.
 - A local board refuses the flag with a message that names Pomb.
 
 A full column:

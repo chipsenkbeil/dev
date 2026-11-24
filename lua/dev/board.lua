@@ -318,6 +318,8 @@ end
 ---@field position integer? the zero-based place in the column and lane, the top when nil
 ---@field lane string? the name of the lane to move the card to, its own lane when nil
 ---@field force boolean? whether Pomb skips the column and group limits, true for a trunk-blocker
+---@field closed boolean? whether the card already sits in its own board's Done column, which lets a
+---   move to another board end in that board's Done column
 
 ---@class dev.board.Dwell
 ---@field id string the card's full id
@@ -528,7 +530,8 @@ function M.cross_move_refusal(reason, detail, name, column)
             .. column
             .. " of board "
             .. name
-            .. " is a Done column. Move the card to another column and close it there."
+            .. " is a Done column, and only a card already in Done moves into it."
+            .. " Move the card to another column and close it there."
     end
     return "Board " .. name .. " has no " .. column .. " column."
 end

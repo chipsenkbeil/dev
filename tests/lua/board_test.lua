@@ -8101,7 +8101,7 @@ testing.test(
 
 local function across_sandbox(opts)
     opts = opts or {}
-    local root, home = sandbox()
+    local root, home = sandbox({ export = opts.export })
     local general = DETAIL
         :gsub('"id":"board%-1","name":"dotfiles"', '"id":"board-2","name":"General"')
         :gsub('"id":"col%-', '"id":"g-col-')
@@ -8164,6 +8164,28 @@ testing.test("move to board refuses a missing column and a Done column", functio
     testing.eq(code, 1, out)
     testing.eq(out, "Board General has no Nowhere column.\n")
     out, code = move_across(root, home, "Done")
+    testing.eq(code, 1, out)
+    testing.ok(out:find("is a Done column", 1, true), out)
+    testing.eq(read(root, "calls"):find("/move", 1, true), nil)
+end)
+
+testing.test("move to board moves a Done card to the Done column of the other board", function()
+    local root, home = across_sandbox({
+        export = export_with_first_card({ column_id = support.column_id(support.Column.DONE) }),
+    })
+    local out, code = move_across(root, home, "Done")
+    testing.eq(code, 0, out)
+    testing.eq(out, "moved 11111111 to Done on board General\n")
+    local calls = read(root, "calls")
+    testing.ok(calls:find("/api/tasks/" .. ID_A .. "/move", 1, true), calls)
+    testing.ok(calls:find('"column_id":"g-col-done"', 1, true), calls)
+end)
+
+testing.test("move to board refuses an open card a move into the Done column", function()
+    local root, home = across_sandbox({
+        export = export_with_first_card({ column_id = PROGRESS_COLUMN }),
+    })
+    local out, code = move_across(root, home, "Done")
     testing.eq(code, 1, out)
     testing.ok(out:find("is a Done column", 1, true), out)
     testing.eq(read(root, "calls"):find("/move", 1, true), nil)

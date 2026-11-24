@@ -1910,7 +1910,7 @@ function Backend:move_to_board(id, name, column, opts)
     if not column_id then
         return nil, nil, board.CrossMoveReason.NO_COLUMN
     end
-    if target:__column_done(column_id) then
+    if target:__column_done(column_id) and not (opts and opts.closed) then
         return nil, nil, board.CrossMoveReason.DONE
     end
     local moved
