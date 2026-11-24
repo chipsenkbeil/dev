@@ -104,7 +104,6 @@ jobs:
   build-windows:
     name: build x86_64-pc-windows-msvc
     runs-on: windows-2025
-    continue-on-error: true
     defaults:
       run:
         shell: bash
@@ -127,7 +126,7 @@ jobs:
   publish:
     name: publish
     needs: [build, build-macos, build-freebsd, build-windows]
-    if: ${{ startsWith(github.ref, 'refs/tags/v') && !cancelled() && needs.build.result == 'success' && needs.build-macos.result == 'success' && needs.build-freebsd.result == 'success' }}
+    if: ${{ startsWith(github.ref, 'refs/tags/v') && !cancelled() && needs.build.result == 'success' && needs.build-macos.result == 'success' && needs.build-freebsd.result == 'success' && needs.build-windows.result == 'success' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
