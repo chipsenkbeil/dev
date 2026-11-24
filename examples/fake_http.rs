@@ -7,7 +7,7 @@
 //! 1. method, or `*` for any
 //! 2. a pattern for the path without its query, or for the whole target when it holds a `?`;
 //!    `*` stands for any run of bytes and `#` for one lowercase hex digit or dash
-//! 3. status, 0 to close the connection without an answer, or -1 to answer nothing and stop
+//! 3. status, 0 to close the connection without an answer, or -1 to reset the connection and stop
 //!    listening, so every later connect is refused
 //! 4. headers as `Name: value` joined by `|`, or `-`
 //! 5. body file, relative to ROUTES, or `-` for an empty body
@@ -24,6 +24,7 @@ use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::thread;
+use std::time::Duration;
 
 /// One request as the server read it.
 struct Request {
@@ -220,6 +221,7 @@ fn serve(mut stream: TcpStream, routes: &Path, log: Option<&Path>) {
         body: b"no route".to_vec(),
     });
     if answer.status < 0 {
+        let _ = rustix::net::sockopt::set_socket_linger(&stream, Some(Duration::ZERO));
         drop(stream);
         std::process::exit(0);
     }

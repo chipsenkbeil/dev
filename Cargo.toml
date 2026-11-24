@@ -9,7 +9,7 @@ crossterm = "0.29"
 fs4 = "0.13"
 include_dir = "0.7"
 mlua = { version = "0.12", features = ["luau"] }
-rustix = { version = "1", features = ["fs", "process", "stdio", "termios"] }
+rustix = { version = "1", features = ["fs", "net", "process", "stdio", "termios"] }
 rustls-platform-verifier = "0.7"
 serde_json = "1"
 sha2 = "0.10"

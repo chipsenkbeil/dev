@@ -8459,6 +8459,25 @@ testing.test("rename is queued while Pomb is unreachable", function()
     testing.ok(queued:find('"rename"', 1, true) and queued:find('"Better"', 1, true), queued)
 end)
 
+testing.test("a request the fake resets and stops on reads as a refused connect", function()
+    for _ = 1, 20 do
+        local root, home = sandbox({ export = SUBTASKS_EXPORT })
+        override(root, {
+            steps = {
+                {
+                    advance = function(route)
+                        return route.path:find("/colors", 1, true) ~= nil
+                    end,
+                },
+                { prepend = { { path = "*/api/tasks/*", status = -1 } } },
+            },
+        })
+        local out, code = dev(root, home, { "board", "show", "11111111" })
+        testing.eq(code, 1, out)
+        testing.ok(out:find("(curl exit 7)", 1, true), out)
+    end
+end)
+
 testing.test("discard queues each step it could not take, in order, once", function()
     local root, home = sandbox({ export = SUBTASKS_EXPORT })
     override(root, {
@@ -8472,7 +8491,7 @@ testing.test("discard queues each step it could not take, in order, once", funct
         },
     })
     local out, code = dev(root, home, { "board", "discard", "11111111", "--reason", "Dropped" })
-    testing.eq(code, 0)
+    testing.eq(code, 0, out)
     testing.eq(out, "queued: Pomb unreachable, will sync\n")
     local queued = assert(fs.read(queue_file(home)))
     local note = assert(queued:find('"note"', 1, true), queued)
