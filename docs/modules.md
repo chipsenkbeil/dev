@@ -68,6 +68,18 @@ A table of the parsed global flags: `args`, `after`, `dashed`, `remote`,
 - `spawn(argv, opts)` starts a child without waiting and returns a process
   with `pid`, `wait(secs?)` and `kill(sig)`. `opts.detach` starts a new
   session that outlives dev.
+- A SIGINT, SIGTERM or SIGHUP to dev reaches these children:
+  - A `run`, `capture` or `capture_input` child shares dev's process group. It
+    gets SIGTERM always. It gets SIGINT or SIGHUP when another process sends
+    it to dev's pid alone, such as `kill -INT PID`. A terminal's Ctrl-C or
+    hangup already reaches it through the group, so dev adds no second copy.
+    A signal that another process sends to dev's whole group reaches it twice.
+  - A `capture_timed` child leads its own group, and dev signals that whole
+    group with the same signal.
+  - A `spawn` child is not a foreground child. It is stopped with SIGTERM when
+    dev exits, except with `opts.detach`, which outlives dev.
+  - SIGKILL to dev runs no cleanup and reaches no child. A caller kills dev's
+    process group instead.
 - `stdout` and `stderr` with `write` and `flush`, and `stdin` with `read`.
 - `exit(code?)`, `on_exit(fn)`, `run_cleanups()`, `interrupt_code()`,
   `SIGNAL_EXIT_BASE` (128) and `EXEC_FAILED` (126).

@@ -132,7 +132,9 @@ Register `dev.os.on_exit(fn)` where a bash command would write `trap fn EXIT`.
 Each cleanup runs once, newest first, on a return, on an error and when
 `SIGTERM`, `SIGHUP` or `SIGINT` ends the command, which then exits with 143,
 129 or 130. dev passes the signal on to the child process it waits for, and
-the command stops once that child returns. `SIGKILL` runs no cleanup. A
+the command stops once that child returns. A `SIGINT` that another process sends
+to dev's pid alone reaches that child too. The `dev.os` notes in the modules
+reference say which children a signal reaches. `SIGKILL` runs no cleanup. A
 `SIGINT` or `SIGHUP` that was ignored at start, as `nohup` leaves it, stays
 ignored where dev can read that (Linux), and `SIGTERM` is always handled.
 

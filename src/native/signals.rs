@@ -3,7 +3,9 @@ use std::{fs, thread};
 
 use rustix::process::{self, Pid, Signal};
 use signal_hook::flag;
-use signal_hook::iterator::Signals;
+use signal_hook::iterator::SignalsInfo;
+use signal_hook::iterator::exfiltrator::WithOrigin;
+use signal_hook::low_level::siginfo::Origin;
 
 use crate::runtime;
 
@@ -60,7 +62,8 @@ impl Foreground {
     /// Makes `pid` the child that SIGINT, SIGTERM and SIGHUP are forwarded to.
     ///
     /// A child that leads its own group gets the signal for the whole group. A child in dev's own
-    /// group already receives a terminal's interrupt, so it only gets SIGTERM.
+    /// group already receives a terminal's interrupt, so it gets SIGTERM, and a SIGINT or SIGHUP
+    /// that another process sent to dev alone.
     #[must_use]
     pub fn enter(pid: i32, own_group: bool) -> Self {
         Self {
@@ -84,30 +87,63 @@ const WATCHED: [i32; 3] = [INT, TERM, HUP];
 ///
 /// The handler registered with `flag::register_usize` already recorded the signal for Luau, so
 /// recording it again here would interrupt a cleanup that runs after the first interrupt.
-fn on_signal(signal: i32) {
+fn on_signal(origin: &Origin) {
     let pid = FOREGROUND_PID.load(Ordering::SeqCst);
     if pid > 0 {
-        forward(pid, FOREGROUND_OWN_GROUP.load(Ordering::SeqCst), signal);
+        let own_group = FOREGROUND_OWN_GROUP.load(Ordering::SeqCst);
+        forward(pid, own_group, origin.signal, sender_of(origin));
     }
 }
 
-/// Passes `signal` on to child `pid`, to its whole group when it leads one.
+/// Who delivered a signal to dev.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Sender {
+    /// The terminal or the kernel, which signal dev's whole foreground group.
+    Terminal,
+    /// Another process, or a sender that is not known.
+    Process,
+}
+
+/// Tells whether another process sent the signal, as opposed to the terminal or the kernel.
 ///
-/// A child in dev's own group already receives a terminal's interrupt, so it only gets TERM.
-fn forward(pid: i32, own_group: bool, signal: i32) {
+/// A terminal delivers its Ctrl-C and its hangup to the whole foreground group, with no sender
+/// process behind them (`SI_KERNEL` or a zero pid), so a child in dev's group already has them.
+#[must_use]
+fn sender_of(origin: &Origin) -> Sender {
+    if origin.process.is_some_and(|sender| sender.pid > 0) {
+        Sender::Process
+    } else {
+        Sender::Terminal
+    }
+}
+
+/// Returns whether a signal is passed on to a child in dev's own group.
+///
+/// TERM always is. INT and HUP are only when another process sent them, since the child
+/// already got the terminal's.
+#[must_use]
+const fn reaches_group_child(signal: i32, sender: Sender) -> bool {
+    signal == TERM || matches!(sender, Sender::Process)
+}
+
+/// Passes `signal` on to child `pid`, to its whole group when it leads one.
+fn forward(pid: i32, own_group: bool, signal: i32, sender: Sender) {
     if own_group {
         let _ = send(-pid, signal);
-    } else if signal == TERM {
+    } else if reaches_group_child(signal, sender) {
         let _ = send(pid, signal);
     }
 }
 
 /// Passes the interrupt that is pending on to child `pid`.
+///
+/// The sender of a pending interrupt is unknown, so a child in dev's group gets only TERM.
 pub fn forward_pending(pid: i32, own_group: bool) {
     forward(
         pid,
         own_group,
         runtime::interrupt_code() - runtime::SIGNAL_EXIT_BASE,
+        Sender::Terminal,
     );
 }
 
@@ -156,12 +192,26 @@ pub fn install() {
         let slot = runtime::interrupt_slot();
         let _ = flag::register_usize(signal, slot, usize::try_from(signal).unwrap_or(1));
     }
-    let Ok(mut signals) = Signals::new(handled) else {
+    let Ok(mut signals) = SignalsInfo::<WithOrigin>::new(handled) else {
         return;
     };
     thread::spawn(move || {
-        for signal in signals.forever() {
-            on_signal(signal);
+        for origin in signals.forever() {
+            on_signal(&origin);
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reaches_group_child_should_pass_term_always_and_int_and_hup_only_when_alone() {
+        assert!(reaches_group_child(TERM, Sender::Terminal));
+        assert!(reaches_group_child(INT, Sender::Process));
+        assert!(reaches_group_child(HUP, Sender::Process));
+        assert!(!reaches_group_child(INT, Sender::Terminal));
+        assert!(!reaches_group_child(HUP, Sender::Terminal));
+    }
 }

@@ -5,6 +5,8 @@ load pty
 CONFIRM="${BATS_TEST_DIRNAME}/../lua/fixtures/confirm.luau"
 SPIN="${BATS_TEST_DIRNAME}/../lua/fixtures/spin.luau"
 SPIN_CAPTURE="${BATS_TEST_DIRNAME}/../lua/fixtures/spin_capture.luau"
+RUN_CHILD="${BATS_TEST_DIRNAME}/../lua/fixtures/run_child.luau"
+COUNT_INT='trap "echo i >>\"\$1\"" INT; echo Working; touch "$2"; n=0; while [ $n -lt 30 ]; do sleep 0.1; n=$((n+1)); done'
 
 setup() {
     require_pty
@@ -232,5 +234,42 @@ STUB
     out="$(tr '\r' '\n' <"$OUT.pty" | sd '\x1b\[[0-9;?]*[A-Za-z]' '' | grep -v '^$')"
     [[ "$out" == *"Deleting ci-abc"* ]] || false
     [ "$(tail -n 1 <<<"$out")" = "Deleted ci-abc · no archive" ]
+}
+
+@test "a SIGINT sent to dev's pid alone stops a child in dev's group" {
+    local ready="$BATS_TEST_TMPDIR/ready" started=$SECONDS devpid
+    set -m
+    dev -l "$RUN_CHILD" sh -c 'touch "$1"; exec sleep 8.654' sh "$ready" >/dev/null 2>&1 &
+    devpid=$!
+    set +m
+    pty_wait_for "$ready"
+    kill -INT "$devpid"
+    local status=0
+    wait "$devpid" || status=$?
+    [ "$status" -eq 130 ]
+    [ $((SECONDS - started)) -lt 6 ]
+    process_gone 'sleep 8.654'
+}
+
+@test "a SIGINT sent to dev's pid alone reaches a child in dev's group once" {
+    local ready="$BATS_TEST_TMPDIR/ready" log="$BATS_TEST_TMPDIR/ints" devpid
+    set -m
+    dev -l "$RUN_CHILD" sh -c "$COUNT_INT" sh "$log" "$ready" >/dev/null 2>&1 &
+    devpid=$!
+    set +m
+    pty_wait_for "$ready"
+    kill -INT "$devpid"
+    local status=0
+    wait "$devpid" || status=$?
+    [ "$status" -eq 130 ]
+    [ "$(grep -c i "$log")" -eq 1 ]
+}
+
+@test "a ctrl-c from the terminal reaches a child in dev's group once" {
+    local log="$BATS_TEST_TMPDIR/ints"
+    READY="$BATS_TEST_TMPDIR/ready"
+    in_pty '\003' 0 "$RUN_CHILD" sh -c "$COUNT_INT" sh "$log" "$READY"
+    status_is_130
+    [ "$(grep -c i "$log")" -eq 1 ]
 }
 
