@@ -4,6 +4,8 @@ local dev_os = require("dev.os")
 local fs = require("dev.fs")
 local json = require("dev.json")
 local dev_command = require("dev.command")
+local pipelines = require("dev.pipelines")
+local project = require("dev.project")
 
 local stderr = dev_os.stderr
 
@@ -204,6 +206,18 @@ end
 ---@field verbosity integer 1 or more prints the ci command first
 ---@field pipeline? string a pipeline under `.ci/` to run the job from, else the default one
 
+---Read the target ci starts a job on when the pipeline names none.
+---
+---A `CI_DEFAULT_TARGET` already in the environment wins, so a caller's own choice stands.
+---@param root string the project root
+---@return string? target the user config's target, nil to keep the ci default
+local function default_target(root)
+    if (dev_os.getenv("CI_DEFAULT_TARGET") or "") ~= "" then
+        return nil
+    end
+    return pipelines.target(project.detect_type(root) == project.Kind.RUST)
+end
+
 ---Run a job on ci and return its exit code.
 ---@param run dev.remote.Run
 ---@param opts dev.remote.ci_runner.Opts
@@ -256,6 +270,11 @@ function M.ci_runner(run, opts)
         DEV_CI_CARD = dev_os.getenv(M.CARD_ENV),
     }, { tty = dev_os.isatty(0) })
     local env = name and { DEV_AGENT = name } or nil
+    local target = default_target(run.root)
+    if target then
+        env = env or {}
+        env.CI_DEFAULT_TARGET = target
+    end
     local code = dev_os.run(argv, { env = env })
     if code == nil then
         dev_command.die("The command `ci` could not run.")

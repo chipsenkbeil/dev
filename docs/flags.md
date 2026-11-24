@@ -18,7 +18,8 @@ also count after it.
 - `--remote`: run the command on a remote runner. By default that is the job
   named like the command in the project's default pipeline (`.ci/jobs.lua`),
   run on example-box through ci. `DEV_REMOTE=1` in the environment is the
-  same.
+  same. A job that names no target starts on `ci.rust_target` (a Rust project)
+  or `ci.target` from the user config, else on the ci default.
 - `--local`: run the command here, whatever the `[remote] default` setting
   says. With `--remote` it is a usage error. Under `DEV_AGENT` a run of a
   command with a ci job that stays here is refused (see the `remote` topic).

@@ -32,6 +32,12 @@ with every argument after the `--`.
 
 The runner inherits the terminal, and its exit code is dev's.
 
+The ci run starts on the ci target the user config names when the job names
+none: `ci.rust_target` for a project with a `Cargo.toml` and `ci.target` for
+any other. dev passes it as `CI_DEFAULT_TARGET`. With neither key set, or with
+`CI_DEFAULT_TARGET` already in the environment, dev adds nothing and ci uses
+its own default. A job that names its own target keeps it.
+
 These runs show the shapes:
 
 ```

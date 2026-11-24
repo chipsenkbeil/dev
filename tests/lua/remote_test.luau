@@ -44,6 +44,7 @@ run*)
     printf ' [%s]' "$@" >>"$STUB_LOG"
     printf '\n' >>"$STUB_LOG"
     printf '%s\n' "${DEV_AGENT:-}" >>"$STUB_LOG.agent"
+    printf '%s\n' "${CI_DEFAULT_TARGET:-}" >>"$STUB_LOG.target"
     case " $* " in
     *" --detach "*) [ "${CI_STUB_RC:-0}" = 0 ] && echo 123abc ;;
     esac
@@ -106,6 +107,7 @@ local function dev_env(base, env)
         PATH = base .. "/bin:" .. dev_os.getenv("PATH"),
         HOME = base .. "/home",
         CI = "",
+        CI_DEFAULT_TARGET = "",
         DEV_AGENT = "",
         DEV_CI_COMMAND = "",
         DEV_CI_CARD = "",
@@ -651,6 +653,45 @@ testing.test("--remote ci run label takes DEV_CI_COMMAND and DEV_CI_CARD", funct
     _, code = dev(root, base, { "--remote", "test" }, { DEV_CI_COMMAND = "release" })
     testing.eq(code, 0)
     testing.eq(fs.read(base .. "/log.agent"), "p/release\n")
+end)
+
+local function write_ci_config(base, body)
+    assert(fs.mkdir(base .. "/home/.config/dev", { parents = true }))
+    assert(fs.write(base .. "/home/.config/dev/config.toml", "[ci]\n" .. body .. "\n"))
+end
+
+testing.test("--remote starts a Rust project's run on ci.rust_target", function()
+    local root, base = setup()
+    assert(fs.write(root .. "/Cargo.toml", "[package]\n"))
+    write_ci_config(base, 'target = "plain"\nrust_target = "archlinux-rust"')
+    local _, code = dev(root, base, { "--remote", "test" })
+    testing.eq(code, 0)
+    testing.eq(fs.read(base .. "/log.target"), "archlinux-rust\n")
+end)
+
+testing.test("--remote starts any other project's run on ci.target", function()
+    local root, base = setup()
+    write_ci_config(base, 'target = "plain"\nrust_target = "archlinux-rust"')
+    local _, code = dev(root, base, { "--remote", "test" })
+    testing.eq(code, 0)
+    testing.eq(fs.read(base .. "/log.target"), "plain\n")
+end)
+
+testing.test("--remote leaves the ci default target when neither key is set", function()
+    local root, base = setup()
+    assert(fs.write(root .. "/Cargo.toml", "[package]\n"))
+    local _, code = dev(root, base, { "--remote", "test" })
+    testing.eq(code, 0)
+    testing.eq(fs.read(base .. "/log.target"), "\n")
+end)
+
+testing.test("--remote keeps a CI_DEFAULT_TARGET the caller set", function()
+    local root, base = setup()
+    assert(fs.write(root .. "/Cargo.toml", "[package]\n"))
+    write_ci_config(base, 'rust_target = "archlinux-rust"')
+    local _, code = dev(root, base, { "--remote", "test" }, { CI_DEFAULT_TARGET = "mine" })
+    testing.eq(code, 0)
+    testing.eq(fs.read(base .. "/log.target"), "mine\n")
 end)
 
 testing.test("--remote passes --priority to ci run only when DEV_CI_PRIORITY is 1", function()
