@@ -644,7 +644,6 @@ A project or global command (`.dev/commands/*.luau` or
 functions listed under each. The list is what `.dev` calls
 today, and the test `tests/lua/modules_contract_test.luau` reads it, so it
 fails when a listed module or function goes away.
-module or function goes away.
 
 - `dev.command`: `die`, `need`, `no_args`, `note`, `say`, `show`,
   `usage_error`.
@@ -656,19 +655,28 @@ module or function goes away.
   `usage_error`.
 - `dev.json`: `decode`, `encode`.
 - `dev.os`: `capture`, `capture_input`, `capture_timed`, `command`, `exec`,
-  `getpid`, `getuid`, `isatty`, `name`, `nap`, `quote`, `run`, `which`.
+  `getenv`, `getpid`, `getuid`, `isatty`, `name`, `nap`, `on_exit`, `quote`,
+  `run`, `which`.
 - `dev.pipelines`: `jobs`.
 - `dev.project`: `detect_type`, `root`.
 - `dev.registry`: `load`.
 - `dev.release`: `env`.
 - `dev.remote`: `ci_runner`, `is_remote_host`.
+- `dev.runtime`: `add_path`, `asset`, `assets`, `dofile`, `load`,
+  `parse_globals`, `signatures`.
 - `dev.standalone`: `problems`.
-- `dev.text`: `fit`, `words`, `wrap`.
+- `dev.testenv`: `calls`, `command`, `fake`, `tempdir`.
+- `dev.testing`: `eq`, `ok`, `raises`, `test`.
+- `dev.testrun`: `execute`, `run`.
+- `dev.text`: `fit`, `trim`, `words`, `wrap`.
 - `dev.ui`: `confirm`, `context`, `table`.
 - `dev.ui.picker`: `run`.
 - `dev.vcs`: `backend`, `base`, `branches`, `files`, `remotes`, `require`,
   `with`.
 - `dev.xdg`: `state_home`.
+
+`dev.runtime.exe` is a string, not a function: the path of the running dev
+binary, which a command passes to `dev.os.run` to start dev again.
 
 Every other module under `dev` is internal and may change without notice.
 
