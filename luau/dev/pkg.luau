@@ -377,10 +377,6 @@ local function parse_check(args, opts)
                 return false
             end
             local key = args[i] == "--manifest" and "manifest" or "group"
-            if opts[key] then
-                note("--" .. key .. " given twice")
-                return false
-            end
             opts[key] = args[i + 1]
             i = i + 2
         else
@@ -416,10 +412,6 @@ local function parse_install(args, opts)
                 return false
             end
             local key = arg:sub(3):gsub("%-", "_")
-            if key == "manifest" and opts.manifest then
-                note("--manifest given twice")
-                return false
-            end
             opts[key] = value
             i = i + 2
         elseif arg:sub(1, 1) == "-" then
