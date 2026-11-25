@@ -10,6 +10,7 @@ local support = require("./support")
 local CARD = "11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 local POLLS = 50
 local POLL_SECONDS = 0.1
+local LAPSE_SECONDS = 3 * 60 * 60
 
 local function spawn_loop()
     local out = dev_os.capture(
@@ -215,22 +216,6 @@ testing.test("column_role names every column's role and takes the claimant's for
     testing.eq(clock.column_role(stages, support.COLUMN_NAME.DONE, who), nil)
 end)
 
-local START_SECONDS = 1000
-
-local function start_aged(card, role, seconds)
-    local original = clock.now
-    clock.now = function()
-        return START_SECONDS
-    end
-    clock.start(card, role)
-    clock.now = function()
-        return START_SECONDS + seconds
-    end
-    return function()
-        clock.now = original
-    end
-end
-
 testing.test("time stop refuses a card with no running clock", function()
     local previous = dev_os.getenv("XDG_STATE_HOME") or ""
     dev_os.setenv("XDG_STATE_HOME", support.tempdir())
@@ -249,7 +234,7 @@ testing.test("a stop whose claim of the clock file fails logs nothing", function
         return true
     end
     local card = { id = CARD, labels = {} }
-    local restore = start_aged(card, "reviewer", 120)
+    local restore = support.start_aged(card, support.ROLE.REVIEWER, 120)
     assert(fs.write(clock.stopping_path(CARD), "taken\n"))
     local result = clock.stop(backend, card, nil)
     local kept = clock.read(CARD)
@@ -272,7 +257,7 @@ testing.test("a start clears a stop's leftover file so the next stop logs", func
     local card = { id = CARD, labels = {} }
     assert(fs.mkdir(claims.dir(), { parents = true }))
     assert(fs.write(clock.stopping_path(CARD), "left behind\n"))
-    local restore = start_aged(card, "reviewer", 120)
+    local restore = support.start_aged(card, support.ROLE.REVIEWER, 120)
     local result = clock.stop(backend, card, nil)
     restore()
     dev_os.setenv("XDG_STATE_HOME", previous)
@@ -292,7 +277,7 @@ testing.test("a stop called from inside the first stop's log logs once", functio
         nested = nested or clock.stop(backend, card, nil)
         return true
     end
-    local restore = start_aged(card, "reviewer", 120)
+    local restore = support.start_aged(card, support.ROLE.REVIEWER, 120)
     local first = clock.stop(backend, card, nil)
     local left = clock.read(CARD)
     restore()
@@ -311,7 +296,7 @@ testing.test("a failed log puts the clock back so it keeps running", function()
         return nil, "pomb is away"
     end
     local card = { id = CARD, labels = {} }
-    local restore = start_aged(card, "reviewer", 120)
+    local restore = support.start_aged(card, support.ROLE.REVIEWER, 120)
     local result = clock.stop(backend, card, nil)
     local kept = clock.read(CARD)
     restore()
@@ -330,7 +315,7 @@ testing.test("a stretch under a minute logs nothing and still clears the clock",
         return true
     end
     local card = { id = CARD, labels = {} }
-    local restore = start_aged(card, "reviewer", 59)
+    local restore = support.start_aged(card, support.ROLE.REVIEWER, 59)
     local result = clock.stop(backend, card, nil)
     local left = clock.read(CARD)
     local again = clock.stop(backend, card, nil)
@@ -352,7 +337,7 @@ testing.test("a stretch of exactly a minute still logs one minute", function()
         return true
     end
     local card = { id = CARD, labels = {} }
-    local restore = start_aged(card, "reviewer", 60)
+    local restore = support.start_aged(card, support.ROLE.REVIEWER, 60)
     local result = clock.stop(backend, card, nil)
     restore()
     dev_os.setenv("XDG_STATE_HOME", previous)
@@ -377,7 +362,7 @@ testing.test("a lapsed claim logs time only up to its last heartbeat", function(
     clock.now = function()
         return started
     end
-    local began = clock.start({ id = CARD, labels = {} }, "implementer")
+    local began = clock.start({ id = CARD, labels = {} }, support.ROLE.IMPLEMENTER)
     local saved = claims.write({ card = CARD, fence = 1, pid = 0 })
     local beat = fs.write(clock.beat_path(CARD), string.format("%d\n", started + 10 * 60))
     local backend = logging_backend()
@@ -402,11 +387,11 @@ testing.test("a clock with no claim stops at twice the card's size", function()
     clock.now = function()
         return started
     end
-    local began = clock.start({ id = CARD, labels = {} }, "reviewer")
+    local began = clock.start({ id = CARD, labels = {} }, support.ROLE.REVIEWER)
     local backend = logging_backend()
     local card = { id = CARD, name = "x", size = "1 Pomodoro", labels = {} }
     local early = clock.sweep(backend, { card }, started + 30 * 60)
-    local late = clock.sweep(backend, { card }, started + 3 * 60 * 60)
+    local late = clock.sweep(backend, { card }, started + LAPSE_SECONDS)
     clock.now = original
     dev_os.setenv("XDG_STATE_HOME", previous)
     testing.eq(began.code, nil, began.message)
@@ -420,13 +405,13 @@ testing.test("a sweep that stops a clock within a minute logs nothing and clears
     dev_os.setenv("XDG_STATE_HOME", support.tempdir())
     local original = clock.now
     clock.now = function()
-        return START_SECONDS
+        return support.CLOCK_START
     end
-    local began = clock.start({ id = CARD, labels = {} }, "reviewer")
-    local beat = fs.write(clock.beat_path(CARD), string.format("%d\n", START_SECONDS + 30))
+    local began = clock.start({ id = CARD, labels = {} }, support.ROLE.REVIEWER)
+    local beat = fs.write(clock.beat_path(CARD), string.format("%d\n", support.CLOCK_START + 30))
     local backend = logging_backend()
     local card = { id = CARD, name = "x", size = "1 Pomodoro", labels = {} }
-    local ticking, warnings = clock.sweep(backend, { card }, START_SECONDS + 3 * 60 * 60)
+    local ticking, warnings = clock.sweep(backend, { card }, support.CLOCK_START + LAPSE_SECONDS)
     local left = clock.read(CARD)
     clock.now = original
     dev_os.setenv("XDG_STATE_HOME", previous)
@@ -446,9 +431,9 @@ testing.test("a clock on a card of another board stays and logs nothing", functi
     clock.now = function()
         return started
     end
-    local began = clock.start({ id = CARD, labels = {} }, "reviewer")
+    local began = clock.start({ id = CARD, labels = {} }, support.ROLE.REVIEWER)
     local backend = logging_backend()
-    local ticking, warnings = clock.sweep(backend, {}, started + 3 * 60 * 60)
+    local ticking, warnings = clock.sweep(backend, {}, started + LAPSE_SECONDS)
     local kept = clock.read(CARD)
     clock.now = original
     dev_os.setenv("XDG_STATE_HOME", previous)

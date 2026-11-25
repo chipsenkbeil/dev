@@ -6677,26 +6677,19 @@ testing.test(
         card.column = PROGRESS_NAME
         card.claimant = name
         local backend = fake({ card })
-        local now = role_clock.now
-        role_clock.now = function()
-            return 5000
-        end
-        local started = role_clock.start(card, "implementer")
-        role_clock.now = function()
-            return 5000 + 40 * 60
-        end
+        local restore, started = support.start_aged(card, support.ROLE.IMPLEMENTER, 40 * 60)
         local result
         as_agent(name, function()
             result = cmd_board.run("move", { "cccccccc", support.Column.REVIEW }, backend)
         end)
         local ticking = role_clock.read(ID_C)
-        role_clock.now = now
+        restore()
         dev_os.setenv("XDG_STATE_HOME", previous)
         testing.eq(started.code, nil, started.message)
         testing.eq(result.message, nil)
         testing.eq(backend.calls[#backend.calls], { "log_time", ID_C, 40, "implementer", nil })
-        testing.eq(ticking.role, "reviewer")
-        testing.eq(ticking.start, 5000 + 40 * 60)
+        testing.eq(ticking.role, support.ROLE.REVIEWER)
+        testing.eq(ticking.start, support.CLOCK_START + 40 * 60)
     end
 )
 
@@ -15660,23 +15653,16 @@ testing.test("follow returns the dropped reason when the stop is refused", funct
     card.column = PROGRESS_NAME
     local backend = fake({ card })
     backend.stages = board.stages()
-    local now = role_clock.now
-    role_clock.now = function()
-        return 5000
-    end
-    local started = role_clock.start(card, "implementer")
-    role_clock.now = function()
-        return 5000 + 120
-    end
+    local restore, started = support.start_aged(card, support.ROLE.IMPLEMENTER, 120)
     backend.refusal = "Pomb is down."
     local reason, detail = role_clock.follow(backend, card, support.COLUMN_NAME.REVIEW, LEAD)
     local left = role_clock.read(ID_C)
-    role_clock.now = now
+    restore()
     dev_os.setenv("XDG_STATE_HOME", previous)
     testing.eq(started.code, nil, started.message)
     testing.eq(reason, role_clock.Reason.DROPPED)
     testing.eq(detail, "Pomb is down.")
-    testing.eq(left.role, "reviewer")
+    testing.eq(left.role, support.ROLE.REVIEWER)
 end)
 
 testing.test("follow logs nothing for a stretch under a minute and starts the next role", function()
@@ -15687,23 +15673,16 @@ testing.test("follow logs nothing for a stretch under a minute and starts the ne
     card.column = PROGRESS_NAME
     local backend = fake({ card })
     backend.stages = board.stages()
-    local now = role_clock.now
-    role_clock.now = function()
-        return 5000
-    end
-    local started = role_clock.start(card, "implementer")
-    role_clock.now = function()
-        return 5000 + 30
-    end
+    local restore, started = support.start_aged(card, support.ROLE.IMPLEMENTER, 30)
     local reason, detail = role_clock.follow(backend, card, support.COLUMN_NAME.REVIEW, LEAD)
     local ticking = role_clock.read(ID_C)
-    role_clock.now = now
+    restore()
     dev_os.setenv("XDG_STATE_HOME", previous)
     testing.eq(started.code, nil, started.message)
     testing.eq(reason, nil, detail)
     testing.eq(backend.calls, {})
-    testing.eq(ticking.role, "reviewer")
-    testing.eq(ticking.start, 5000 + 30)
+    testing.eq(ticking.role, support.ROLE.REVIEWER)
+    testing.eq(ticking.start, support.CLOCK_START + 30)
 end)
 
 testing.test("count returns the read reason for an unreadable queue", function()

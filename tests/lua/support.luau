@@ -3,6 +3,7 @@ local fs = require("@dev/fs")
 local json = require("@dev/json")
 local runtime = require("@dev/runtime")
 local board = require("@dev/board")
+local clock = require("@dev/board/clock")
 
 ---@class support
 local M = {}
@@ -1623,6 +1624,39 @@ function M.pomb_plan_sync(server, root, ids, plan)
         end
         server:set(routes, step == 1 and "routes.tsv" or ("routes." .. step .. ".tsv"))
     end
+end
+
+---The role a clock counts for, by constant.
+M.ROLE = {
+    IMPLEMENTER = "implementer",
+    REVIEWER = "reviewer",
+}
+
+---The second the clock helpers start a stretch at.
+M.CLOCK_START = 5000
+
+---Start a card's clock at CLOCK_START and leave the clock `seconds` later.
+---@param card the card
+---@param role the role to start
+---@param seconds how long the stretch has run
+---@return restore puts the real clock back
+---@return started the result of the start
+function M.start_aged(
+    card: { id: string, labels: { string }? },
+    role: string,
+    seconds: number
+): (() -> (), { code: number?, message: string? })
+    local original = clock.now
+    clock.now = function()
+        return M.CLOCK_START
+    end
+    local started = clock.start(card, role)
+    clock.now = function()
+        return M.CLOCK_START + seconds
+    end
+    return function()
+        clock.now = original
+    end, started
 end
 
 dev_os.setenv("XDG_CONFIG_HOME", M.tempdir())
