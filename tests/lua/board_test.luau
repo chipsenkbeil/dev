@@ -6662,7 +6662,7 @@ testing.test("time start refuses a needs:human card and a second clock on one ca
     testing.eq(second.code, 1)
     testing.eq(human.code, 1)
     testing.eq(bare.code, 2)
-    testing.eq(stopped.output, "logged 1 minutes as planner on 11111111")
+    testing.eq(stopped.output, "logged nothing as planner on 11111111, under a minute")
     testing.eq(again.code, 1)
 end)
 
@@ -15660,15 +15660,50 @@ testing.test("follow returns the dropped reason when the stop is refused", funct
     card.column = PROGRESS_NAME
     local backend = fake({ card })
     backend.stages = board.stages()
+    local now = role_clock.now
+    role_clock.now = function()
+        return 5000
+    end
     local started = role_clock.start(card, "implementer")
+    role_clock.now = function()
+        return 5000 + 120
+    end
     backend.refusal = "Pomb is down."
     local reason, detail = role_clock.follow(backend, card, support.COLUMN_NAME.REVIEW, LEAD)
     local left = role_clock.read(ID_C)
+    role_clock.now = now
     dev_os.setenv("XDG_STATE_HOME", previous)
     testing.eq(started.code, nil, started.message)
     testing.eq(reason, role_clock.Reason.DROPPED)
     testing.eq(detail, "Pomb is down.")
     testing.eq(left.role, "reviewer")
+end)
+
+testing.test("follow logs nothing for a stretch under a minute and starts the next role", function()
+    local previous = dev_os.getenv("XDG_STATE_HOME") or ""
+    dev_os.setenv("XDG_STATE_HOME", support.tempdir())
+    local card = colored("green")
+    card.outcomes = outcomes(2)
+    card.column = PROGRESS_NAME
+    local backend = fake({ card })
+    backend.stages = board.stages()
+    local now = role_clock.now
+    role_clock.now = function()
+        return 5000
+    end
+    local started = role_clock.start(card, "implementer")
+    role_clock.now = function()
+        return 5000 + 30
+    end
+    local reason, detail = role_clock.follow(backend, card, support.COLUMN_NAME.REVIEW, LEAD)
+    local ticking = role_clock.read(ID_C)
+    role_clock.now = now
+    dev_os.setenv("XDG_STATE_HOME", previous)
+    testing.eq(started.code, nil, started.message)
+    testing.eq(reason, nil, detail)
+    testing.eq(backend.calls, {})
+    testing.eq(ticking.role, "reviewer")
+    testing.eq(ticking.start, 5000 + 30)
 end)
 
 testing.test("count returns the read reason for an unreadable queue", function()

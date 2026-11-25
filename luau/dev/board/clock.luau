@@ -88,12 +88,15 @@ function M.read(card)
     return { card = card, role = role, start = start }
 end
 
----Count the minutes a stretch logs, rounded and held within 1 to 1440.
+---Count the minutes a stretch logs, rounded and held within 1 to 1440, or 0 under a minute.
 ---@param seconds integer the elapsed seconds
 ---@return integer minutes the minutes
 function M.minutes(seconds: number)
+    if seconds < SECONDS_PER_MINUTE then
+        return 0
+    end
     local minutes = math.floor(seconds / SECONDS_PER_MINUTE + 0.5)
-    return math.min(M.MAX_MINUTES, math.max(1, minutes))
+    return math.min(M.MAX_MINUTES, minutes)
 end
 
 ---Start a card's clock.
@@ -180,7 +183,11 @@ function M.stop(backend, card, note, at: number?)
     if not ok then
         return guards.failure("Card " .. prefix .. " has a clock another stop already claimed.")
     end
-    ok, message = backend:log_time(card.id, minutes, running.role, note)
+    if minutes == 0 then
+        ok = true
+    else
+        ok, message = backend:log_time(card.id, minutes, running.role, note)
+    end
     if not ok then
         local restored, why = fs.move(claimed, M.path(card.id))
         if not restored then
@@ -190,6 +197,9 @@ function M.stop(backend, card, note, at: number?)
     end
     fs.remove(claimed)
     fs.remove(M.beat_path(card.id))
+    if minutes == 0 then
+        return { output = `logged nothing as {running.role} on {prefix}, under a minute` }
+    end
     return { output = "logged " .. minutes .. " minutes as " .. running.role .. " on " .. prefix }
 end
 

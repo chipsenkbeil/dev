@@ -4120,7 +4120,10 @@ cannot measure elapsed time, so the clock is dev's.
 `dev board time stop CARD [--note TEXT]` logs the stretch and removes the
 clock. It logs the elapsed time as whole minutes, rounded and held within 1 to
 1440, under the role the clock started with, and prints the same `logged` line
-as the plain form. `stop` takes no `--as`.
+as the plain form. A stretch under a minute logs no entry, to keep Pomb's
+daily entry cap for real work. It still removes the clock and prints
+`logged nothing as <role> on <id prefix>, under a minute`. `stop` takes no
+`--as`.
 
 The refusals, all exit 1 unless stated:
 
