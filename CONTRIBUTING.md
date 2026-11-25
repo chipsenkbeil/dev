@@ -153,15 +153,23 @@ them too.
 
 1. Push the tag from a workspace: `jj tag set vX.Y.Z -r REV`, then
    `dev push --tag vX.Y.Z`. Gerrit mirrors it to GitHub.
-2. A Linux x86_64 musl job and one macOS job build with `DEV_RELEASE_TAG` set
-   to the tag, so `dev --version` prints it, run `dev release test` on each
-   binary and upload it. The Linux job builds with `cargo zigbuild` for the
-   musl C++ compiler that `mlua-sys` needs for Luau and Ubuntu lacks. It pins
-   Zig 0.17.1 and cargo-zigbuild 0.24.1, which caches the Zig download under a
-   fixed key, and fails unless `file` reports the binary as static. Every job
-   sets `timeout-minutes` to keep a hung step from holding a release. The
-   macOS job runs on an Apple-chip runner, builds aarch64 natively and
-   cross-compiles x86_64, which it tests under Rosetta.
+2. Four build jobs run in parallel. Each builds with `DEV_RELEASE_TAG` set to
+   the tag, so `dev --version` prints it, runs `dev release test` on its
+   binary and uploads it. Every job sets `timeout-minutes` to keep a hung step
+   from holding a release.
+
+   - Linux x86_64 musl builds with `cargo zigbuild` for the musl C++ compiler
+     that `mlua-sys` needs for Luau and Ubuntu lacks. It pins Zig 0.17.1 and
+     cargo-zigbuild 0.24.1, which caches the Zig download under a fixed key,
+     and fails unless `file` reports the binary as static.
+   - macOS runs on an Apple-chip runner, builds aarch64 natively and
+     cross-compiles x86_64, then tests the x86_64 binary under Rosetta.
+   - FreeBSD x86_64 builds and tests inside a FreeBSD 15.1 VM on a Linux
+     runner.
+   - Windows x86_64 builds and tests on `windows-2025`.
+
+   The publish job in step 3 needs all four, so it runs only when every build
+   job passed.
 3. A last job runs the built Linux binary's `dev release publish`, which writes
    `SHA256SUMS` and creates the GitHub release, as a pre-release when the tag
    holds `-pre.`.
