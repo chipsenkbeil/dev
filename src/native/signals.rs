@@ -1,13 +1,4 @@
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
-use std::{fs, thread};
-
-use rustix::process::{self, Pid, Signal};
-use signal_hook::flag;
-use signal_hook::iterator::SignalsInfo;
-use signal_hook::iterator::exfiltrator::WithOrigin;
-use signal_hook::low_level::siginfo::Origin;
-
-use crate::runtime;
 
 /// Signal number of SIGHUP.
 pub const HUP: i32 = 1;
@@ -21,6 +12,9 @@ pub const QUIT: i32 = 3;
 /// Signal number of SIGKILL.
 pub const KILL: i32 = 9;
 
+/// Signal number of SIGPIPE.
+pub const PIPE: i32 = 13;
+
 /// Signal number of SIGTERM.
 pub const TERM: i32 = 15;
 
@@ -33,8 +27,11 @@ static FOREGROUND_OWN_GROUP: AtomicBool = AtomicBool::new(false);
 /// Sends `signal` to process `pid`, or to the process group `-pid` when `pid` is negative.
 ///
 /// Returns whether the signal was delivered.
+#[cfg(unix)]
 #[must_use]
 pub fn send(pid: i32, signal: i32) -> bool {
+    use rustix::process::{self, Pid, Signal};
+
     let (Some(target), Some(signal)) = (
         Pid::from_raw(pid.saturating_abs()),
         Signal::from_named_raw(signal),
@@ -81,13 +78,15 @@ impl Drop for Foreground {
 }
 
 /// The signals that interrupt dev.
+#[cfg(unix)]
 const WATCHED: [i32; 3] = [INT, TERM, HUP];
 
 /// Passes `signal` on to the foreground child.
 ///
 /// The handler registered with `flag::register_usize` already recorded the signal for Luau, so
 /// recording it again here would interrupt a cleanup that runs after the first interrupt.
-fn on_signal(origin: &Origin) {
+#[cfg(unix)]
+fn on_signal(origin: &signal_hook::low_level::siginfo::Origin) {
     let pid = FOREGROUND_PID.load(Ordering::SeqCst);
     if pid > 0 {
         let own_group = FOREGROUND_OWN_GROUP.load(Ordering::SeqCst);
@@ -96,6 +95,7 @@ fn on_signal(origin: &Origin) {
 }
 
 /// Who delivered a signal to dev.
+#[cfg(unix)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Sender {
     /// The terminal or the kernel, which signal dev's whole foreground group.
@@ -108,8 +108,9 @@ enum Sender {
 ///
 /// A terminal delivers its Ctrl-C and its hangup to the whole foreground group, with no sender
 /// process behind them (`SI_KERNEL` or a zero pid), so a child in dev's group already has them.
+#[cfg(unix)]
 #[must_use]
-fn sender_of(origin: &Origin) -> Sender {
+fn sender_of(origin: &signal_hook::low_level::siginfo::Origin) -> Sender {
     if origin.process.is_some_and(|sender| sender.pid > 0) {
         Sender::Process
     } else {
@@ -121,12 +122,14 @@ fn sender_of(origin: &Origin) -> Sender {
 ///
 /// TERM always is. INT and HUP are only when another process sent them, since the child
 /// already got the terminal's.
+#[cfg(unix)]
 #[must_use]
 const fn reaches_group_child(signal: i32, sender: Sender) -> bool {
     signal == TERM || matches!(sender, Sender::Process)
 }
 
 /// Passes `signal` on to child `pid`, to its whole group when it leads one.
+#[cfg(unix)]
 fn forward(pid: i32, own_group: bool, signal: i32, sender: Sender) {
     if own_group {
         let _ = send(-pid, signal);
@@ -138,7 +141,10 @@ fn forward(pid: i32, own_group: bool, signal: i32, sender: Sender) {
 /// Passes the interrupt that is pending on to child `pid`.
 ///
 /// The sender of a pending interrupt is unknown, so a child in dev's group gets only TERM.
+#[cfg(unix)]
 pub fn forward_pending(pid: i32, own_group: bool) {
+    use crate::runtime;
+
     forward(
         pid,
         own_group,
@@ -157,10 +163,14 @@ pub fn by_name(name: &str) -> Option<i32> {
         "QUIT" => QUIT,
         "KILL" => KILL,
         "TERM" => TERM,
-        "USR1" => Signal::USR1.as_raw(),
-        "USR2" => Signal::USR2.as_raw(),
-        "CONT" => Signal::CONT.as_raw(),
-        "STOP" => Signal::STOP.as_raw(),
+        #[cfg(unix)]
+        "USR1" => rustix::process::Signal::USR1.as_raw(),
+        #[cfg(unix)]
+        "USR2" => rustix::process::Signal::USR2.as_raw(),
+        #[cfg(unix)]
+        "CONT" => rustix::process::Signal::CONT.as_raw(),
+        #[cfg(unix)]
+        "STOP" => rustix::process::Signal::STOP.as_raw(),
         _ => return None,
     })
 }
@@ -168,8 +178,9 @@ pub fn by_name(name: &str) -> Option<i32> {
 /// Returns whether the process was started with `signal` ignored.
 ///
 /// Only Linux says so, through /proc. Elsewhere no signal counts as ignored.
+#[cfg(unix)]
 fn is_ignored(signal: i32) -> bool {
-    fs::read_to_string("/proc/self/status")
+    std::fs::read_to_string("/proc/self/status")
         .ok()
         .and_then(|text| {
             text.lines()
@@ -179,11 +190,25 @@ fn is_ignored(signal: i32) -> bool {
         .is_some_and(|mask| (mask >> (signal - 1)) & 1 == 1)
 }
 
+/// Installs nothing on Windows: a Ctrl-C ends dev, and every child on the console, with the
+/// console's own default.
+#[cfg(windows)]
+pub fn install() {}
+
 /// Installs the handlers that turn SIGINT, SIGTERM and SIGHUP into a Luau interrupt.
 ///
 /// A SIGINT or SIGHUP that was ignored at start, as `nohup` leaves it, stays ignored where
 /// the process can read that (Linux). SIGTERM is always handled.
+#[cfg(unix)]
 pub fn install() {
+    use std::thread;
+
+    use signal_hook::flag;
+    use signal_hook::iterator::SignalsInfo;
+    use signal_hook::iterator::exfiltrator::WithOrigin;
+
+    use crate::runtime;
+
     let handled: Vec<i32> = WATCHED
         .into_iter()
         .filter(|&signal| signal == TERM || !is_ignored(signal))
@@ -202,7 +227,7 @@ pub fn install() {
     });
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
 

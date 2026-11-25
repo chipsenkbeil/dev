@@ -2,10 +2,8 @@ use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fs::OpenOptions;
 use std::io::{self, PipeWriter, Read, Write};
-use std::os::fd::{AsFd, OwnedFd};
-use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::path::PathBuf;
-use std::process::{Child, ChildStdin, Command, ExitStatus, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::{Mutex, PoisonError};
 use std::thread;
@@ -46,7 +44,20 @@ const WAIT_POLL: Duration = Duration::from_millis(10);
 const IDLE_POLLS: u32 = 3;
 
 /// The device that discards what is written to it.
+#[cfg(unix)]
 const DEV_NULL: &str = "/dev/null";
+
+/// The device that discards what is written to it.
+#[cfg(windows)]
+const DEV_NULL: &str = "NUL";
+
+/// An open stream a child takes as its standard output or error.
+#[cfg(unix)]
+type Owned = std::os::fd::OwnedFd;
+
+/// An open stream a child takes as its standard output or error.
+#[cfg(windows)]
+type Owned = std::os::windows::io::OwnedHandle;
 
 /// Where one of a command's output streams goes.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -139,7 +150,7 @@ impl Spec {
             Input::Pipe => Stdio::piped(),
         });
         let stdout = match &self.stdout {
-            Sink::Inherit => out.map(OwnedFd::from),
+            Sink::Inherit => out.map(Owned::from),
             Sink::Null => Some(open_null()?),
             Sink::Append(path) => Some(open_append(path)?),
             Sink::Merge => None,
@@ -152,10 +163,9 @@ impl Spec {
                 Some(fd) => fd
                     .try_clone()
                     .map_err(|error| Error::io("duplicate standard output", error))?,
-                None => io::stdout()
-                    .as_fd()
-                    .try_clone_to_owned()
-                    .map_err(|error| Error::io("duplicate standard output", error))?,
+                None => {
+                    dup_stdout().map_err(|error| Error::io("duplicate standard output", error))?
+                }
             }),
         };
         if let Some(fd) = stdout {
@@ -164,29 +174,50 @@ impl Spec {
         if let Some(fd) = stderr {
             command.stderr(Stdio::from(fd));
         }
-        if self.group == Group::Own {
-            command.process_group(0);
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+
+            if self.group == Group::Own {
+                command.process_group(0);
+            }
         }
         Ok(command)
     }
 }
 
-/// Opens /dev/null for writing.
-fn open_null() -> Result<OwnedFd> {
+/// Duplicates dev's standard output.
+#[cfg(unix)]
+fn dup_stdout() -> io::Result<Owned> {
+    use std::os::fd::AsFd;
+
+    io::stdout().as_fd().try_clone_to_owned()
+}
+
+/// Duplicates dev's standard output.
+#[cfg(windows)]
+fn dup_stdout() -> io::Result<Owned> {
+    use std::os::windows::io::AsHandle;
+
+    io::stdout().as_handle().try_clone_to_owned()
+}
+
+/// Opens the null device for writing.
+fn open_null() -> Result<Owned> {
     OpenOptions::new()
         .write(true)
         .open(DEV_NULL)
-        .map(OwnedFd::from)
+        .map(Owned::from)
         .map_err(|error| Error::io("open the null device", error))
 }
 
 /// Opens `path` for appending, creating it when missing.
-fn open_append(path: &PathBuf) -> Result<OwnedFd> {
+fn open_append(path: &PathBuf) -> Result<Owned> {
     OpenOptions::new()
         .append(true)
         .create(true)
         .open(path)
-        .map(OwnedFd::from)
+        .map(Owned::from)
         .map_err(|error| Error::io(format!("open {}", path.display()), error))
 }
 
@@ -198,11 +229,22 @@ fn start(command: &mut Command, spec: &Spec) -> Result<Child> {
 }
 
 /// Returns the exit status a finished command reports: its code, or 128 plus its signal.
+///
+/// Windows has no signal, and its commands always have a code.
 #[must_use]
 pub fn decode(status: ExitStatus) -> i32 {
-    status
-        .code()
-        .unwrap_or_else(|| SIGNAL_EXIT_BASE + status.signal().unwrap_or(0))
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+
+        status
+            .code()
+            .unwrap_or_else(|| SIGNAL_EXIT_BASE + status.signal().unwrap_or(0))
+    }
+    #[cfg(windows)]
+    {
+        status.code().unwrap_or(SIGNAL_EXIT_BASE)
+    }
 }
 
 /// Returns the exit status a shell gives for a command that failed to start with `error`.
@@ -275,9 +317,12 @@ fn raise_interrupt() -> Result<()> {
 fn enter_foreground(child: &Child, group: Group, pending_before: bool) -> Foreground {
     let pid = pid_of(child);
     let foreground = Foreground::enter(pid, group == Group::Own);
+    #[cfg(unix)]
     if !pending_before && runtime::interrupted() {
         signals::forward_pending(pid, group == Group::Own);
     }
+    #[cfg(windows)]
+    let _ = pending_before;
     foreground
 }
 
@@ -330,9 +375,23 @@ fn pid_of(child: &Child) -> i32 {
     i32::try_from(child.id()).unwrap_or(i32::MAX)
 }
 
+/// Sends `signal` to the group `pgid` that `child` leads, returning whether it was delivered.
+#[cfg(unix)]
+fn signal_group(_child: &mut Child, pgid: i32, signal: i32) -> bool {
+    signals::send(-pgid, signal)
+}
+
+/// Ends `child` for TERM or KILL, returning whether it was ended.
+///
+/// Windows has no process group and no other signal, so the processes `child` started stay.
+#[cfg(windows)]
+fn signal_group(child: &mut Child, _pgid: i32, signal: i32) -> bool {
+    matches!(signal, signals::TERM | signals::KILL) && child.kill().is_ok()
+}
+
 /// Sends TERM to the group, gives the leader a second to end, then sends KILL.
 fn stop_group(child: &mut Child, pgid: i32) -> Result<()> {
-    let _ = signals::send(-pgid, signals::TERM);
+    let _ = signal_group(child, pgid, signals::TERM);
     let deadline = Instant::now() + KILL_GRACE;
     while Instant::now() < deadline {
         let ended = child
@@ -343,7 +402,7 @@ fn stop_group(child: &mut Child, pgid: i32) -> Result<()> {
         }
         thread::sleep(WAIT_POLL);
     }
-    let _ = signals::send(-pgid, signals::KILL);
+    let _ = signal_group(child, pgid, signals::KILL);
     child
         .wait()
         .map(drop)
@@ -351,24 +410,46 @@ fn stop_group(child: &mut Child, pgid: i32) -> Result<()> {
 }
 
 /// The shell that runs the watcher, by absolute path so no folder on `PATH` can stand in for it.
+#[cfg(unix)]
 const WATCHER_SHELL: &str = "/bin/sh";
 
 /// Script of the watcher: kills group `$1` when its input ends before dev wrote the release line.
+#[cfg(unix)]
 const WATCHER_SCRIPT: &str =
     r#"IFS= read -r released; [ -n "$released" ] || kill -KILL "-$1" 2>/dev/null"#;
 
+/// Stands in for the watcher on Windows, which has no process group to kill.
+#[cfg(windows)]
+#[derive(Debug)]
+struct Watcher;
+
+#[cfg(windows)]
+impl Watcher {
+    /// Starts nothing.
+    fn start(_pgid: i32) -> Result<Self> {
+        Ok(Self)
+    }
+
+    /// Releases nothing.
+    fn release(self) {}
+}
+
 /// A process that kills a timed command's group when dev dies before it released the watcher.
+#[cfg(unix)]
 #[derive(Debug)]
 struct Watcher {
     /// The watcher itself.
     child: Child,
     /// The pipe it blocks on, held open by dev.
-    stdin: ChildStdin,
+    stdin: std::process::ChildStdin,
 }
 
+#[cfg(unix)]
 impl Watcher {
     /// Starts a watcher for process group `pgid`.
     fn start(pgid: i32) -> Result<Self> {
+        use std::os::unix::process::CommandExt;
+
         let mut command = Command::new(WATCHER_SHELL);
         command
             .args(["-c", WATCHER_SCRIPT, "sh", &pgid.to_string()])
@@ -452,7 +533,7 @@ pub fn capture_timed(
     let watcher = match Watcher::start(pgid) {
         Ok(watcher) => watcher,
         Err(error) => {
-            let _ = signals::send(-pgid, signals::KILL);
+            let _ = signal_group(&mut child, pgid, signals::KILL);
             drop(child.wait());
             return Err(error);
         }
@@ -460,7 +541,7 @@ pub fn capture_timed(
     let feeder = feed(&mut child, input);
     let result = watch_output(&mut child, pgid, secs, reap, &pump(reader), on_text);
     if result.is_err() {
-        let _ = signals::send(-pgid, signals::KILL);
+        let _ = signal_group(&mut child, pgid, signals::KILL);
         drop(child.wait());
     }
     watcher.release();
@@ -496,6 +577,7 @@ fn watch_output(
     let mut open = true;
     let mut idle = 0;
     let mut interrupted = false;
+    let mut stopped = false;
     loop {
         if open {
             match output.recv_timeout(POLL) {
@@ -521,18 +603,21 @@ fn watch_output(
             if let Some(status) = ended {
                 code = Some(decode(status));
                 if reap {
-                    let _ = signals::send(-pgid, signals::KILL);
+                    let _ = signal_group(child, pgid, signals::KILL);
                 }
             } else if runtime::interrupted() {
                 stop_group(child, pgid)?;
                 code = Some(runtime::interrupt_code());
                 interrupted = true;
+                stopped = true;
             } else if secs > 0.0 && started.elapsed().as_secs_f64() > secs {
                 stop_group(child, pgid)?;
                 code = Some(TIMEOUT_EXIT);
+                stopped = true;
             }
         }
-        if code.is_some() && (!open || idle >= IDLE_POLLS) {
+        // A Windows grandchild outlives its killed parent and keeps the pipe open and busy
+        if code.is_some() && (!open || idle >= IDLE_POLLS || (cfg!(windows) && stopped)) {
             break;
         }
     }
@@ -607,8 +692,12 @@ pub fn wait(pid: u32, secs: Option<f64>) -> Option<Option<i32>> {
 /// Sends `signal` to the group of a spawned command and returns whether it was delivered.
 #[must_use]
 pub fn kill(pid: u32, signal: i32) -> bool {
-    let known = with_live(|live| live.contains_key(&pid));
-    known && signals::send(-i32::try_from(pid).unwrap_or(i32::MAX), signal)
+    with_live(|live| {
+        live.get_mut(&pid).is_some_and(|entry| {
+            let pgid = i32::try_from(pid).unwrap_or(i32::MAX);
+            signal_group(&mut entry.child, pgid, signal)
+        })
+    })
 }
 
 /// Stops every spawned command that is not detached, TERM first and KILL after a short wait.
@@ -635,7 +724,7 @@ pub fn stop_spawned() {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use std::ffi::OsString;
     use std::io;

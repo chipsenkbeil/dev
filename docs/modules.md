@@ -81,6 +81,20 @@ A table of the parsed global flags: `args`, `after`, `dashed`, `remote`,
     dev exits, except with `opts.detach`, which outlives dev.
   - SIGKILL to dev runs no cleanup and reaches no child. A caller kills dev's
     process group instead.
+- On Windows there are no process groups and no POSIX signals:
+  - A child never leads a group, so `group` has no effect, and dev installs no
+    handler. A Ctrl-C reaches dev and every process on the console alike, so dev
+    forwards nothing. It ends with the console's own status instead of 130 and
+    runs no `on_exit` cleanup.
+  - INT, TERM and HUP are not delivered. `kill(sig)` on a spawned process and
+    the TERM that stops a timed command end the process itself, which is KILL,
+    and any other signal returns `false`. The processes that child started stay
+    running. `capture_timed` starts no watcher, so a child outlives a dev that
+    died, and after a timeout or an interrupt it stops reading output at once,
+    since a surviving grandchild may keep the pipe open.
+  - `by_name` knows HUP, INT, QUIT, KILL and TERM only. `run` and `capture`
+    report an exit code as it is, never 128 plus a signal.
+  - The null device is `NUL`.
 - `stdout` and `stderr` with `write` and `flush`, and `stdin` with `read`.
 - `exit(code?)`, `on_exit(fn)`, `run_cleanups()`, `interrupt_code()`,
   `SIGNAL_EXIT_BASE` (128) and `EXEC_FAILED` (126).
@@ -149,6 +163,11 @@ A table of the parsed global flags: `args`, `after`, `dashed`, `remote`,
 - `page(text, opts)` shows text in the built-in pager and returns whether it
   did. `move_to(row, col)`, `clear()` and `alt_screen(on)` move the cursor and
   switch the screen.
+- Windows has no pty and no `/dev/tty`. Every child inherits the console.
+  `TTY_PATH` is `CONOUT$`, and `open_tty()` opens it, so a handle's number is
+  made up. It returns `nil` and a reason when dev has no console. `silent`
+  leaves the echo on. `page` has no built-in pager there: it runs `opts.pager`
+  or `$PAGER` when one is set, and prints the text otherwise.
 
 ### @dev/spec
 

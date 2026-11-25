@@ -6,8 +6,8 @@ use std::sync::{Arc, LazyLock};
 use std::{fs, process};
 
 use mlua::{Error, Function, Lua, LuaString, MultiValue, Table, Value, VmState};
-use signal_hook::consts::{SIGINT, SIGPIPE};
 
+use crate::native::signals::{INT as SIGINT, PIPE as SIGPIPE};
 use crate::resolve::{DEV_ALIAS, Target, resolve};
 use crate::{Error as DevError, embed, log};
 
@@ -548,10 +548,17 @@ pub fn report(error: &Error) {
     write_err(text.as_bytes());
 }
 
-/// Returns whether dev runs with an effective user id of 0.
+/// Returns whether dev runs with an effective user id of 0, which is never so on Windows.
 #[must_use]
 pub fn is_root() -> bool {
-    rustix::process::geteuid().is_root()
+    #[cfg(unix)]
+    {
+        rustix::process::geteuid().is_root()
+    }
+    #[cfg(windows)]
+    {
+        false
+    }
 }
 
 /// Runs `f` on the module search state.
@@ -566,6 +573,7 @@ fn with_state<R>(lua: &Lua, f: impl FnOnce(&mut SearchState) -> R) -> mlua::Resu
 mod tests {
     use super::*;
 
+    #[cfg(unix)]
     #[test]
     fn interrupt_should_stop_a_running_loop_with_the_signal_status() {
         let lua = new().unwrap();

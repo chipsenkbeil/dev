@@ -477,7 +477,7 @@ fn external(lua: &Lua, command: &str, text: &[u8]) -> crate::Result<StdResult<bo
     }
     let status = loop {
         if runtime::interrupted() {
-            stop(&child);
+            stop(&mut child);
             // The pager is on its way out and its status no longer matters
             let _ = child.wait();
             runtime::check_interrupt().map_err(term::core_error)?;
@@ -500,10 +500,18 @@ fn external(lua: &Lua, command: &str, text: &[u8]) -> crate::Result<StdResult<bo
 }
 
 /// Asks `child` to stop with SIGTERM, so a pager can restore the screen.
-fn stop(child: &Child) {
+#[cfg(unix)]
+fn stop(child: &mut Child) {
     let pid = rustix::process::Pid::from_child(child);
     // The pager may have gone already, which is what was wanted
     let _ = rustix::process::kill_process(pid, rustix::process::Signal::TERM);
+}
+
+/// Ends `child`, since Windows has no SIGTERM to ask with.
+#[cfg(windows)]
+fn stop(child: &mut Child) {
+    // The pager may have gone already, which is what was wanted
+    let _ = child.kill();
 }
 
 native_fn! {
@@ -511,7 +519,8 @@ native_fn! {
     ///
     /// A command in `opts.pager`, else a non-empty `$PAGER`, reads the text on its standard input.
     /// Otherwise the built-in pager shows it: j and k or the arrows scroll, space and b page,
-    /// `/` searches, n finds the next match and q quits. Returns true when a pager showed the
+    /// `/` searches, n finds the next match and q quits. Windows has no built-in pager and
+    /// prints the text when no pager command is set. Returns true when a pager showed the
     /// text, false when it was printed, and `nil` with a reason when an external pager failed.
     ///
     /// # Errors
@@ -537,6 +546,10 @@ native_fn! {
         let command = choose_command(pager, env::var("PAGER").ok());
         if let Some(command) = command {
             return Ok(external(lua, &command, &bytes)?);
+        }
+        if cfg!(windows) {
+            runtime::write_out(lua, &bytes)?;
+            return Ok(Ok(false));
         }
         runtime::flush_out(lua)?;
         let Ok(entered) = term::enter_raw() else {

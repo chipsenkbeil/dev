@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{self, IsTerminal, Write};
 use std::ops::RangeInclusive;
-use std::os::fd::{AsFd, AsRawFd, BorrowedFd};
 use std::result::Result as StdResult;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, Once, PoisonError};
@@ -11,7 +10,6 @@ use std::time::Duration;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use crossterm::terminal;
 use mlua::{Function, Lua, LuaString, Table};
-use rustix::termios::{self, LocalModes, OptionalActions, Termios};
 
 use crate::native::pager;
 use crate::{native_fn, runtime};
@@ -20,7 +18,12 @@ use crate::{native_fn, runtime};
 pub const NAME: &str = "term";
 
 /// Path of the controlling terminal.
+#[cfg(unix)]
 const TTY_PATH: &str = "/dev/tty";
+
+/// Path of the console's output buffer, the only part of the controlling terminal dev opens.
+#[cfg(windows)]
+const TTY_PATH: &str = "CONOUT$";
 
 /// Rows `size` reports when the terminal gives none.
 const DEFAULT_ROWS: i64 = 24;
@@ -404,8 +407,27 @@ pub fn next_key() -> crate::Result<Option<KeyEvent>> {
     }
 }
 
+/// Returns the number that names the open terminal `file`: its descriptor.
+#[cfg(unix)]
+fn handle_key(file: &File) -> i32 {
+    use std::os::fd::AsRawFd;
+
+    file.as_raw_fd()
+}
+
+/// Returns the number that names the open terminal `file`: the next of a counter, since a
+/// Windows handle is no small integer.
+#[cfg(windows)]
+fn handle_key(_file: &File) -> i32 {
+    static NEXT: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(1000);
+    NEXT.fetch_add(1, Ordering::SeqCst)
+}
+
 /// Runs `body` on the terminal `fd` names, `None` when it is neither a standard stream nor a handle.
-fn with_fd<T>(fd: i64, body: impl FnOnce(BorrowedFd<'_>) -> T) -> Option<T> {
+#[cfg(unix)]
+fn with_fd<T>(fd: i64, body: impl FnOnce(std::os::fd::BorrowedFd<'_>) -> T) -> Option<T> {
+    use std::os::fd::AsFd;
+
     match fd {
         0 => Some(body(rustix::stdio::stdin())),
         1 => Some(body(rustix::stdio::stdout())),
@@ -418,15 +440,19 @@ fn with_fd<T>(fd: i64, body: impl FnOnce(BorrowedFd<'_>) -> T) -> Option<T> {
 }
 
 /// Reads the settings of the terminal on `fd`, `None` when it has none.
+#[cfg(unix)]
 #[must_use]
-fn get_termios(fd: i64) -> Option<Termios> {
-    with_fd(fd, |terminal| termios::tcgetattr(terminal).ok()).flatten()
+fn get_termios(fd: i64) -> Option<rustix::termios::Termios> {
+    with_fd(fd, |terminal| rustix::termios::tcgetattr(terminal).ok()).flatten()
 }
 
 /// Applies `settings` to the terminal on `fd`, returning whether that worked.
-fn set_termios(fd: i64, settings: &Termios) -> bool {
+#[cfg(unix)]
+fn set_termios(fd: i64, settings: &rustix::termios::Termios) -> bool {
+    use rustix::termios::{OptionalActions, tcsetattr};
+
     with_fd(fd, |terminal| {
-        termios::tcsetattr(terminal, OptionalActions::Now, settings).is_ok()
+        tcsetattr(terminal, OptionalActions::Now, settings).is_ok()
     })
     .unwrap_or(false)
 }
@@ -447,12 +473,13 @@ native_fn! {
     ///
     /// # Errors
     ///
-    /// Never fails; no terminal is a `nil` and a reason.
+    /// Never fails; no terminal is a `nil` and a reason. On Windows the handle is the console's
+    /// output buffer, and its number is made up.
     pub fn open_tty(_lua: &Lua) -> mlua::Result<StdResult<i64, String>> {
         let file = OpenOptions::new().read(true).write(true).open(TTY_PATH);
         Ok(match file {
             Ok(file) => {
-                let fd = file.as_raw_fd();
+                let fd = handle_key(&file);
                 with_handles(|handles| handles.insert(fd, file));
                 Ok(i64::from(fd))
             }
@@ -675,26 +702,36 @@ native_fn! {
     /// Turns off the echo of typed characters on `fd`, keeping line editing and signals.
     ///
     /// The echo also comes back when dev exits. When `fd` is not a terminal the returned
-    /// function does nothing.
+    /// function does nothing, and on Windows it always does nothing, so typed characters echo.
     ///
     /// # Errors
     ///
     /// Raises when the exit cleanup cannot be registered.
     #[luau = "(fd: number) -> () -> ()"]
     pub fn silent(lua: &Lua, fd: i64) -> mlua::Result<Function> {
-        let Some(settings) = get_termios(fd) else {
-            return once(lua, || {});
-        };
-        let mut quiet = settings.clone();
-        quiet.local_modes.remove(LocalModes::ECHO);
-        if !set_termios(fd, &quiet) {
-            return once(lua, || {});
+        #[cfg(windows)]
+        {
+            let _ = fd;
+            once(lua, || {})
         }
-        let restore = once(lua, move || {
-            set_termios(fd, &settings);
-        })?;
-        runtime::on_exit(lua, restore.clone())?;
-        Ok(restore)
+        #[cfg(unix)]
+        {
+            let Some(settings) = get_termios(fd) else {
+                return once(lua, || {});
+            };
+            let mut quiet = settings.clone();
+            quiet
+                .local_modes
+                .remove(rustix::termios::LocalModes::ECHO);
+            if !set_termios(fd, &quiet) {
+                return once(lua, || {});
+            }
+            let restore = once(lua, move || {
+                set_termios(fd, &settings);
+            })?;
+            runtime::on_exit(lua, restore.clone())?;
+            Ok(restore)
+        }
     }
 }
 
@@ -784,7 +821,7 @@ mod tests {
 
     #[test]
     fn next_event_should_return_the_interrupt_error_when_a_signal_arrived() {
-        runtime::interrupt(signal_hook::consts::SIGINT);
+        runtime::interrupt(crate::native::signals::INT);
         let error = next_event().expect_err("the pending interrupt must raise");
         assert!(runtime::is_interrupt(&mlua::Error::from(error)));
     }

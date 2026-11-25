@@ -221,6 +221,7 @@ fn serve(mut stream: TcpStream, routes: &Path, log: Option<&Path>) {
         body: b"no route".to_vec(),
     });
     if answer.status < 0 {
+        #[cfg(unix)]
         let _ = rustix::net::sockopt::set_socket_linger(&stream, Some(Duration::ZERO));
         drop(stream);
         std::process::exit(0);
