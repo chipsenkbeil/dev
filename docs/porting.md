@@ -209,6 +209,15 @@ local checks = require("myproj.checks")
 local checks = require("@lib/myproj/checks")
 ```
 
+A test that copies or links `.dev` into a temporary tree loses the
+project's root `.luaurc`, so `@lib` requires stop resolving there. Write a
+`.luaurc` with the `lib` alias above the copy, in the folder that holds the
+copied `.dev`:
+
+```json
+{ "aliases": { "lib": ".dev/lib" } }
+```
+
 Scripts that a command calls but that are not commands live in
 `.dev/helpers/`. dev never lists, completes or runs anything there as a
 command. dev never lists `lib`, `helpers` or `help` as a command with
