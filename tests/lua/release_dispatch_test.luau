@@ -60,7 +60,9 @@ local function fake_gh(root, view)
             '    "run view")',
             '        case "$*" in',
             "            *--log-failed*) cat " .. root .. "/failed.log ;;",
-            "            *) cat " .. root .. "/view.json ;;",
+            "            *)",
+            `                if [ -x {root}/bin/midrun ]; then {root}/bin/midrun; fi`,
+            "                cat " .. root .. "/view.json ;;",
             "        esac ;;",
             "esac",
         }, "\n")
@@ -223,12 +225,49 @@ if dev_os.which("jj") then
         local out, code = dispatch(root, commit, {}, JJ_IDENT)
         testing.eq(code, 1, out)
         testing.eq(support.rev(bare, "refs/heads/review-" .. change), commit)
-        local listed = dev_os.capture(
-            { "jj", "--no-pager", "-R", root, "bookmark", "list", "--all" },
-            { stderr = "stdout", env = JJ_IDENT }
-        )
-        testing.ok(not listed:find("review-", 1, true), listed)
     end)
+
+    testing.test(
+        "dispatch leaves the jj working copy on its commit when another workspace fetches mid-run",
+        function()
+            local root, bare, change, commit = jj_project(false)
+            local other = support.tempdir() .. "/other"
+            local function jj(dir, ...)
+                local out, code = dev_os.capture(
+                    { "jj", "--no-pager", "-R", dir, ... },
+                    { stderr = "stdout", env = JJ_IDENT }
+                )
+                assert(code == 0, out)
+                return (out:gsub("\n$", ""))
+            end
+            jj(root, "workspace", "add", other)
+            script(root, "midrun", `jj --no-pager -R {other} git fetch >/dev/null 2>&1`)
+            local env = { GH_SHA = commit }
+            for name, value in pairs(JJ_IDENT) do
+                env[name] = value
+            end
+            local out, code = support.dev(
+                root,
+                { "release", "dispatch", "--interval", "0" },
+                { env = env }
+            )
+            testing.eq(code, 1, out)
+            testing.eq(dev_os.capture({ "git", "-C", bare, "branch", "--list" }), "", out)
+            jj(other, "git", "fetch")
+            local seen = jj(
+                root,
+                "log",
+                "--no-graph",
+                "-r",
+                "@",
+                "-T",
+                'commit_id ++ " " ++ description.first_line()'
+            )
+            testing.eq(seen, commit .. " feat: two")
+            local listed = jj(other, "bookmark", "list", "--all")
+            testing.ok(not listed:find("review-" .. change, 1, true), listed)
+        end
+    )
 
     testing.test("dispatch sends the parent when the jj working copy is empty", function()
         local root, bare, change, commit = jj_project(true)

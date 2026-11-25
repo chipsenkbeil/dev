@@ -50,31 +50,69 @@ local function git_target(root)
     return sha, BRANCH_PREFIX .. branch:gsub("[^%w._-]", "-")
 end
 
-local function push(ctx, backend, sha, branch)
-    local dir
-    if backend == vcs.JJ then
-        dir = text.trim(dev_os.capture(vcs.with(vcs.base(ctx.root, backend), "git", "root")))
+local function jj_step(ctx, argv, failure)
+    dev_command.show(ctx, argv)
+    local out, code = dev_os.capture(argv, { cwd = ctx.root, stderr = "stdout" })
+    if code ~= 0 then
+        dev_command.die(`{failure}: {text.trim(out)}`)
     end
-    local argv = vcs.git_push(REMOTE, { `+{sha}:refs/heads/{branch}` }, { git_dir = dir })
+end
+
+local function jj_push(ctx, sha, branch)
+    local base = vcs.base(ctx.root, vcs.JJ, { quiet = true })
+    local failure = `The push of {branch} to {REMOTE} failed`
+    jj_step(ctx, vcs.with(base, "bookmark", "set", "--allow-backwards", "-r", sha, branch), failure)
+    jj_step(ctx, vcs.with(base, "git", "fetch", "--remote", REMOTE, "--branch", branch), failure)
+    jj_step(
+        ctx,
+        vcs.with(
+            base,
+            "--config",
+            "git.sign-on-push=false",
+            "git",
+            "push",
+            "--remote",
+            REMOTE,
+            "--bookmark",
+            branch,
+            "--allow-empty-description",
+            "--allow-private"
+        ),
+        failure
+    )
+end
+
+local function push(ctx, backend, sha, branch)
+    if backend == vcs.JJ then
+        jj_push(ctx, sha, branch)
+        return
+    end
+    local argv = vcs.git_push(REMOTE, { `+{sha}:refs/heads/{branch}` })
     dev_command.show(ctx, argv)
     local out, code = dev_os.capture(argv, { cwd = ctx.root, stderr = "stdout" })
     if code ~= 0 then
         dev_command.die(`The push of {branch} to {REMOTE} failed: {text.trim(out)}`)
     end
-    if dir then
-        local drop = { "git", "--git-dir=" .. dir, "update-ref", "-d" }
-        drop[#drop + 1] = `refs/remotes/{REMOTE}/{branch}`
-        dev_os.run(drop, { stdout = "null", stderr = "null" })
-    end
-    return dir
 end
 
-local function remove_branch(ctx, dir, branch)
-    local argv = vcs.git_push(REMOTE, { `:refs/heads/{branch}` }, { git_dir = dir })
-    dev_command.show(ctx, argv)
-    local out, code = dev_os.capture(argv, { cwd = ctx.root, stderr = "stdout" })
-    if code ~= 0 then
-        dev_command.say(`The branch {branch} stays on {REMOTE}: {text.trim(out)}`)
+local function remove_branch(ctx, backend, branch)
+    local deletes
+    if backend == vcs.JJ then
+        local base = vcs.base(ctx.root, backend, { quiet = true })
+        deletes = {
+            vcs.with(base, "bookmark", "delete", branch),
+            vcs.with(base, "git", "push", "--remote", REMOTE, "--bookmark", branch),
+        }
+    else
+        deletes = { vcs.git_push(REMOTE, { `:refs/heads/{branch}` }) }
+    end
+    for _, argv in ipairs(deletes) do
+        dev_command.show(ctx, argv)
+        local out, code = dev_os.capture(argv, { cwd = ctx.root, stderr = "stdout" })
+        if code ~= 0 then
+            dev_command.say(`The branch {branch} stays on {REMOTE}: {text.trim(out)}`)
+            return
+        end
     end
 end
 
@@ -192,7 +230,7 @@ local function execute(opts, _, ctx)
     else
         sha, branch = git_target(ctx.root)
     end
-    local dir = push(ctx, backend, sha, branch)
+    push(ctx, backend, sha, branch)
     dev_command.say(`Pushed {branch} at {sha:sub(1, 12)} to {REMOTE}.`)
 
     local known = run_ids(branch, sha)
@@ -217,7 +255,7 @@ local function execute(opts, _, ctx)
     end
     local failed = report(run, opts.lines)
     if not opts.keep then
-        remove_branch(ctx, dir, branch)
+        remove_branch(ctx, backend, branch)
     end
     dev_command.say(`Run {id} ended {run.conclusion} with {failed} job(s) not green: {run.url}`)
     return if failed == 0 and run.conclusion == "success" then 0 else 1
@@ -234,9 +272,11 @@ return dev_command({
         "",
         "- jj uses the working-copy change, or its parent when it is empty, and ",
         "names the branch from its change id. git uses HEAD and its branch name.",
-        "- The branch is force-pushed, so a rerun on an amended change replaces it. It ",
-        "is deleted from origin once the run ends, so jj never sees it as an ",
-        "immutable remote bookmark. `--keep` leaves it, and a timeout leaves it too.",
+        "- The branch is force-pushed, so a rerun on an amended change replaces it. jj ",
+        "pushes it through a bookmark of the same name and deletes that bookmark ",
+        "with the remote branch once the run ends, so jj never abandons the pushed ",
+        "change when the branch vanishes. `--keep` leaves both, and a timeout leaves ",
+        "them too.",
         "- A dispatched run runs the build jobs only. Publishing needs a `v*` tag, so ",
         "it creates no release and no tag.",
         "- `--timeout SECONDS` bounds the wait and exits 1 when the run is still going.",

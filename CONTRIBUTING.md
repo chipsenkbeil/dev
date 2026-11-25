@@ -146,9 +146,10 @@ origin, starts the workflow on that branch with `gh workflow run`, waits up to
 `--timeout` seconds (default 3600), then prints each job's result and the last
 `--lines` lines of every job that did not pass. It works for jj and git, and
 exits 1 when any job did not pass, a job marked `continue-on-error` included.
-The verb deletes the branch from origin when the run ends, so jj never holds it
-as an immutable remote bookmark. `--keep` leaves it, and a timeout leaves it
-too.
+With jj the verb pushes through a bookmark of the same name and deletes that
+bookmark and the branch when the run ends, so jj never abandons the pushed
+change when the branch vanishes. `--keep` leaves them, and a timeout leaves
+them too.
 
 1. Push the tag from a workspace: `jj tag set vX.Y.Z -r REV`, then
    `dev push --tag vX.Y.Z`. Gerrit mirrors it to GitHub.
