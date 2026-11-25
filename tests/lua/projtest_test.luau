@@ -1,6 +1,7 @@
 local testing = require("@dev/testing")
 local testenv = require("@dev/testenv")
 local dev_os = require("@dev/os")
+local dev_project = require("@dev/project")
 local fs = require("@dev/fs")
 local runtime = require("@dev/runtime")
 
@@ -15,7 +16,7 @@ local TEST_COMMAND = 'local dev_command = require("@dev/command")\n'
 local TEST_HEADER = 'local t = require("@dev/testing")\n'
 
 local function project(tests)
-    local root = assert(fs.realpath(testenv.tempdir()))
+    local root = assert(fs.realpath(testenv.project()))
     assert(fs.mkdir(root .. "/.dev/commands", { parents = true }))
     assert(fs.write(root .. "/.dev/commands/test.luau", TEST_COMMAND))
     if tests then
@@ -92,6 +93,23 @@ testing.test("the files run in sorted order", function()
     local out, code, err = run(root)
     testing.eq(code, 0, err)
     testing.ok(out:find("ok - first\nok - second\n", 1, true), out)
+end)
+
+testing.test("testenv.project makes an @lib require resolve", function()
+    local root = assert(fs.realpath(testenv.project()))
+    assert(fs.mkdir(root .. "/.dev/lib", { parents = true }))
+    assert(fs.write(root .. "/.dev/lib/answer.luau", "return 42\n"))
+    local script = root .. "/probe.luau"
+    assert(fs.write(script, 'print(require("@lib/answer"))\n'))
+    local out, code, err = dev_os.capture({ runtime.exe, "-l", script }, { cwd = root })
+    testing.eq(code, 0, err)
+    testing.eq(out, "42\n")
+end)
+
+testing.test("testenv.project copies the project root's .luaurc", function()
+    local root = assert(fs.realpath(testenv.project()))
+    local expected = assert(fs.read(dev_project.root() .. "/.luaurc"))
+    testing.eq(fs.read(root .. "/.luaurc"), expected)
 end)
 
 testing.test("a dev -l script that ran its own cases is not run a second time", function()

@@ -1,5 +1,6 @@
 local dev_os = require("@dev/os")
 local fs = require("@dev/fs")
+local project = require("@dev/project")
 local runtime = require("@dev/runtime")
 
 ---@class dev.testenv
@@ -17,6 +18,18 @@ local M = {}
 ---@return string dir the new directory
 function M.tempdir()
     return assert(fs.mktemp({ prefix = "test", dir = true }))
+end
+
+---Make a temporary project tree for one test, holding the project's `.luaurc`.
+---
+---The file is a copy of the `.luaurc` at dev's project root, so `@lib` requires resolve in the
+---tree. When the root has none, the file holds the `lib` alias for `.dev/lib`.
+---@return dir the new directory
+function M.project()
+    local dir = M.tempdir()
+    local text = fs.read(project.root() .. "/.luaurc") or '{ "aliases": { "lib": ".dev/lib" } }\n'
+    assert(fs.write(dir .. "/.luaurc", text))
+    return dir
 end
 
 ---Put an executable named `name` in `root/bin`.

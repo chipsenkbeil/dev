@@ -209,10 +209,12 @@ local checks = require("myproj.checks")
 local checks = require("@lib/myproj/checks")
 ```
 
-A test that copies or links `.dev` into a temporary tree loses the
-project's root `.luaurc`, so `@lib` requires stop resolving there. Write a
-`.luaurc` with the `lib` alias above the copy, in the folder that holds the
-copied `.dev`:
+`testenv.project()` makes a temporary tree and writes a `.luaurc` into it, a
+copy of the project root's file (or the `lib` alias when the root has none),
+so `@lib` requires resolve there. A test that builds its tree with
+`testenv.tempdir()` and copies or links `.dev` into it loses that file, so
+write a `.luaurc` with the `lib` alias above the copy, in the folder that
+holds the copied `.dev`:
 
 ```json
 { "aliases": { "lib": ".dev/lib" } }
