@@ -196,6 +196,19 @@ file. A command in `~/.config/dev/commands` finds its own library through a
 `.luaurc` in `~/.config/dev`. dev reads the file as plain JSON, so keep
 comments out of it.
 
+`runtime.add_path` is gone, and a `.luaurc` alias replaces it. A command
+that called `runtime.add_path(root .. "/.dev/lib")` before a dotted
+`require` now declares the folder once as the `lib` alias in `.luaurc`:
+
+```lua
+-- before
+runtime.add_path(root .. "/.dev/lib")
+local checks = require("myproj.checks")
+
+-- after, with { "aliases": { "lib": ".dev/lib" } } in `.luaurc`
+local checks = require("@lib/myproj/checks")
+```
+
 Scripts that a command calls but that are not commands live in
 `.dev/helpers/`. dev never lists, completes or runs anything there as a
 command. dev never lists `lib`, `helpers` or `help` as a command with
