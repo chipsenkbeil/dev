@@ -161,10 +161,25 @@ them too.
    `SHA256SUMS` and creates the GitHub release, as a pre-release when the tag
    holds `-pre.`.
 
-`dev release build`, `test` and `publish` hold the logic, so the workflow only
-sets up the toolchain, the one bootstrap `cargo build` and the calls. A
-published release is never deleted or overwritten. A failed run is fixed
-forward with the next tag.
+4. Before the release is announced, check the binary on each fleet platform
+   with the command below, once for each of Linux x86_64, FreeBSD x86_64,
+   Windows x86_64, macOS x86_64 and macOS aarch64. TARGET is the fleet target
+   of that platform. The job builds dev from the tree on that target, then
+   runs `dev release verify` there.
+
+   ```
+   CI_DEFAULT_TARGET=TARGET ci run .ci/verify.lua --local --arch ARCH -- vX.Y.Z
+   ```
+
+   The verb downloads `SHA256SUMS` and the asset for its machine. It exits 1
+   when the asset does not match its line, then runs the binary with
+   `--version`, which must print `dev vX.Y.Z`, and with `help`.
+   `DEV_RELEASE_URL` replaces the folder it downloads from.
+
+`dev release build`, `test`, `publish` and `verify` hold the logic, so the
+workflow only sets up the toolchain, the one bootstrap `cargo build` and the
+calls. A published release is never deleted or overwritten. A failed run is
+fixed forward with the next tag.
 
 ## The lint-set template rule
 
