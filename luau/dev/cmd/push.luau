@@ -14,8 +14,13 @@ local REMOTE_NAMES = { "origin", "gerrit" }
 ---@field named string[] every remote `dev push` accepts by name
 ---@field forge dev.forge.Forge the forge and remote of record
 
+export type Reason = "no_trunk" | "detached" | "no_remote"
+
+---The reasons a push finds nothing to send
+local Reason = { NO_TRUNK = "no_trunk", DETACHED = "detached", NO_REMOTE = "no_remote" }
+
 ---@class dev.cmd.push
-local M = {}
+local M = { Reason = Reason }
 
 local function resolve(root, tags_only)
     local backend, err = vcs.require(root)
@@ -26,13 +31,13 @@ local function resolve(root, tags_only)
     if backend == vcs.JJ then
         plan.ref = vcs.trunk(vcs.branches(root, backend))
         if not plan.ref and not tags_only then
-            return nil, "no master or main bookmark in " .. root
+            return nil, Reason.NO_TRUNK
         end
     else
         local branch, code =
             dev_os.capture({ "git", "-C", root, "symbolic-ref", "--short", "-q", "HEAD" })
         if code ~= 0 and not tags_only then
-            return nil, "HEAD is detached in " .. root .. ", and a push needs a branch"
+            return nil, Reason.DETACHED
         end
         plan.ref = text.trim(branch)
         plan.sha = text.trim(dev_os.capture({ "git", "-C", root, "rev-parse", "HEAD" }))
@@ -47,7 +52,7 @@ local function resolve(root, tags_only)
         end
     end
     if #plan.named == 0 then
-        return nil, "no origin or gerrit remote"
+        return nil, Reason.NO_REMOTE
     end
     if not plan.forge then
         return nil, err
@@ -57,6 +62,17 @@ local function resolve(root, tags_only)
         plan.named[#plan.named + 1] = plan.forge.remote
     end
     return plan
+end
+
+local function refusal(root, err)
+    if err == Reason.NO_TRUNK then
+        return `No master or main bookmark in {root}.`
+    elseif err == Reason.DETACHED then
+        return `HEAD is detached in {root}. A push needs a branch.`
+    elseif err == Reason.NO_REMOTE then
+        return "No origin or gerrit remote."
+    end
+    return dev_command.vcs_sentence(err, root)
 end
 
 local function argv_for(root, plan, remote)
@@ -184,7 +200,7 @@ end
 function M.commands(root)
     local plan, err = resolve(root)
     if not plan then
-        return { dev_command.vcs_sentence(err, root) }
+        return { refusal(root, err) }
     end
     local lines = {}
     for _, remote in ipairs(plan.remotes) do
@@ -212,7 +228,7 @@ function M.run(opts, args, ctx)
     end
     local plan, err = resolve(ctx.root, #tags > 0)
     if not plan then
-        dev_command.die(dev_command.vcs_sentence(err, ctx.root))
+        dev_command.die(refusal(ctx.root, err))
     end
     local remotes = plan.remotes
     if #names > 0 then

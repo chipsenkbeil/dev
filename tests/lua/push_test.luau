@@ -63,6 +63,42 @@ testing.test("push.commands names a missing jj", function()
     assert(ok, err)
 end)
 
+testing.test("push refuses a detached head with two sentences", function()
+    local root, remote = fixture()
+    git(root, "checkout", "-q", "--detach")
+    local message = `HEAD is detached in {root}. A push needs a branch.`
+    testing.eq(push.commands(root), { message })
+    local out, code = support.dev(root, { "push" })
+    testing.eq(code, 1)
+    testing.eq(out:find(message, 1, true) ~= nil, true, out)
+    cleanup(root, remote)
+end)
+
+testing.test("push refuses a repo with no remote in a sentence", function()
+    local root = assert(fs.realpath(support.tempdir()))
+    git(root, "init", "-q")
+    git(root, "commit", "-q", "--allow-empty", "-m", "one")
+    testing.eq(push.commands(root), { "No origin or gerrit remote." })
+    local out, code = support.dev(root, { "push" })
+    testing.eq(code, 1)
+    testing.eq(out:find("No origin or gerrit remote.", 1, true) ~= nil, true, out)
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("push refuses a jj repo with no trunk bookmark in a sentence", function()
+    local root = assert(fs.realpath(support.tempdir()))
+    local out, code = dev_os.capture({ "jj", "--no-pager", "git", "init", root }, {
+        stderr = "stdout",
+    })
+    assert(code == 0, out)
+    local message = `No master or main bookmark in {root}.`
+    testing.eq(push.commands(root), { message })
+    local shown, status = support.dev(root, { "push" })
+    testing.eq(status, 1)
+    testing.eq(shown:find(message, 1, true) ~= nil, true, shown)
+    fs.remove(root, { recursive = true })
+end)
+
 testing.test("push.tag.sends.each.tag.to.the.remote.of.record", function()
     local root, remote = fixture()
     git(root, "tag", "v1")
