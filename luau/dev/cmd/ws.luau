@@ -24,6 +24,8 @@ local STALE_BOOKMARKS = "bookmarks() ~ ::trunk()"
 local HEAD_TEMPLATE = 'commit_id ++ "\\t" ++ description.first_line() ++ "\\n"'
 local BOOKMARK_TEMPLATE = 'if(remote, "", name ++ "\\n")'
 local SHORT_ID = 12
+local MAX_TITLE_MATCHES = 5
+local MAX_LANDED_ROUNDS = 20
 local STAMP_FORMAT = "!%Y%m%dT%H%M%SZ"
 local TRASH_DIR = ".trash"
 local ADOPT_PARENTS = "coalesce(@ & ::trunk(), @-)"
@@ -1156,6 +1158,7 @@ end
 
 local function abandon_heads(ctx, heads, opts)
     local dry = opts.dry
+    local kind = opts.kind or "empty"
     if #heads == 0 then
         return 0
     end
@@ -1168,34 +1171,216 @@ local function abandon_heads(ctx, heads, opts)
         local code = dev_os.run(argv) or 1
         if code ~= 0 then
             dev_command.say(
-                sentence("Left the empty heads alone. The jj abandon command exited " .. code)
+                sentence(`Left the {kind} heads alone. The jj abandon command exited {code}`)
             )
             return 0, code
         end
     end
     for _, head in ipairs(heads) do
         dev_command.say(
-            sentence((dry and "Would abandon" or "Abandoned") .. " empty head " .. head_text(head))
+            sentence(`{dry and "Would abandon" or "Abandoned"} {kind} head {head_text(head)}`)
         )
     end
     return #heads
 end
 
-local function list_strays(root, freed)
+local function jj_capture(root, ...)
+    local argv = vcs.with(vcs.base(root, vcs.JJ, { quiet = true }), ...)
+    local out, code = dev_os.capture(argv, { stderr = "null" })
+    if code ~= 0 then
+        return nil
+    end
+    return out
+end
+
+local function quoted(text)
+    local escaped = text:gsub('[\\"]', "\\%0")
+    return `"{escaped}"`
+end
+
+local function same_title_on_trunk(root, head)
+    local found = jj_capture(
+        root,
+        "log",
+        "-r",
+        `description(substring:{quoted(head.description)}) & ::trunk()`,
+        "--no-graph",
+        "-T",
+        HEAD_TEMPLATE
+    )
+    local tried = 0
+    for line in (found or ""):gmatch("[^\n]+") do
+        local id, title = line:match("^(%x+)\t(.*)$")
+        if id and title == head.description and tried < MAX_TITLE_MATCHES then
+            tried += 1
+            local diff = jj_capture(root, "interdiff", "--from", id, "--to", head.id, "--summary")
+            if diff == "" then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function head_landed(root, head)
+    local out = jj_capture(
+        root,
+        "log",
+        "-r",
+        head.id,
+        "--no-graph",
+        "-T",
+        'change_id ++ "\\n" ++ description'
+    )
+    local change = out and out:match("^(%S+)\n")
+    if change then
+        local trailer = out:match("\nChange%-Id: (I%x+)")
+        local revset = change
+        if trailer then
+            revset = `({change} | description(substring:"Change-Id: {trailer}"))`
+        end
+        local on_trunk = jj_capture(
+            root,
+            "log",
+            "-r",
+            `{revset} & ::trunk()`,
+            "--no-graph",
+            "-T",
+            'commit_id ++ "\\n"'
+        )
+        if on_trunk and on_trunk:match("%x") then
+            return true
+        end
+    end
+    return head.description ~= "" and same_title_on_trunk(root, head)
+end
+
+local function landed_heads(root, freed)
+    local landed = {}
+    for _, head in ipairs(jj_heads(root, unheld_heads(STRAY_HEADS, freed))) do
+        if head_landed(root, head) then
+            landed[#landed + 1] = head
+        end
+    end
+    return landed
+end
+
+local function abandon_landed_heads(ctx, freed, opts)
+    local total, code, planned = 0, nil, {}
+    for _ = 1, opts.dry and 1 or MAX_LANDED_ROUNDS do
+        local landed = landed_heads(ctx.root, freed)
+        if #landed == 0 then
+            break
+        end
+        local count
+        count, code = abandon_heads(ctx, landed, { dry = opts.dry, kind = "landed" })
+        total += count
+        for _, head in ipairs(landed) do
+            planned[head.id] = true
+        end
+        if code then
+            break
+        end
+    end
+    return total, code, planned
+end
+
+local function list_strays(root, freed, planned)
     local left = 0
     for _, head in ipairs(jj_heads(root, unheld_heads(STRAY_HEADS, freed))) do
-        dev_command.say(
-            sentence("Left non-empty head " .. head_text(head) .. " alone. Nothing holds it")
-        )
-        left = left + 1
+        if not planned[head.id] then
+            dev_command.say(
+                sentence("Left non-empty head " .. head_text(head) .. " alone. Nothing holds it")
+            )
+            left += 1
+        end
     end
     for _, name in
         ipairs(jj_lines(root, "bookmark", "list", "-r", STALE_BOOKMARKS, "-T", BOOKMARK_TEMPLATE))
     do
         dev_command.say(sentence("Left bookmark " .. name .. " alone. It is not on trunk"))
-        left = left + 1
+        left += 1
     end
     return left
+end
+
+local function git_trunk_refs(root, trunk)
+    local base = vcs.base(root, vcs.GIT, { quiet = true })
+    local refs = { `refs/heads/{trunk}` }
+    local out = dev_os.capture(
+        vcs.with(base, "for-each-ref", "--format=%(refname)", "refs/remotes"),
+        { stderr = "null" }
+    )
+    for ref in (out or ""):gmatch("[^\n]+") do
+        if ref:match(`^refs/remotes/[^/]+/{trunk}$`) then
+            refs[#refs + 1] = ref
+        end
+    end
+    return refs
+end
+
+local function on_trunk(base, branch, refs)
+    for _, ref in ipairs(refs) do
+        local argv = vcs.with(base, "merge-base", "--is-ancestor", `refs/heads/{branch}`, ref)
+        if dev_os.run(argv, { stdout = "null", stderr = "null" }) == 0 then
+            return true
+        end
+    end
+    return false
+end
+
+local function checked_out_branches(root)
+    local base = vcs.base(root, vcs.GIT, { quiet = true })
+    local out =
+        dev_os.capture(vcs.with(base, "worktree", "list", "--porcelain"), { stderr = "null" })
+    local held = {}
+    for branch in ("\n" .. (out or "")):gmatch("\nbranch refs/heads/([^\n]+)") do
+        held[branch] = true
+    end
+    return held
+end
+
+local function delete_merged_branches(ctx, opts)
+    local trunk = vcs.trunk(vcs.branches(ctx.root, vcs.GIT))
+    if not trunk then
+        return 0, 0, nil
+    end
+    local refs = git_trunk_refs(ctx.root, trunk)
+    local base = vcs.base(ctx.root, vcs.GIT, { quiet = true })
+    local held = checked_out_branches(ctx.root)
+    local deleted, unmerged, failure = 0, 0, nil
+    for _, branch in ipairs(vcs.branches(ctx.root, vcs.GIT)) do
+        if branch == trunk then
+            continue
+        end
+        if held[branch] then
+            dev_command.say(sentence(`Left branch {branch} alone. A worktree has it checked out`))
+            unmerged += 1
+            continue
+        end
+        if not on_trunk(base, branch, refs) then
+            dev_command.say(sentence(`Left branch {branch} alone. It is not on trunk`))
+            unmerged += 1
+            continue
+        end
+        local ok, why = true, nil
+        if not opts.dry then
+            ok, why = vcs.delete_branch(ctx.root, vcs.GIT, branch)
+        end
+        if ok then
+            dev_command.say(
+                sentence(`{opts.dry and "Would delete" or "Deleted"} merged branch {branch}`)
+            )
+            deleted += 1
+        else
+            dev_command.say(
+                sentence(`Left branch {branch} alone. {why or "Git did not delete it"}`)
+            )
+            unmerged += 1
+            failure = failure or 1
+        end
+    end
+    return deleted, unmerged, failure
 end
 
 local function finished_cards(root)
@@ -1239,13 +1424,20 @@ function M.prune(opts, args, ctx)
 
     local abandoned = 0
     if backend == vcs.JJ then
-        local code
+        local code, landed, planned
         local empty = jj_heads(ctx.root, unheld_heads(EMPTY_HEADS, freed))
         abandoned, code = abandon_heads(ctx, empty, { dry = dry })
         failure = failure or code
-        left = left + list_strays(ctx.root, freed)
+        landed, code, planned = abandon_landed_heads(ctx, freed, { dry = dry })
+        abandoned += landed
+        failure = failure or code
+        left += list_strays(ctx.root, freed, planned)
     else
-        dev_command.say("Git keeps no empty heads, so only worktrees are pruned.")
+        dev_command.say("Git keeps no empty heads.")
+        local deleted, unmerged, code = delete_merged_branches(ctx, { dry = dry })
+        abandoned = deleted
+        left += unmerged
+        failure = failure or code
     end
 
     dev_command.say(

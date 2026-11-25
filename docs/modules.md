@@ -396,10 +396,21 @@ leaves the workspaces it would forget out of the held working copies, so it
 lists the same heads a real run does. Only heads go, so a chain of empty
 commits needs one run per commit.
 
-It lists and leaves alone every non-empty head that nothing holds, and every
-bookmark whose commit is not an ancestor of `trunk()`. There is no age
-threshold. A git project has no heads to abandon and says so, so only
-worktrees are pruned.
+It then abandons every non-empty head that nothing holds and that trunk
+already holds. A head is landed when a commit of `::trunk()` has its change id
+or its Gerrit `Change-Id` trailer, or has its first line and an empty
+`jj interdiff`. Each round can expose the parent of an abandoned head, so it
+repeats up to 20 times, and a dry run plans one round.
+
+It lists and leaves alone every other non-empty head that nothing holds, and
+every bookmark whose commit is not an ancestor of `trunk()`. There is no age
+threshold.
+
+A git project has no empty heads. It deletes every local branch that is an
+ancestor of the local or remote-tracking trunk and says `Deleted merged branch
+NAME.` (`Would delete` in a dry run). It leaves the trunk branch and every
+other branch alone with a line saying it is not on trunk, and a failed delete
+exits 1.
 
 `vcs.delete_branch(root, backend, name)` runs `jj bookmark delete` or
 `git branch -D` when `vcs.branches` lists the name. `land` calls it for the

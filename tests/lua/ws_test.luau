@@ -1306,6 +1306,11 @@ case "$*" in
         case "$*" in *'~ "gone1"@'*) printf '%s' "$FREED_STRAYS"; exit 0 ;; esac
         printf '%s' "$STRAYS"; exit 0 ;;
     *"bookmark list"*) printf '%s' "$BOOKMARKS"; exit 0 ;;
+    *"change_id ++"*) printf '%s' "$HEAD_DESCRIPTION"; exit 0 ;;
+    *"description(substring:\"Change-Id"*) printf '%s' "$TRUNK_MATCHES"; exit 0 ;;
+    *"description(substring"*) printf '%s' "$TITLE_MATCHES"; exit 0 ;;
+    *"::trunk()"*) printf '%s' "$TRUNK_MATCHES"; exit 0 ;;
+    *interdiff*) printf '%s' "$INTERDIFF"; exit 0 ;;
 esac
 echo "jj $*" >> "$LOG"
 if [ -n "$FAIL" ]; then exit 3; fi
@@ -1320,6 +1325,7 @@ case "$*" in
         fi
         printf '%s' "$WORKTREES"; exit 0 ;;
     *"status --porcelain"*) printf '%s' "$DIRTY"; exit 0 ;;
+    *"for-each-ref"*) printf '%s' "$BRANCHES"; exit 0 ;;
 esac
 echo "git $*" >> "$LOG"
 if [ -n "$FAIL" ]; then exit 3; fi
@@ -1494,7 +1500,7 @@ testing.test("prune leaves a git worktree that is not a done card alone", functi
         out,
         lines(
             "Left worktree " .. OPEN_ID .. " alone. Its name is not the id of a done card.",
-            "Git keeps no empty heads, so only worktrees are pruned.",
+            "Git keeps no empty heads.",
             "Pruned 0 worktrees and 0 heads. Left 1 item alone."
         )
     )
@@ -1861,7 +1867,7 @@ testing.test("prune removes git worktrees whose folder is gone or named for a do
                 .. " to "
                 .. trashed(env, root, DONE_ID)
                 .. ".",
-            "Git keeps no empty heads, so only worktrees are pruned.",
+            "Git keeps no empty heads.",
             "Pruned 2 worktrees and 0 heads. Left 0 items alone."
         )
     )
@@ -1896,7 +1902,7 @@ testing.test("prune keeps a dirty git worktree of a done card", function()
         out,
         lines(
             "Kept worktree " .. DONE_ID .. ". " .. done .. " holds changes not in a commit.",
-            "Git keeps no empty heads, so only worktrees are pruned.",
+            "Git keeps no empty heads.",
             "Pruned 0 worktrees and 0 heads. Left 1 item alone."
         )
     )
@@ -1928,7 +1934,7 @@ testing.test("prune keeps a locked git worktree of a done card", function()
                 .. ". "
                 .. done
                 .. " is a locked git worktree. Run git worktree unlock first.",
-            "Git keeps no empty heads, so only worktrees are pruned.",
+            "Git keeps no empty heads.",
             "Pruned 0 worktrees and 0 heads. Left 1 item alone."
         )
     )
@@ -1965,7 +1971,7 @@ testing.test("prune removes a gone worktree before a done one listed ahead of it
                 .. " to "
                 .. trashed(env, root, DONE_ID)
                 .. ".",
-            "Git keeps no empty heads, so only worktrees are pruned.",
+            "Git keeps no empty heads.",
             "Pruned 2 worktrees and 0 heads. Left 0 items alone."
         )
     )
@@ -2033,7 +2039,7 @@ testing.test("prune dry-run changes no git worktree", function()
         lines(
             "Would remove worktree gone1. Its folder " .. gone .. " is gone.",
             "Would remove worktree " .. DONE_ID .. ". Its card is done.",
-            "Git keeps no empty heads, so only worktrees are pruned.",
+            "Git keeps no empty heads.",
             "Would prune 2 worktrees and 0 heads. Left 0 items alone."
         )
     )
@@ -2061,7 +2067,7 @@ testing.test("prune leaves a done card worktree outside the ws new folder alone"
         out,
         lines(
             "Left worktree " .. DONE_ID .. " alone. Its folder is not where ws new puts it.",
-            "Git keeps no empty heads, so only worktrees are pruned.",
+            "Git keeps no empty heads.",
             "Would prune 0 worktrees and 0 heads. Left 1 item alone."
         )
     )
@@ -2091,7 +2097,7 @@ testing.test("prune dry-run keeps a locked git worktree of a done card", functio
                 .. ". "
                 .. done
                 .. " is a locked git worktree. Run git worktree unlock first.",
-            "Git keeps no empty heads, so only worktrees are pruned.",
+            "Git keeps no empty heads.",
             "Would prune 0 worktrees and 0 heads. Left 1 item alone."
         )
     )
@@ -2127,7 +2133,7 @@ testing.test(
                     .. sibling
                     .. ", which git marks prunable. Run git worktree prune first.",
                 "Left worktree sibling alone. Its name is not the id of a done card.",
-                "Git keeps no empty heads, so only worktrees are pruned.",
+                "Git keeps no empty heads.",
                 "Would prune 0 worktrees and 0 heads. Left 2 items alone."
             )
         )
@@ -2157,7 +2163,7 @@ testing.test("prune dry-run removes a done worktree beside a prunable gone one",
         lines(
             "Would remove worktree gone1. Its folder " .. gone .. " is gone.",
             "Would remove worktree " .. DONE_ID .. ". Its card is done.",
-            "Git keeps no empty heads, so only worktrees are pruned.",
+            "Git keeps no empty heads.",
             "Would prune 2 worktrees and 0 heads. Left 0 items alone."
         )
     )
@@ -2183,7 +2189,7 @@ testing.test("prune goes on after a failed removal and exits with its code", fun
             "Skipped the card test. This project has no board.",
             "Kept worktree gone1. The git command exited 3.",
             "Kept worktree gone2. The git command exited 3.",
-            "Git keeps no empty heads, so only worktrees are pruned.",
+            "Git keeps no empty heads.",
             "Pruned 0 worktrees and 0 heads. Left 2 items alone."
         )
     )
@@ -2753,3 +2759,171 @@ if dev_os.which("jj") then
         end)
     end)
 end
+
+if dev_os.which("jj") then
+    local function head_ids(root, revset)
+        local out = real_jj(root, "log", "-r", revset, "--no-graph", "-T", 'commit_id ++ "\\n"')
+        return out
+    end
+
+    local function landed_project()
+        local root = support.sandbox({}, {})
+        local init = { stdout = "null", stderr = "null", env = IDENT }
+        assert(dev_os.run({ "jj", "git", "init", root }, init) == 0, "jj git init failed")
+        assert(fs.write(root .. "/base", "1"))
+        real_jj(root, "commit", "-m", "base")
+        local base = real_jj(root, "log", "-r", "@-", "--no-graph", "-T", "commit_id")
+        local function change(parent, message, file, text)
+            real_jj(root, "new", parent, "-m", message)
+            assert(fs.write(root .. "/" .. file, text))
+            return (real_jj(root, "log", "-r", "@", "--no-graph", "-T", "commit_id"))
+        end
+        change(base, "feat: one\n\nChange-Id: I1111111111111111111111111111111111111111", "t1", "1")
+        change("@", "feat: two", "t2", "2")
+        real_jj(root, "bookmark", "create", "tip", "-r", "@")
+        real_jj(root, "config", "set", "--repo", 'revset-aliases."trunk()"', "tip")
+        local by_trailer = change(
+            base,
+            "feat: one, rewritten\n\nChange-Id: I1111111111111111111111111111111111111111",
+            "other",
+            "x"
+        )
+        local by_title = change(base, "feat: two", "t2", "2")
+        local unlanded = change(base, "feat: three", "t3", "3")
+        real_jj(root, "new", "tip")
+        local env = adopt_env()
+        env.env.XDG_CONFIG_HOME = dev_os.getenv("XDG_CONFIG_HOME")
+        return root, env, { trailer = by_trailer, title = by_title, unlanded = unlanded }
+    end
+
+    testing.test("prune abandons a head whose change id or title and diff is on trunk", function()
+        -- Hold a rewritten copy by Change-Id, one by title and diff, and one unlanded head
+        local root, env, heads = landed_project()
+
+        -- Prune so the landed heads go and the unlanded one stays
+        local out, code = support.dev(root, { "ws", "prune" }, env)
+
+        -- Expect both landed heads abandoned and the unlanded head listed and kept
+        testing.eq(code, 0, out)
+        testing.ok(out:find("Abandoned landed head " .. heads.trailer:sub(1, 12), 1, true), out)
+        testing.ok(out:find("Abandoned landed head " .. heads.title:sub(1, 12), 1, true), out)
+        testing.ok(out:find("Left non-empty head " .. heads.unlanded:sub(1, 12), 1, true), out)
+        testing.ok(out:find("Pruned 0 workspaces and 2 heads. Left 1 item alone.", 1, true), out)
+        testing.eq(head_ids(root, "all()"):find(heads.trailer, 1, true), nil)
+        testing.eq(head_ids(root, "all()"):find(heads.title, 1, true), nil)
+        testing.ok(head_ids(root, heads.unlanded):find(heads.unlanded, 1, true) ~= nil)
+    end)
+
+    testing.test("prune dry-run lists the landed heads and abandons none", function()
+        -- Hold the same landed and unlanded heads
+        local root, env, heads = landed_project()
+
+        -- Plan the prune
+        local out, code = support.dev(root, { "ws", "prune", "--dry-run" }, env)
+
+        -- Expect the plan to name the landed heads and the heads left in place
+        testing.eq(code, 0, out)
+        testing.ok(out:find("Would abandon landed head " .. heads.trailer:sub(1, 12), 1, true), out)
+        testing.ok(out:find("Would abandon landed head " .. heads.title:sub(1, 12), 1, true), out)
+        testing.eq(out:find("Left non-empty head " .. heads.title:sub(1, 12), 1, true), nil)
+        testing.ok(head_ids(root, heads.trailer):find(heads.trailer, 1, true) ~= nil)
+        testing.ok(head_ids(root, heads.title):find(heads.title, 1, true) ~= nil)
+    end)
+
+    testing.test("prune leaves the landed heads and exits 1 when the abandon fails", function()
+        -- Hold the landed heads and put a jj in front that refuses to abandon
+        local root, env, heads = landed_project()
+        local bin = support.tempdir()
+        local script = table.concat({
+            "#!/bin/sh",
+            'for word in "$@"; do',
+            '    if [ "$word" = abandon ]; then',
+            '        echo "abandon refused" >&2',
+            "        exit 1",
+            "    fi",
+            "done",
+            "exec " .. assert(dev_os.which("jj")) .. ' "$@"',
+            "",
+        }, "\n")
+        assert(fs.write(bin .. "/jj", script))
+        assert(dev_os.run({ "chmod", "755", bin .. "/jj" }) == 0, "chmod failed")
+        env.env.PATH = bin .. ":" .. dev_os.getenv("PATH")
+
+        -- Prune so the abandon fails
+        local out, code = support.dev(root, { "ws", "prune" }, env)
+
+        -- Expect the failure code, the heads reported left alone and both still present
+        testing.eq(code, 1, out)
+        testing.ok(out:find("Left the landed heads alone.", 1, true), out)
+        testing.ok(head_ids(root, heads.trailer):find(heads.trailer, 1, true) ~= nil)
+        testing.ok(head_ids(root, heads.title):find(heads.title, 1, true) ~= nil)
+    end)
+end
+
+local function branch_project()
+    local root = support.sandbox({}, {})
+    local code = dev_os.run({ "git", "init", "-q", "-b", "main", root }, { stdout = "null" })
+    assert(code == 0, "git init failed")
+    assert(fs.write(root .. "/base", "1"))
+    support.git(root, "add", "-A")
+    support.git(root, "commit", "-q", "-m", "base")
+    support.git(root, "branch", "merged")
+    support.git(root, "checkout", "-q", "-b", "unmerged")
+    assert(fs.write(root .. "/work", "1"))
+    support.git(root, "add", "-A")
+    support.git(root, "commit", "-q", "-m", "feat: work")
+    support.git(root, "checkout", "-q", "main")
+    local env = adopt_env()
+    return root, env
+end
+
+local function has_branch(root, name)
+    local out = dev_os.capture({ "git", "-C", root, "branch", "--list", name })
+    return out:match("%S") ~= nil
+end
+
+testing.test("prune deletes a git branch merged into trunk and keeps an unmerged one", function()
+    -- Hold one branch on trunk and one with its own commit
+    local root, env = branch_project()
+
+    -- Prune so the merged branch is deleted
+    local out, code = support.dev(root, { "ws", "prune" }, env)
+
+    -- Expect the merged branch gone and the unmerged one listed and kept
+    testing.eq(code, 0, out)
+    testing.ok(out:find("Deleted merged branch merged.", 1, true), out)
+    testing.ok(out:find("Left branch unmerged alone. It is not on trunk.", 1, true), out)
+    testing.ok(out:find("Pruned 0 worktrees and 1 head. Left 1 item alone.", 1, true), out)
+    testing.eq(has_branch(root, "merged"), false)
+    testing.eq(has_branch(root, "unmerged"), true)
+    testing.eq(has_branch(root, "main"), true)
+end)
+
+testing.test("prune keeps a merged git branch a worktree has checked out", function()
+    -- Hold a merged branch checked out in a live worktree
+    local root, env = branch_project()
+    local dir = support.tempdir() .. "/held"
+    support.git(root, "worktree", "add", "-q", "-b", "held", dir, "main")
+
+    -- Prune so the merged branch goes and the checked-out one stays
+    local out, code = support.dev(root, { "ws", "prune" }, env)
+
+    -- Expect no failure and the held branch listed as left alone
+    testing.eq(code, 0, out)
+    testing.ok(out:find("Left branch held alone. A worktree has it checked out.", 1, true), out)
+    testing.eq(has_branch(root, "held"), true)
+    testing.eq(has_branch(root, "merged"), false)
+end)
+
+testing.test("prune dry-run names the merged git branch and deletes nothing", function()
+    -- Hold the same branches
+    local root, env = branch_project()
+
+    -- Plan the prune
+    local out, code = support.dev(root, { "ws", "prune", "--dry-run" }, env)
+
+    -- Expect the plan to name the branch while it stays
+    testing.eq(code, 0, out)
+    testing.ok(out:find("Would delete merged branch merged.", 1, true), out)
+    testing.eq(has_branch(root, "merged"), true)
+end)
