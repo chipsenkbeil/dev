@@ -5,32 +5,33 @@ local support = require("./support")
 local DOC = "docs/modules.md"
 local HEADING = "### Modules a command may require"
 
-local PROBE = [=[
-local entries = %s
-return require("@dev/command")({
-    summary = "Check the modules a command may require.",
-    run = function()
-        local missing = {}
-        for _, entry in ipairs(entries) do
-            local ok, module = pcall(require, entry.module)
-            if not ok then
-                missing[#missing + 1] = entry.module .. " does not load"
-            else
-                for _, name in ipairs(entry.functions) do
-                    if type(module[name]) ~= "function" then
-                        missing[#missing + 1] = entry.module .. "." .. name .. " is not a function"
-                    end
-                end
-            end
-        end
-        for _, line in ipairs(missing) do
-            print(line)
-        end
-        print("checked " .. #entries .. " modules")
-        return 0
-    end,
-})
-]=]
+local PROBE = table.concat({
+    "local entries = %s",
+    'return require("@dev/command")({',
+    '    summary = "Check the modules a command may require.",',
+    "    run = function()",
+    "        local missing = {}",
+    "        for _, entry in ipairs(entries) do",
+    "            local ok, module = pcall(require, entry.module)",
+    "            if not ok then",
+    '                missing[#missing + 1] = entry.module .. " does not load"',
+    "            else",
+    "                for _, name in ipairs(entry.functions) do",
+    '                    if type(module[name]) ~= "function" then',
+    '                        missing[#missing + 1] = entry.module .. "." .. name .. " is not a function"',
+    "                    end",
+    "                end",
+    "            end",
+    "        end",
+    "        for _, line in ipairs(missing) do",
+    "            print(line)",
+    "        end",
+    '        print("checked " .. #entries .. " modules")',
+    "        return 0",
+    "    end,",
+    "})",
+    "",
+}, "\n")
 
 local function section()
     local text = assert(fs.read(DOC))
@@ -94,6 +95,7 @@ testing.test("the modules topic lists at least one function for every module", f
 end)
 
 testing.test("every module the modules topic lists loads from a project command", function()
+    -- List the modules the topic names
     local items = entries()
 
     -- Put the probe command in a project

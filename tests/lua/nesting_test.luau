@@ -4,10 +4,19 @@ local fs = require("@dev/fs")
 local registry = require("@dev/registry")
 local support = require("./support")
 
-local RAN = "#!/usr/bin/env bash\n# summary: Run x.\n# flag: now kind=boolean -- Right away\n"
-    .. '# arg: words list\necho ran-x "$@"\n'
-local RAN_Y = 'local dev_command = require("@dev/command")\n'
-    .. 'return dev_command({ summary = "Run y.", run = function() print("ran-y") return 0 end })\n'
+local RAN = table.concat({
+    "#!/usr/bin/env bash",
+    "# summary: Run x.",
+    "# flag: now kind=boolean -- Right away",
+    "# arg: words list",
+    'echo ran-x "$@"',
+    "",
+}, "\n")
+local RAN_Y = table.concat({
+    'local dev_command = require("@dev/command")',
+    'return dev_command({ summary = "Run y.", run = function() print("ran-y") return 0 end })',
+    "",
+}, "\n")
 
 local function project(files)
     local root = support.tempdir()
@@ -36,7 +45,12 @@ end
 local function nested()
     return project({
         ["n/m/x.sh"] = RAN,
-        ["n/m/h.sh"] = "#!/usr/bin/env bash\n# summary: Hidden.\n# hidden\n",
+        ["n/m/h.sh"] = table.concat({
+            "#!/usr/bin/env bash",
+            "# summary: Hidden.",
+            "# hidden",
+            "",
+        }, "\n"),
         ["n/m/o/y.luau"] = RAN_Y,
         ["n/m/DESCRIPTION"] = "The m parent command\n",
     })
@@ -52,14 +66,19 @@ testing.test("a command three words deep runs with its arguments", function()
 end)
 
 testing.test("a parent command that holds only a parent command is a parent command", function()
+    -- Run the outer parent and see it list its child
     local root = project({ ["n/m/x.sh"] = RAN })
     local out, code = dev(root, { "n" })
     testing.eq(code, 2)
     testing.ok(out:find("dev n: needs a subcommand", 1, true), out)
     testing.ok(out:find("\n  m ", 1, true), out)
+
+    -- Run the inner parent and see it ask for a subcommand
     out, code = dev(root, { "n", "m" })
     testing.eq(code, 2)
     testing.ok(out:find("dev n m: needs a subcommand", 1, true), out)
+
+    -- Run an unknown word under it and see it refused
     out, code = dev(root, { "n", "m", "nope" })
     testing.eq(code, 2)
     testing.ok(out:find("dev n m: unknown subcommand nope", 1, true), out)
@@ -67,24 +86,30 @@ testing.test("a parent command that holds only a parent command is a parent comm
 end)
 
 testing.test("dev help lists the subcommands at each depth and shows a leaf", function()
+    -- List the subcommands at each depth
     local root = nested()
     local out = dev(root, { "help", "n" })
     testing.ok(out:find("\n  m +The m parent command\n"), out)
     out = dev(root, { "help", "n", "m" })
     testing.ok(out:find("\n  x +Run x%.\n"), out)
     testing.ok(out:find("\n  o ", 1, true), out)
+
+    -- Show a leaf through help and through the help flags
     out = dev(root, { "help", "n", "m", "x" })
     testing.ok(out:find("dev n m x", 1, true) and out:find("--now", 1, true), out)
     out = dev(root, { "n", "m", "--help" })
     testing.ok(out:find("\n  x +Run x%.\n"), out)
     out = dev(root, { "n", "m", "x", "-h" })
     testing.ok(out:find("usage\n  dev n m x", 1, true), out)
+
+    -- Refuse help for an unknown word
     local _, code = dev(root, { "help", "n", "m", "zap" })
     testing.eq(code, 2)
     fs.remove(root, { recursive = true })
 end)
 
 testing.test("the registry answers one word per level", function()
+    -- List the names one level below a parent
     local root = nested()
     local reg = registry.load(root, { warn = function() end })
     local names = {}
@@ -93,6 +118,8 @@ testing.test("the registry answers one word per level", function()
     end
     table.sort(names)
     testing.eq(names, { "n m o", "n m x" })
+
+    -- Look up a hidden and a visible leaf and its flags
     testing.eq(reg:find({ "n", "m", "h" }).hidden, true)
     testing.eq(reg:find({ "n", "m", "x" }).hidden, false)
     testing.eq(reg:flags({ "n", "m", "x" }), { "--now" })
@@ -100,23 +127,42 @@ testing.test("the registry answers one word per level", function()
 end)
 
 testing.test("the topic check follows a parent command to any depth", function()
+    -- Check a topic that names real commands and flags
     local root = nested()
     assert(fs.mkdir(root .. "/.dev/help", { parents = true }))
-    assert(
-        fs.write(
-            root .. "/.dev/help/t.md",
-            "# t: A topic\n\n`dev n m x --now` and `dev n m o y`.\n\n```\ndev n m x\n```\n"
-        )
-    )
+    assert(fs.write(
+        root .. "/.dev/help/t.md",
+        table.concat({
+            "# t: A topic",
+            "",
+            "`dev n m x --now` and `dev n m o y`.",
+            "",
+            "```",
+            "dev n m x",
+            "```",
+            "",
+        }, "\n")
+    ))
     testing.eq({ dev(root, { "help", "--check-topics" }) }, { "", 0 })
-    assert(
-        fs.write(
-            root .. "/.dev/help/t.md",
-            "# t: A topic\n\n`dev n m nope`\n\n`dev n m x --bogus`\n\n`dev n m o frob`\n"
-        )
-    )
+
+    -- Check a topic that names a missing command and flag
+    assert(fs.write(
+        root .. "/.dev/help/t.md",
+        table.concat({
+            "# t: A topic",
+            "",
+            "`dev n m nope`",
+            "",
+            "`dev n m x --bogus`",
+            "",
+            "`dev n m o frob`",
+            "",
+        }, "\n")
+    ))
     local out, code = dev(root, { "help", "--check-topics" })
     testing.eq(code, 1)
+
+    -- Expect one problem per bad reference
     testing.ok(
         out:find(".dev/help/t.md:3: `dev n m nope`: dev n m has no subcommand nope", 1, true),
         out
@@ -127,10 +173,13 @@ testing.test("the topic check follows a parent command to any depth", function()
 end)
 
 testing.test("the old hyphenated words are gone", function()
+    -- Run the old hyphenated word and see it refused
     local root = project({})
     local out, code = dev(root, { "box", "install-tools", "b" })
     testing.eq(code, 2)
     testing.ok(out:find("dev box: unknown subcommand install-tools", 1, true), out)
+
+    -- Run the new nested words and see them reach the picker
     out, code = dev(root, { "box", "tools", "install" })
     testing.eq(code, 2)
     testing.ok(out:find("No box given and no terminal to pick one", 1, true), out)
@@ -147,6 +196,7 @@ local function names_below(reg, words, found)
 end
 
 testing.test("no command word of this repository has a hyphen, at any depth", function()
+    -- Collect every builtin command name at every depth
     local root = support.tempdir()
     local reg = registry.load(root, { warn = function() end }):view(registry.Source.BUILTIN)
     local found = {}
@@ -156,11 +206,15 @@ testing.test("no command word of this repository has a hyphen, at any depth", fu
             names_below(reg, row.words, found)
         end
     end
+
+    -- Check the walk reached the deep commands
     testing.ok(#found > 20, "too few commands found: " .. #found)
     testing.ok(
         table.concat(found, "\n"):find("box tools install", 1, true),
         "box tools install missing"
     )
+
+    -- Check no name holds a hyphen
     for _, name in ipairs(found) do
         testing.ok(not name:find("-", 1, true), "hyphenated command " .. name)
     end

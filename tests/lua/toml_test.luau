@@ -34,10 +34,7 @@ testing.test("parse reads root keys, integers, booleans, arrays and quoted keys"
 end)
 
 testing.test("parse reads escapes and keeps a # inside a string", function()
-    local input = table.concat({
-        's = "a\\tb\\n\\"c\\\\ # not"',
-        "",
-    }, "\r\n")
+    local input = 's = "a\\tb\\n\\"c\\\\ # not"\r\n'
     testing.eq(toml.parse(input), { s = 'a\tb\n"c\\ # not' })
 end)
 
@@ -199,6 +196,7 @@ testing.test("parse names the line of each form it refuses", function()
 end)
 
 testing.test("set adds a key under an existing section and keeps the rest of the file", function()
+    -- Start from a file with comments and a second section
     local input = table.concat({
         "# mine",
         "[board.pomb]",
@@ -208,6 +206,8 @@ testing.test("set adds a key under an existing section and keeps the rest of the
         'host = "h"',
         "",
     }, "\n")
+
+    -- Set a key under the first section and see the rest untouched
     local out = assert(toml.set(input, "board.pomb.token", "pass:x"))
     testing.eq(
         out,
@@ -222,6 +222,8 @@ testing.test("set adds a key under an existing section and keeps the rest of the
             "",
         }, "\n")
     )
+
+    -- Check the result still parses to the same values
     testing.eq(toml.parse(out).board.pomb, { url = "u", token = "pass:x" })
 end)
 
@@ -233,10 +235,15 @@ testing.test("set makes the section when it is absent", function()
 end)
 
 testing.test("set writes a list of strings, an integer and an escaped string", function()
+    -- Write a list of strings
     local out = assert(toml.set("", "board.ship.source_roots", { "a/", "b c/" }))
     testing.eq(toml.parse(out).board.ship.source_roots, { "a/", "b c/" })
+
+    -- Write an integer
     out = assert(toml.set(out, "board.ship.n", 3))
     testing.eq(toml.parse(out).board.ship.n, 3)
+
+    -- Write a string that needs escapes
     out = assert(toml.set(out, "board.ship.s", 'q"\\t'))
     testing.eq(toml.parse(out).board.ship.s, 'q"\\t')
 end)

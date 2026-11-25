@@ -6,7 +6,16 @@ local support = require("./support")
 
 local Column = support.Column
 
-local PLANNED = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone"
+local PLANNED = table.concat({
+    "## Problem",
+    "why",
+    "",
+    "## Change",
+    "- x",
+    "",
+    "## Out of scope",
+    "none",
+}, "\n")
 local JUDGED = "done (reviewer judgement)"
 local AGENT = board.ACTOR.AGENT
 local Kind = board.NoteKind
@@ -42,18 +51,28 @@ testing.test("open_question is nil with no comments", function()
 end)
 
 local function setup()
-    local root = support.sandbox(
-        { [".dev/config.toml"] = '[board]\nbackend = "local"\nname = "mine"\n' },
-        {}
-    )
+    -- Make a project on a local board and a home with a Pomb config
+    local root = support.sandbox({
+        [".dev/config.toml"] = table.concat({
+            "[board]",
+            'backend = "local"',
+            'name = "mine"',
+            "",
+        }, "\n"),
+    }, {})
     local home = support.tempdir()
     assert(fs.mkdir(home .. "/.config/dev", { parents = true }))
-    assert(
-        fs.write(
-            home .. "/.config/dev/config.toml",
-            '[board.pomb]\nurl = "https://pomb.example"\ntoken = "pass:secrets/worker/token/pomb"\n'
-        )
-    )
+    assert(fs.write(
+        home .. "/.config/dev/config.toml",
+        table.concat({
+            "[board.pomb]",
+            'url = "https://pomb.example"',
+            'token = "pass:secrets/worker/token/pomb"',
+            "",
+        }, "\n")
+    ))
+
+    -- Run dev in that project as one session
     local function dev(args)
         return support.dev(root, args, {
             env = {
@@ -64,10 +83,14 @@ local function setup()
             },
         })
     end
+
+    -- Start the board with no turn card
     local out, code = dev({ "board", "init" })
     testing.eq(code, 0, out)
     local tracked = root .. "/.dev/board.json"
     support.drop_turn_card(fs.exists(tracked) and tracked or support.board_file(home, "mine"))
+
+    -- Hand back the runner and the board file
     return dev, fs.exists(tracked) and tracked or support.board_file(home, "mine")
 end
 
@@ -112,28 +135,41 @@ local function stored(comment, who)
 end
 
 testing.test("move to Ready refuses a card with an unanswered question and names it", function()
+    -- Plan a card and leave a question on it
     local dev, path = setup()
     local id = planned_card(dev, Column.BACKLOG)
     comment_on(path, { stored(ASKED, AGENT) })
+
+    -- Move it to Ready
     local out, code = dev({ "board", "move", id, Column.READY })
+
+    -- Refuse the move and name the question
     testing.eq(code, 1, out)
     testing.ok(out:find("unanswered question, comment qqqqqqqq", 1, true), out)
 end)
 
 testing.test("move to Ready passes once a decision note follows the question", function()
+    -- Plan a card and leave a question and its decision on it
     local dev, path = setup()
     local id = planned_card(dev, Column.BACKLOG)
     comment_on(path, { stored(ASKED, AGENT), stored(DECIDED, AGENT) })
+
+    -- Move it to Ready and pass
     local out, code = dev({ "board", "move", id, Column.READY })
     testing.eq(code, 0, out)
 end)
 
 testing.test("next skips a Ready card whose question is unanswered", function()
+    -- Leave a question on a Ready card
     local dev, path = setup()
     planned_card(dev, Column.READY)
     comment_on(path, { stored(ASKED, AGENT) })
+
+    -- Skip the card while the question is open
     local out = dev({ "board", "next" })
     testing.eq(out, "No ready cards.\n")
+
+    -- Offer the card once a decision follows
     comment_on(path, { stored(ASKED, AGENT), stored(STATUS, AGENT), stored(DECIDED, AGENT) })
     out = dev({ "board", "next" })
     testing.ok(out:find("Card", 1, true), out)

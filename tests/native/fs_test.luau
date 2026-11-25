@@ -69,11 +69,16 @@ check("atomic write replaces the file and leaves no temp", function()
 end)
 
 check("failed atomic write keeps the old file whole", function()
+    -- Write an old file
     local path = root .. "/keep"
     assert(fs.write(path, "old"))
+
+    -- Make the folder unwritable and try an atomic write
     assert(fs.chmod(root .. "/atomic", 320))
     local ok, reason = fs.write(root .. "/atomic/f", "new", { atomic = true })
     fs.chmod(root .. "/atomic", 448)
+
+    -- Check the old file is whole
     if not is_root() then
         assert(ok == nil and reason)
         assert(fs.read(root .. "/atomic/f") == "new")
@@ -91,15 +96,20 @@ check("mkdir parents accepts an existing folder, plain mkdir does not", function
 end)
 
 check("remove, recursive and missing", function()
+    -- Refuse a plain remove of a folder with content
     local dir = root .. "/rm"
     assert(fs.mkdir(dir .. "/sub", { parents = true }))
     assert(fs.write(dir .. "/sub/f", "x"))
     local ok, reason = fs.remove(dir)
     assert(ok == nil and reason)
+
+    -- Remove it recursively, then again while missing
     assert(fs.remove(dir, { recursive = true }))
     assert(not fs.exists(dir))
     assert(fs.remove(dir, { recursive = true }))
     assert(fs.remove(dir) == nil)
+
+    -- Remove a plain file
     assert(fs.write(root .. "/gone", "x"))
     assert(fs.remove(root .. "/gone"))
 end)
@@ -121,13 +131,18 @@ check("move refuses a broken link as target", function()
 end)
 
 check("list is sorted, hidden names included, no dots", function()
+    -- Make a folder with three names
     local dir = root .. "/ls"
     assert(fs.mkdir(dir))
     assert(fs.write(dir .. "/b", ""))
     assert(fs.write(dir .. "/a", ""))
     assert(fs.write(dir .. "/.h", ""))
+
+    -- List it sorted
     local names = assert(fs.list(dir))
     assert(table.concat(names, ",") == ".h,a,b", table.concat(names, ","))
+
+    -- List an empty folder
     local empty = assert(fs.list(root .. "/p/q/r"))
     assert(#empty == 0)
 end)
@@ -170,22 +185,30 @@ check("is_exec follows the permission bits", function()
 end)
 
 check("realpath and readlink keep their messages", function()
+    -- Resolve a link and a missing path
     local real = assert(fs.realpath(root .. "/lslink"))
     assert(real == assert(fs.realpath(root .. "/ls")))
     local ok, reason = fs.realpath(root .. "/nope")
     assert(ok == nil and reason == "cannot resolve " .. root .. "/nope")
+
+    -- Read a link and a plain file
     assert(fs.readlink(root .. "/lslink") == root .. "/ls")
     local text, why = fs.readlink(root .. "/a.txt")
     assert(text == nil and why == root .. "/a.txt is not a link")
 end)
 
 check("mktemp names PREFIX.XXXXXX under TMPDIR", function()
+    -- Make a named file
     local path = assert(fs.mktemp({ prefix = "named" }))
     assert(string.match(path, "/named%.%w%w%w%w%w%w$"), path)
     assert(fs.is_file(path))
+
+    -- Make a default-named folder
     local dir = assert(fs.mktemp({ dir = true }))
     assert(string.match(dir, "/dev%.%w%w%w%w%w%w$"), dir)
     assert(fs.is_dir(dir))
+
+    -- Clean up
     fs.remove(path)
     fs.remove(dir, { recursive = true })
 end)
@@ -203,12 +226,17 @@ check("join, dirname and basename keep the edge cases", function()
 end)
 
 check("open_nofollow, fstat, read_fd and close", function()
+    -- Open the file and stat it
     local fd = assert(fs.open_nofollow(root .. "/a.txt"))
     assert(type(fd) == "number")
     local info = assert(fs.fstat(fd))
     assert(info.kind == "file" and info.size == 4)
+
+    -- Read it in two parts
     assert(assert(fs.read_fd(fd, 2)) == "a\0")
     assert(assert(fs.read_fd(fd, 100)) == "b\n")
+
+    -- Close it and see fstat fail
     fs.close(fd)
     local bad, reason = fs.fstat(fd)
     assert(bad == nil and reason)

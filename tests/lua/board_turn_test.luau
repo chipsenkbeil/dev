@@ -26,12 +26,22 @@ local function advance(seconds)
 end
 
 local function board_home()
+    -- Make a repo that names a local board
     local root = support.sandbox({
-        [".dev/config.toml"] = '[board]\nbackend = "local"\nname = "mine"\n',
+        [".dev/config.toml"] = table.concat({
+            "[board]",
+            'backend = "local"',
+            'name = "mine"',
+            "",
+        }, "\n"),
     }, {})
+
+    -- Give it a home with an empty user config
     local home = support.tempdir()
     assert(fs.mkdir(home .. "/.config/dev", { parents = true }), "mkdir failed")
     assert(fs.write(home .. "/.config/dev/config.toml", ""), "write failed")
+
+    -- Create the board and drop the turn card it starts with
     local out, code = support.dev(root, { "board", "init" }, {
         env = { HOME = home, XDG_STATE_HOME = home .. "/state" },
     })
@@ -64,32 +74,45 @@ local function lease(seconds)
 end
 
 testing.test("the turn goes to one asker and names its holder and the time to the next", function()
+    -- Let the first asker take the turn
     local backend = backend_at(board_home())
     local first = assert(turn.take(backend, "alpha", "aaaa1111"))
     testing.eq(first.holder, "alpha")
+
+    -- Refuse a second asker with the holder and the time it took over
     local second, message = turn.take(backend, "beta", "bbbb2222")
     testing.eq(second, nil)
     testing.ok(message:find("held by alpha since 20", 1, true), message)
+
+    -- Name the holder to anyone who looks
     local holder = assert(turn.holder(backend))
     testing.eq(holder.name, "alpha")
     testing.ok(holder.since:find("^20%d%d%-"), holder.since)
 end)
 
 testing.test("a released turn goes to the next asker", function()
+    -- Take the turn and give it back
     local backend = backend_at(board_home())
     local first = assert(turn.take(backend, "alpha", "aaaa1111"))
     turn.release(backend, first)
     testing.eq(turn.holder(backend), nil)
+
+    -- Hand the turn to the next asker
     local second = assert(turn.take(backend, "beta", "bbbb2222"))
     testing.eq(second.holder, "beta")
 end)
 
 testing.test("a holder that stops renewing loses the turn to the next asker", function()
+    -- Take the turn under a short lease
     local backend = backend_at(board_home())
     local restore = lease(LEASE_SECONDS)
     assert(turn.take(backend, "alpha", "aaaa1111"))
+
+    -- Keep a second asker out while the lease holds
     local early = turn.take(backend, "beta", "bbbb2222")
     testing.eq(early, nil)
+
+    -- Let the lease lapse and give the turn to the second asker
     advance(PAST_LEASE_SECONDS)
     local second = assert(turn.take(backend, "beta", "bbbb2222"))
     restore()
@@ -98,40 +121,55 @@ testing.test("a holder that stops renewing loses the turn to the next asker", fu
 end)
 
 testing.test("a holder that returns after another took the turn is refused", function()
+    -- Let another asker take the turn after the first lease lapses
     local backend = backend_at(board_home())
     local restore = lease(LEASE_SECONDS)
     local first = assert(turn.take(backend, "alpha", "aaaa1111"))
     advance(PAST_LEASE_SECONDS)
     assert(turn.take(backend, "beta", "bbbb2222"))
+
+    -- Refuse the first holder's renewal with a message that ends cleanly
     local renewed, message = turn.renew(backend, first)
     restore()
     testing.eq(renewed, nil)
     testing.ok(message:find("The landing turn was lost. ", 1, true), message)
     testing.ok(message:find("[.!?]$") and not message:find("%.%.$"), message)
+
+    -- Keep the turn with the new holder
     testing.eq(assert(turn.holder(backend)).name, "beta")
 end)
 
 testing.test("a holder that returns after its lease ran out must ask again", function()
+    -- Take the turn and let its lease run out
     local backend = backend_at(board_home())
     local restore = lease(LEASE_SECONDS)
     local first = assert(turn.take(backend, "alpha", "aaaa1111"))
     advance(PAST_LEASE_SECONDS)
+
+    -- Refuse the late renewal and say the lease ran out
     local renewed, message = turn.renew(backend, first)
     restore()
     testing.eq(renewed, nil)
     testing.ok(message:find("ran out", 1, true), message)
+
+    -- Leave the turn free for the next asker
     testing.eq(turn.holder(backend), nil)
 end)
 
 testing.test("a stretched turn outlasts its first lease", function()
+    -- Take the turn under a short lease
     local backend = backend_at(board_home())
     local STRETCH_SECONDS = 10
     local restore = lease(LEASE_SECONDS)
     local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+
+    -- Stretch the turn and run past the first lease
     advance(PAST_HOLD_SECONDS)
     testing.eq(turn.stretch(backend, first, STRETCH_SECONDS), true)
     advance(PAST_LEASE_SECONDS)
     restore()
+
+    -- Keep every other asker out
     testing.eq(turn.take(backend, "beta", "bbbb2222"), nil)
     testing.eq(assert(turn.holder(backend)).name, "alpha")
 end)
@@ -146,30 +184,42 @@ testing.test("a stretch restores the holder's own lease", function()
 end)
 
 testing.test("a stretch keeps a hold's longer lease", function()
+    -- Make a board and size the lease and the stretch
     local backend = backend_at(board_home())
     local LONG_HOLD_SECONDS = 6
     local SHORT_STRETCH_SECONDS = 3
     local PAST_SHORT_SECONDS = 5
+
+    -- Take a hold with a long lease
     local held = assert(turn.take(backend, "alpha", "aaaa1111", {
         hold = true,
         seconds = LONG_HOLD_SECONDS,
     }))
+
+    -- Stretch it by less than the lease it already has
     advance(PAST_HOLD_SECONDS)
     testing.eq(turn.stretch(backend, held, SHORT_STRETCH_SECONDS), true)
     advance(PAST_SHORT_SECONDS)
     testing.eq(held.lease, LONG_HOLD_SECONDS)
+
+    -- Keep every other asker out
     testing.eq(turn.take(backend, "beta", "bbbb2222"), nil)
     testing.eq(assert(turn.holder(backend)).name, "alpha")
 end)
 
 testing.test("a holder that renews in time keeps the turn past its first lease", function()
+    -- Make a board and size the lease
     local backend = backend_at(board_home())
     local LONG_LEASE_SECONDS = 4
     local HALF_LEASE_SECONDS = 2
+
+    -- Take the turn under a lease and renew it halfway
     local restore = lease(LONG_LEASE_SECONDS)
     local first = assert(turn.take(backend, "alpha", "aaaa1111"))
     advance(HALF_LEASE_SECONDS)
     testing.eq(turn.renew(backend, first), true)
+
+    -- Run past the first lease and keep every other asker out
     advance(HALF_LEASE_SECONDS)
     restore()
     testing.eq(turn.take(backend, "beta", "bbbb2222"), nil)
@@ -206,63 +256,86 @@ testing.test("two turn cards made by a race leave one turn on the lowest id", fu
 end)
 
 testing.test("holder and claimed read the lowest turn card, not the cached one", function()
+    -- Take a hold on the card the board knows
     local backend = backend_at(board_home())
     local taken = assert(turn.take(backend, "alpha", "aaaa1111", { hold = true, seconds = 600 }))
+
+    -- Add turn cards until one sorts below the held card
     local lower
     repeat
         lower = assert(backend:add(turn.NAME, backend.stages.icebox, {}))
     until lower.id < taken.card
+
+    -- Read the turn from the lowest card so the hold is gone
     testing.eq(turn.holder(backend), nil)
     testing.eq(turn.claimed(backend, "alpha", "aaaa1111"), nil)
 end)
 
 testing.test("waiting cards get the turn in the order they asked", function()
+    -- Queue two askers behind the holder and release the turn
     local backend = backend_at(board_home())
     local first = assert(turn.take(backend, "alpha", "aaaa1111"))
     assert(turn.ask(backend, { name = "beta", card = "bbbb2222", seconds = 60 }))
     assert(turn.ask(backend, { name = "gamma", card = "cccc3333", seconds = 60 }))
     turn.release(backend, first)
+
+    -- Refuse the later asker and a newcomer while the first in line waits
     local late, message = turn.take(backend, "gamma", "cccc3333")
     testing.eq(late, nil)
     testing.ok(message:find("next for beta", 1, true), message)
     local fresh = turn.take(backend, "delta", "dddd4444")
     testing.eq(fresh, nil)
+
+    -- Pass the turn down the line in the order they asked
     local second = assert(turn.take(backend, "beta", "bbbb2222"))
     turn.release(backend, second)
     testing.eq(assert(turn.take(backend, "gamma", "cccc3333")).holder, "gamma")
 end)
 
 testing.test("a card that leaves the line passes the turn to the next one", function()
+    -- Queue two askers and keep the second one waiting
     local backend = backend_at(board_home())
     assert(turn.ask(backend, { name = "beta", card = "bbbb2222", seconds = 60 }))
     assert(turn.ask(backend, { name = "gamma", card = "cccc3333", seconds = 60 }))
     testing.eq(turn.take(backend, "gamma", "cccc3333"), nil)
+
+    -- Let the first asker leave and pass the turn to the second
     turn.leave(backend, "beta", "bbbb2222")
     testing.eq(assert(turn.take(backend, "gamma", "cccc3333")).holder, "gamma")
 end)
 
 testing.test("a waiter that died stops holding the line after its wait", function()
+    -- Queue an asker that will never come back
     local backend = backend_at(board_home())
     local WAIT_SECONDS = 3
     local grace = turn.ASK_GRACE_SECONDS
     turn.ASK_GRACE_SECONDS = 0
     assert(turn.ask(backend, { name = "beta", card = "bbbb2222", seconds = WAIT_SECONDS }))
+
+    -- Keep another asker out while the wait lasts and then let it run out
     local early = turn.take(backend, "gamma", "cccc3333")
     advance(PAST_LEASE_SECONDS)
     turn.ASK_GRACE_SECONDS = grace
     testing.eq(early, nil)
+
+    -- Give the turn to the asker behind the dead one
     testing.eq(assert(turn.take(backend, "gamma", "cccc3333")).holder, "gamma")
 end)
 
 testing.test("only the holder's fence releases the turn", function()
+    -- Let a second asker take the turn after the first lease lapses
     local backend = backend_at(board_home())
     local restore = lease(LEASE_SECONDS)
     local first = assert(turn.take(backend, "alpha", "aaaa1111"))
     advance(PAST_LEASE_SECONDS)
     assert(turn.take(backend, "beta", "bbbb2222"))
     restore()
+
+    -- Ignore a release from the holder that lost the turn
     turn.release(backend, first)
     testing.eq(assert(turn.holder(backend)).name, "beta")
+
+    -- Refuse a release that carries the wrong fence and say which fence it lacked
     local stale = first.fence + 100
     local released, message =
         turn.release(backend, { card = first.card, fence = stale, holder = "gamma" })
@@ -287,16 +360,23 @@ end)
 testing.test(
     "a hold is found from the board, renews with its lease and ends when it is given back",
     function()
+        -- Find no hold before one is taken
         local backend = backend_at(board_home())
         testing.eq(turn.held(backend, "alpha", "aaaa1111"), nil)
+
+        -- Take a hold and find it again from the board
         local first =
             assert(turn.take(backend, "alpha", "aaaa1111", { hold = true, seconds = 600 }))
         testing.eq(first.lease, 600)
         local found = assert(turn.held(backend, "alpha", "aaaa1111"))
         testing.eq(found.fence, first.fence)
         testing.eq(found.lease, 600)
+
+        -- Renew it, and see no hold for another card
         testing.eq(turn.renew(backend, found), true)
         testing.eq(turn.held(backend, "alpha", "bbbb2222"), nil)
+
+        -- Give it back and leave the turn free
         turn.release(backend, found)
         testing.eq(turn.held(backend, "alpha", "aaaa1111"), nil)
         testing.eq(turn.holder(backend), nil)
@@ -306,14 +386,19 @@ testing.test(
 testing.test(
     "a hold that ran out is reported as lost, and a landing's own turn is no hold",
     function()
+        -- Take a hold and let its lease run out
         local backend = backend_at(board_home())
         local restore = lease(LEASE_SECONDS)
         assert(turn.take(backend, "alpha", "aaaa1111", { hold = true, seconds = LEASE_SECONDS }))
         advance(PAST_LEASE_SECONDS)
+
+        -- Report the hold as lost
         local found, message = turn.held(backend, "alpha", "aaaa1111")
         restore()
         testing.eq(found, nil)
         testing.ok(message:find("ran out or was taken", 1, true), message)
+
+        -- See no hold in a plain landing turn
         local plain = assert(turn.take(backend, "beta", "bbbb2222"))
         testing.eq(plain.hold, false)
         testing.eq(turn.held(backend, "beta", "bbbb2222"), nil)
@@ -395,15 +480,20 @@ testing.test(
 )
 
 testing.test("renewing a hold keeps the lease it was taken with", function()
+    -- Take a hold whose lease outlasts the turn's default
     local backend = backend_at(board_home())
     local restore = lease(1)
     local HOLD_LEASE_SECONDS = 6
     local first = assert(
         turn.take(backend, "alpha", "aaaa1111", { hold = true, seconds = HOLD_LEASE_SECONDS })
     )
+
+    -- Renew it partway through and run on to just before the renewed lease ends
     advance(HOLD_LEASE_SECONDS - 2)
     testing.eq(turn.renew(backend, first), true)
     advance(HOLD_LEASE_SECONDS - 2)
+
+    -- Keep another asker out
     local second = turn.take(backend, "beta", "bbbb2222")
     restore()
     testing.eq(second, nil)
@@ -411,14 +501,19 @@ testing.test("renewing a hold keeps the lease it was taken with", function()
 end)
 
 testing.test("a hold cannot be extended past the most it may be kept", function()
+    -- Take a hold and run past a tiny cap on how long a hold may be kept
     local backend = backend_at(board_home())
     local previous = turn.MAX_HOLD_SECONDS
     turn.MAX_HOLD_SECONDS = 1
     local first = assert(turn.take(backend, "alpha", "aaaa1111", { hold = true, seconds = 600 }))
     advance(PAST_HOLD_SECONDS)
+
+    -- Try to extend and to renew the capped hold
     local renewed, message, capped = turn.extend(backend, first, 600)
     local landing, landing_message, landing_capped = turn.renew(backend, first)
     turn.MAX_HOLD_SECONDS = previous
+
+    -- Refuse both and say the cap is the reason
     testing.eq(renewed, nil)
     testing.eq(capped, true)
     testing.ok(message:find("the most it may be kept", 1, true), message)
@@ -428,10 +523,13 @@ testing.test("a hold cannot be extended past the most it may be kept", function(
 end)
 
 testing.test("extending a hold records the new lease for the next command", function()
+    -- Take a hold and extend it later
     local backend = backend_at(board_home())
     local first = assert(turn.take(backend, "alpha", "aaaa1111", { hold = true, seconds = 600 }))
     advance(PAST_LEASE_SECONDS)
     testing.eq(turn.extend(backend, first, 1800), true)
+
+    -- Find the new lease from the board and keep the time the hold began
     local found = assert(turn.held(backend, "alpha", "aaaa1111"))
     testing.eq(found.lease, 1800)
     testing.eq(found.taken, first.taken)
@@ -441,9 +539,12 @@ end)
 testing.test(
     "a waiting poll reads the remembered card twice per call and never lists the cards",
     function()
+        -- Queue a waiter behind a holder and remember its place
         local backend = backend_at(board_home())
         assert(turn.take(backend, "alpha", "aaaa1111"))
         local _, _, first = turn.take(backend, "beta", "bbbb2222")
+
+        -- Count every list and single read the board sees
         local listed, single = 0, 0
         local cards, card = backend.cards, backend.card
         function backend:cards()
@@ -454,12 +555,16 @@ testing.test(
             single = single + 1
             return card(self, id)
         end
+
+        -- Poll three times and see the same place each time
         for _ = 1, 3 do
             local taken, message, place = turn.take(backend, "beta", "bbbb2222")
             testing.eq(taken, nil)
             testing.ok(message:find("held by alpha", 1, true), message)
             testing.eq(place, first)
         end
+
+        -- Read the card twice per poll and never list the cards
         testing.eq(listed, 0)
         testing.eq(single, 6)
     end
@@ -468,19 +573,26 @@ testing.test(
 testing.test(
     "the poll backs off while the place in line is unchanged and starts over when it moves",
     function()
+        -- Make a poller with no jitter
         local poll = turn.poller({
             random = function()
                 return 0
             end,
         })
+
+        -- Wait eight times in the same place in line
         local slept = {}
         for _ = 1, 8 do
             slept[#slept + 1] = poll:pace("2:alpha")
         end
+
+        -- Grow each sleep up to the cap
         testing.eq(slept[1], turn.POLL_SECONDS)
         testing.eq(slept[2], turn.POLL_SECONDS * turn.POLL_BACKOFF)
         testing.ok(slept[3] > slept[2], "the third sleep did not grow")
         testing.eq(slept[8], turn.POLL_MAX_SECONDS)
+
+        -- Start over when the place moves
         testing.eq(poll:pace("1:alpha"), turn.POLL_SECONDS)
         testing.eq(poll:pace("1:alpha"), turn.POLL_SECONDS * turn.POLL_BACKOFF)
     end
@@ -501,9 +613,12 @@ end)
 testing.test(
     "a lookup resolves a lower-id duplicate turn card created after the first read",
     function()
+        -- Hold the turn on the first turn card
         local LOWER_ID = "00000000-0000-4000-8000-000000000000"
         local backend = backend_at(board_home())
         assert(turn.take(backend, "alpha", "aaaa1111"))
+
+        -- Show a second turn card with a lower id on every listing
         local cards, comments = backend.cards, backend.comments
         function backend:cards()
             local listed, message = cards(self)
@@ -519,6 +634,8 @@ testing.test(
             end
             return comments(self, id)
         end
+
+        -- Read the holder from the lower card
         local holder = turn.holder(backend)
         backend.cards, backend.comments = cards, comments
         testing.eq(holder.name, "zed")
@@ -526,17 +643,25 @@ testing.test(
 )
 
 testing.test("a poll finds a new turn card once the cached one is done", function()
+    -- Take the turn and give it back
     local backend = backend_at(board_home())
     local first = assert(turn.take(backend, "alpha", "aaaa1111"))
     turn.release(backend, first)
+
+    -- Finish the turn card
     assert(backend:move(first.card, board.DEFAULT_NAMES.done))
+
+    -- Take the turn again on a fresh card
     local second = assert(turn.take(backend, "beta", "bbbb2222"))
     testing.ok(second.card ~= first.card, "the done turn card was reused")
 end)
 
 testing.test("a claim lost after the turn card was read still names the holder", function()
+    -- Hold the turn
     local backend = backend_at(board_home())
     assert(turn.take(backend, "alpha", "aaaa1111"))
+
+    -- Drop the claim from the first read of the turn card
     local card = backend.card
     local reads = 0
     function backend:card(id)
@@ -547,6 +672,8 @@ testing.test("a claim lost after the turn card was read still names the holder",
         end
         return read, message
     end
+
+    -- Refuse a second asker and still name the holder
     local taken, message = turn.take(backend, "beta", "bbbb2222")
     backend.card = card
     testing.eq(taken, nil)
@@ -684,63 +811,89 @@ local function count_lists(backend)
 end
 
 testing.test("turnpoll: a second take on one backend reads no board list", function()
+    -- Hold the turn and start counting board lists
     local backend = backend_at(board_home())
     assert(turn.take(backend, "alpha", "aaaa1111"))
     local lists = count_lists(backend)
+
+    -- Poll twice as a waiter
     testing.eq(turn.take(backend, "beta", "bbbb2222"), nil)
     testing.eq(turn.take(backend, "beta", "bbbb2222"), nil)
+
+    -- Read no list
     testing.eq(lists.n, 0)
 end)
 
 testing.test("turnpoll: held right after a take reads no board list", function()
+    -- Hold the turn and queue a waiter
     local backend = backend_at(board_home())
     assert(turn.take(backend, "alpha", "aaaa1111"))
     testing.eq(turn.take(backend, "beta", "bbbb2222"), nil)
+
+    -- Ask the waiter for its hold while counting board lists
     local lists = count_lists(backend)
     testing.eq(turn.held(backend, "beta", "bbbb2222"), nil)
+
+    -- Read no list
     testing.eq(lists.n, 0)
 end)
 
 testing.test("turnpoll: a rotated turn card is found again by the next take", function()
+    -- Fill the released turn card so the next take rotates to a fresh one
     local backend = backend_at(board_home())
     local first = assert(turn.take(backend, "alpha", "aaaa1111"))
     turn.release(backend, first)
     fill(backend, first.card)
     local second = assert(turn.take(backend, "beta", "bbbb2222"))
     testing.ok(second.card ~= first.card, "the full card was reused")
+
+    -- Poll as another waiter and read no list
     local lists = count_lists(backend)
     testing.eq(turn.take(backend, "gamma", "cccc3333"), nil)
     testing.eq(lists.n, 0)
     testing.eq(turn.holder(backend).name, "beta")
+
+    -- Release and find the fresh card again
     turn.release(backend, second)
     testing.eq(assert(turn.take(backend, "gamma", "cccc3333")).card, second.card)
 end)
 
 testing.test("a full landing turn card rotates to a fresh one", function()
+    -- Release the turn and fill its card
     local backend = backend_at(board_home())
     local first = assert(turn.take(backend, "alpha", "aaaa1111"))
     turn.release(backend, first)
     fill(backend, first.card)
+
+    -- Take the turn again on a fresh card
     local second = assert(turn.take(backend, "beta", "bbbb2222"))
     testing.ok(second.card ~= first.card, "the full card was reused")
+
+    -- Leave the fresh card open and the full one done
     testing.eq(open_turn_card(backend).id, second.card)
     testing.eq(assert(backend:card(first.card)).done, true)
 end)
 
 testing.test("a held landing turn card is not rotated", function()
+    -- Fill the card of a held turn
     local backend = backend_at(board_home())
     local first = assert(turn.take(backend, "alpha", "aaaa1111"))
     fill(backend, first.card)
+
+    -- Queue a waiter and keep the full card in place
     testing.eq(turn.take(backend, "beta", "bbbb2222"), nil)
     assert(turn.ask(backend, { name = "beta", card = "bbbb2222", seconds = 60 }))
     testing.eq(open_turn_card(backend).id, first.card)
     testing.eq(turn.holder(backend).name, "alpha")
+
+    -- Release the turn and rotate to a fresh card
     turn.release(backend, first)
     local second = assert(turn.take(backend, "beta", "bbbb2222"))
     testing.ok(second.card ~= first.card, "the freed full card was reused")
 end)
 
 testing.test("rotation keeps the line of askers", function()
+    -- Queue three askers, one of which lets its wait lapse, and fill the old card
     local backend = backend_at(board_home())
     local first = assert(turn.take(backend, "alpha", "aaaa1111"))
     assert(turn.ask(backend, { name = "beta", card = "bbbb2222", seconds = 60 }))
@@ -749,6 +902,8 @@ testing.test("rotation keeps the line of askers", function()
     turn.release(backend, first)
     fill(backend, first.card)
     advance(turn.ASK_GRACE_SECONDS + 2)
+
+    -- Rotate to a fresh card that carries only the askers still waiting
     testing.eq(turn.take(backend, "gamma", "cccc3333"), nil)
     local fresh = open_turn_card(backend)
     testing.ok(fresh.id ~= first.card, "the full card was kept")
@@ -759,6 +914,8 @@ testing.test("rotation keeps the line of askers", function()
     testing.eq(#bodies, 2)
     testing.ok(bodies[1]:find("holder=beta card=bbbb2222", 1, true), bodies[1])
     testing.ok(bodies[2]:find("holder=gamma card=cccc3333", 1, true), bodies[2])
+
+    -- Pass the turn down the kept line
     local second = assert(turn.take(backend, "beta", "bbbb2222"))
     testing.eq(second.card, fresh.id)
     turn.release(backend, second)
@@ -766,10 +923,13 @@ testing.test("rotation keeps the line of askers", function()
 end)
 
 testing.test("a card past the byte limit rotates", function()
+    -- Release the turn and fill its card
     local backend = backend_at(board_home())
     local first = assert(turn.take(backend, "alpha", "aaaa1111"))
     turn.release(backend, first)
     fill(backend, first.card)
+
+    -- Make the board refuse to move the card for being too big, and watch for a bin
     backend.move = function()
         return nil, "limit reached: at most 1048576 bytes in one task", true
     end
@@ -778,6 +938,8 @@ testing.test("a card past the byte limit rotates", function()
         binned = true
         return true
     end
+
+    -- Refuse the next asker with a way out and leave the card as it was
     local refused, message = turn.take(backend, "beta", "bbbb2222")
     testing.eq(refused, nil)
     testing.ok(message:find(first.card:sub(1, 8), 1, true), message)
@@ -800,9 +962,12 @@ local function landing_card(backend)
 end
 
 testing.test("a waiter whose card moves to Done leaves the queue within one retry", function()
+    -- Hold the turn so a waiter has to nap
     local backend = backend_at(board_home())
     local id, short = landing_card(backend)
     local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+
+    -- Finish the waiter's card during its first nap and refuse a second
     local naps = 0
     local result
     local nap = dev_os.nap
@@ -812,6 +977,8 @@ testing.test("a waiter whose card moves to Done leaves the queue within one retr
         advance(seconds)
         assert(backend:move(id, board.DEFAULT_NAMES.done))
     end
+
+    -- Wait for the turn as the waiter and see it leave with the card named done
     local ok, err = pcall(as_agent, "beta", function()
         result = cmd_board.run("turn", { short, "--wait", "600" }, backend)
     end)
@@ -820,20 +987,27 @@ testing.test("a waiter whose card moves to Done leaves the queue within one retr
     testing.eq(naps, 1)
     testing.eq(result.code, 1)
     testing.ok(result.message:find(short .. " is done", 1, true), result.message)
+
+    -- Free the turn and see the ask leave the line
     turn.release(backend, first)
     testing.ok(turn.take(backend, "gamma", "cccc3333"), "the done card's ask kept the line")
 end)
 
 testing.test("a waiter whose card is done is not handed a turn that frees meanwhile", function()
+    -- Hold the turn so a waiter has to nap
     local backend = backend_at(board_home())
     local id, short = landing_card(backend)
     local first = assert(turn.take(backend, "alpha", "aaaa1111"))
+
+    -- Free the turn and finish the waiter's card during its nap
     local nap = dev_os.nap
     dev_os.nap = function(seconds)
         advance(seconds)
         turn.release(backend, first)
         assert(backend:move(id, board.DEFAULT_NAMES.done))
     end
+
+    -- Wait for the turn as the waiter and see it leave without the turn
     local result
     local ok, err = pcall(as_agent, "beta", function()
         result = cmd_board.run("turn", { short, "--wait", "600" }, backend)
@@ -919,15 +1093,20 @@ testing.test("move and turn refuse a bad wait with the same message", function()
 end)
 
 testing.test("release drops the queued ask of a caller that holds no turn", function()
+    -- Hold the turn and queue an ask for a landing card
     local backend = backend_at(board_home())
     local _, short = landing_card(backend)
     local first = assert(turn.take(backend, "alpha", "aaaa1111"))
     assert(turn.ask(backend, { name = "beta", card = short, seconds = 600 }))
+
+    -- Release as the waiter, which holds no turn
     local result
     as_agent("beta", function()
         result = cmd_board.run("turn", { short, "--release" }, backend)
     end)
     testing.eq(result.code, 1)
+
+    -- Free the turn and see the dropped ask leave the line
     turn.release(backend, first)
     testing.ok(turn.take(backend, "gamma", "cccc3333"), "the released ask kept the line")
 end)
@@ -969,11 +1148,16 @@ testing.test("a failed claim release keeps the hold found until a retry gives it
 end)
 
 testing.test("a leave keeps a live hold", function()
+    -- Take a hold and leave the line
     local backend = backend_at(board_home())
     local first = assert(turn.take(backend, "alpha", "aaaa1111", { hold = true, seconds = 600 }))
     turn.leave(backend, "alpha", "aaaa1111")
+
+    -- Find the hold still live under the same fence
     local found = assert(turn.held(backend, "alpha", "aaaa1111"))
     testing.eq(found.fence, first.fence)
+
+    -- Give it back and find none
     turn.release(backend, found)
     testing.eq(turn.held(backend, "alpha", "aaaa1111"), nil)
 end)
@@ -1171,25 +1355,35 @@ testing.test("a failed release through the turn command prints one sentence", fu
 end)
 
 testing.test("a turn hold over 3600 is refused", function()
+    -- Check the default and the most a hold may last
     local backend = backend_at(board_home())
     local _, short = landing_card(backend)
     testing.eq(turn.HOLD_SECONDS, 1800)
     testing.eq(turn.MAX_HOLD_SECONDS, 3600)
+
+    -- Ask for a hold one second over the most
     local result
     as_agent("alpha", function()
         result = cmd_board.run("turn", { short, "--hold", "3601" }, backend)
     end)
+
+    -- Refuse it and name the limit
     testing.eq(result.code, 2)
     testing.ok(result.message:find("up to 3600", 1, true), result.message)
     testing.eq(turn.holder(backend), nil)
 end)
 
 testing.test("turn covers rebase and land only", function()
+    -- Start with a free turn
     local backend = backend_at(board_home())
     testing.eq(turn.holder(backend), nil)
+
+    -- Take and release a landing's turn, which is no hold
     local landing = assert(turn.take(backend, "alpha", "aaaa1111"))
     testing.eq(landing.hold, false)
     assert(turn.release(backend, landing))
+
+    -- Do the same for the next landing and leave the turn free
     local next_landing = assert(turn.take(backend, "beta", "bbbb2222"))
     testing.eq(next_landing.hold, false)
     assert(turn.release(backend, next_landing))
@@ -1197,6 +1391,7 @@ testing.test("turn covers rebase and land only", function()
 end)
 
 testing.test("turn take grabs the owner with the turn lease", function()
+    -- Take the turn under the turn lease and let it lapse
     local backend = backend_at(board_home())
     local restore = lease(LEASE_SECONDS)
     local first = assert(turn.take(backend, "alpha", "aaaa1111"))
@@ -1204,26 +1399,35 @@ testing.test("turn take grabs the owner with the turn lease", function()
     advance(PAST_LEASE_SECONDS)
     restore()
     testing.eq(turn.holder(backend), nil)
+
+    -- Take a hold and renew it partway through its lease
     local RENEWED_AT_SECONDS = 500
     local held =
         assert(turn.take(backend, "beta", "bbbb2222", { hold = true, seconds = TURN_HOLD_SECONDS }))
     testing.eq(held.lease, TURN_HOLD_SECONDS)
     advance(RENEWED_AT_SECONDS)
     testing.eq(turn.renew(backend, held), true)
+
+    -- Keep every other asker out until the renewed lease ends
     advance(TURN_HOLD_SECONDS - RENEWED_AT_SECONDS)
     testing.eq(turn.take(backend, "gamma", "cccc3333"), nil)
     testing.eq(assert(turn.holder(backend)).name, "beta")
 end)
 
 testing.test("turn release ends the owner lease", function()
+    -- Take a hold and renew it
     local backend = backend_at(board_home())
     local first = assert(
         turn.take(backend, "alpha", "aaaa1111", { hold = true, seconds = TURN_HOLD_SECONDS })
     )
     testing.eq(first.lease, TURN_HOLD_SECONDS)
     testing.eq(turn.renew(backend, first), true)
+
+    -- Release it and free the turn
     testing.eq(turn.release(backend, first), true)
     testing.eq(turn.holder(backend), nil)
+
+    -- Hand the turn on and refuse a second release of the old hold
     local second = assert(turn.take(backend, "beta", "bbbb2222"))
     testing.eq(second.holder, "beta")
     testing.eq(turn.release(backend, first), nil)
@@ -1231,13 +1435,18 @@ testing.test("turn release ends the owner lease", function()
 end)
 
 testing.test("turn names the live owner as its holder", function()
+    -- Take the turn under a short lease
     local backend = backend_at(board_home())
     local restore = lease(LEASE_SECONDS)
     assert(turn.take(backend, "alpha", "aaaa1111"))
+
+    -- Refuse a second asker and name the live owner
     local refused, message = turn.take(backend, "beta", "bbbb2222")
     testing.eq(refused, nil)
     testing.ok(message:find("The landing turn is held by alpha since 20", 1, true), message)
     testing.eq(assert(turn.holder(backend)).name, "alpha")
+
+    -- Let the lease lapse and see the turn free
     advance(PAST_LEASE_SECONDS)
     restore()
     testing.eq(turn.holder(backend), nil)
@@ -1264,6 +1473,7 @@ end
 local SERVERS = {}
 
 local function pomb_root()
+    -- Describe a board with an icebox and a done column
     local ID_B = "11111111-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
     local ID_C = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
     local boards = '[{"id":"board-1","name":"dotfiles","archived":false}]'
@@ -1276,6 +1486,8 @@ local function pomb_root()
         .. '{"id":"col-done","name":"'
         .. support.COLUMN_NAME.DONE
         .. '","is_done":true}]}'
+
+    -- Put the turn card in the sandbox files
     local card = turn_card()
     local root = support.sandbox({
         ["boards.json"] = boards,
@@ -1289,16 +1501,21 @@ local function pomb_root()
             .. '","position":1,"labels":[]}',
         ["comments.json"] = "[]",
     }, {})
+
+    -- Serve the files over a fake Pomb
     SERVERS[root] = support.pomb_server(root, ID_A, ID_B, ID_C)
     return root
 end
 
 local function on_pomb(root, run)
+    -- Remember the token variables to restore
     local names = { "DEV_BOARD_TOKEN" }
     local previous = {}
     for _, name in ipairs(names) do
         previous[name] = dev_os.getenv(name) or ""
     end
+
+    -- Sync the server and run against a backend that holds a token
     support.pomb_sync(root)
     dev_os.setenv("DEV_BOARD_TOKEN", "pomb_SECRETtoken0123456789")
     local ok, err = pcall(function()
@@ -1308,6 +1525,8 @@ local function on_pomb(root, run)
             name = "dotfiles",
         })))
     end)
+
+    -- Put the token variables back and surface any failure
     for _, name in ipairs(names) do
         dev_os.setenv(name, previous[name])
     end
@@ -1346,7 +1565,10 @@ end)
 testing.test("a Pomb turn taken with a hold is found as held from the remembered card", function()
     local root = pomb_root()
     on_pomb(root, function(backend)
+        -- Take a hold
         local taken = assert(turn.take(backend, "alpha", "aaaa1111", { hold = true }))
+
+        -- Show the server a live owner and a hold record for the new fence
         assert(
             fs.write(
                 root .. "/task.json",
@@ -1361,6 +1583,8 @@ testing.test("a Pomb turn taken with a hold is found as held from the remembered
             )
         )
         assert(fs.write(root .. "/comments.json", hold_record(taken.fence)))
+
+        -- Find the hold from the remembered card
         support.pomb_sync(root)
         local found, message = turn.held(backend, "alpha", "aaaa1111")
         testing.eq(message, nil)
@@ -1443,6 +1667,7 @@ end
 testing.test(
     "the default seats are PUT as the union of the stored seats and the wanted ones",
     function()
+        -- Store two seats, one of which differs from a wanted seat only in case
         local root = pomb_root()
         assert(
             fs.write(
@@ -1451,9 +1676,13 @@ testing.test(
                     .. '{"name":"qa","role":"verifier"}]}'
             )
         )
+
+        -- Add the wanted seats and see only the missing ones added
         on_pomb(root, function(backend)
             testing.eq(backend:add_seats(WANTED_SEATS), { "style", "recheck" })
         end)
+
+        -- Send one PUT that holds the stored seats and the new ones
         local writes = seat_writes(root)
         testing.eq(#writes, 1)
         testing.ok(writes[1]:find('{"name":"Code","role":"reviewer"}', 1, true), writes[1])
@@ -1506,23 +1735,33 @@ testing.test("the local board has no default seats to add", function()
 end)
 
 testing.test("renewing the Pomb turn sends its fence as If-Owner-Fence", function()
+    -- Make a Pomb board
     local root = pomb_root()
+
+    -- Take the turn and renew it
     on_pomb(root, function(backend)
         local held = assert(turn.take(backend, "alpha", "aaaa1111"))
         testing.eq(turn.renew(backend, held), true)
     end)
+
+    -- Find the fence in the renew call
     local renewed = call_to(root, "/api/tasks/" .. ID_A .. "/owner/renew")
     testing.ok(renewed:find("if-owner-fence: 7", 1, true), renewed)
 end)
 
 testing.test("ending the Pomb turn releases its owner with the fence", function()
+    -- Make a Pomb board
     local root = pomb_root()
+
+    -- Take the turn, show the server its owner and release it
     on_pomb(root, function(backend)
         local held = assert(turn.take(backend, "alpha", "aaaa1111"))
         assert(fs.write(root .. "/owner_name", "alpha"))
         support.pomb_sync(root)
         testing.eq(turn.release(backend, held), true)
     end)
+
+    -- Find the fence and the owner in the release call
     local released = call_to(root, "/api/tasks/" .. ID_A .. "/owner/release")
     testing.ok(released:find("if-owner-fence: 7", 1, true), released)
     testing.ok(released:find('"name":"alpha"', 1, true), released)
@@ -1539,6 +1778,7 @@ testing.test("a Pomb turn card is listed from the task list, never the export", 
 end)
 
 testing.test("a summary row with an owner fence gives the turn card's claim fence", function()
+    -- Give the exported turn card a live owner at fence 7 and a hold record for it
     local root = pomb_root()
     assert(
         fs.write(
@@ -1552,6 +1792,8 @@ testing.test("a summary row with an owner fence gives the turn card's claim fenc
         )
     )
     assert(fs.write(root .. "/comments.json", hold_record(7)))
+
+    -- Read the claim from the summary row and find the hold under its fence
     on_pomb(root, function(backend)
         local cards = assert(backend:cards({ summary = true }))
         testing.eq(cards[1].claimant, "alpha")

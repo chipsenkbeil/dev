@@ -35,8 +35,10 @@ end)
 testing.test(
     "a Makefile target is preferred for a lua project and named when it is missing",
     function()
-        local root =
-            tree({ ["x.lua"] = "return 1\n", Makefile = "test:\n\ttrue\nlint :\n\ttrue\n" })
+        local root = tree({
+            ["x.lua"] = "return 1\n",
+            Makefile = table.concat({ "test:", "\ttrue", "lint :", "\ttrue", "" }, "\n"),
+        })
         testing.eq(project.detect_type(root), project.Kind.LUA)
         testing.eq(lines_for(root, types.Command.TEST), { "make -C " .. root .. " test" })
         testing.eq(lines_for(root, types.Command.LINT), { "make -C " .. root .. " lint" })
@@ -118,7 +120,11 @@ testing.test("lua fmt says when a project has no .lua file to format", function(
 end)
 
 testing.test("a love2d project runs love and has make targets only for test and lint", function()
-    local root = tree({ ["main.lua"] = "", ["conf.lua"] = "", Makefile = "lint:\n\ttrue\n" })
+    local root = tree({
+        ["main.lua"] = "",
+        ["conf.lua"] = "",
+        Makefile = table.concat({ "lint:", "\ttrue", "" }, "\n"),
+    })
     testing.eq(lines_for(root, types.Command.RUN), { "love " .. root })
     testing.eq(lines_for(root, types.Command.LINT), { "make -C " .. root .. " lint" })
     testing.eq(lines_for(root, types.Command.TEST), { "The Makefile has no test target." })
@@ -173,9 +179,15 @@ end)
 testing.test(
     "a failing make target ends dev with make's exit code after showing the command",
     function()
-        local root = support.sandbox({ ["x.lua"] = "return 1\n", Makefile = "test:\n\ttrue\n" })
+        -- Run the test command against a make target that exits 3
+        local root = support.sandbox({
+            ["x.lua"] = "return 1\n",
+            Makefile = table.concat({ "test:", "\ttrue", "" }, "\n"),
+        })
         local out, code = support.dev(root, { "-v", types.Command.TEST, "a", "b" }, { code = "3" })
         testing.eq(code, 3)
+
+        -- Check the output shows the command and its arguments
         testing.ok(out:find("+ make -C " .. root .. " test a b\n", 1, true), out)
         testing.ok(out:find("make -C " .. root .. " test a b cwd=", 1, true), out)
         testing.ok(not out:find("no built-in", 1, true), out)
@@ -184,10 +196,13 @@ testing.test(
 )
 
 testing.test("arguments reach npm after a --, and no -- without arguments", function()
+    -- Run the test command with arguments
     local root = support.sandbox({ ["package.json"] = '{"scripts":{"test":"x"}}' })
     local out, code = support.dev(root, { types.Command.TEST, "--watch", "a" })
     testing.eq(code, 0)
     testing.ok(out:find("npm --prefix " .. root .. " run test -- --watch a cwd=", 1, true), out)
+
+    -- Run it with none and see no --
     out = support.dev(root, { types.Command.TEST })
     testing.ok(out:find("npm --prefix " .. root .. " run test cwd=", 1, true), out)
     testing.ok(not out:find(" -- ", 1, true), out)
@@ -197,6 +212,7 @@ end)
 testing.test(
     "ast-grep and cargo fetch run in the project root, cargo fmt where dev was run",
     function()
+        -- Lint from a subdirectory of a rust project
         local root =
             support.sandbox({ ["Cargo.toml"] = "", ["sgconfig.yml"] = "", ["deny.toml"] = "" })
         assert(fs.mkdir(root .. "/sub", { parents = true }))
@@ -204,6 +220,8 @@ testing.test(
         testing.eq(code, 0)
         testing.ok(out:find("ast-grep scan --globs !target/** cwd=" .. root .. "\n", 1, true), out)
         testing.ok(out:find("cargo +nightly fmt --check cwd=" .. root .. "/sub\n", 1, true), out)
+
+        -- Fetch from the same subdirectory
         out, code = support.dev(root, { types.Command.FETCH }, { cwd = root .. "/sub" })
         testing.eq(code, 0)
         testing.ok(out:find("cargo fetch --locked cwd=" .. root .. "\n", 1, true), out)

@@ -20,7 +20,12 @@ local clock
 local function board_home()
     -- A project whose board is local and named mine
     local root = support.sandbox({
-        [".dev/config.toml"] = '[board]\nbackend = "local"\nname = "mine"\n',
+        [".dev/config.toml"] = table.concat({
+            "[board]",
+            'backend = "local"',
+            'name = "mine"',
+            "",
+        }, "\n"),
     }, {})
 
     -- A private home with an empty user config
@@ -162,9 +167,12 @@ testing.test("await_turn with a wait of 0 asks once and never sleeps", function(
 end)
 
 testing.test("a renewal keeps the loop for the longer of the cap and the row's seconds", function()
+    -- A card claimed by the caller on a local board
     local home = board_home()
     backend_at(home)
     local card = { id = "cccc3333", size = "2 Pomodori", claimant = "dotfiles/a" }
+
+    -- A backend that records the tick count each keepalive starts with
     local ticks
     local stub = {
         claim = function(_, _, _, opts)
@@ -175,12 +183,16 @@ testing.test("a renewal keeps the loop for the longer of the cap and the row's s
             return 0
         end,
     }
+
+    -- The row lengths and the tick counts they should give
     local cases = {
         { seconds = nil, ticks = 20 },
         { seconds = 600, ticks = 20 },
         { seconds = 7200, ticks = 24 },
         { seconds = 7201, ticks = 25 },
     }
+
+    -- Renew the claim for each row length and check the ticks
     for _, case in ipairs(cases) do
         assert(claims.write({ card = card.id, fence = 3 }))
         testing.eq(runner.renew_claim(stub, card, "dotfiles/a", case.seconds), nil)
@@ -219,11 +231,16 @@ local function claim_stub(fails)
 end
 
 testing.test("take keeps a renewed claim when the comments cannot be read", function()
+    -- A card whose claim is already held with a fence
     backend_at(board_home())
     local card = { id = "cccc3333", size = "1 Pomodoro", claimant = "dotfiles/a" }
     assert(claims.write({ card = card.id, fence = 3 }))
+
+    -- Claim it again through a backend whose comments cannot be read
     local stub = claim_stub("comments")
     local result, fence = runner.claim_card(stub, card, "dotfiles/a")
+
+    -- Check the claim is kept, not released, and the output says why
     testing.eq(result.code, nil)
     testing.eq(fence, 3)
     testing.eq(stub.released, 0)
@@ -271,19 +288,26 @@ testing.test("a land with a local claim sends the release with its fence", funct
 end)
 
 testing.test("a land whose release is refused with a reason prints the sentence", function()
+    -- A backend that refuses the release with a reason
     local dev_command = require("@dev/command")
     local stub = {
         release = function()
             return nil, nil, board.ReleaseReason.NOT_HELD, "dddd4444"
         end,
     }
+
+    -- A note that records its text instead of printing
     local notes = {}
     local original = dev_command.note
     dev_command.note = function(text)
         notes[#notes + 1] = text
     end
+
+    -- Land the card, then restore the note
     wiring.release_landed(stub, { id = "dddd4444" }, { card = "dddd4444", fence = 3 })
     dev_command.note = original
+
+    -- Check the note prints the sentence with the card and fence
     testing.eq(notes, {
         "Landed, but the claim was not released. "
             .. "The claim on dddd4444 is not held with fence 3.",
@@ -304,9 +328,12 @@ end)
 testing.test("take releases a first claim when the note or the comments fail", function()
     backend_at(board_home())
     for _, fails in ipairs({ "note", "comments" }) do
+        -- Claim a card through a backend whose note or comments fail
         local card = { id = "cccc3333", size = "1 Pomodoro" }
         local stub = claim_stub(fails)
         local result, fence = runner.claim_card(stub, card, "dotfiles/a")
+
+        -- Check the claim is dropped and released
         testing.eq(result.code, 1)
         testing.eq(fence, nil)
         testing.eq(stub.released, 1)
@@ -315,10 +342,15 @@ testing.test("take releases a first claim when the note or the comments fail", f
 end)
 
 testing.test("take releases the claim when the keepalive cannot start", function()
+    -- A card to claim on a local board
     backend_at(board_home())
     local card = { id = "cccc3333", size = "1 Pomodoro" }
+
+    -- Claim it through a backend whose keepalive refuses
     local stub = claim_stub("keepalive")
     local result, fence = runner.claim_card(stub, card, "dotfiles/a")
+
+    -- Check the claim fails with the reason and is released
     testing.eq(result.code, 1)
     testing.eq(result.message, "Keepalive refused.")
     testing.eq(fence, nil)

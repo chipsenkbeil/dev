@@ -11,10 +11,17 @@ local has_jj = dev_os.which("jj") ~= nil
 local IDENT = { JJ_USER = "t", JJ_EMAIL = "t@example.com" }
 
 local function setup()
-    local root = support.sandbox(
-        { [".dev/config.toml"] = '[board]\nbackend = "local"\nname = "mine"\n' },
-        {}
-    )
+    -- Make a repo that names a local board
+    local root = support.sandbox({
+        [".dev/config.toml"] = table.concat({
+            "[board]",
+            'backend = "local"',
+            'name = "mine"',
+            "",
+        }, "\n"),
+    }, {})
+
+    -- Give it a home with an empty user config
     local home = support.tempdir()
     assert(fs.mkdir(home .. "/.config/dev", { parents = true }))
     assert(fs.write(home .. "/.config/dev/config.toml", ""))
@@ -38,8 +45,11 @@ local function must(first, second)
 end
 
 local function card_in(root, home)
+    -- Create the board and drop the turn card it starts with
     must(dev(root, home, { "board", "init" }))
     support.drop_turn_card(support.board_file(home, "mine"))
+
+    -- Spell out a ready card with every outcome to finish
     local args = {
         "board",
         "add",
@@ -59,20 +69,27 @@ local function card_in(root, home)
         args[#args + 1] = "--done-when"
         args[#args + 1] = outcome.name
     end
+
+    -- Add it and return its id
     local out = dev(root, home, args)
     return assert(out:match("added (%x+)"), out)
 end
 
 local function git_root()
+    -- Run git in the repo under a fixed identity
     local root, home = setup()
     local function git(...)
         local argv =
             { "git", "-C", root, "-c", "user.name=t", "-c", "user.email=t@example.com", ... }
         must(dev_os.run(argv, { stdout = "null" }))
     end
+
+    -- Commit the sandbox as the base
     must(dev_os.run({ "git", "init", "-q", root }, { stdout = "null" }))
     git("add", "-A")
     git("commit", "-q", "-m", "base")
+
+    -- Name the commit the reviews will point at
     local head = dev_os.capture({ "git", "-C", root, "rev-parse", "HEAD" }):gsub("\n$", "")
     return root, home, head
 end
@@ -83,8 +100,11 @@ local function comments(home)
 end
 
 testing.test("review records the kind, the name and the commit in git", function()
+    -- Make a card in a git repo
     local root, home, head = git_root()
     local id = card_in(root, home)
+
+    -- Review it by name at the head commit
     local out, code = dev(root, home, {
         "board",
         "review",
@@ -98,6 +118,8 @@ testing.test("review records the kind, the name and the commit in git", function
         "--verdict",
         "clean",
     })
+
+    -- Say what was recorded and write the record on the card
     testing.eq(code, 0, out)
     testing.ok(
         out:find(
@@ -115,6 +137,7 @@ testing.test("review records the kind, the name and the commit in git", function
 end)
 
 testing.test("review in git ignores an expect-fail check record from a jj change", function()
+    -- Make a card in a git repo and review it once
     local root, home = git_root()
     local id = card_in(root, home)
     local function review()
@@ -135,6 +158,7 @@ testing.test("review in git ignores an expect-fail check record from a jj change
     local out, code = review()
     testing.eq(code, 0, out)
 
+    -- Append an expect-fail check record that carries a jj change id
     local file = support.board_file(home, "mine")
     local doc = assert(json.decode(assert(fs.read(file))))
     local record = {}
@@ -142,17 +166,23 @@ testing.test("review in git ignores an expect-fail check record from a jj change
         record[key] = value
     end
     record.body = string.format(
-        "dev-check: commit=%s change=abcdefgh mode=expect-fail rows=1 sum=ab5ba36a\n1 fail 28c702",
+        table.concat({
+            "dev-check: commit=%s change=abcdefgh mode=expect-fail rows=1 sum=ab5ba36a",
+            "1 fail 28c702",
+        }, "\n"),
         string.rep("a", 40)
     )
     table.insert(doc.cards[1].comments, record)
     assert(fs.write(file, assert(json.encode(doc))))
+
+    -- Review again and expect git to ignore that record
     out, code = review()
     testing.eq(code, 0, out)
     testing.eq(#comments(home), 3)
 end)
 
 testing.test("review in git accepts a run check record from a jj change", function()
+    -- Make a repo with a card and a way to review it
     local root, home = git_root()
     local id = card_in(root, home)
     local function review()
@@ -183,7 +213,10 @@ testing.test("review in git accepts a run check record from a jj change", functi
         record[key] = value
     end
     record.body = string.format(
-        "dev-check: commit=%s change=abcdefgh mode=run rows=1 sum=ab5ba36a\n1 pass 28c702",
+        table.concat({
+            "dev-check: commit=%s change=abcdefgh mode=run rows=1 sum=ab5ba36a",
+            "1 pass 28c702",
+        }, "\n"),
         string.rep("a", 40)
     )
     table.insert(doc.cards[1].comments, record)
@@ -196,11 +229,14 @@ testing.test("review in git accepts a run check record from a jj change", functi
 end)
 
 testing.test("review verdict is required, must be known and is written on the record", function()
+    -- Refuse a review that has no verdict
     local root, home, head = git_root()
     local id = card_in(root, home)
     local out, code =
         dev(root, home, { "board", "review", id, "--kind", "code", "--by", "r", "--rev", "HEAD" })
     testing.eq(code, 2, out)
+
+    -- Refuse an unknown verdict and name the known ones
     out, code = dev(root, home, {
         "board",
         "review",
@@ -217,6 +253,8 @@ testing.test("review verdict is required, must be known and is written on the re
     testing.eq(code, 2, out)
     testing.ok(out:find("The verdicts are clean, minor, needs-work", 1, true), out)
     testing.eq(#comments(home), 0)
+
+    -- Write each known verdict on the record
     for i, verdict in ipairs({ "clean", "minor", "needs-work" }) do
         out, code = dev(root, home, {
             "board",
@@ -240,9 +278,12 @@ testing.test("review verdict is required, must be known and is written on the re
 end)
 
 testing.test("review refuses the claimant as the reviewer", function()
+    -- Take the card as the builder
     local root, home = git_root()
     local id = card_in(root, home)
     must(dev(root, home, { "board", "take", id, "--as", "dotfiles/builder" }))
+
+    -- Refuse the builder as the reviewer
     local out, code = dev(root, home, {
         "board",
         "review",
@@ -259,6 +300,8 @@ testing.test("review refuses the claimant as the reviewer", function()
     testing.eq(code, 1, out)
     testing.ok(out:find("cannot review its own change", 1, true), out)
     testing.eq(#comments(home), 1)
+
+    -- Accept another reviewer
     out, code = dev(root, home, {
         "board",
         "review",
@@ -279,16 +322,21 @@ end)
 testing.test(
     "review refuses a claimant whose claim lapsed, and a take writes one claim note",
     function()
+        -- Take the card twice and expect one claim note
         local root, home = git_root()
         local id = card_in(root, home)
         must(dev(root, home, { "board", "take", id, "--as", "dotfiles/builder" }))
         must(dev(root, home, { "board", "take", id, "--as", "dotfiles/builder" }))
         testing.eq(#comments(home), 1)
         testing.eq(comments(home)[1].body, "dev-claim: by=dotfiles/builder")
+
+        -- Let the claim lapse
         local file = support.board_file(home, "mine")
         local doc = assert(json.decode(assert(fs.read(file))))
         doc.cards[1].claim.expires_at = "2000-01-01T00:00:00Z"
         assert(fs.write(file, assert(json.encode(doc))))
+
+        -- Refuse the lapsed claimant as the reviewer of every kind
         for _, kind in ipairs({ "code", "style", "recheck" }) do
             local out, code = dev(
                 root,
@@ -318,6 +366,8 @@ testing.test(
             )
         end
         testing.eq(#comments(home), 1)
+
+        -- Accept another reviewer
         local out, code = dev(root, home, {
             "board",
             "review",
@@ -332,6 +382,8 @@ testing.test(
             "clean",
         })
         testing.eq(code, 0, out)
+
+        -- Refuse a note that forges a claim record
         out, code = dev(root, home, { "board", "note", id, "dev-claim: by=other" })
         testing.eq(code, 1, out)
         testing.ok(out:find("dev-claim:", 1, true), out)
@@ -339,14 +391,19 @@ testing.test(
 )
 
 testing.test("review does not renew the claimants claim", function()
+    -- Take the card as the builder
     local root, home = git_root()
     local id = card_in(root, home)
     must(dev(root, home, { "board", "take", id, "--as", "dotfiles/builder" }))
+
+    -- Set the claim to expire far ahead
     local file = support.board_file(home, "mine")
     local doc = assert(json.decode(assert(fs.read(file))))
     local expires_at = "2999-01-01T00:00:00Z"
     doc.cards[1].claim.expires_at = expires_at
     assert(fs.write(file, assert(json.encode(doc))))
+
+    -- Review as another reviewer
     local out, code = dev(root, home, {
         "board",
         "review",
@@ -362,6 +419,8 @@ testing.test("review does not renew the claimants claim", function()
     })
     testing.eq(code, 0, out)
     testing.ok(not out:find("not renewed", 1, true), out)
+
+    -- Leave the claim's expiry as it was
     doc = assert(json.decode(assert(fs.read(file))))
     testing.eq(doc.cards[1].claim.expires_at, expires_at)
 end)
@@ -383,8 +442,11 @@ testing.test("a tick writes a dev-tick record naming who ticked", function()
 end)
 
 testing.test("a take with DEV_AGENT unset claims nothing, so no claimant reviews itself", function()
+    -- Make a card in a git repo
     local root, home = git_root()
     local id = card_in(root, home)
+
+    -- Take it from a session with a session id but no agent name
     local out, code = support.dev(root, { "board", "take", id }, {
         env = {
             HOME = home,
@@ -395,12 +457,15 @@ testing.test("a take with DEV_AGENT unset claims nothing, so no claimant reviews
             CLAUDE_SESSION_ID = "dotfiles/builder",
         },
     })
+
+    -- Refuse the take and leave the card unclaimed
     testing.eq(code, 2, out)
     testing.ok(out:find("Set DEV_AGENT to <repo>/<role>[/<card>]", 1, true), out)
     testing.eq(#comments(home), 0)
 end)
 
 testing.test("review refuses an older default-named claimant when DEV_AGENT is unset", function()
+    -- Make a card and a way to run dev as a named session
     local root, home = git_root()
     local id = card_in(root, home)
     local function run(session, args)
@@ -415,6 +480,8 @@ testing.test("review refuses an older default-named claimant when DEV_AGENT is u
             },
         })
     end
+
+    -- Take the card as the builder
     must(support.dev(root, { "board", "take", id }, {
         env = {
             HOME = home,
@@ -424,6 +491,8 @@ testing.test("review refuses an older default-named claimant when DEV_AGENT is u
             DEV_AGENT = "dotfiles/builder",
         },
     }))
+
+    -- Rewrite the claimant to the older default name
     local host = dev_os.capture({ "hostname", "-s" }):gsub("%s+$", "")
     local old = "dev@" .. host .. ":builder"
     local path = support.board_file(home, "mine")
@@ -431,6 +500,8 @@ testing.test("review refuses an older default-named claimant when DEV_AGENT is u
     doc.cards[1].claim.claimant = old
     doc.cards[1].comments[1].body = "dev-claim: by=" .. old
     assert(fs.write(path, assert(json.encode(doc))))
+
+    -- Refuse the builder's session as the reviewer of every kind
     for _, kind in ipairs({ "code", "style", "recheck" }) do
         local out, code = run(
             "builder",
@@ -451,6 +522,8 @@ testing.test("review refuses an older default-named claimant when DEV_AGENT is u
         testing.eq(code, 1, out)
         testing.ok(out:find("cannot review its own change", 1, true), out)
     end
+
+    -- Accept another session as the reviewer
     local out, code = run("reviewer", {
         "board",
         "review",
@@ -469,6 +542,7 @@ testing.test("review refuses an older default-named claimant when DEV_AGENT is u
 end)
 
 testing.test("review recheck needs of code or style, and of goes with no other kind", function()
+    -- Make a card and a way to spell a review with or without --of
     local root, home = git_root()
     local id = card_in(root, home)
     local function review_args(kind, of)
@@ -491,21 +565,28 @@ testing.test("review recheck needs of code or style, and of goes with no other k
         end
         return args
     end
+
+    -- Refuse a recheck that names no kind or the wrong one to recheck
     local out, code = dev(root, home, review_args("recheck"))
     testing.eq(code, 2, out)
     testing.ok(out:find("A recheck needs --of code|style", 1, true), out)
     out, code = dev(root, home, review_args("recheck", "recheck"))
     testing.eq(code, 2, out)
+
+    -- Refuse --of on any other kind
     out, code = dev(root, home, review_args("code", "code"))
     testing.eq(code, 2, out)
     testing.ok(out:find("The --of flag goes only with --kind recheck", 1, true), out)
     testing.eq(#comments(home), 0)
+
+    -- Accept a recheck of style
     out, code = dev(root, home, review_args("recheck", "style"))
     testing.eq(code, 0, out)
     testing.eq(#comments(home), 1)
 end)
 
 testing.test("review recheck record carries of and parse reads it back", function()
+    -- Write a recheck record that names what it rechecks
     local review = require("@dev/board/review")
     local rev = { commit = "abc123", change = "chg" }
     local body = review.record("recheck", "r", rev, "clean", "style")
@@ -513,16 +594,21 @@ testing.test("review recheck record carries of and parse reads it back", functio
         body,
         "dev-review: kind=recheck by=r commit=abc123 change=chg of=style verdict=clean"
     )
+
+    -- Read the record back
     local record = review.parse(body)
     testing.eq(record.of, "style")
     testing.eq(record.kind, "recheck")
     testing.eq(record.verdict, "clean")
+
+    -- Read no target from a record that has none
     testing.eq(review.parse(review.record("code", "r", rev, "clean")).of, nil)
 end)
 
 testing.test(
     "review refuses an unknown kind, a missing flag and a rev that is not a commit",
     function()
+        -- Refuse an unknown kind and name the known ones
         local root, home = git_root()
         local id = card_in(root, home)
         local out, code = dev(root, home, {
@@ -540,6 +626,8 @@ testing.test(
         })
         testing.eq(code, 2, out)
         testing.ok(out:find("The kinds are code, style, recheck", 1, true), out)
+
+        -- Refuse a missing flag and a reviewer name with a space
         out, code = dev(root, home, { "board", "review", id, "--kind", "code", "--by", "r" })
         testing.eq(code, 2, out)
         out, code = dev(root, home, {
@@ -556,6 +644,8 @@ testing.test(
             "clean",
         })
         testing.eq(code, 2, out)
+
+        -- Refuse a rev that is not a commit and write nothing
         for _, rev in ipairs({ "nosuchrev", "--all", "", "HEAD^{tree}" }) do
             out, code = dev(root, home, {
                 "board",
@@ -577,11 +667,14 @@ testing.test(
 )
 
 testing.test("note cannot write, edit or delete the review prefix", function()
+    -- Refuse a note that writes the review prefix
     local root, home = git_root()
     local id = card_in(root, home)
     local out, code = dev(root, home, { "board", "note", id, "  DEV-REVIEW: kind=code" })
     testing.eq(code, 1, out)
     testing.ok(out:find("`dev board review` writes", 1, true), out)
+
+    -- Record a review and refuse to edit or delete its note
     must(dev(root, home, {
         "board",
         "review",
@@ -601,6 +694,8 @@ testing.test("note cannot write, edit or delete the review prefix", function()
     testing.eq(code, 1, out)
     out, code = dev(root, home, { "board", "note", id, "--delete", first })
     testing.eq(code, 1, out)
+
+    -- Refuse to edit a plain note into a review record
     must(dev(root, home, { "board", "note", id, "plain" }))
     listing = dev(root, home, { "board", "notes", id })
     local second = assert(listing:match("\n(%x+)"), listing)
@@ -610,6 +705,7 @@ testing.test("note cannot write, edit or delete the review prefix", function()
 end)
 
 testing.test("a review that cannot be written is never reported as recorded", function()
+    -- Fake a backend whose note write fails
     local root = git_root()
     local card = {
         id = "11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -636,11 +732,15 @@ testing.test("a review that cannot be written is never reported as recorded", fu
     function backend:note()
         return nil, "Curl exit 28."
     end
+
+    -- Review the card against that backend
     local result = require("@dev/cmd/board").run(
         "review",
         { "11111111", "--kind", "code", "--by", "r", "--rev", "HEAD", "--verdict", "clean" },
         backend
     )
+
+    -- Report the failure with no sign of a recorded review
     testing.eq(result.output, nil)
     testing.eq(result.code, 1)
     testing.ok(result.message:find("was NOT recorded", 1, true), result.message)
@@ -648,6 +748,7 @@ testing.test("a review that cannot be written is never reported as recorded", fu
 end)
 
 local function seat_backend(root, refusal, reason)
+    -- Describe one card in progress
     local card = {
         id = "11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
         name = "Card",
@@ -657,6 +758,8 @@ local function seat_backend(root, refusal, reason)
         checks = {},
         outcomes = {},
     }
+
+    -- Serve that card from a backend that remembers every seat verdict and note
     local backend = { root = root, seats = {}, notes = {} }
     function backend:done_columns()
         return { support.COLUMN_NAME.DONE }
@@ -708,21 +811,31 @@ testing.test("a clean or minor review sets the seat approved with the revision",
 end)
 
 testing.test("a needs-work review sets the seat to changes needed", function()
+    -- Fake a backend that accepts every seat verdict
     local root = git_root()
     local backend = seat_backend(root)
+
+    -- Review the code as needing work
     local result = review_as(backend, "code", "needs-work")
+
+    -- Set the seat to changes needed
     testing.eq(result.code, nil, result.message)
     testing.eq(backend.seats[1].seat, "code")
     testing.eq(backend.seats[1].verdict, "changes_needed")
 end)
 
 testing.test("a review reports a seat that Pomb refused", function()
+    -- Fake a backend that refuses the seat as the owner's
     local root = git_root()
     local backend = seat_backend(
         root,
         "pomb answered 409: the task's owner cannot take a seat on it (owner_seat)"
     )
+
+    -- Review the code against it
     local result = review_as(backend, "code", "clean")
+
+    -- Record the review, warn once and write the note
     testing.eq(result.code, nil)
     testing.ok(result.output:find("recorded code review by r", 1, true), result.output)
     testing.eq(#result.warnings, 1)
@@ -735,6 +848,7 @@ local OWNER_SEAT = "pomb answered 409: the task's owner cannot take a seat on it
 local MINT_HINT = "dev board token mint --role reviewer --as r"
 
 local function owner_seat_warning(with_token, by)
+    -- Point the token store at an empty state directory
     local previous_state = dev_os.getenv("XDG_STATE_HOME") or ""
     local previous_runtime = dev_os.getenv("XDG_RUNTIME_DIR") or ""
     dev_os.setenv("XDG_RUNTIME_DIR", "")
@@ -743,11 +857,15 @@ local function owner_seat_warning(with_token, by)
     if with_token then
         written = tokenfile.write(by or "r", "pomb_token0123456789", 0)
     end
+
+    -- Review against a backend that refuses the seat as the owner's
     local root = git_root()
     local backend = seat_backend(root, OWNER_SEAT)
     local ran, result = pcall(review_as, backend, "code", "clean", by)
     dev_os.setenv("XDG_STATE_HOME", previous_state)
     dev_os.setenv("XDG_RUNTIME_DIR", previous_runtime)
+
+    -- Hand back the single warning the review printed
     assert(written, "token file was not written")
     assert(ran, result)
     testing.eq(result.code, nil, result.message)
@@ -798,9 +916,14 @@ local function recheck_of(backend, of)
 end
 
 testing.test("a refused recheck with the seat held prints no warning", function()
+    -- Fake a backend that refuses the seat as held
     local root = git_root()
     local backend = seat_backend(root, "pomb answered 409: the seat is taken (seat_held)")
+
+    -- Recheck style against it
     local result = recheck_of(backend, "style")
+
+    -- Print no warning and say only the card records the review
     testing.eq(result.code, nil, result.message)
     testing.eq(result.warnings, nil)
     testing.ok(
@@ -815,9 +938,14 @@ testing.test("a refused recheck with the seat held prints no warning", function(
 end)
 
 testing.test("a code review refused with the seat held warns", function()
+    -- Fake a backend that refuses the seat as held
     local root = git_root()
     local backend = seat_backend(root, "pomb answered 409: the seat is taken (seat_held)")
+
+    -- Review the code against it
     local result = review_as(backend, "code", "clean")
+
+    -- Warn with the reset command and leave out the recheck sentence
     testing.eq(result.code, nil)
     testing.eq(#result.warnings, 1)
     testing.ok(result.warnings[1]:find("seat_held", 1, true), result.warnings[1])
@@ -826,21 +954,31 @@ testing.test("a code review refused with the seat held warns", function()
 end)
 
 testing.test("a refused recheck with the owner seat still warns", function()
+    -- Fake a backend that refuses the seat as the owner's
     local root = git_root()
     local backend = seat_backend(
         root,
         "pomb answered 409: the task's owner cannot take a seat on it (owner_seat)"
     )
+
+    -- Recheck code against it
     local result = recheck_of(backend, "code")
+
+    -- Warn once with the refusal's code
     testing.eq(result.code, nil, result.message)
     testing.eq(#result.warnings, 1)
     testing.ok(result.warnings[1]:find("owner_seat", 1, true), result.warnings[1])
 end)
 
 testing.test("a review writes the missing seat warning from its reason", function()
+    -- Fake a backend that cannot add the missing seat
     local root = git_root()
     local backend = seat_backend(root, "add refused", board.SeatReason.NO_SEAT)
+
+    -- Review the code against it
     local result = review_as(backend, "code", "clean")
+
+    -- Warn that the card has no seat and say how to take one
     testing.eq(result.code, nil)
     testing.eq(#result.warnings, 1)
     testing.ok(
@@ -855,9 +993,14 @@ testing.test("a review writes the missing seat warning from its reason", functio
 end)
 
 testing.test("a review still writes the dev-review comment", function()
+    -- Fake a backend that accepts every seat verdict
     local root, _, head = git_root()
     local backend = seat_backend(root)
+
+    -- Review the code against it
     local result = review_as(backend, "code", "clean")
+
+    -- Write the review record as a note all the same
     testing.eq(result.code, nil, result.message)
     testing.eq(backend.notes, {
         "dev-review: kind=code by=r commit=" .. head .. " change=- verdict=clean",
@@ -911,6 +1054,7 @@ testing.test("seat_verdict adds a missing seat and takes it again", function()
 end)
 
 testing.test("seat_verdict adds no seat for another 404 and stops at each refusal", function()
+    -- Add no seat when a 404 says the task is missing
     local other = { nil, "pomb answered 404", 404, { message = "task not found" } }
     local backend = pomb_seats({ other })
     local ok, message = backend:seat_verdict("t1", "code", "r", "approved", "abc")
@@ -918,10 +1062,12 @@ testing.test("seat_verdict adds no seat for another 404 and stops at each refusa
     testing.eq(message, "pomb answered 404")
     testing.eq(#backend.calls, 1)
 
+    -- Stop at a refusal and name its code
     backend = pomb_seats({ { nil, "pomb answered 409", 409, { code = "owner_seat" } } })
     ok, message = backend:seat_verdict("t1", "code", "r", "approved", "abc")
     testing.eq({ ok, message, #backend.calls }, { nil, "pomb answered 409 (owner_seat)", 1 })
 
+    -- Stop when adding the missing seat fails
     backend = pomb_seats({ NO_SEAT, { nil, "add refused" } })
     local reason
     ok, message, reason = backend:seat_verdict("t1", "code", "r", "approved", "abc")
@@ -930,6 +1076,7 @@ testing.test("seat_verdict adds no seat for another 404 and stops at each refusa
         { nil, "add refused", board.SeatReason.NO_SEAT, 2 }
     )
 
+    -- Stop when the verdict post fails
     backend = pomb_seats({ { true }, { nil, "verdict refused" } })
     ok, message = backend:seat_verdict("t1", "code", "r", "approved", "abc")
     testing.eq({ ok, message, #backend.calls }, { nil, "verdict refused", 2 })
@@ -946,6 +1093,7 @@ if has_jj then
     testing.test(
         "in jj review stores the change id and one commit, and refuses a revset of many",
         function()
+            -- Make a jj repo with a base commit and a card
             local root, home = setup()
             must(
                 dev_os.run(
@@ -955,9 +1103,13 @@ if has_jj then
             )
             jj(root, "commit", "-m", "base")
             local id = card_in(root, home)
+
+            -- Look up the commit and change id of the base
             local want =
                 jj(root, "log", "-r", "@-", "--no-graph", "-T", "commit_id ++ ' ' ++ change_id")
             local commit, change = want:match("^(%x+) (%a+)")
+
+            -- Review the base and expect the change id on the record
             local out, code = dev(root, home, {
                 "board",
                 "review",
@@ -982,6 +1134,8 @@ if has_jj then
                     .. change
                     .. " of=code verdict=clean"
             )
+
+            -- Refuse a revset of many commits and write nothing more
             out, code = dev(root, home, {
                 "board",
                 "review",
@@ -1054,7 +1208,10 @@ if has_jj then
             record[key] = value
         end
         record.body = string.format(
-            "dev-check: commit=%s change=%s mode=run rows=1 sum=ab5ba36a\n1 pass 28c702",
+            table.concat({
+                "dev-check: commit=%s change=%s mode=run rows=1 sum=ab5ba36a",
+                "1 pass 28c702",
+            }, "\n"),
             string.rep("a", 40),
             change_of("@")
         )
@@ -1068,6 +1225,7 @@ if has_jj then
     end)
 
     testing.test("review names dev board check when the card holds another change", function()
+        -- Make a jj repo with a base commit, a card and a way to review a rev
         local root, home = setup()
         must(
             dev_os.run(
@@ -1092,9 +1250,12 @@ if has_jj then
                 "clean",
             })
         end
+
+        -- Record a review of the base
         local out, code = review("@-")
         testing.eq(code, 0, out)
 
+        -- Review the working change and expect a pointer to dev board check
         out, code = review("@")
         testing.eq(code, 1, out)
         testing.ok(out:find("`dev board check` at this commit", 1, true), out)
@@ -1127,11 +1288,14 @@ local function seats_root()
 end
 
 local function on_seats(root, run)
+    -- Remember the token variables to restore
     local names = { "DEV_BOARD_TOKEN" }
     local previous = {}
     for _, name in ipairs(names) do
         previous[name] = dev_os.getenv(name) or ""
     end
+
+    -- Sync the server and run against a backend that holds a token
     support.pomb_sync(root)
     dev_os.setenv("DEV_BOARD_TOKEN", "pomb_SECRETtoken0123456789")
     local ok, err = pcall(function()
@@ -1141,6 +1305,8 @@ local function on_seats(root, run)
             name = "dotfiles",
         })))
     end)
+
+    -- Put the token variables back and surface any failure
     for _, name in ipairs(names) do
         dev_os.setenv(name, previous[name])
     end
@@ -1148,6 +1314,7 @@ local function on_seats(root, run)
 end
 
 testing.test("seats returns the verdict and revision of each seat", function()
+    -- Serve one decided seat and one idle seat
     local root = seats_root()
     assert(
         fs.write(
@@ -1158,6 +1325,8 @@ testing.test("seats returns the verdict and revision of each seat", function()
                 .. '"verdict":null,"revision":null}]'
         )
     )
+
+    -- Read both seats and see each one's verdict and revision
     on_seats(root, function(backend)
         local seats = assert(backend:seats(SEATS_ID))
         testing.eq(#seats, 2)
@@ -1216,8 +1385,11 @@ local function posted_to_seats(line)
 end
 
 testing.test("a lead resets a held seat", function()
+    -- Serve a held seat that asks for changes
     local root = seats_root()
     assert(fs.write(root .. "/task.seats.json", HELD_CODE_SEAT))
+
+    -- Reset the seat, report who held it, and let another reviewer take it
     on_seats(root, function(backend)
         local done, message, missing, previous = backend:reset_seat(SEATS_ID, "code")
         testing.eq({ done, message, missing }, { true, nil, nil })
@@ -1226,6 +1398,8 @@ testing.test("a lead resets a held seat", function()
         local took, why = backend:seat_verdict(SEATS_ID, "code", "r2", "approved", "def456")
         testing.eq(took, true, tostring(why))
     end)
+
+    -- Check the calls dropped the seat, added it again and then took it
     local lines = calls_of(root)
     local dropped = first_index(lines, function(line)
         return line:sub(-#"/seats?name=code") == "/seats?name=code"
@@ -1238,6 +1412,8 @@ testing.test("a lead resets a held seat", function()
         dropped and added and taken and dropped < added and added < taken,
         table.concat(lines, "\n")
     )
+
+    -- Check the drop went out as a DELETE
     local deleted = false
     for _, entry in ipairs(support.pomb_requests(SERVERS[root])) do
         deleted = deleted or entry.method == "DELETE"
@@ -1246,14 +1422,19 @@ testing.test("a lead resets a held seat", function()
 end)
 
 testing.test("a reset without seats.manage is refused", function()
+    -- Serve a held seat and refuse every drop
     local root = seats_root()
     assert(fs.write(root .. "/task.seats.json", HELD_CODE_SEAT))
     assert(fs.write(root .. "/seat_drop_refused", ""))
+
+    -- Reset the seat and see the missing permission named
     on_seats(root, function(backend)
         local done, message, missing = backend:reset_seat(SEATS_ID, "code")
         testing.eq(done, nil)
         testing.ok(message ~= nil)
         testing.eq(missing, "seats.manage")
     end)
+
+    -- Add no seat after the refused drop
     testing.eq(first_index(calls_of(root), posted_to_seats), nil)
 end)

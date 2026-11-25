@@ -18,20 +18,22 @@ local function cell_of(selected, name)
     end
 end
 
-local PROBE = [=[
-local dev_os = require("@dev/os")
-local manifest = require("@dev/manifest")
-local selected, err = manifest.select(manifest.parse(arg[1]), { column = tonumber(arg[2]) })
-if not selected then
-    dev_os.stdout:write("ERR\t", err)
-    return
-end
-for _, row in ipairs(selected) do
-    dev_os.stdout:write(row.name, "\t", row.cell, "\n")
-end
-]=]
+local PROBE = table.concat({
+    'local dev_os = require("@dev/os")',
+    'local manifest = require("@dev/manifest")',
+    "local selected, err = manifest.select(manifest.parse(arg[1]), { column = tonumber(arg[2]) })",
+    "if not selected then",
+    '    dev_os.stdout:write("ERR\\t", err)',
+    "    return",
+    "end",
+    "for _, row in ipairs(selected) do",
+    '    dev_os.stdout:write(row.name, "\\t", row.cell, "\\n")',
+    "end",
+    "",
+}, "\n")
 
 local function select_with_env(text, column, env)
+    -- Write the probe and name the variables the caller left unset
     local dir = assert(fs.realpath(support.tempdir()))
     assert(fs.write(dir .. "/probe.luau", PROBE))
     local unset = {}
@@ -40,15 +42,21 @@ local function select_with_env(text, column, env)
             unset[#unset + 1] = name
         end
     end
+
+    -- Run it under the given environment
     local out = dev_os.capture(
         { runtime.exe, "-l", dir .. "/probe.luau", text, tostring(column) },
         { env = env, unset = unset }
     )
     fs.remove(dir, { recursive = true })
+
+    -- Return the error it reported
     local err = out:match("^ERR\t(.*)$")
     if err then
         return nil, err
     end
+
+    -- Return the cells it printed
     local cells = {}
     for name, cell in out:gmatch("([^\t\n]*)\t([^\n]*)\n") do
         cells[name] = cell
@@ -71,9 +79,12 @@ end)
 testing.test(
     "a quoted cell with spaces is one cell and unquoted cells split on runs of blanks",
     function()
-        local rows = manifest.parse(
-            'name\tbinary  brew\nplain\tpl\tripgrep\nargs zzz "script:/tmp/x.sh --flag value"\n'
-        )
+        local rows = manifest.parse(table.concat({
+            "name\tbinary  brew",
+            "plain\tpl\tripgrep",
+            'args zzz "script:/tmp/x.sh --flag value"',
+            "",
+        }, "\n"))
         local column = assert(manifest.column(rows, "brew"))
         local selected = assert(select_all(rows, column))
         testing.eq(cell_of(selected, "plain"), "ripgrep")
@@ -99,23 +110,33 @@ end)
 testing.test(
     "an undefined variable fails the whole selection and names the variable and row",
     function()
-        local selected, err =
-            select_with_env("name binary brew\nnope-row x ${NOPE}\nfine y ripgrep\n", 3, {})
+        local text = table.concat({
+            "name binary brew",
+            "nope-row x ${NOPE}",
+            "fine y ripgrep",
+            "",
+        }, "\n")
+        local selected, err = select_with_env(text, 3, {})
         testing.eq(selected, nil)
         testing.eq(err, "Variable ${NOPE} is undefined in row nope-row.")
     end
 )
 
 testing.test("a variable in another manager's column does not fail the selection", function()
-    local text = "name binary brew pacman\nx y ripgrep ${NOPE}\n"
+    local text = table.concat({ "name binary brew pacman", "x y ripgrep ${NOPE}", "" }, "\n")
     testing.eq(select_with_env(text, 3, {}), { x = "ripgrep" })
     testing.eq(select_with_env(text, 4, {}), nil)
 end)
 
 testing.test("select keeps the rows of one group, comma lists included", function()
-    local rows = manifest.parse(
-        "name binary brew groups\naa a aa-f base\nbb b bb-f rust\ncc c cc-f base,rust\ndd d dd-f -\n"
-    )
+    local rows = manifest.parse(table.concat({
+        "name binary brew groups",
+        "aa a aa-f base",
+        "bb b bb-f rust",
+        "cc c cc-f base,rust",
+        "dd d dd-f -",
+        "",
+    }, "\n"))
     local names = function(group)
         local out = {}
         for _, row in ipairs(assert(select_all(rows, 3, group))) do
@@ -130,7 +151,7 @@ testing.test("select keeps the rows of one group, comma lists included", functio
 end)
 
 testing.test("a manifest with no groups column has no groups", function()
-    local rows = manifest.parse("name binary brew\naa a aa-f\n")
+    local rows = manifest.parse(table.concat({ "name binary brew", "aa a aa-f", "" }, "\n"))
     testing.eq(#assert(select_all(rows, 3, "base")), 0)
 end)
 
@@ -219,11 +240,21 @@ testing.test("route names who installs a channel and which driver handles it", f
 end)
 
 testing.test("groups is never a manager column and a group name never lands in a cell", function()
-    local rows = manifest.parse(
-        "name binary brew groups\naa a aa-f base\nbb b bb-f rust\ncc c cc-f base,rust\ndd d dd-f -\n"
-    )
+    -- Parse a manifest that has a groups column
+    local rows = manifest.parse(table.concat({
+        "name binary brew groups",
+        "aa a aa-f base",
+        "bb b bb-f rust",
+        "cc c cc-f base,rust",
+        "dd d dd-f -",
+        "",
+    }, "\n"))
+
+    -- Look for manager columns
     testing.eq(manifest.column(rows, "groups"), nil)
     testing.eq(manifest.column(rows, "brew"), 3)
+
+    -- Select every row and check no group name leaks into a cell
     local selected = assert(select_all(rows, 3))
     testing.eq(#selected, 4)
     for _, row in ipairs(selected) do
@@ -234,26 +265,36 @@ end)
 testing.test(
     "a failed logged command prints the last 20 lines of its output under the failure",
     function()
+        -- Write a probe that logs a failing command and flushes the failure
         local dir = assert(fs.realpath(support.tempdir()))
-        local probe = 'local lib = require("@dev/pkg/lib")\n'
-            .. "local opts = { log_file = arg[1] }\n"
-            .. 'assert(lib.run({ "echo", "earlier" }, opts) == 0)\n'
-            .. 'local code = lib.run({ "sh", "-c", "seq 1 30; echo broke >&2; exit 3" }, opts)\n'
-            .. "assert(code == 3)\n"
-            .. 'lib.failed({ name = "tool" }, "sh -c x")\n'
-            .. 'assert(lib.run({ "true" }, opts) == 0)\n'
-            .. "lib.flush_failure()\n"
+        local probe = table.concat({
+            'local lib = require("@dev/pkg/lib")',
+            "local opts = { log_file = arg[1] }",
+            'assert(lib.run({ "echo", "earlier" }, opts) == 0)',
+            'local code = lib.run({ "sh", "-c", "seq 1 30; echo broke >&2; exit 3" }, opts)',
+            "assert(code == 3)",
+            'lib.failed({ name = "tool" }, "sh -c x")',
+            'assert(lib.run({ "true" }, opts) == 0)',
+            "lib.flush_failure()",
+            "",
+        }, "\n")
         assert(fs.write(dir .. "/probe.luau", probe))
+
+        -- Run it
         local out, code = dev_os.capture(
             { runtime.exe, "-l", dir .. "/probe.luau", dir .. "/log" },
             { stderr = "stdout" }
         )
         testing.eq(code, 0)
-        local expected = '  ! tool: "sh -c x" failed\n'
+
+        -- Expect the failure and the last 20 lines of its output
+        local expected = { '  ! tool: "sh -c x" failed' }
         for i = 12, 30 do
-            expected = expected .. "      " .. i .. "\n"
+            expected[#expected + 1] = "      " .. i
         end
-        testing.eq(out, expected .. "      broke\n")
+        expected[#expected + 1] = "      broke"
+        expected[#expected + 1] = ""
+        testing.eq(out, table.concat(expected, "\n"))
         fs.remove(dir, { recursive = true })
     end
 )

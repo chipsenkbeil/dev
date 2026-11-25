@@ -178,23 +178,28 @@ end)
 
 local function fake_pager(body)
     local dir = assert(fs.mktemp({ dir = true }))
-    assert(fs.write(dir .. "/fakepager", "#!/bin/sh\n" .. body))
+    assert(fs.write(dir .. "/fakepager", table.concat({ "#!/bin/sh", body }, "\n")))
     assert(dev_os.run({ "chmod", "755", dir .. "/fakepager" }) == 0, "chmod failed")
     return dir
 end
 
 testing.test("page sends a tall text to the pager command on PATH", function()
+    -- Make a pager that records its input and put it on PATH
     local dir = fake_pager('cat >"$1"\n')
     local record = dir .. "/record"
     local content = lines_of(50)
     local path = dev_os.getenv("PATH")
     dev_os.setenv("PATH", dir .. ":" .. path)
+
+    -- Page a tall text through it
     local paged = ui.page(content, {
         pager = "fakepager " .. record,
         interactive = true,
         rows = 24,
     })
     dev_os.setenv("PATH", path)
+
+    -- Check it paged and received the whole text
     testing.eq(paged, true)
     testing.eq(fs.read(record), content)
     fs.remove(dir, { recursive = true })
@@ -242,7 +247,7 @@ testing.test("page prints the text and a warning when the pager command is missi
 end)
 
 testing.test("page prints the text and a warning when the pager exits non-zero", function()
-    local dir = fake_pager("cat >/dev/null\nexit 3\n")
+    local dir = fake_pager(table.concat({ "cat >/dev/null", "exit 3", "" }, "\n"))
     local out = page_output(30, { pager = dir .. "/fakepager" })
     testing.ok(out:find(WARNING, 1, true), out)
     testing.ok(out:find(lines_of(30) .. "false", 1, true), out)
@@ -257,7 +262,7 @@ testing.test("page prints nothing but the pager's own output when the pager succ
 end)
 
 testing.test("page prints the fallback text when the pager fails", function()
-    local dir = fake_pager("cat >/dev/null\nexit 3\n")
+    local dir = fake_pager(table.concat({ "cat >/dev/null", "exit 3", "" }, "\n"))
     local out = page_output(30, { pager = dir .. "/fakepager", fallback = "plain\n" })
     testing.ok(out:find(WARNING .. "plain\n", 1, true), out)
     testing.ok(not out:find(lines_of(30), 1, true), out)

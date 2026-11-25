@@ -52,11 +52,18 @@ testing.test("scm.workspace.names.the.checkout.after.its.directory", function()
 end)
 
 testing.test("scm.workspace.is.dirty.only.while.the.checkout.holds.changes", function()
+    -- Make a repo
     local root = repo()
+
+    -- Start with a clean checkout
     local workspace = scm.workspace(root)
     testing.eq(workspace:is_dirty(), false)
+
+    -- Add a file and see it dirty
     assert(fs.write(root .. "/new.txt", "new\n"), "write failed")
     testing.eq(workspace:is_dirty(), true)
+
+    -- Commit it and see it clean again
     git(root, "add", "-A")
     git(root, "commit", "-q", "-m", "feat: new")
     testing.eq(workspace:is_dirty(), false)
@@ -66,6 +73,7 @@ if dev_os.which("jj") then
     testing.test(
         "scm.workspace.in.jj.is.dirty.while.the.working.copy.commit.holds.changes",
         function()
+            -- Make a jj repository
             local root = assert(fs.realpath(support.tempdir()))
             local env = { JJ_USER = "t", JJ_EMAIL = "t@example.com" }
             local function jj(...)
@@ -75,10 +83,16 @@ if dev_os.which("jj") then
             end
             local init = { stdout = "null", stderr = "null", env = env }
             assert(dev_os.run({ "jj", "git", "init", root }, init) == 0, "jj init failed")
+
+            -- Start with an empty working copy
             local workspace = scm.workspace(root)
             testing.eq(workspace:is_dirty(), false)
+
+            -- Add a file and see it dirty
             assert(fs.write(root .. "/new.txt", "new\n"), "write failed")
             testing.eq(workspace:is_dirty(), true)
+
+            -- Commit it and see it clean again
             jj("commit", "-m", "feat: new")
             testing.eq(workspace:is_dirty(), false)
         end
@@ -94,31 +108,43 @@ testing.test("scm.workspace.lists.the.files.a.commit.touches", function()
 end)
 
 testing.test("scm.workspace.says.which.revision.holds.a.commit", function()
+    -- Make a repo
     local root = repo()
+
+    -- Remember the base commit and add a commit on top
     local base = head(root)
     assert(fs.write(root .. "/new.txt", "new\n"), "write failed")
     git(root, "add", "-A")
     git(root, "commit", "-q", "-m", "feat: new")
+
+    -- Check the head holds the base and not the other way
     local workspace = scm.workspace(root)
     testing.eq(workspace:holds(base, "HEAD"), true)
     testing.eq(workspace:holds(head(root), base), false)
 end)
 
 testing.test("scm.workspace.merge.into.trunk.pushes.the.head.commit", function()
+    -- Publish the base to a bare remote
     local root = repo()
     local bare = assert(fs.realpath(support.tempdir()))
     local init = { stdout = "null" }
     assert(dev_os.run({ "git", "init", "-q", "--bare", bare }, init) == 0, "git init failed")
     git(root, "remote", "add", "origin", bare)
     git(root, "push", "-q", "origin", "main")
+
+    -- Commit a change
     assert(fs.write(root .. "/new.txt", "new\n"), "write failed")
     git(root, "add", "-A")
     git(root, "commit", "-q", "-m", "feat: new")
+
+    -- Merge into trunk
     local ok, out
     with_push_env(function()
         ok, out = scm.workspace(root):merge_into_trunk()
     end)
     testing.eq(ok, true, out)
+
+    -- Check the remote holds the head commit
     local remote = dev_os.capture({ "git", "-C", root, "ls-remote", "origin", "refs/heads/main" })
     testing.eq(remote:match("^(%x+)"), head(root))
 end)

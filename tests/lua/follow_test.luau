@@ -45,13 +45,18 @@ local function bare()
 end
 
 local function advance(remote)
+    -- Clone the remote into a second checkout
     local parent = dir()
     local other = parent .. "/other"
     git(parent, "clone", "-q", remote, other)
+
+    -- Commit a new file there and push it to trunk
     assert(fs.write(other .. "/next.txt", "next\n"))
     git(other, "add", "next.txt")
     git(other, "commit", "-q", "-m", "next")
     git(other, "push", "-q", "origin", "master")
+
+    -- Report the new trunk commit
     return git(other, "rev-parse", "HEAD")
 end
 
@@ -187,12 +192,17 @@ testing.test("follow.git.moves.onto.a.DEV_FOLLOW_REV.ahead.of.the.checkout", fun
 end)
 
 testing.test("follow.git.leaves.a.checkout.on.a.newer.commit", function()
+    -- Move trunk ahead of a checkout
     local root, remote = git_main()
     local old = git(root, "rev-parse", "HEAD")
     local head = advance(remote)
+
+    -- Follow trunk and expect the checkout to advance
     local out, code = follow(root)
     testing.eq(code, 0, out)
     testing.eq(git(root, "rev-parse", "HEAD"), head)
+
+    -- Follow the older commit and expect the checkout to stay on the newer one
     out, code = support.dev(root, { "follow" }, { env = { DEV_FOLLOW_REV = old } })
     testing.eq(code, 0, out)
     testing.ok(
@@ -214,12 +224,17 @@ testing.test("follow.jj.moves.onto.a.DEV_FOLLOW_REV.ahead.of.the.checkout", func
 end)
 
 testing.test("follow.jj.leaves.a.checkout.on.a.newer.commit", function()
+    -- Move trunk ahead of a checkout
     local root, remote = jj_main()
     local old = jj(root, "log", "-r", "@-", "--no-graph", "-T", "commit_id")
     local head = advance(remote)
+
+    -- Follow trunk and expect the checkout to advance
     local out, code = follow(root)
     testing.eq(code, 0, out)
     testing.eq(jj(root, "log", "-r", "@-", "--no-graph", "-T", "commit_id"), head)
+
+    -- Follow the older commit and expect the checkout to stay on the newer one
     out, code = support.dev(root, { "follow" }, { env = { DEV_FOLLOW_REV = old } })
     testing.eq(code, 0, out)
     testing.ok(
@@ -328,7 +343,7 @@ end)
 
 testing.test("follow.project.script.replaces.the.built.in", function()
     local root = support.sandbox({
-        [".dev/commands/follow.sh"] = "#!/bin/sh\necho mine\n",
+        [".dev/commands/follow.sh"] = table.concat({ "#!/bin/sh", "echo mine", "" }, "\n"),
     }, {})
     assert(dev_os.run({ "chmod", "755", root .. "/.dev/commands/follow.sh" }) == 0, "chmod failed")
     local out, code = follow(root)

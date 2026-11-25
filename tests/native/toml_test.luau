@@ -130,14 +130,22 @@ check("parse reads the TOML 1.0 forms the old reader refused", function()
     same(toml.parse("a = 'x'"), { a = "x" })
     same(toml.parse("a = 1.5"), { a = 1.5 })
     same(toml.parse("a = [[1]]"), { a = { { 1 } } })
-    same(toml.parse('a = """x\ny"""'), { a = "x\ny" })
+    same(toml.parse(lines('a = """x', 'y"""')), { a = "x\ny" })
     same(toml.parse("d = 2026-10-27"), { d = "2026-10-27" })
     same(toml.parse('a = "\\u0041"'), { a = "A" })
     same(toml.parse(lines("[[a]]", "x = 1", "[[a]]", "x = 2")), { a = { { x = 1 }, { x = 2 } } })
 end)
 
 check("parse refuses what TOML refuses", function()
-    for _, text in { "[a]\n[a]", "a = 1\n[a]", "a 1", "a =", "a = 1 b", "[a\n" } do
+    local bad = {
+        lines("[a]", "[a]"),
+        lines("a = 1", "[a]"),
+        "a 1",
+        "a =",
+        "a = 1 b",
+        lines("[a", ""),
+    }
+    for _, text in bad do
         local tree, err = toml.parse(text)
         same(tree, nil)
         assert(err and err:find("^%d+: "), tostring(err))
@@ -204,7 +212,7 @@ check("set returns a reason for a key already set, a bad key and a bad value", f
 end)
 
 check("set names the line of a file that does not parse", function()
-    local out, reason, detail = toml.set("[a\n", "a.b", "v")
+    local out, reason, detail = toml.set(lines("[a", ""), "a.b", "v")
     same(out, nil)
     same(reason, toml.SetRefusal.UNPARSEABLE)
     starts(detail, "1:")
@@ -237,18 +245,30 @@ check("encode round-trips a tree through parse", function()
 end)
 
 check("set keeps a key out of a multi-line string with blank, comment and header lines", function()
-    local input = '[a]\nx = """\nfirst\n\n# not a comment\n[b]\n"""\ny = 1\n'
+    -- Set a key in a file holding a multi-line string
+    local input = lines("[a]", 'x = """', "first", "", "# not a comment", "[b]", '"""', "y = 1", "")
     local out = assert(toml.set(input, "a.z", "v"))
-    same(out, input .. 'z = "v"\n')
+
+    -- Check the key lands at the end and the string is intact
+    same(out, input .. lines('z = "v"', ""))
     same(toml.parse(out).a.z, "v")
-    same(toml.parse(out).a.x, "first\n\n# not a comment\n[b]\n")
+    same(toml.parse(out).a.x, lines("first", "", "# not a comment", "[b]", ""))
 end)
 
 check("set writes CRLF lines into a CRLF file", function()
-    local out = assert(toml.set("[a]\r\nx = 1\r\n", "b.y", "v"))
-    same(out, '[a]\r\nx = 1\r\n\r\n[b]\r\ny = "v"\r\n')
-    out = assert(toml.set("[a]\r\nx = 1\r\n", "a.y", "v"))
-    same(out, '[a]\r\nx = 1\r\ny = "v"\r\n')
+    -- Build a file with CRLF line breaks
+    local function crlf(entries)
+        return table.concat(entries, "\r\n")
+    end
+    local input = crlf({ "[a]", "x = 1", "" })
+
+    -- Set a key in a new section
+    local out = assert(toml.set(input, "b.y", "v"))
+    same(out, crlf({ "[a]", "x = 1", "", "[b]", 'y = "v"', "" }))
+
+    -- Set a key in the existing section
+    out = assert(toml.set(input, "a.y", "v"))
+    same(out, crlf({ "[a]", "x = 1", 'y = "v"', "" }))
 end)
 
 if failures > 0 then

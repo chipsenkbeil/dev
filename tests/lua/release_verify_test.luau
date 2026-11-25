@@ -57,7 +57,7 @@ testing.test("verify checks the asset against SHA256SUMS and runs --version and 
     testing.eq(code, 0, out)
     testing.ok(out:find("dev " .. TAG, 1, true), out)
     testing.ok(out:find("help ran", 1, true), out)
-    testing.eq(fs.read(root .. "/run.log"), "--version\nhelp\n")
+    testing.eq(fs.read(root .. "/run.log"), table.concat({ "--version", "help", "" }, "\n"))
 end)
 
 testing.test("verify refuses an asset that does not match SHA256SUMS and never runs it", function()

@@ -11,8 +11,8 @@ local function project(bats_body)
     local root = support.sandbox({
         [".dev/commands/soak.luau"] = assert(fs.read(REPO .. "/.dev/commands/soak.luau")),
         ["tests/lua/run.luau"] = 'print("ok - a case")\n',
-        ["bin/nproc"] = "#!/bin/sh\necho 1\n",
-        ["bin/bats"] = "#!/bin/sh\n" .. bats_body .. "\n",
+        ["bin/nproc"] = table.concat({ "#!/bin/sh", "echo 1", "" }, "\n"),
+        ["bin/bats"] = table.concat({ "#!/bin/sh", bats_body, "" }, "\n"),
     }, {})
     for _, tool in ipairs({ "nproc", "bats" }) do
         assert(dev_os.run({ "chmod", "755", root .. "/bin/" .. tool }) == 0, "chmod failed")
@@ -77,37 +77,44 @@ end)
 
 local MAIN = runtime.exe
 
-local DRIVER = [[
-set -m
-"$MAIN" soak --runs 1 >/dev/null 2>&1 &
-soak=$!
-n=0
-while [ ! -s "$GROUP" ] && [ "$n" -lt 100 ]; do sleep 0.1; n=$((n + 1)); done
-[ -s "$GROUP" ] || exit 2
-kill -TERM "$soak"
-wait "$soak"
-group=$(tr -d ' \n' <"$GROUP")
-alive() {
-    ps -A -o pgid= -o stat= | awk -v g="$group" '$1 == g && $2 !~ /^Z/ { found = 1 } END { exit !found }'
-}
-n=0
-while alive && [ "$n" -lt 50 ]; do sleep 0.1; n=$((n + 1)); done
-if alive; then
-    kill -KILL -- "-$group"
-    exit 1
-fi
-]]
+local DRIVER = table.concat({
+    "set -m",
+    '"$MAIN" soak --runs 1 >/dev/null 2>&1 &',
+    "soak=$!",
+    "n=0",
+    'while [ ! -s "$GROUP" ] && [ "$n" -lt 100 ]; do sleep 0.1; n=$((n + 1)); done',
+    '[ -s "$GROUP" ] || exit 2',
+    'kill -TERM "$soak"',
+    'wait "$soak"',
+    "group=$(tr -d ' \\n' <\"$GROUP\")",
+    "alive() {",
+    "    ps -A -o pgid= -o stat= | awk -v g=\"$group\" '$1 == g && $2 !~ /^Z/ { found = 1 } END { exit !found }'",
+    "}",
+    "n=0",
+    'while alive && [ "$n" -lt 50 ]; do sleep 0.1; n=$((n + 1)); done',
+    "if alive; then",
+    '    kill -KILL -- "-$group"',
+    "    exit 1",
+    "fi",
+    "",
+}, "\n")
 
 testing.test("a TERM to dev alone stops the case and its busy loops", function()
+    -- Make a case that records its process group and sleeps
     local root = project("")
     local group = root .. "/group"
-    assert(
-        fs.write(
-            root .. "/bin/bats",
-            ("#!/bin/sh\nps -o pgid= -p $$ >%s\nsleep 60\n"):format(group)
-        )
-    )
+    local case = table.concat({
+        "#!/bin/sh",
+        "ps -o pgid= -p $$ >%s",
+        "sleep 60",
+        "",
+    }, "\n")
+    assert(fs.write(root .. "/bin/bats", case:format(group)))
+
+    -- Write a driver that sends TERM to dev alone and waits for the group to die
     assert(fs.write(root .. "/driver.sh", DRIVER))
+
+    -- Run the driver
     local code = dev_os.run({ "bash", root .. "/driver.sh" }, {
         cwd = root,
         env = {

@@ -5,68 +5,70 @@ local support = require("./support")
 
 local REPO = arg[0]:match("^(.*)/tests/lua/") or "."
 
-local STUB = [[#!/usr/bin/env bash
-root=""
-if [ "$1" = -C ]; then root="$2"; shift 2; fi
-case "$1 ${2:-}" in
-"run --list")
-    if [ "$3" = --all ]; then
-        printf '{"jobs":[{"name":"client","targets":["macos-vm-rust","linux-x86-rust"]}],'
-        printf '"pipeline":"%s/.ci/client.lua"}\n' "$root"
-        exit 0
-    fi
-    case "${CI_STUB_JOBS:-}" in
-    fail)
-        echo "hub unreachable" >&2
-        exit 9
-        ;;
-    bad)
-        echo "not json"
-        exit 0
-        ;;
-    empty)
-        echo "{}"
-        exit 0
-        ;;
-    array)
-        echo "[]"
-        exit 0
-        ;;
-    esac
-    if [ "$3" = bootstrap ] || [ "$3" = soak ]; then
-        printf '{"jobs":[{"name":"%s"}]}\n' "$3"
-    else
-        printf '{"jobs":[{"name":"test"},{"name":"widget-save"},{"name":"n-m-x"}]}\n'
-    fi
-    ;;
-run*)
-    printf 'ci -C %s' "$root" >>"$STUB_LOG"
-    printf ' [%s]' "$@" >>"$STUB_LOG"
-    printf '\n' >>"$STUB_LOG"
-    printf '%s\n' "${DEV_AGENT:-}" >>"$STUB_LOG.agent"
-    printf '%s\n' "${CI_DEFAULT_TARGET:-}" >>"$STUB_LOG.target"
-    case " $* " in
-    *" --detach "*) [ "${CI_STUB_RC:-0}" = 0 ] && echo 123abc ;;
-    esac
-    exit "${CI_STUB_RC:-0}"
-    ;;
-"ps 123abc")
-    printf 'ci -C %s [ps] [%s]\n' "$root" "$3" >>"$STUB_LOG"
-    if [ "$3" = --json ]; then
-        printf '{"status":"%s","jobs":[{"name":"client","target":"%s","index":2}]}\n' \
-            "${CI_STUB_STATUS:-passed}" "${CI_STUB_TARGET:-macos-vm-rust}"
-    fi
-    ;;
-"cp 123abc:"*)
-    printf 'ci -C %s [cp] [%s] [%s]\n' "$root" "$2" "${4:+--force}" >>"$STUB_LOG"
-    if [ -n "${CI_STUB_PATCH:-}" ]; then
-        cp "$CI_STUB_PATCH" "$3/${2##*/}"
-    else
-        printf 'binary\n' >"$3/${2##*/}"
-    fi
-    ;;
-esac
-]]
+local STUB = table.concat({
+    "#!/usr/bin/env bash",
+    'root=""',
+    'if [ "$1" = -C ]; then root="$2"; shift 2; fi',
+    'case "$1 ${2:-}" in',
+    '"run --list")',
+    '    if [ "$3" = --all ]; then',
+    '        printf \'{"jobs":[{"name":"client","targets":["macos-vm-rust","linux-x86-rust"]}],\'',
+    '        printf \'"pipeline":"%s/.ci/client.lua"}\\n\' "$root"',
+    "        exit 0",
+    "    fi",
+    '    case "${CI_STUB_JOBS:-}" in',
+    "    fail)",
+    '        echo "hub unreachable" >&2',
+    "        exit 9",
+    "        ;;",
+    "    bad)",
+    '        echo "not json"',
+    "        exit 0",
+    "        ;;",
+    "    empty)",
+    '        echo "{}"',
+    "        exit 0",
+    "        ;;",
+    "    array)",
+    '        echo "[]"',
+    "        exit 0",
+    "        ;;",
+    "    esac",
+    '    if [ "$3" = bootstrap ] || [ "$3" = soak ]; then',
+    '        printf \'{"jobs":[{"name":"%s"}]}\\n\' "$3"',
+    "    else",
+    '        printf \'{"jobs":[{"name":"test"},{"name":"widget-save"},{"name":"n-m-x"}]}\\n\'',
+    "    fi",
+    "    ;;",
+    "run*)",
+    '    printf \'ci -C %s\' "$root" >>"$STUB_LOG"',
+    '    printf \' [%s]\' "$@" >>"$STUB_LOG"',
+    "    printf '\\n' >>\"$STUB_LOG\"",
+    '    printf \'%s\\n\' "${DEV_AGENT:-}" >>"$STUB_LOG.agent"',
+    '    printf \'%s\\n\' "${CI_DEFAULT_TARGET:-}" >>"$STUB_LOG.target"',
+    '    case " $* " in',
+    '    *" --detach "*) [ "${CI_STUB_RC:-0}" = 0 ] && echo 123abc ;;',
+    "    esac",
+    '    exit "${CI_STUB_RC:-0}"',
+    "    ;;",
+    '"ps 123abc")',
+    '    printf \'ci -C %s [ps] [%s]\\n\' "$root" "$3" >>"$STUB_LOG"',
+    '    if [ "$3" = --json ]; then',
+    '        printf \'{"status":"%s","jobs":[{"name":"client","target":"%s","index":2}]}\\n\' \\',
+    '            "${CI_STUB_STATUS:-passed}" "${CI_STUB_TARGET:-macos-vm-rust}"',
+    "    fi",
+    "    ;;",
+    '"cp 123abc:"*)',
+    '    printf \'ci -C %s [cp] [%s] [%s]\\n\' "$root" "$2" "${4:+--force}" >>"$STUB_LOG"',
+    '    if [ -n "${CI_STUB_PATCH:-}" ]; then',
+    '        cp "$CI_STUB_PATCH" "$3/${2##*/}"',
+    "    else",
+    "        printf 'binary\\n' >\"$3/${2##*/}\"",
+    "    fi",
+    "    ;;",
+    "esac",
+    "",
+}, "\n")
 
 local function write_exec(path, text)
     assert(fs.mkdir(fs.dirname(path), { parents = true }))
@@ -75,12 +77,15 @@ local function write_exec(path, text)
 end
 
 local function setup(files)
+    -- Make a project tree with the ci stub on the box's path
     local base = assert(fs.realpath(support.tempdir()))
     local root = base .. "/p"
     assert(fs.mkdir(root .. "/.dev", { parents = true }))
     assert(fs.mkdir(root .. "/.ci", { parents = true }))
     assert(fs.write(root .. "/.ci/jobs.lua", "return {}\n"))
     write_exec(base .. "/bin/ci", STUB)
+
+    -- Install each requested command or helper under the project
     for name, text in pairs(files or {}) do
         local where = name:find("^helpers/") and "/.dev/" or "/.dev/commands/"
         write_exec(root .. where .. name, text)
@@ -90,7 +95,8 @@ end
 
 local function write_config(base, body)
     assert(fs.mkdir(base .. "/home/.config/dev", { parents = true }))
-    assert(fs.write(base .. "/home/.config/dev/config.toml", "[remote]\n" .. body .. "\n"))
+    local text = table.concat({ "[remote]", body, "" }, "\n")
+    assert(fs.write(base .. "/home/.config/dev/config.toml", text))
 end
 
 local function with_empty_home(body)
@@ -121,17 +127,24 @@ local function dev_env(base, env)
 end
 
 local function dev(root, base, args, env)
+    -- Build the dev argv from the words given
     local argv = { support.DEV }
     for _, word in ipairs(args) do
         argv[#argv + 1] = word
     end
+
+    -- Start each run with an empty ci log
     fs.remove(base .. "/log")
+
+    -- Run dev from the project with the sandboxed environment
     local out, code = dev_os.capture(
         argv,
         { cwd = root, stderr = "stdout", stdin = "null", env = dev_env(base, env) }
     )
     return out, code, fs.read(base .. "/log") or ""
 end
+
+local HELLO = table.concat({ "#!/usr/bin/env bash", "echo hi", "" }, "\n")
 
 testing.test("--remote runs ci with the arguments after -- as separate words", function()
     local root, base = setup()
@@ -144,10 +157,13 @@ testing.test("--remote runs ci with the arguments after -- as separate words", f
 end)
 
 testing.test("--detach replaces --follow and the flag order does not matter", function()
+    -- Detach with the flag ahead of the command
     local root, base = setup()
     local _, _, log = dev(root, base, { "--remote", "--detach", "test" })
     testing.ok(log:find("[--detach] [--job] [test]", 1, true), log)
     testing.ok(not log:find("--follow", 1, true), log)
+
+    -- Follow when the flag is left out
     _, _, log = dev(root, base, { "--remote", "test" })
     testing.ok(log:find("[--follow] [--job] [test]", 1, true), log)
 end)
@@ -169,17 +185,22 @@ testing.test("--priority without --remote is a usage error", function()
 end)
 
 testing.test("--remote --priority puts --priority before the double dash", function()
+    -- Put the flag ahead of the double dash when it is given
     local root, base = setup()
     local _, code, log = dev(root, base, { "--remote", "--priority", "test", "--", "-k", "x" })
     testing.eq(code, 0)
     testing.ok(log:find("[--job] [test] [--priority] [--] [-k] [x]", 1, true), log)
+
+    -- Leave the flag out when it is not given
     _, code, log = dev(root, base, { "--remote", "test", "--", "-k", "x" })
     testing.eq(code, 0)
     testing.ok(not log:find("--priority", 1, true), log)
 end)
 
 testing.test("a parent command and its subcommand are one job named with a hyphen", function()
-    local root, base = setup({ ["widget/save.sh"] = "#!/usr/bin/env bash\ntrue\n" })
+    local root, base = setup({
+        ["widget/save.sh"] = table.concat({ "#!/usr/bin/env bash", "true", "" }, "\n"),
+    })
     local _, _, log = dev(root, base, { "--remote", "widget", "save" })
     testing.ok(log:find("[--job] [widget-save]", 1, true), log)
 end)
@@ -261,40 +282,61 @@ testing.test("a machine-local command is refused with the mockup text", function
 end)
 
 testing.test("DEV_REMOTE counts as --remote", function()
+    -- Send the run to ci when the variable is 1
     local root, base = setup()
     local _, _, log = dev(root, base, { "test" }, { DEV_REMOTE = "1" })
     testing.ok(log:find("[--job] [test]", 1, true), log)
+
+    -- Keep the run here when the variable is 0 under a local default
     write_config(base, 'default = "local"')
     _, _, log = dev(root, base, { "test" }, { DEV_REMOTE = "0" })
     testing.eq(log, "")
 end)
 
 testing.test("with no setting a command with a job runs on ci and --local keeps it here", function()
+    -- Send a command with a job to ci by default
     local root, base = setup()
     local _, code, log = dev(root, base, { "test", "a", "--", "b" })
     testing.eq(code, 0)
     testing.eq(log, "ci -C " .. root .. " [run] [--local] [--follow] [--job] [test] [--] [a] [b]\n")
+
+    -- Keep the run here under the local flag
     _, _, log = dev(root, base, { "--local", "test" })
     testing.eq(log, "")
+
+    -- Refuse the two flags together
     local out, code2 = dev(root, base, { "--local", "--remote", "test" })
     testing.eq(code2, 2)
     testing.eq(out, "The flags `--local` and `--remote` cannot be used together.\n")
 end)
 
 testing.test("remote.default local runs here and --remote still goes to ci", function()
+    -- Keep a plain run here under the local default
     local root, base = setup()
     write_config(base, 'default = "local"')
     local _, _, log = dev(root, base, { "test" })
     testing.eq(log, "")
+
+    -- Send the run to ci when the flag asks for it
     _, _, log = dev(root, base, { "--remote", "test" })
     testing.ok(log:find("[--job] [test]", 1, true), log)
 end)
 
 testing.test("the user file beats the project file for remote.default", function()
+    -- Follow the project file while the user has no setting
     local root, base = setup()
-    assert(fs.write(root .. "/.dev/config.toml", '[remote]\ndefault = "local"\n'))
+    assert(fs.write(
+        root .. "/.dev/config.toml",
+        table.concat({
+            "[remote]",
+            'default = "local"',
+            "",
+        }, "\n")
+    ))
     local _, _, log = dev(root, base, { "test" })
     testing.eq(log, "")
+
+    -- Follow the user file once it sets the default
     write_config(base, 'default = "remote"')
     _, _, log = dev(root, base, { "test" })
     testing.ok(log:find("[--job] [test]", 1, true), log)
@@ -312,11 +354,16 @@ testing.test("a bad remote.default is one line and exit 1", function()
 end)
 
 testing.test("CI=true or a box marker runs here, whatever the flags and default", function()
+    -- Run here on a ci job without any flag
     local root, base = setup()
     local _, _, log = dev(root, base, { "test" }, { CI = "true" })
     testing.eq(log, "")
+
+    -- Run here on a ci job even under the remote flag
     _, _, log = dev(root, base, { "--remote", "test" }, { CI = "true" })
     testing.eq(log, "")
+
+    -- Run here in a box even under the remote flag
     assert(fs.write(base .. "/box", "name=x\n"))
     _, _, log = dev(root, base, { "--remote", "test" }, { DEV_BOX_MARKER = base .. "/box" })
     testing.eq(log, "")
@@ -325,11 +372,14 @@ end)
 testing.test(
     "commands without a job and machine-local commands run here under the default",
     function()
-        local root, base = setup({ ["hello.sh"] = "#!/usr/bin/env bash\necho hi\n" })
+        -- Run a command without a job here
+        local root, base = setup({ ["hello.sh"] = HELLO })
         local out, code, log = dev(root, base, { "hello" })
         testing.eq(out, "hi\n")
         testing.eq(code, 0)
         testing.eq(log, "")
+
+        -- Run a machine-local command here
         out, code, log = dev(root, base, { "board", "status" })
         testing.eq(log, "")
         testing.eq(out, "This project has no board.\n")
@@ -338,14 +388,19 @@ testing.test(
 )
 
 testing.test("without ci on PATH the default fails with the --local hint", function()
-    local root, base = setup({ ["hello.sh"] = "#!/usr/bin/env bash\necho hi\n" })
+    -- Fail the default run with the hint when ci is missing
+    local root, base = setup({ ["hello.sh"] = HELLO })
     local env = { PATH = "/usr/bin:/bin" }
     local out, code = dev(root, base, { "hello" }, env)
     testing.eq(code, 1)
     testing.eq(out, "The ci client is not on PATH. Rerun it, or pass `--local` to run it here.\n")
+
+    -- Fail the remote flag with the plain error when ci is missing
     out, code = dev(root, base, { "--remote", "test" }, env)
     testing.eq(code, 1)
     testing.ok(out:find("The ci client is not found", 1, true), out)
+
+    -- Run here under each way of opting out of ci
     out, code = dev(root, base, { "--local", "hello" }, { PATH = env.PATH })
     testing.eq(out, "hi\n")
     testing.eq(code, 0)
@@ -362,7 +417,8 @@ end)
 testing.test(
     "a failing ci run --list under the default fails with ci's error and the hint",
     function()
-        local root, base = setup({ ["hello.sh"] = "#!/usr/bin/env bash\necho hi\n" })
+        -- Fail the default run with ci's error and the hint
+        local root, base = setup({ ["hello.sh"] = HELLO })
         local out, code, log = dev(root, base, { "hello" }, { CI_STUB_JOBS = "fail" })
         testing.eq(code, 9)
         testing.eq(
@@ -370,6 +426,8 @@ testing.test(
             "The command `ci run --list` failed. The error was: hub unreachable. Rerun it, or pass `--local` to run it here.\n"
         )
         testing.eq(log, "")
+
+        -- Run here under the local flag despite the failing ci
         out, code = dev(root, base, { "--local", "hello" }, { CI_STUB_JOBS = "fail" })
         testing.eq(out, "hi\n")
         testing.eq(code, 0)
@@ -377,7 +435,7 @@ testing.test(
 )
 
 testing.test("a project with no pipeline file runs here without calling ci", function()
-    local root, base = setup({ ["hello.sh"] = "#!/usr/bin/env bash\necho hi\n" })
+    local root, base = setup({ ["hello.sh"] = HELLO })
     assert(dev_os.run({ "rm", "-rf", root .. "/.ci" }) == 0, "rm failed")
     local out, code = dev(root, base, { "hello" }, { CI_STUB_JOBS = "fail" })
     testing.eq(out, "hi\n")
@@ -387,17 +445,22 @@ end)
 testing.test(
     "a helpers/remote.luau runner gets the words, args, detach and root and its integer is the exit code",
     function()
+        -- Hand the words, args and root to the runner and take its integer as the exit code
         local root, base = setup({
-            ["helpers/remote.luau"] = [[return function(run)
-    require("@dev/os").stdout:write(table.concat(run.words, " "), "|", table.concat(run.args, ","), "|", tostring(run.detach), "|", run.root, "\n")
-    return 5
-end
-]],
+            ["helpers/remote.luau"] = table.concat({
+                "return function(run)",
+                '    require("@dev/os").stdout:write(table.concat(run.words, " "), "|", table.concat(run.args, ","), "|", tostring(run.detach), "|", run.root, "\\n")',
+                "    return 5",
+                "end",
+                "",
+            }, "\n"),
         })
         local out, code, log = dev(root, base, { "--remote", "test", "--", "a", "b c" })
         testing.eq(code, 5)
         testing.eq(out, "test|a,b c|false|" .. root .. "\n")
         testing.eq(log, "")
+
+        -- Hand over the detach flag when it is given
         out = dev(root, base, { "--remote", "--detach", "test" })
         testing.eq(out, "test||true|" .. root .. "\n")
     end
@@ -406,10 +469,13 @@ end
 testing.test(
     "a helpers/remote.luau that errors or returns no function ends with one line and exit 1",
     function()
+        -- Refuse a runner file that returns no function
         local root, base = setup({ ["helpers/remote.luau"] = "return 3\n" })
         local out, code = dev(root, base, { "--remote", "test" })
         testing.eq(code, 1)
         testing.ok(out:find(" must return a function.", 1, true), out)
+
+        -- Report the error a runner raises as one line
         write_exec(root .. "/.dev/helpers/remote.luau", "return function() error('nope', 0) end\n")
         out, code = dev(root, base, { "--remote", "test" })
         testing.eq(code, 1)
@@ -420,16 +486,21 @@ testing.test(
 testing.test(
     "a failing ci run --list is reported with ci's exit code, not as a missing job",
     function()
+        -- Pass ci's own exit code and error through
         local root, base = setup()
         local out, code, log = dev(root, base, { "--remote", "test" }, { CI_STUB_JOBS = "fail" })
         testing.eq(code, 9)
         testing.eq(out, "The command `ci run --list` failed. The error was: hub unreachable.\n")
         testing.eq(log, "")
+
+        -- Report an unreadable listing as a failure, not a missing job
         out, code, log = dev(root, base, { "--remote", "test" }, { CI_STUB_JOBS = "bad" })
         testing.eq(code, 1)
         testing.ok(out:find("The command `ci run --list` failed.", 1, true), out)
         testing.ok(not out:find("No job named", 1, true), out)
         testing.eq(log, "")
+
+        -- Report a listing of the wrong shape the same way
         for _, mode in ipairs({ "empty", "array" }) do
             out, code, log = dev(root, base, { "--remote", "test" }, { CI_STUB_JOBS = mode })
             testing.eq(code, 1)
@@ -479,13 +550,20 @@ testing.test(
 )
 
 testing.test("-- before the command or parent command still names the job", function()
-    local root, base = setup({ ["widget/save.sh"] = "#!/usr/bin/env bash\ntrue\n" })
+    -- Name a plain command's job after a leading double dash
+    local root, base = setup({
+        ["widget/save.sh"] = table.concat({ "#!/usr/bin/env bash", "true", "" }, "\n"),
+    })
     local _, code, log = dev(root, base, { "--remote", "--", "test", "a" })
     testing.eq(code, 0)
     testing.eq(log, "ci -C " .. root .. " [run] [--local] [--follow] [--job] [test] [--] [a]\n")
+
+    -- Name a parent command's job after a leading double dash
     _, code, log = dev(root, base, { "--remote", "--", "widget", "save" })
     testing.eq(code, 0)
     testing.ok(log:find("[--job] [widget-save] [--]", 1, true), log)
+
+    -- Name a parent command's job when the dash sits between its words
     _, code, log = dev(root, base, { "--remote", "widget", "--", "save" })
     testing.ok(log:find("[--job] [widget-save] [--]", 1, true), log)
 end)
@@ -515,6 +593,7 @@ testing.test("arguments after -- reach the job untouched", function()
 end)
 
 testing.test("the project's helpers/remote.luau sends soak to the soak pipeline", function()
+    -- Send a followed soak run to the soak pipeline
     local override = assert(fs.read(REPO .. "/.dev/helpers/remote.luau"))
     local root, base = setup({ ["helpers/remote.luau"] = override })
     local _, code, log = dev(root, base, { "--remote", "soak", "--", "--runs", "5" })
@@ -523,6 +602,8 @@ testing.test("the project's helpers/remote.luau sends soak to the soak pipeline"
         log,
         "ci -C " .. root .. " [run] [soak] [--local] [--follow] [--job] [soak] [--] [--runs] [5]\n"
     )
+
+    -- Send a detached soak run to the soak pipeline
     _, code, log = dev(root, base, { "--remote", "--detach", "soak" })
     testing.eq(code, 0)
     testing.eq(log, "ci -C " .. root .. " [run] [soak] [--local] [--detach] [--job] [soak] [--]\n")
@@ -555,8 +636,11 @@ testing.test(
 )
 
 testing.test("the project's helpers/remote.luau keeps -v and -vv for the ci echo", function()
+    -- Install the project's runner in a fresh tree
     local override = assert(fs.read(REPO .. "/.dev/helpers/remote.luau"))
     local root, base = setup({ ["helpers/remote.luau"] = override })
+
+    -- Echo the ci command for each verbose flag
     for _, flag in ipairs({ "-v", "-vv" }) do
         local out = dev(root, base, { flag, "--remote", "soak" })
         testing.ok(
@@ -569,6 +653,8 @@ testing.test("the project's helpers/remote.luau keeps -v and -vv for the ci echo
             out
         )
     end
+
+    -- Stay quiet without a verbose flag
     local out = dev(root, base, { "--remote", "test" })
     testing.ok(not out:find("+ ci", 1, true), out)
 end)
@@ -576,7 +662,9 @@ end)
 testing.test(
     "a parent command nested two deep is one job with a hyphen between each word",
     function()
-        local root, base = setup({ ["n/m/x.sh"] = "#!/usr/bin/env bash\ntrue\n" })
+        local root, base = setup({
+            ["n/m/x.sh"] = table.concat({ "#!/usr/bin/env bash", "true", "" }, "\n"),
+        })
         local _, code, log = dev(root, base, { "--remote", "n", "m", "x" })
         testing.eq(code, 0)
         testing.ok(log:find("[--job] [n-m-x]", 1, true), log)
@@ -584,9 +672,12 @@ testing.test(
 )
 
 testing.test("DEV_REMOTE=0 runs here under the default and --remote still wins", function()
+    -- Keep a plain run here when the variable is 0
     local root, base = setup()
     local _, _, log = dev(root, base, { "test" }, { DEV_REMOTE = "0" })
     testing.eq(log, "")
+
+    -- Send the run to ci when the flag asks for it
     _, _, log = dev(root, base, { "--remote", "test" }, { DEV_REMOTE = "0" })
     testing.ok(log:find("[--job] [test]", 1, true), log)
 end)
@@ -594,15 +685,26 @@ end)
 testing.test(
     "a runs_local header keeps a command with a same-named job here until --remote",
     function()
+        -- Keep the command here while it carries the header
         local root, base = setup({
-            ["test.sh"] = "#!/usr/bin/env bash\n# Run the tests.\n# runs_local\necho ran-local\n",
+            ["test.sh"] = table.concat({
+                "#!/usr/bin/env bash",
+                "# Run the tests.",
+                "# runs_local",
+                "echo ran-local",
+                "",
+            }, "\n"),
         })
         local out, code, log = dev(root, base, { "test" })
         testing.eq(out, "ran-local\n")
         testing.eq(code, 0)
         testing.eq(log, "")
+
+        -- Send the command to ci when the flag asks for it
         _, _, log = dev(root, base, { "--remote", "test" })
         testing.ok(log:find("[--job] [test]", 1, true), log)
+
+        -- Describe the behaviour in the help without echoing the header
         out = dev(root, base, { "help", "test" })
         testing.ok(out:find("runs here under the remote default", 1, true), out)
         testing.ok(not out:find("# runs_local", 1, true), out)
@@ -610,8 +712,14 @@ testing.test(
 )
 
 testing.test("a command script without runs_local keeps routing to its job", function()
-    local root, base =
-        setup({ ["test.sh"] = "#!/usr/bin/env bash\n# Run the tests.\necho ran-local\n" })
+    local root, base = setup({
+        ["test.sh"] = table.concat({
+            "#!/usr/bin/env bash",
+            "# Run the tests.",
+            "echo ran-local",
+            "",
+        }, "\n"),
+    })
     local out, _, log = dev(root, base, { "test" })
     testing.eq(out, "")
     testing.ok(log:find("[--job] [test]", 1, true), log)
@@ -620,13 +728,20 @@ end)
 testing.test(
     "runs_local also works in a luau spec and a parent command subcommand, and shows under -h",
     function()
+        -- Keep a luau subcommand here while its spec sets the flag
         local root, base = setup({
-            ["widget/save.luau"] = 'local c = require("@dev/command")\nreturn c({ summary = "Save it.", runs_local = true, run = function() print("ran-lua") end })\n',
+            ["widget/save.luau"] = table.concat({
+                'local c = require("@dev/command")',
+                'return c({ summary = "Save it.", runs_local = true, run = function() print("ran-lua") end })',
+                "",
+            }, "\n"),
         })
         local out, code, log = dev(root, base, { "widget", "save" })
         testing.eq(out, "ran-lua\n")
         testing.eq(code, 0)
         testing.eq(log, "")
+
+        -- Describe the behaviour in the subcommand's help
         out = dev(root, base, { "widget", "save", "-h" })
         testing.ok(out:find("runs here under the remote default", 1, true), out)
     end
@@ -640,6 +755,7 @@ testing.test("--remote ci run label is repo/remote when DEV_AGENT is unset", fun
 end)
 
 testing.test("--remote ci run label takes DEV_CI_COMMAND and DEV_CI_CARD", function()
+    -- Label a run with the command and the card
     local root, base = setup()
     local _, code = dev(
         root,
@@ -649,6 +765,8 @@ testing.test("--remote ci run label takes DEV_CI_COMMAND and DEV_CI_CARD", funct
     )
     testing.eq(code, 0)
     testing.eq(fs.read(base .. "/log.agent"), "p/land/d9f0e004\n")
+
+    -- Label a run with the command alone when no card is set
     fs.remove(base .. "/log.agent")
     _, code = dev(root, base, { "--remote", "test" }, { DEV_CI_COMMAND = "release" })
     testing.eq(code, 0)
@@ -657,13 +775,14 @@ end)
 
 local function write_ci_config(base, body)
     assert(fs.mkdir(base .. "/home/.config/dev", { parents = true }))
-    assert(fs.write(base .. "/home/.config/dev/config.toml", "[ci]\n" .. body .. "\n"))
+    local text = table.concat({ "[ci]", body, "" }, "\n")
+    assert(fs.write(base .. "/home/.config/dev/config.toml", text))
 end
 
 testing.test("--remote starts a Rust project's run on ci.rust_target", function()
     local root, base = setup()
     assert(fs.write(root .. "/Cargo.toml", "[package]\n"))
-    write_ci_config(base, 'target = "plain"\nrust_target = "ci-rust"')
+    write_ci_config(base, table.concat({ 'target = "plain"', 'rust_target = "ci-rust"' }, "\n"))
     local _, code = dev(root, base, { "--remote", "test" })
     testing.eq(code, 0)
     testing.eq(fs.read(base .. "/log.target"), "ci-rust\n")
@@ -671,7 +790,7 @@ end)
 
 testing.test("--remote starts any other project's run on ci.target", function()
     local root, base = setup()
-    write_ci_config(base, 'target = "plain"\nrust_target = "ci-rust"')
+    write_ci_config(base, table.concat({ 'target = "plain"', 'rust_target = "ci-rust"' }, "\n"))
     local _, code = dev(root, base, { "--remote", "test" })
     testing.eq(code, 0)
     testing.eq(fs.read(base .. "/log.target"), "plain\n")
@@ -695,10 +814,13 @@ testing.test("--remote keeps a CI_DEFAULT_TARGET the caller set", function()
 end)
 
 testing.test("--remote passes --priority to ci run only when DEV_CI_PRIORITY is 1", function()
+    -- Leave the flag out when the variable is unset
     local root, base = setup()
     local _, code, log = dev(root, base, { "--remote", "test" })
     testing.eq(code, 0)
     testing.ok(not log:find("--priority", 1, true), log)
+
+    -- Pass the flag when the variable is 1
     _, code, log = dev(root, base, { "--remote", "test" }, { DEV_CI_PRIORITY = "1" })
     testing.eq(code, 0)
     testing.ok(log:find("[--job] [test] [--priority] [--]", 1, true), log)
@@ -765,23 +887,35 @@ testing.test("--remote ci run label is unset when run from a real terminal", fun
     testing.eq(fs.read(base .. "/log.agent"), "\n")
 end)
 
-local FETCH_COMMAND = [[#!/usr/bin/env bash
-# Show the file ci built.
-# fetch client ci
-echo "fetched=${DEV_FETCHED:-none}"
-[ -z "${DEV_FETCHED:-}" ] || cat "$DEV_FETCHED"
-]]
+local FETCH_COMMAND = table.concat({
+    "#!/usr/bin/env bash",
+    "# Show the file ci built.",
+    "# fetch client ci",
+    'echo "fetched=${DEV_FETCHED:-none}"',
+    '[ -z "${DEV_FETCHED:-}" ] || cat "$DEV_FETCHED"',
+    "",
+}, "\n")
 
 local function fetch_setup()
     local root, base = setup({ ["show.sh"] = FETCH_COMMAND })
-    write_exec(base .. "/bin/uname", '#!/usr/bin/env bash\necho "${UNAME_STUB:-Darwin arm64}"\n')
+    write_exec(
+        base .. "/bin/uname",
+        table.concat({
+            "#!/usr/bin/env bash",
+            'echo "${UNAME_STUB:-Darwin arm64}"',
+            "",
+        }, "\n")
+    )
     return root, base
 end
 
-local FETCH_LOG = "ci -C %s [run] [client] [--local] [--detach] [--job] [client:%s] [--arch] [%s]\n"
-    .. "ci -C %s [ps] [-w]\n"
-    .. "ci -C %s [ps] [--json]\n"
-    .. "ci -C %s [cp] [123abc:client.2.%s/ci] [--force]\n"
+local FETCH_LOG = table.concat({
+    "ci -C %s [run] [client] [--local] [--detach] [--job] [client:%s] [--arch] [%s]",
+    "ci -C %s [ps] [-w]",
+    "ci -C %s [ps] [--json]",
+    "ci -C %s [cp] [123abc:client.2.%s/ci] [--force]",
+    "",
+}, "\n")
 
 testing.test(
     "a fetch command run remote runs here with the pulled file for this platform",
@@ -815,6 +949,7 @@ testing.test("a fetch command picks the target for this host's OS and architectu
 end)
 
 testing.test("a fetch command under --local or default local runs here with no fetch", function()
+    -- Run here under the local flag and the variable
     local root, base = fetch_setup()
     local runs = {
         { args = { "--local", "show" }, env = {} },
@@ -826,6 +961,8 @@ testing.test("a fetch command under --local or default local runs here with no f
         testing.eq(out, "fetched=none\n")
         testing.eq(log, "")
     end
+
+    -- Run here under the local default
     write_config(base, 'default = "local"')
     local out, code, log = dev(root, base, { "show" })
     testing.eq(code, 0, out)
@@ -849,18 +986,30 @@ testing.test("a fetch command fails and names the run when the job does not pass
     testing.ok(out:find("The ci run 123abc of job client did not pass.", 1, true), out)
 end)
 
-local PATCH_COMMAND = [[#!/usr/bin/env bash
-# Format the tree.
-# patch client fmt.patch
-echo "ran-here"
-]]
+local PATCH_COMMAND = table.concat({
+    "#!/usr/bin/env bash",
+    "# Format the tree.",
+    "# patch client fmt.patch",
+    'echo "ran-here"',
+    "",
+}, "\n")
 
-local PATCH_LOG = "ci -C %s [run] [client] [--local] [--detach] [--job] [client:macos-vm-rust]\n"
-    .. "ci -C %s [ps] [-w]\n"
-    .. "ci -C %s [ps] [--json]\n"
-    .. "ci -C %s [cp] [123abc:client.2.macos-vm-rust/fmt.patch] [--force]\n"
+local PATCH_LOG = table.concat({
+    "ci -C %s [run] [client] [--local] [--detach] [--job] [client:macos-vm-rust]",
+    "ci -C %s [ps] [-w]",
+    "ci -C %s [ps] [--json]",
+    "ci -C %s [cp] [123abc:client.2.macos-vm-rust/fmt.patch] [--force]",
+    "",
+}, "\n")
 
-local PATCH_TEXT = "--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-old\n+new\n"
+local PATCH_TEXT = table.concat({
+    "--- a/a.txt",
+    "+++ b/a.txt",
+    "@@ -1 +1 @@",
+    "-old",
+    "+new",
+    "",
+}, "\n")
 
 local function patch_setup(patch)
     local root, base = setup({ ["fmt.sh"] = PATCH_COMMAND })
@@ -896,23 +1045,38 @@ end)
 testing.test(
     "a patch command that does not apply changes nothing and names the run and patch",
     function()
-        local first = "--- a/b.txt\n+++ b/b.txt\n@@ -1 +1 @@\n-old\n+new\n"
+        -- Offer a patch whose second file no longer matches
+        local first = table.concat({
+            "--- a/b.txt",
+            "+++ b/b.txt",
+            "@@ -1 +1 @@",
+            "-old",
+            "+new",
+            "",
+        }, "\n")
         local root, base, env = patch_setup(first .. PATCH_TEXT)
         assert(fs.write(root .. "/b.txt", "old\n"))
         assert(fs.write(root .. "/a.txt", "other\n"))
+
+        -- Refuse the patch and name the run
         local out, code = dev(root, base, { "fmt" }, env)
         testing.eq(code, 1)
         testing.ok(out:find("ci run 123abc does not apply", 1, true), out)
         testing.ok(out:find("fmt.patch", 1, true), out)
+
+        -- Leave both files as they were
         testing.eq(fs.read(root .. "/a.txt"), "other\n")
         testing.eq(fs.read(root .. "/b.txt"), "old\n")
     end
 )
 
 testing.test("a patch command on a ci job or in a box runs here with no ci call", function()
+    -- Mark a box beside the project
     local root, base, env = patch_setup(PATCH_TEXT)
     assert(fs.write(base .. "/box", "name=x\n"))
     local marker = { DEV_BOX_MARKER = base .. "/box" }
+
+    -- Run here on a ci job and in a box without calling ci
     for _, extra in ipairs({ { CI = "true" }, marker }) do
         extra.CI_STUB_PATCH = env.CI_STUB_PATCH
         local out, code, log = dev(root, base, { "fmt" }, extra)
@@ -932,6 +1096,7 @@ testing.test("a patch command shows its help under --remote and applies nothing"
 end)
 
 testing.test("a patch command under --local or default local runs here with no ci call", function()
+    -- Run here under the local flag and the variable
     local root, base, env = patch_setup(PATCH_TEXT)
     local runs = {
         { args = { "--local", "fmt" }, env = env },
@@ -943,6 +1108,8 @@ testing.test("a patch command under --local or default local runs here with no c
         testing.eq(out, "ran-here\n")
         testing.eq(log, "")
     end
+
+    -- Run here under the local default
     write_config(base, 'default = "local"')
     local out, code, log = dev(root, base, { "fmt" }, env)
     testing.eq(code, 0, out)
@@ -964,13 +1131,18 @@ testing.test("--remote ci run label keeps a caller's DEV_AGENT", function()
 end)
 
 testing.test("--remote hands over the words after the command with or without a dash", function()
+    -- Hand over words given without a dash
     local root, base = setup()
     local _, code, log = dev(root, base, { "--remote", "test", "a", "b" })
     testing.eq(code, 0)
     testing.ok(log:find("[--job] [test] [--] [a] [b]", 1, true), log)
+
+    -- Hand over words given after a dash
     _, code, log = dev(root, base, { "--remote", "test", "--", "a", "b" })
     testing.eq(code, 0)
     testing.ok(log:find("[--job] [test] [--] [a] [b]", 1, true), log)
+
+    -- Refuse words given on both sides of the dash
     local out
     out, code, log = dev(root, base, { "--remote", "test", "a", "--", "b" })
     testing.eq(code, 2)

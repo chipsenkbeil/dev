@@ -12,7 +12,7 @@ local MACOS = "dev-" .. TAG .. "-aarch64-apple-darwin"
 
 local function script(root, name, body)
     local path = root .. "/bin/" .. name
-    assert(fs.write(path, "#!/bin/sh\n" .. body .. "\n"))
+    assert(fs.write(path, table.concat({ "#!/bin/sh", body, "" }, "\n")))
     assert(dev_os.run({ "chmod", "755", path }) == 0, "chmod failed")
 end
 
@@ -136,10 +136,13 @@ testing.test("test fails when the native suite fails", function()
 end)
 
 testing.test("publish creates a pre-release with SHA256SUMS over the tag's assets", function()
+    -- Publish the tag's artifacts
     local root = project()
     local dir = artifacts(root)
     local out, code = release(root, { "publish", TAG, "--dir", dir })
     testing.eq(code, 0, out)
+
+    -- Check the release create call names the staged assets
     local create = testenv.calls(root, "gh")[2]
     local stage = create:match("^release create %S+ (%S+)/" .. MACOS:gsub("%p", "%%%0") .. " ")
     testing.ok(stage, create)
@@ -154,15 +157,16 @@ testing.test("publish creates a pre-release with SHA256SUMS over the tag's asset
             "--notes Builds of dev at " .. TAG .. ". --prerelease",
         }, " ")
     )
-    local want = hash.sha256("binary-" .. MACOS)
-        .. "  "
-        .. MACOS
-        .. "\n"
-        .. hash.sha256("binary-" .. LINUX)
-        .. "  "
-        .. LINUX
-        .. "\n"
+
+    -- Check the checksum file covers both assets
+    local want = table.concat({
+        hash.sha256("binary-" .. MACOS) .. "  " .. MACOS,
+        hash.sha256("binary-" .. LINUX) .. "  " .. LINUX,
+        "",
+    }, "\n")
     testing.eq(fs.read(stage .. "/SHA256SUMS"), want)
+
+    -- Check the output links the release
     testing.ok(out:find("releases/tag/" .. TAG, 1, true), out)
 end)
 

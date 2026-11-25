@@ -11,7 +11,7 @@ local FAILED_JOB = 4242
 
 local function script(root, name, body)
     local path = root .. "/bin/" .. name
-    assert(fs.write(path, "#!/bin/sh\n" .. body .. "\n"))
+    assert(fs.write(path, table.concat({ "#!/bin/sh", body, "" }, "\n")))
     assert(dev_os.run({ "chmod", "755", path }) == 0, "chmod failed")
 end
 
@@ -70,20 +70,27 @@ local function fake_gh(root, view)
 end
 
 local function project(view)
+    -- Copy the dispatch command into a project
     local files = {}
     for _, name in ipairs({ "DESCRIPTION", "dispatch.luau" }) do
         local path = ".dev/commands/release/" .. name
         files[path] = assert(fs.read(REPO .. "/" .. path))
     end
-    files[".gitignore"] = "bin/\n*.json\n*.log\ndispatched\n"
+    files[".gitignore"] = table.concat({ "bin/", "*.json", "*.log", "dispatched", "" }, "\n")
     local root = support.sandbox(files, {})
+
+    -- Make a git repository that pushes to a bare remote
     local bare = support.tempdir()
     support.git(bare, "init", "-q", "--bare")
     support.git(root, "init", "-q", "-b", "master")
     support.git(root, "remote", "add", "origin", bare)
+
+    -- Commit a change
     assert(fs.write(root .. "/a.txt", "one\n"))
     support.git(root, "add", "-A")
     support.git(root, "commit", "-q", "-m", "feat: one")
+
+    -- Put the fake gh on the path
     fake_gh(root, view)
     return root, bare, support.rev(root, "HEAD")
 end
@@ -109,9 +116,12 @@ end
 testing.test(
     "dispatch pushes the branch, starts the run and prints each job and its log",
     function()
+        -- Dispatch a run that has a failed job
         local root, bare, sha = project(MIXED)
         local out, code = dispatch(root, sha)
         testing.eq(code, 1, out)
+
+        -- Check the branch was pushed and gh saw each call in order
         testing.eq(support.rev(bare, "refs/heads/review-master"), sha)
         testing.eq(testenv.calls(root, "gh"), {
             "run list --repo chipsenkbeil/dev --workflow release.yml --branch review-master --event workflow_dispatch --limit 30 --json databaseId,headSha",
@@ -120,6 +130,8 @@ testing.test(
             "run view " .. RUN .. " --repo chipsenkbeil/dev --json status,conclusion,url,jobs",
             "run view --repo chipsenkbeil/dev --job " .. FAILED_JOB .. " --log-failed",
         })
+
+        -- Check the output lists each job and the failed log
         testing.ok(out:find("Started run " .. RUN, 1, true), out)
         testing.ok(out:find("job build: success", 1, true), out)
         testing.ok(out:find("job build-windows: failure", 1, true), out)
@@ -193,6 +205,7 @@ end)
 
 if dev_os.which("jj") then
     local function jj_project(empty_head)
+        -- Turn the git project into a jj repository
         local root, bare = project(MIXED)
         assert(fs.remove(root .. "/.git", { recursive = true }))
         local made = dev_os.capture(
@@ -209,11 +222,15 @@ if dev_os.which("jj") then
             return (out:gsub("\n$", ""))
         end
         jj("git", "remote", "add", "origin", bare)
+
+        -- Describe a change, with an empty one on top when asked
         assert(fs.write(root .. "/b.txt", "two\n"))
         jj("describe", "-m", "feat: two")
         if empty_head then
             jj("new")
         end
+
+        -- Read the ids of the change to dispatch
         local target = if empty_head then "@-" else "@"
         local change = jj("log", "--no-graph", "-r", target, "-T", "change_id.short(12)")
         local commit = jj("log", "--no-graph", "-r", target, "-T", "commit_id")
@@ -230,6 +247,7 @@ if dev_os.which("jj") then
     testing.test(
         "dispatch leaves the jj working copy on its commit when another workspace fetches mid-run",
         function()
+            -- Add a second workspace that fetches during the run
             local root, bare, change, commit = jj_project(false)
             local other = support.tempdir() .. "/other"
             local function jj(dir, ...)
@@ -242,6 +260,8 @@ if dev_os.which("jj") then
             end
             jj(root, "workspace", "add", other)
             script(root, "midrun", `jj --no-pager -R {other} git fetch >/dev/null 2>&1`)
+
+            -- Dispatch with the fetch running mid-run
             local env = { GH_SHA = commit }
             for name, value in pairs(JJ_IDENT) do
                 env[name] = value
@@ -253,6 +273,8 @@ if dev_os.which("jj") then
             )
             testing.eq(code, 1, out)
             testing.eq(dev_os.capture({ "git", "-C", bare, "branch", "--list" }), "", out)
+
+            -- Check the working copy stayed on its commit
             jj(other, "git", "fetch")
             local seen = jj(
                 root,
@@ -264,6 +286,8 @@ if dev_os.which("jj") then
                 'commit_id ++ " " ++ description.first_line()'
             )
             testing.eq(seen, commit .. " feat: two")
+
+            -- Check the other workspace never saw the review bookmark
             local listed = jj(other, "bookmark", "list", "--all")
             testing.ok(not listed:find("review-" .. change, 1, true), listed)
         end

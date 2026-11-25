@@ -92,19 +92,23 @@ check("open_tty gives a handle or a reason, and close frees it", function()
 end)
 
 check("page prints plainly when it is not on a terminal", function()
-    same(term.page("one\ntwo\n", { rows = 1 }), false)
+    same(term.page(table.concat({ "one", "two", "" }, "\n"), { rows = 1 }), false)
 end)
 
 check("page hands the text to the pager command", function()
-    same(term.page("a\nb\nc\n", { pager = "cat", rows = 1, interactive = true }), true)
+    local text = table.concat({ "a", "b", "c", "" }, "\n")
+    same(term.page(text, { pager = "cat", rows = 1, interactive = true }), true)
 end)
 
 check("page reports a pager that fails", function()
-    local shown, reason = term.page("a\nb\n", { pager = "false", rows = 1, interactive = true })
+    -- Page through a pager that exits non-zero
+    local text = table.concat({ "a", "b", "" }, "\n")
+    local shown, reason = term.page(text, { pager = "false", rows = 1, interactive = true })
     same(shown, nil)
     same(type(reason), "string")
-    local missing =
-        term.page("a\nb\n", { pager = "dev-no-such-pager", rows = 1, interactive = true })
+
+    -- Page through a pager that does not exist
+    local missing = term.page(text, { pager = "dev-no-such-pager", rows = 1, interactive = true })
     same(missing, nil)
 end)
 

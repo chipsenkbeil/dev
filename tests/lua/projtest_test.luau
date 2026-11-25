@@ -6,13 +6,16 @@ local fs = require("@dev/fs")
 local runtime = require("@dev/runtime")
 
 local ENV = { CI = "true", DEV_REMOTE = "0" }
-local TEST_COMMAND = 'local dev_command = require("@dev/command")\n'
-    .. "return dev_command({\n"
-    .. '    summary = "Run the tests",\n'
-    .. "    run = function(_, _, ctx)\n"
-    .. '        return require("@dev/testrun").run(ctx.root)\n'
-    .. "    end,\n"
-    .. "})\n"
+local TEST_COMMAND = table.concat({
+    'local dev_command = require("@dev/command")',
+    "return dev_command({",
+    '    summary = "Run the tests",',
+    "    run = function(_, _, ctx)",
+    '        return require("@dev/testrun").run(ctx.root)',
+    "    end,",
+    "})",
+    "",
+}, "\n")
 local TEST_HEADER = 'local t = require("@dev/testing")\n'
 
 local function project(tests)
@@ -41,8 +44,11 @@ end)
 
 testing.test("a failing case prints not ok with its message and dev test exits 1", function()
     local root = project({
-        ["a_test.luau"] = 't.test("breaks", function() error("boom here") end)\n'
-            .. 't.test("fine", function() end)\n',
+        ["a_test.luau"] = table.concat({
+            't.test("breaks", function() error("boom here") end)',
+            't.test("fine", function() end)',
+            "",
+        }, "\n"),
     })
     local out, code = run(root)
     testing.eq(code, 1)
@@ -67,17 +73,25 @@ end)
 testing.test(
     "testenv.fake puts a command on PATH and command returns its exit code and stderr",
     function()
+        -- Fake a failing tool and a command that runs it
         local root = project()
         testenv.fake(root, "tool", { code = 3, out = "hello", err = "oops" })
-        local probe = 'local dev_command = require("@dev/command")\n'
-            .. "return dev_command({\n"
-            .. '    summary = "Run the tool",\n'
-            .. "    run = function()\n"
-            .. '        return require("@dev/os").run({ "tool", "a", "b" })\n'
-            .. "    end,\n"
-            .. "})\n"
+        local probe = table.concat({
+            'local dev_command = require("@dev/command")',
+            "return dev_command({",
+            '    summary = "Run the tool",',
+            "    run = function()",
+            '        return require("@dev/os").run({ "tool", "a", "b" })',
+            "    end,",
+            "})",
+            "",
+        }, "\n")
         assert(fs.write(root .. "/.dev/commands/probe.luau", probe))
+
+        -- Run the command
         local out, code, err = testenv.command(root, { "probe" }, { env = ENV })
+
+        -- Check the exit code, the output streams and the recorded call
         testing.eq(code, 3)
         testing.ok(out:find("hello", 1, true), out)
         testing.ok(err:find("oops", 1, true), err)
@@ -92,7 +106,7 @@ testing.test("the files run in sorted order", function()
     })
     local out, code, err = run(root)
     testing.eq(code, 0, err)
-    testing.ok(out:find("ok - first\nok - second\n", 1, true), out)
+    testing.ok(out:find(table.concat({ "ok - first", "ok - second", "" }, "\n"), 1, true), out)
 end)
 
 testing.test("testenv.project makes an @lib require resolve", function()
@@ -113,6 +127,7 @@ testing.test("testenv.project copies the project root's .luaurc", function()
 end)
 
 testing.test("a dev -l script that ran its own cases is not run a second time", function()
+    -- Write a script that registers a case and runs its own cases
     local dir = assert(fs.realpath(testenv.tempdir()))
     local script = dir .. "/own_run.luau"
     assert(fs.write(
@@ -124,7 +139,11 @@ testing.test("a dev -l script that ran its own cases is not run a second time", 
             "",
         }, "\n")
     ))
+
+    -- Run it
     local out, code = dev_os.capture({ runtime.exe, "-l", script })
     testing.eq(code, 0)
-    testing.eq(out, "body ran\nok - once\n")
+
+    -- Check the case body ran once
+    testing.eq(out, table.concat({ "body ran", "ok - once", "" }, "\n"))
 end)

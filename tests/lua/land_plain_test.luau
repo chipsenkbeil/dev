@@ -8,6 +8,7 @@ local git = support.git
 local rev = support.rev
 
 local function project()
+    -- Make a bare remote and a project that pushes to it
     local root = support.sandbox({ [".dev/config.toml"] = "" }, {})
     local bare = support.tempdir()
     local bare_code = dev_os.run(
@@ -18,9 +19,13 @@ local function project()
     local root_code = dev_os.run({ "git", "init", "-q", "-b", "master", root }, { stdout = "null" })
     assert(root_code == 0, "git init failed")
     git(root, "remote", "add", "origin", bare)
+
+    -- Publish a base commit
     git(root, "add", "-A")
     git(root, "commit", "-q", "-m", "base")
     git(root, "push", "-q", "origin", "master")
+
+    -- Commit a change on a work branch
     git(root, "checkout", "-q", "-b", "work")
     assert(fs.write(root .. "/work.txt", "one\n"), "write failed")
     git(root, "add", "-A")

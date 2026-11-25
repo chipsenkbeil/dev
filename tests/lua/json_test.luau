@@ -78,11 +78,16 @@ testing.test("decode rejects raw control characters in strings", function()
 end)
 
 testing.test("decode refuses nesting deeper than 200 without overflowing", function()
+    -- Decode 200 levels
     local ok = assert(json.decode(string.rep("[", 200) .. string.rep("]", 200)))
     testing.ok(type(ok) == "table", "200 levels should decode")
+
+    -- Refuse 201 levels
     local value, err = json.decode(string.rep("[", 201) .. string.rep("]", 201))
     testing.eq(value, nil)
     testing.ok(err:find("nesting too deep"), err)
+
+    -- Refuse a hundred thousand unclosed levels
     value = json.decode(string.rep("[", 100000))
     testing.eq(value, nil)
 end)
@@ -115,12 +120,17 @@ testing.test("encode tells arrays from objects", function()
 end)
 
 testing.test("encode orders keys: opts.order first, the rest sorted", function()
+    -- Build a document with nested keys
     local doc =
         { zeta = 1, alpha = 2, model = "m", messages = { { role = "user", content = "hi" } } }
+
+    -- Sort every key with no order given
     testing.eq(
         json.encode(doc),
         '{"alpha":2,"messages":[{"content":"hi","role":"user"}],"model":"m","zeta":1}'
     )
+
+    -- Put the ordered keys first at every level
     testing.eq(
         json.encode(doc, { order = { "model", "messages", "role", "content", "absent" } }),
         '{"model":"m","messages":[{"role":"user","content":"hi"}],"alpha":2,"zeta":1}'
@@ -133,12 +143,17 @@ testing.test("encode round-trips what decode reads", function()
 end)
 
 testing.test("encode fails on values it cannot write", function()
+    -- Refuse a function and name its type
     local text, err = json.encode({ f = print })
     testing.eq(text, nil)
     testing.ok(err:find("function"), err)
+
+    -- Refuse a NaN, an infinity and a key that is no string
     testing.eq((json.encode(0 / 0)), nil)
     testing.eq((json.encode(math.huge)), nil)
     testing.eq((json.encode({ [true] = 1 })), nil)
+
+    -- Refuse a table that holds itself
     local loop = {}
     loop.self = loop
     testing.eq((json.encode(loop)), nil)
@@ -174,6 +189,7 @@ testing.test("decode rejects a number that overflows", function()
 end)
 
 testing.test("encode refuses nesting deeper than 200", function()
+    -- Refuse 201 levels
     local deep = {}
     for _ = 1, 201 do
         deep = { deep }
@@ -181,6 +197,8 @@ testing.test("encode refuses nesting deeper than 200", function()
     local text, err = json.encode(deep)
     testing.eq(text, nil)
     testing.eq(err, "nesting too deep")
+
+    -- Encode 199 levels
     local ok = {}
     for _ = 1, 199 do
         ok = { ok }

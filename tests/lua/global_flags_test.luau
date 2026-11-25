@@ -43,39 +43,57 @@ local function run(root, args)
 end
 
 testing.test("--local exports DEV_LOCAL to a command and no flag leaves it unset", function()
+    -- Make a command that prints DEV_LOCAL
     local root = project({
-        ["probe.luau"] = 'local dev_command = require("@dev/command")\n'
-            .. 'local dev_os = require("@dev/os")\n'
-            .. 'return dev_command({ summary = "Probe", run = function()\n'
-            .. '    print("DEV_LOCAL=" .. tostring(dev_os.getenv("DEV_LOCAL")))\n'
-            .. "end })\n",
+        ["probe.luau"] = table.concat({
+            'local dev_command = require("@dev/command")',
+            'local dev_os = require("@dev/os")',
+            'return dev_command({ summary = "Probe", run = function()',
+            '    print("DEV_LOCAL=" .. tostring(dev_os.getenv("DEV_LOCAL")))',
+            "end })",
+            "",
+        }, "\n"),
     })
+
+    -- Run it with and without the flag
     testing.eq(run(root, { "--local", "probe" }), "DEV_LOCAL=1\n")
     testing.eq(run(root, { "probe" }), "DEV_LOCAL=nil\n")
+
+    -- Remove the project
     fs.remove(root, { recursive = true })
 end)
 
 testing.test("the binary takes each global flag the registry lists before the command", function()
+    -- Try each flag that takes no value
     local root = project({})
     local skip = { ["-C"] = true, ["--agent"] = true, ["--job-timeout"] = true }
     for _, flag in ipairs(without(registry.GLOBAL_FLAGS, skip)) do
         local out = run(root, { flag, "help" })
         testing.ok(not out:find("is not a global flag", 1, true), flag .. ": " .. out)
     end
+
+    -- Try the flags that take a value
     local out = run(root, { "--agent", "x/y", "help" })
     testing.ok(not out:find("is not a global flag", 1, true), out)
     out = run(root, { "-C", root, "help" })
     testing.ok(not out:find("is not a global flag", 1, true), out)
     out = run(root, { "--job-timeout", "5m", "help" })
     testing.ok(not out:find("is not a global flag", 1, true), out)
+
+    -- Remove the project
     fs.remove(root, { recursive = true })
 end)
 
 testing.test("a word that is not a global flag before the command is a usage error", function()
+    -- Run help with an unknown flag before it
     local root = project({})
     local out, code = run(root, { "--nope", "help" })
+
+    -- Refuse the flag by name
     testing.eq(code, 2)
     testing.ok(out:find("The flag `--nope` is not a global flag of dev.", 1, true), out)
+
+    -- Remove the project
     fs.remove(root, { recursive = true })
 end)
 
@@ -100,6 +118,7 @@ testing.test("help names each global flag as a table row", function()
 end)
 
 testing.test("flags.md lists each global flag as a bullet", function()
+    -- Collect the flags the doc lists as bullets
     local docs = source(REPO .. "/docs/flags.md")
     local listed = {}
     for head in docs:gmatch("\n%- ([^\n]-):") do
@@ -107,11 +126,15 @@ testing.test("flags.md lists each global flag as a bullet", function()
             listed[flag] = true
         end
     end
+
+    -- Find each registry flag the doc misses
     local out = {}
     for _, flag in ipairs(registry.GLOBAL_FLAGS) do
         if not listed[flag] then
             out[#out + 1] = flag
         end
     end
+
+    -- Miss none
     testing.eq(out, {})
 end)

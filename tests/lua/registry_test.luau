@@ -21,22 +21,45 @@ local function words(rows)
     return names
 end
 
-local SPEC_A = 'local dev_command = require("@dev/command")\n'
-    .. "return dev_command({\n"
-    .. '    summary = "From the Luau command.",\n'
-    .. '    flags = { { name = "lua", kind = "boolean" } },\n'
-    .. "    run = function() end,\n"
-    .. "})\n"
+local function described(text)
+    return table.concat({ "#!/usr/bin/env bash", "# " .. text, "" }, "\n")
+end
+
+local SPEC_A = table.concat({
+    'local dev_command = require("@dev/command")',
+    "return dev_command({",
+    '    summary = "From the Luau command.",',
+    '    flags = { { name = "lua", kind = "boolean" } },',
+    "    run = function() end,",
+    "})",
+    "",
+}, "\n")
 
 local function make_project()
     local root = support.tempdir()
-    scripted(root, ".dev/commands/a.sh", "#!/usr/bin/env bash\n# From the shell script.\n")
+    scripted(root, ".dev/commands/a.sh", described("From the shell script."))
     scripted(root, ".dev/commands/a.luau", SPEC_A, "644")
-    scripted(root, ".dev/commands/n/x.sh", "#!/usr/bin/env bash\n# Sub x.\n# group: Mine\n")
-    scripted(root, ".dev/commands/n/y.sh", "#!/usr/bin/env bash\n# Hidden sub.\n# hidden\n")
-    scripted(root, ".dev/commands/h.sh", "#!/usr/bin/env bash\n# Helper.\n# hidden\n")
-    scripted(root, ".dev/commands/quiet.sh", "#!/usr/bin/env bash\n# Quiet one.\n# hidden\n")
-    scripted(root, ".dev/commands/off.sh", "#!/usr/bin/env bash\n# Not executable.\n", "644")
+    scripted(
+        root,
+        ".dev/commands/n/x.sh",
+        table.concat({ "#!/usr/bin/env bash", "# Sub x.", "# group: Mine", "" }, "\n")
+    )
+    scripted(
+        root,
+        ".dev/commands/n/y.sh",
+        table.concat({ "#!/usr/bin/env bash", "# Hidden sub.", "# hidden", "" }, "\n")
+    )
+    scripted(
+        root,
+        ".dev/commands/h.sh",
+        table.concat({ "#!/usr/bin/env bash", "# Helper.", "# hidden", "" }, "\n")
+    )
+    scripted(
+        root,
+        ".dev/commands/quiet.sh",
+        table.concat({ "#!/usr/bin/env bash", "# Quiet one.", "# hidden", "" }, "\n")
+    )
+    scripted(root, ".dev/commands/off.sh", described("Not executable."), "644")
     return root
 end
 
@@ -57,16 +80,21 @@ testing.test(
 )
 
 testing.test("a .sh command beats a .ps1 command and a .lua file is refused", function()
+    -- Shadow and mislabel commands with lower-priority and wrongly named files
     local root = make_project()
     scripted(root, ".dev/commands/b.ps1", "# Powershell b.\n", "644")
-    scripted(root, ".dev/commands/b.sh", "#!/usr/bin/env bash\n# Shell b.\n")
+    scripted(root, ".dev/commands/b.sh", described("Shell b."))
     scripted(root, ".dev/commands/c.lua", "return {}\n", "644")
+
+    -- Load the project while collecting every warning it raises
     local warned = {}
     local reg = registry.load(root, {
         warn = function(message)
             warned[#warned + 1] = message
         end,
     })
+
+    -- Check the shell script wins and the .lua file is refused with a warning
     testing.eq(reg:find({ "b" }).lang, "sh")
     testing.eq(reg:find({ "c" }), nil)
     testing.eq(warned, {
@@ -102,18 +130,28 @@ end)
 
 testing.test("DESCRIPTION supplies a parent command's description", function()
     local root = make_project()
-    assert(fs.write(root .. "/.dev/commands/n/DESCRIPTION", "The n parent command\nsecond line\n"))
+    assert(
+        fs.write(
+            root .. "/.dev/commands/n/DESCRIPTION",
+            table.concat({ "The n parent command", "second line", "" }, "\n")
+        )
+    )
     testing.eq(registry.load(root):find({ "n" }).desc, "The n parent command")
     fs.remove(root, { recursive = true })
 end)
 
 testing.test("commands lists builtins, then project commands, and lists hidden ones", function()
+    -- Load every command the registry lists
     local root = make_project()
     local rows = registry.load(root):commands()
     local names = words(rows)
+
+    -- Check builtins come first and project commands follow, hidden ones included
     testing.eq(rows[1].source, registry.Source.BUILTIN)
     testing.eq({ table.unpack(names, #names - 3) }, { "a", "h", "quiet", "n" })
     testing.eq(registry.load(root):find({ "h" }).desc, "Helper.")
+
+    -- Check the unexecutable script is not listed
     local seen = {}
     for _, name in ipairs(names) do
         seen[name] = true
@@ -133,22 +171,29 @@ testing.test("a hidden header and a group header place a local command", functio
 end)
 
 local function with_global(files, run)
+    -- Make a config home to hold the global commands
     local home = support.tempdir()
     local dir = home .. "/dev/commands"
+
+    -- Write each global script under it
     for rel, text in pairs(files) do
         scripted(dir, rel, text)
     end
+
+    -- Run the body with that home as the config directory
     support.with_env("XDG_CONFIG_HOME", home, function()
         run(dir)
     end)
+
+    -- Remove the home again
     fs.remove(home, { recursive = true })
 end
 
 testing.test("a global script answers a command the project lacks", function()
     local root = make_project()
     with_global({
-        ["hello.sh"] = "#!/usr/bin/env bash\n# Say hello.\n",
-        ["g/sub.sh"] = "#!/usr/bin/env bash\n# Global sub.\n",
+        ["hello.sh"] = described("Say hello."),
+        ["g/sub.sh"] = described("Global sub."),
     }, function(dir)
         local reg = registry.load(root)
         local row = reg:find({ "hello" })
@@ -167,15 +212,15 @@ end)
 
 testing.test("a project script beats a global script", function()
     local root = make_project()
-    scripted(root, ".dev/commands/lint.sh", "#!/usr/bin/env bash\n# Project lint.\n")
-    scripted(root, ".dev/commands/both.sh", "#!/usr/bin/env bash\n# Project both.\n")
-    scripted(root, ".dev/commands/deploy/up.sh", "#!/usr/bin/env bash\n# Project up.\n")
+    scripted(root, ".dev/commands/lint.sh", described("Project lint."))
+    scripted(root, ".dev/commands/both.sh", described("Project both."))
+    scripted(root, ".dev/commands/deploy/up.sh", described("Project up."))
     with_global({
-        ["deploy.sh"] = "#!/usr/bin/env bash\n# Global deploy.\n",
-        ["lint.sh"] = "#!/usr/bin/env bash\n# Global lint.\n",
-        ["both.sh"] = "#!/usr/bin/env bash\n# Global both.\n",
-        ["n/x.sh"] = "#!/usr/bin/env bash\n# Global x.\n",
-        ["n/more.sh"] = "#!/usr/bin/env bash\n# Global more.\n",
+        ["deploy.sh"] = described("Global deploy."),
+        ["lint.sh"] = described("Global lint."),
+        ["both.sh"] = described("Global both."),
+        ["n/x.sh"] = described("Global x."),
+        ["n/more.sh"] = described("Global more."),
     }, function()
         local reg = registry.load(root)
         testing.eq(reg:is_parent("deploy"), true)
@@ -194,8 +239,13 @@ end)
 testing.test("a global script replaces a built-in subcommand", function()
     local root = make_project()
     with_global({
-        ["tools/install.sh"] = "#!/usr/bin/env bash\n# Global install.\n# flag: mine kind=boolean\n",
-        ["box.sh"] = "#!/usr/bin/env bash\n# Global box.\n",
+        ["tools/install.sh"] = table.concat({
+            "#!/usr/bin/env bash",
+            "# Global install.",
+            "# flag: mine kind=boolean",
+            "",
+        }, "\n"),
+        ["box.sh"] = described("Global box."),
     }, function()
         local reg = registry.load(root)
         local row = reg:find({ "tools", "install" })
@@ -205,11 +255,7 @@ testing.test("a global script replaces a built-in subcommand", function()
         testing.eq(reg:flags({ "tools", "install" }), { "--mine" })
         testing.eq(reg:shadowed_flags({ "tools", "install" })[1], "--dry-run")
         testing.eq(reg:find({ "box" }).kind, registry.Kind.BUILTIN)
-        scripted(
-            root,
-            ".dev/commands/tools/install.sh",
-            "#!/usr/bin/env bash\n# Project install.\n"
-        )
+        scripted(root, ".dev/commands/tools/install.sh", described("Project install."))
         local project_row = registry.load(root):find({ "tools", "install" })
         testing.eq(project_row.source, "project")
         testing.eq(project_row.desc, "Project install.")
@@ -217,28 +263,31 @@ testing.test("a global script replaces a built-in subcommand", function()
     fs.remove(root, { recursive = true })
 end)
 
-local function described(text)
-    return table.concat({ "#!/usr/bin/env bash", "# " .. text, "" }, "\n")
-end
-
 testing.test("a builtin word answers from the built-ins under an override", function()
     local root = make_project()
     scripted(root, ".dev/commands/lint.sh", described("Project lint."))
     with_global({
         ["board/ls.sh"] = described("Global ls."),
     }, function()
+        -- Reach a built-in command that a project script overrides
         local reg = registry.load(root)
         testing.eq(reg:find({ "lint" }).kind, "override")
         local row = reg:find({ "builtin:lint" })
         testing.eq(row.kind, registry.Kind.BUILTIN)
         testing.eq(row.words, { "lint" })
+
+        -- Reach a built-in subcommand that a global script overrides
         testing.eq(reg:find({ "board", "ls" }).kind, "override")
         local sub = reg:find({ "builtin:board", "ls" })
         testing.eq(sub.kind, registry.Kind.BUILTIN)
         testing.eq(sub.words, { "board", "ls" })
+
+        -- Report a word the built-ins lack, with the reason
         local missing, reason = reg:find({ "builtin:a" })
         testing.eq(missing, nil)
         testing.eq(reason, "no builtin command a")
+
+        -- Read the built-in flags and subcommands past the override
         testing.eq(reg:flags({ "builtin:board", "ls" })[1], "--column")
         local listed = {}
         for _, name in ipairs(words(reg:subs({ "builtin:board" }))) do
@@ -258,13 +307,18 @@ testing.test("a global word skips the project script of its name", function()
         ["both.sh"] = described("Global both."),
         ["n/more.sh"] = described("Global more."),
     }, function(dir)
+        -- Reach the global script that a project script shadows
         local reg = registry.load(root)
         local row = reg:find({ "global:both" })
         testing.eq(row.source, "global")
         testing.eq(row.script, dir .. "/both.sh")
         testing.eq(row.desc, "Global both.")
         testing.eq(reg:find({ "both" }).source, "project")
+
+        -- List only the global subcommands of a parent
         testing.eq(words(reg:subs({ "global:n" })), { "n more" })
+
+        -- Report words the global commands lack, with the reason
         local missing, reason = reg:find({ "global:a" })
         testing.eq(missing, nil)
         testing.eq(reason, "no global command a")
@@ -275,30 +329,35 @@ testing.test("a global word skips the project script of its name", function()
 end)
 
 testing.test("another prefix is an unknown source and the sentence names it", function()
+    -- Look up a word under a source that does not exist
     local reg = registry.load(make_project())
     local row, reason = reg:find({ "project:a" })
     testing.eq(row, nil)
     testing.eq(reason, "unknown source project")
+
+    -- Phrase each reason as a sentence naming the source or command
     testing.eq(registry.sentence(reason), "The source project is not builtin or global.")
     testing.eq(
         registry.sentence("no builtin command x y"),
         "The built-in commands have no command x y."
     )
     testing.eq(registry.sentence("no global command x"), "The global commands have no command x.")
+
+    -- Split a prefixed word into its source and name
     testing.eq({ registry.split("builtin:lint") }, { registry.Source.BUILTIN, "lint" })
     testing.eq({ registry.split("lint") }, {})
 end)
 
 testing.test("the override row names the replaced source", function()
     local root = make_project()
-    scripted(root, ".dev/commands/lint.sh", "#!/usr/bin/env bash\n# My lint.\n")
-    scripted(root, ".dev/commands/tools/install.sh", "#!/usr/bin/env bash\n# Project install.\n")
-    scripted(root, ".dev/commands/shared.sh", "#!/usr/bin/env bash\n# Project shared.\n")
-    scripted(root, ".dev/commands/own.sh", "#!/usr/bin/env bash\n# Own.\n")
+    scripted(root, ".dev/commands/lint.sh", described("My lint."))
+    scripted(root, ".dev/commands/tools/install.sh", described("Project install."))
+    scripted(root, ".dev/commands/shared.sh", described("Project shared."))
+    scripted(root, ".dev/commands/own.sh", described("Own."))
     with_global({
-        ["fmt.sh"] = "#!/usr/bin/env bash\n# Global fmt.\n",
-        ["shared.sh"] = "#!/usr/bin/env bash\n# Global shared.\n",
-        ["tools/check.sh"] = "#!/usr/bin/env bash\n# Global check.\n",
+        ["fmt.sh"] = described("Global fmt."),
+        ["shared.sh"] = described("Global shared."),
+        ["tools/check.sh"] = described("Global check."),
     }, function()
         local reg = registry.load(root)
         testing.eq(reg:find({ "lint" }).replaces, registry.Source.BUILTIN)
@@ -316,13 +375,18 @@ end)
 
 testing.test("a script replaces a built-in subcommand but not a built-in parent command", function()
     local root = make_project()
-    scripted(root, ".dev/commands/box.sh", "#!/usr/bin/env bash\n# Fake box.\n")
+    scripted(root, ".dev/commands/box.sh", described("Fake box."))
     scripted(
         root,
         ".dev/commands/tools/install.sh",
-        "#!/usr/bin/env bash\n# Fake install.\n# flag: fake kind=boolean\n"
+        table.concat({
+            "#!/usr/bin/env bash",
+            "# Fake install.",
+            "# flag: fake kind=boolean",
+            "",
+        }, "\n")
     )
-    scripted(root, ".dev/commands/tools/extra.sh", "#!/usr/bin/env bash\n# Extra tool.\n")
+    scripted(root, ".dev/commands/tools/extra.sh", described("Extra tool."))
     local reg = registry.load(root)
     testing.eq(reg:find({ "box" }).kind, registry.Kind.BUILTIN)
     testing.eq(reg:is_parent("box"), true)
@@ -339,12 +403,12 @@ testing.test("a script named like a builtin command overrides it and keeps its p
     scripted(
         root,
         ".dev/commands/lint.sh",
-        "#!/usr/bin/env bash\n# My lint.\n# flag: mine kind=boolean\n"
+        table.concat({ "#!/usr/bin/env bash", "# My lint.", "# flag: mine kind=boolean", "" }, "\n")
     )
     scripted(
         root,
         ".dev/commands/deploy.sh",
-        "#!/usr/bin/env bash\n# My deploy.\n# group: Elsewhere\n"
+        table.concat({ "#!/usr/bin/env bash", "# My deploy.", "# group: Elsewhere", "" }, "\n")
     )
     local reg = registry.load(root)
     local lint = reg:find({ "lint" })
@@ -357,14 +421,19 @@ testing.test("a script named like a builtin command overrides it and keeps its p
 end)
 
 testing.test("a flat script takes the whole name from a directory of the same name", function()
+    -- Add a flat script beside the directory of the same name
     local root = make_project()
-    scripted(root, ".dev/commands/n.sh", "#!/usr/bin/env bash\n# Flat n.\n")
+    scripted(root, ".dev/commands/n.sh", described("Flat n."))
+
+    -- Load the project while collecting every warning it raises
     local warned = {}
     local reg = registry.load(root, {
         warn = function(message)
             warned[#warned + 1] = message
         end,
     })
+
+    -- Check the script replaces the folder and a warning says the subs never run
     testing.eq(reg:is_parent("n"), false)
     testing.eq(reg:find({ "n" }).desc, "Flat n.")
     testing.eq(reg:find({ "n", "x" }), nil)
@@ -394,7 +463,11 @@ end)
 
 testing.test("a flag named help makes the command's spec fail to load", function()
     local root = make_project()
-    scripted(root, ".dev/commands/w.sh", "#!/usr/bin/env bash\n# W.\n# flag: help\n")
+    scripted(
+        root,
+        ".dev/commands/w.sh",
+        table.concat({ "#!/usr/bin/env bash", "# W.", "# flag: help", "" }, "\n")
+    )
     local reg = registry.load(root)
     local row = reg:find({ "w" })
     testing.ok(row.broken and row.broken:find("reserved", 1, true), tostring(row.broken))
@@ -404,23 +477,28 @@ end)
 
 testing.test("a parent command with no description file lists its subcommand names", function()
     local root = make_project()
-    scripted(root, ".dev/commands/n/z.sh", "#!/usr/bin/env bash\n# Sub z.\n")
+    scripted(root, ".dev/commands/n/z.sh", described("Sub z."))
     testing.eq(registry.load(root):find({ "n" }).desc, "x, z")
     fs.remove(root, { recursive = true })
 end)
 
 testing.test("helpers, lib and topics beside commands are never commands", function()
+    -- Put scripts in folders that are not command folders
     local root = make_project()
     scripted(root, ".dev/helpers/remote.luau", "return function() end\n", "644")
     scripted(root, ".dev/lib/tools/shout.luau", "return {}\n", "644")
-    scripted(root, ".dev/help/guide.sh", "#!/usr/bin/env bash\n# Not a command.\n")
-    scripted(root, ".dev/own.sh", "#!/usr/bin/env bash\n# Not in commands.\n")
+    scripted(root, ".dev/help/guide.sh", described("Not a command."))
+    scripted(root, ".dev/own.sh", described("Not in commands."))
+
+    -- Check none of them resolves to a command
     local reg = registry.load(root)
     testing.eq(reg:find({ "helpers" }), nil)
     testing.eq(reg:find({ "remote" }), nil)
     testing.eq(reg:find({ "lib" }), nil)
     testing.eq(reg:find({ "help" }).source, registry.Source.BUILTIN)
     testing.eq(reg:find({ "own" }), nil)
+
+    -- Check no reserved folder shows up in the command list
     for _, row in ipairs(reg:commands()) do
         testing.ok(
             row.source == registry.Source.BUILTIN
@@ -438,19 +516,32 @@ testing.test("a command has the flags its spec declares and an unknown command h
 end)
 
 testing.test("detect_type follows the existing order", function()
+    -- Detect no type in an empty directory
     local root = support.tempdir()
     testing.eq(project.detect_type(root), nil)
+
+    -- Detect make from a Makefile
     assert(fs.write(root .. "/Makefile", ""))
     testing.eq(project.detect_type(root), "make")
+
+    -- Detect lua once a nested Lua file appears
     scripted(root, "src/deep/x.lua", "", "644")
     testing.eq(project.detect_type(root), "lua")
+
+    -- Detect node over lua once package.json appears
     assert(fs.write(root .. "/package.json", "{}"))
     testing.eq(project.detect_type(root), "node")
+
+    -- Detect godot over node once project.godot appears
     assert(fs.write(root .. "/project.godot", ""))
     testing.eq(project.detect_type(root), "godot")
+
+    -- Detect love2d over godot once main.lua and conf.lua appear
     assert(fs.write(root .. "/main.lua", ""))
     assert(fs.write(root .. "/conf.lua", ""))
     testing.eq(project.detect_type(root), "love2d")
+
+    -- Detect rust over everything once Cargo.toml appears
     assert(fs.write(root .. "/Cargo.toml", ""))
     testing.eq(project.detect_type(root), "rust")
     fs.remove(root, { recursive = true })
@@ -484,18 +575,24 @@ testing.test("root finds the nearest .dev from a subdirectory", function()
 end)
 
 testing.test("as uid 0, root only tests for .jj, .git and .dev and runs no VCS command", function()
+    -- Mark a root with .git and put VCS stubs that record any run on PATH
     local root = support.tempdir()
     local bin = support.tempdir()
     local marker = bin .. "/ran"
-    scripted(bin, "jj", string.format("#!/bin/sh\ntouch %s\necho /wrong\n", marker))
-    scripted(bin, "git", string.format("#!/bin/sh\ntouch %s\necho /wrong\n", marker))
+    local stub = table.concat({ "#!/bin/sh", "touch %s", "echo /wrong", "" }, "\n")
+    scripted(bin, "jj", string.format(stub, marker))
+    scripted(bin, "git", string.format(stub, marker))
     assert(fs.write(root .. "/.git", ""))
     assert(fs.mkdir(root .. "/sub/deep", { parents = true }))
+
+    -- Resolve the root as uid 0 from a nested directory
     local env = { PATH = bin .. ":" .. dev_os.getenv("PATH") }
     testing.eq(
         root_from(root .. "/sub/deep", { uid0 = true, env = env }),
         assert(fs.realpath(root)) .. "\n"
     )
+
+    -- Check no stub ran
     testing.eq(fs.exists(marker), false)
     fs.remove(root, { recursive = true })
     fs.remove(bin, { recursive = true })
@@ -504,14 +601,19 @@ end)
 testing.test(
     "dotfile scripts and dot directories are neither commands nor parent commands",
     function()
+        -- Add scripts under dot names
         local root = make_project()
-        scripted(root, ".dev/commands/.hid.sh", "#!/usr/bin/env bash\n# Hidden file.\n")
-        scripted(root, ".dev/commands/.dd/x.sh", "#!/usr/bin/env bash\n# In a dot dir.\n")
-        scripted(root, ".dev/commands/n/.dot.sh", "#!/usr/bin/env bash\n# Dot sub.\n")
+        scripted(root, ".dev/commands/.hid.sh", described("Hidden file."))
+        scripted(root, ".dev/commands/.dd/x.sh", described("In a dot dir."))
+        scripted(root, ".dev/commands/n/.dot.sh", described("Dot sub."))
+
+        -- Check no listed command has a dot name
         local reg = registry.load(root)
         for _, row in ipairs(reg:commands()) do
             testing.ok(row.name:sub(1, 1) ~= ".", "dot name listed as " .. row.name)
         end
+
+        -- Check a dot sub is not found or listed
         testing.eq(reg:find({ "n", ".dot" }), nil)
         testing.eq(words(reg:subs("n")), { "n x" })
         fs.remove(root, { recursive = true })
@@ -520,8 +622,12 @@ testing.test(
 
 testing.test("a parent command with a hidden-group sub and a visible one stays visible", function()
     local root = make_project()
-    scripted(root, ".dev/commands/m/a.sh", "#!/usr/bin/env bash\n# A.\n# group: hidden\n")
-    scripted(root, ".dev/commands/m/b.sh", "#!/usr/bin/env bash\n# B.\n")
+    scripted(
+        root,
+        ".dev/commands/m/a.sh",
+        table.concat({ "#!/usr/bin/env bash", "# A.", "# group: hidden", "" }, "\n")
+    )
+    scripted(root, ".dev/commands/m/b.sh", described("B."))
     local reg = registry.load(root)
     testing.eq(reg:find({ "m" }).hidden, false)
     testing.eq(reg:find({ "m" }).desc, "b")
@@ -532,11 +638,7 @@ end)
 testing.test("local commands come in byte order", function()
     local root = support.tempdir()
     for _, name in ipairs({ "UP", "a", "B", "b-c", "Zed" }) do
-        scripted(
-            root,
-            ".dev/commands/" .. name .. ".sh",
-            "#!/usr/bin/env bash\n# " .. name .. ".\n"
-        )
+        scripted(root, ".dev/commands/" .. name .. ".sh", described(name .. "."))
     end
     local want = { "B", "UP", "Zed", "a", "b-c" }
     local got = words(registry.load(root):commands())
@@ -549,29 +651,39 @@ local function git_repo(root)
 end
 
 testing.test("root asks git for the toplevel when no jj answers", function()
+    -- Skip when git is not installed
     if not dev_os.which("git") then
         print("skip - git is not installed")
         return
     end
+
+    -- Make a git repository with a nested directory
     local root = support.tempdir()
     assert(git_repo(root), "git init failed")
     assert(fs.mkdir(root .. "/sub/deep", { parents = true }))
+
+    -- Resolve the root with only git reachable on PATH
     local env = { PATH = "/usr/bin:/bin:" .. fs.dirname(dev_os.which("git")) }
     testing.eq(root_from(root .. "/sub/deep", { env = env }), assert(fs.realpath(root)) .. "\n")
     fs.remove(root, { recursive = true })
 end)
 
 testing.test("root asks jj for the workspace root first", function()
+    -- Skip when jj or git is not installed
     if not (dev_os.which("jj") and dev_os.which("git")) then
         print("skip - jj or git is not installed")
         return
     end
+
+    -- Make a jj repository with a nested directory
     local root = support.tempdir()
     assert(
         dev_os.run({ "jj", "git", "init", root }, { stdout = "null", stderr = "null" }) == 0,
         "jj init failed"
     )
     assert(fs.mkdir(root .. "/sub/deep", { parents = true }))
+
+    -- Resolve the root from the nested directory
     testing.eq(root_from(root .. "/sub/deep", {}), assert(fs.realpath(root)) .. "\n")
     fs.remove(root, { recursive = true })
 end)
@@ -589,9 +701,12 @@ local function have_vcs()
 end
 
 testing.test("root is a git worktree nested under a colocated jj checkout", function()
+    -- Skip when jj or git is not installed
     if not have_vcs() then
         return
     end
+
+    -- Make a colocated jj checkout with one commit
     local root = support.tempdir()
     assert(quiet({ "jj", "git", "init", "--colocate", root }), "jj init failed")
     assert(
@@ -605,8 +720,12 @@ testing.test("root is a git worktree nested under a colocated jj checkout", func
         }, root),
         "jj commit failed"
     )
+
+    -- Nest a git worktree with a deeper directory inside it
     assert(quiet({ "git", "worktree", "add", "--detach", root .. "/wt/tree" }, root))
     assert(fs.mkdir(root .. "/wt/tree/sub/deep", { parents = true }))
+
+    -- Check the worktree is its own root and the checkout above it stays its own
     local want = assert(fs.realpath(root .. "/wt/tree")) .. "\n"
     testing.eq(root_from(root .. "/wt/tree", {}), want)
     testing.eq(root_from(root .. "/wt/tree/sub/deep", {}), want)
@@ -615,13 +734,18 @@ testing.test("root is a git worktree nested under a colocated jj checkout", func
 end)
 
 testing.test("root keeps the jj checkout over an unrelated git clone nested in it", function()
+    -- Skip when jj or git is not installed
     if not have_vcs() then
         return
     end
+
+    -- Nest an unrelated git clone with a subdirectory in a jj checkout
     local root = support.tempdir()
     assert(quiet({ "jj", "git", "init", "--colocate", root }), "jj init failed")
     assert(git_repo(root .. "/clone"), "git init failed")
     assert(fs.mkdir(root .. "/clone/sub", { parents = true }))
+
+    -- Check the jj checkout stays the root from inside the clone
     local want = assert(fs.realpath(root)) .. "\n"
     testing.eq(root_from(root .. "/clone", {}), want)
     testing.eq(root_from(root .. "/clone/sub", {}), want)
@@ -629,18 +753,25 @@ testing.test("root keeps the jj checkout over an unrelated git clone nested in i
 end)
 
 testing.test("root keeps a jj workspace nested in a foreign git repo", function()
+    -- Skip when jj or git is not installed
     if not have_vcs() then
         return
     end
+
+    -- Put a jj repository inside a foreign git repository
     local outer = support.tempdir()
     assert(git_repo(outer), "git init failed")
     assert(fs.mkdir(outer .. "/main", { parents = true }))
     assert(quiet({ "jj", "git", "init", outer .. "/main" }), "jj init failed")
+
+    -- Add a jj workspace with a subdirectory beside it
     assert(
         quiet({ "jj", "workspace", "add", outer .. "/ws" }, outer .. "/main"),
         "workspace failed"
     )
     assert(fs.mkdir(outer .. "/ws/sub", { parents = true }))
+
+    -- Check the workspace stays the root over the foreign git repository
     local want = assert(fs.realpath(outer .. "/ws")) .. "\n"
     testing.eq(root_from(outer .. "/ws", {}), want)
     testing.eq(root_from(outer .. "/ws/sub", {}), want)
@@ -648,11 +779,18 @@ testing.test("root keeps a jj workspace nested in a foreign git repo", function(
 end)
 
 testing.test("detect_type finds a nested Lua file within the search depth only", function()
+    -- Start from a Makefile project
     local root = support.tempdir()
     assert(fs.write(root .. "/Makefile", ""))
+
+    -- Add one Lua file within the search depth and one beyond it
     scripted(root, "a/b/c/deep.lua", "", "644")
     scripted(root, "a/b/c/d/e/too_deep.lua", "", "644")
+
+    -- Check only the shallow file makes the project lua
     testing.eq(project.detect_type(root), "lua")
+
+    -- Check the project falls back to make without it
     fs.remove(root .. "/a/b/c/deep.lua")
     testing.eq(project.detect_type(root), "make")
     fs.remove(root, { recursive = true })

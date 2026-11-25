@@ -111,8 +111,11 @@ end
 ---@param routes support.Route[] the routes, the first match wins
 ---@return support.FakeHttp server the running server, to stop with `server:stop()`
 function M.fake_http(routes)
+    -- Find the built server binary
     local exe = fs.dirname(runtime.exe) .. "/examples/fake_http"
     assert(fs.exists(exe), exe .. " is not built, run cargo build --examples")
+
+    -- Give the server its own directory and routes
     local dir = assert(fs.realpath(M.tempdir()))
     local server = setmetatable({
         dir = dir,
@@ -124,6 +127,8 @@ function M.fake_http(routes)
         counted = 0,
     }, FakeHttp)
     server:set(routes)
+
+    -- Start it in the background and keep its process id
     local code = dev_os.run({
         "sh",
         "-c",
@@ -134,6 +139,8 @@ function M.fake_http(routes)
     })
     assert(code == 0, "fake_http did not start")
     server.pid = assert(fs.read(dir .. "/pid")):gsub("%s+", "")
+
+    -- Wait for it to print the port it listens on
     for _ = 1, 100 do
         local port = tonumber((fs.read(dir .. "/port") or ""):match("^(%d+)"))
         if port then
@@ -205,6 +212,7 @@ end
 ---@param opts support.PombRoutes what to answer
 ---@return support.Route[] routes the routes
 function M.pomb_task_routes(opts)
+    -- Answer each task by id and by its short prefix
     local board = opts.board or "board-1"
     local lines = M.export_lines(opts.export)
     local routes = {}
@@ -216,6 +224,8 @@ function M.pomb_task_routes(opts)
         routes[#routes + 1] = { path = "/api/tasks/" .. id, body = body }
         routes[#routes + 1] = { path = "/api/tasks/" .. id:sub(1, 8), body = body }
     end
+
+    -- Answer the write calls of each task
     for _, id in ipairs(ids) do
         local base = "/api/tasks/" .. id
         routes[#routes + 1] = {
@@ -234,6 +244,8 @@ function M.pomb_task_routes(opts)
         routes[#routes + 1] = { path = base .. "/owner/release" }
         routes[#routes + 1] = { path = base .. "/comments", body = "[]" }
     end
+
+    -- Answer the board's task list and export
     routes[#routes + 1] = {
         path = "/api/boards/" .. board .. "/tasks",
         body = '{"items":[' .. table.concat(lines, ",") .. '],"next_cursor":null}',
@@ -292,6 +304,7 @@ end
 ---with only the cards it adds.
 ---@param path string the local board file
 function M.drop_turn_card(path)
+    -- Keep every card but the turn card
     local doc = assert(json.decode(assert(fs.read(path))))
     local kept = {}
     for _, card in ipairs(doc.cards) do
@@ -299,6 +312,8 @@ function M.drop_turn_card(path)
             kept[#kept + 1] = card
         end
     end
+
+    -- Save the board file without it
     doc.cards = kept
     assert(fs.write(path, json.encode(doc)))
 end
@@ -350,6 +365,7 @@ end
 ---@param id string the card id or a prefix of it
 ---@param column string the column display name, one of `COLUMN_NAME`
 function M.place(path, id, column)
+    -- Find the column's id
     local doc = assert(json.decode(assert(fs.read(path))))
     local column_id
     for _, row in ipairs(doc.columns) do
@@ -358,11 +374,15 @@ function M.place(path, id, column)
         end
     end
     assert(column_id, "no column " .. column)
+
+    -- Move the card into it
     for _, card in ipairs(doc.cards) do
         if card.id:sub(1, #id) == id then
             card.column_id = column_id
         end
     end
+
+    -- Save the board file
     assert(fs.write(path, json.encode(doc)))
 end
 
@@ -388,12 +408,17 @@ end
 ---@param text string the content of `~/.config/dev/config.toml`
 ---@param run fun() the body to run
 function M.with_user_config(text, run)
+    -- Make a home that holds the user config
     local home = M.tempdir()
     assert(fs.mkdir(home .. "/.config/dev", { parents = true }), "mkdir failed")
     assert(fs.write(home .. "/.config/dev/config.toml", text), "write failed")
+
+    -- Point HOME at it while the body runs
     local previous = dev_os.getenv("HOME")
     dev_os.setenv("HOME", home)
     local ok, err = pcall(run)
+
+    -- Put HOME back and surface a failure of the body
     dev_os.setenv("HOME", previous)
     assert(ok, err)
 end
@@ -423,7 +448,12 @@ function M.rev(dir, name)
     return (dev_os.capture({ "git", "-C", dir, "rev-parse", name }):match("^(%x+)"))
 end
 
-local STUB = '#!/bin/sh\necho "$(basename "$0") $* cwd=$PWD"\nexit "${STUB_CODE:-0}"\n'
+local STUB = table.concat({
+    "#!/bin/sh",
+    'echo "$(basename "$0") $* cwd=$PWD"',
+    'exit "${STUB_CODE:-0}"',
+    "",
+}, "\n")
 local ASYNC_WAIT_SECONDS = 120
 ---Make a project directory with a `.dev` directory and stub tools in `bin`.
 ---
@@ -432,13 +462,18 @@ local ASYNC_WAIT_SECONDS = 120
 ---@param tools string[]? the stubs to make, `make`, `npm`, `cargo` and `ast-grep` when nil
 ---@return string root the project's real path
 function M.sandbox(files, tools)
+    -- Lay out the project and its tool directory
     local root = assert(fs.realpath(M.tempdir()))
     assert(fs.mkdir(root .. "/.dev", { parents = true }))
     assert(fs.mkdir(root .. "/bin", { parents = true }))
+
+    -- Write the files the test asked for
     for name, text in pairs(files) do
         assert(fs.mkdir(fs.dirname(root .. "/" .. name), { parents = true }))
         assert(fs.write(root .. "/" .. name, text))
     end
+
+    -- Make each stub tool executable
     for _, tool in ipairs(tools or { "make", "npm", "cargo", "ast-grep" }) do
         assert(fs.write(root .. "/bin/" .. tool, STUB))
         assert(dev_os.run({ "chmod", "755", root .. "/bin/" .. tool }) == 0, "chmod failed")
@@ -501,6 +536,7 @@ end
 ---@return integer? code dev's exit code
 ---@return string? errors standard error alone, only when `opts.split` is set
 function M.dev(root, args, opts)
+    -- Build the command and, when asked, keep standard error apart
     opts = opts or {}
     local argv, run = invocation(root, args, opts)
     local errors
@@ -508,12 +544,16 @@ function M.dev(root, args, opts)
         errors = assert(fs.mktemp({ prefix = "stderr" }))
         run.stderr = errors
     end
+
+    -- Run it with or without input
     local out, code
     if opts.input then
         out, code = dev_os.capture_input(argv, opts.input, run)
     else
         out, code = dev_os.capture(argv, run)
     end
+
+    -- Return standard error as a third value when kept apart
     if errors then
         local text = fs.read(errors) or ""
         fs.remove(errors)
@@ -532,6 +572,7 @@ end
 ---@param opts support.dev.Opts? where to run and what to set
 ---@return support.Running running the handle of the started command
 function M.dev_async(root, args, opts)
+    -- Wrap the command so it records its output and then its exit status
     local argv, run = invocation(root, args, opts or {})
     local dir = M.tempdir()
     local out, status = dir .. "/out", dir .. "/status"
@@ -544,10 +585,14 @@ function M.dev_async(root, args, opts)
         .. status
         .. ".tmp "
         .. status
+
+    -- Start it in the background
     assert(
         dev_os.run({ "sh", "-c", "(" .. line .. ") &" }, { cwd = run.cwd, env = run.env }) == 0,
         "start failed"
     )
+
+    -- Hand back a handle that polls for the status file
     local function finished()
         return fs.is_file(status)
     end
@@ -588,6 +633,7 @@ end
 ---@param task support.PombExportTask the task to build
 ---@return string json the task object
 function M.pomb_export_task(task)
+    -- Fill the defaults and the owner
     local claim_fence = task.claim_fence or 0
     local position = task.position or 1
     local task_labels = task.labels or {}
@@ -600,6 +646,8 @@ function M.pomb_export_task(task)
             .. lease
             .. "}"
     end
+
+    -- Render the swimlane, color and labels
     local swimlane = task.swimlane_id and ('"swimlane_id":"' .. task.swimlane_id .. '",') or ""
     local color = ""
     if task.color_id == false then
@@ -611,6 +659,8 @@ function M.pomb_export_task(task)
     for _, label in ipairs(task_labels) do
         labels[#labels + 1] = '"' .. label .. '"'
     end
+
+    -- Add the optional fields
     local extra = ""
     if task.kind then
         extra = extra .. ',"kind":"' .. task.kind .. '"'
@@ -627,6 +677,8 @@ function M.pomb_export_task(task)
     if task.history then
         extra = extra .. ',"history":' .. task.history
     end
+
+    -- Assemble the task object
     return '{"id":"'
         .. task.id
         .. '","name":"'
@@ -663,7 +715,16 @@ M.READY_OUTCOMES = {
 M.READY_CHECKS = { "dev --remote lint" }
 
 ---A v4 description with its Problem, Change and Out of scope.
-M.READY_DESCRIPTION = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone"
+M.READY_DESCRIPTION = table.concat({
+    "## Problem",
+    "why",
+    "",
+    "## Change",
+    "- x",
+    "",
+    "## Out of scope",
+    "none",
+}, "\n")
 
 ---`M.READY_DESCRIPTION` as the content of a JSON string.
 M.READY_DESCRIPTION_JSON = M.READY_DESCRIPTION:gsub("\n", "\\n")
@@ -704,45 +765,6 @@ M.FIELDS = '[{"id":"f1","key":"runner.checks","label":"Checks","kind":"table",'
     .. '"options":[],"columns":[],"required":false},'
     .. '{"id":"f4","key":"runner.files","label":"Files","kind":"multiline",'
     .. '"options":[],"columns":[],"required":false}]'
-
----Shell functions for a fake curl that read tasks from the export fixture.
-M.EXPORT_ROUTES = [[
-export_lines() {
-    sed 's/},{"id":"\([0-9a-z]\{8\}-[0-9a-z]\{4\}-\)/}\n{"id":"\1/g' "$ROOT/export.json" \
-        | sed 's/^{"tasks":\[//; s/\]}$//'
-}
-task_of() {
-    export_lines | grep "^{\"id\":\"$1\"" | head -1
-}
-tasks_page() {
-    printf '{"items":[%s],"next_cursor":null}' "$(export_lines | paste -sd, -)"
-}
-]]
-
----Shell that makes a fake curl answer a task read by id prefix like Pomb: a unique prefix reads
----that task, and any other prefix answers 404. It needs `export_lines` and may use `$extra_id`.
-M.PREFIX_RESOLVE = [[
-prefix_miss=
-tail=${last##*/api/tasks/}
-if [ "$tail" != "$last" ] && [ "${#tail}" -ge 6 ] && [ "${#tail}" -lt 36 ] \
-    && [ -z "$(printf '%s' "$tail" | tr -d '0-9a-f-')" ]; then
-    ids=$( { export_lines | sed -n 's/^{"id":"\([^"]*\)".*/\1/p'
-        echo; echo "$extra_id"; } | grep "^$tail")
-    if [ "$(printf '%s\n' "$ids" | grep -c .)" = 1 ]; then
-        last=${last%"$tail"}$ids
-    else
-        prefix_miss=1
-    fi
-fi
-]]
-
----Shell that turns the answer of a missed prefix read into Pomb's 404.
-M.PREFIX_MISS = [[
-if [ -n "$prefix_miss" ]; then
-    body='{"code":"not_found","message":"task not found"}'
-    status=404
-fi
-]]
 
 ---The board column names, by constant.
 ---@enum support.Column
@@ -815,215 +837,7 @@ function M.column_id(column)
     return "col-" .. column
 end
 
----Build the fake `curl` script that answers Pomb's routes from the files in `$ROOT`.
----@param first_id string id of the card the task routes answer for
----@param second_id string id of the card the second page of the card list holds
----@param links_id string id of the card the link routes answer for
----@return string script the shell script
-function M.pomb_curl(first_id, second_id, links_id)
-    return [[#!/bin/sh
-printf 'curl %s\n' "$*" >>"$ROOT/calls"
-cat >"$ROOT/stdin"
-for last; do :; done
-]] .. M.EXPORT_ROUTES .. [[
-status=${HTTP_STATUS:-200}
-extra_id=dddddddd-dddd-4ddd-8ddd-dddddddddddd
-]] .. M.PREFIX_RESOLVE .. [[
-case "$last" in
-*/api/boards) body=$(cat "$ROOT/boards.json") ;;
-*/api/boards/board-1) body=$(cat "$ROOT/detail.json") ;;
-*/api/boards/board-2) body=$(cat "$ROOT/general.json") ;;
-*/colors) body=$(cat "$ROOT/colors.json") ;;
-*/fields) body=$(cat "$ROOT/fields.json") ;;
-*/api/boards/board-1/bin) body=$(cat "$ROOT/bin.json") ;;
-*/restore) body=$(cat "$ROOT/restore.json") ;;
-*/export-data) body=$(cat "$ROOT/export.json") ;;
-*/history\?cursor=*) body=$(cat "$ROOT/history_next.json") ;;
-*/history) body=$(cat "$ROOT/history.json") ;;
-*/tasks\?limit=500\&cursor=c2) body='{"items":[{"id":"]] .. second_id .. [[",'\
-'"column_entered_at":"2020-02-01T00:00:00Z"}],"next_cursor":null}' ;;
-*/tasks\?limit=500) body='{"items":[{"id":"]] .. first_id .. [[",'\
-'"column_entered_at":"2020-01-01T00:00:00.5+00:00"}],"next_cursor":"c2"}' ;;
-*/tasks\?limit=1000*) body=$(tasks_page) ;;
-*/tasks\?*) body='{"items":[{"id":"]] .. first_id .. [["}],"next_cursor":null}' ;;
-*/attachments)
-    body=$(cat "$ROOT/attachments.json")
-    case "$*" in
-    *"-X POST"*)
-        n=$(cat "$ROOT/post_n" 2>/dev/null || echo 0)
-        n=$((n + 1))
-        echo "$n" >"$ROOT/post_n"
-        if [ "$n" -le "$(cat "$ROOT/busy" 2>/dev/null || echo 0)" ]; then
-            body='{"code":"busy","message":"the server is busy"}'
-            status=503
-        elif [ -f "$ROOT/upload_$n.json" ]; then
-            body=$(cat "$ROOT/upload_$n.json")
-        else
-            body=$(cat "$ROOT/upload.json")
-        fi
-        ;;
-    esac
-    ;;
-*/attachments/*/file)
-    out=
-    prev=
-    for arg; do
-        if [ "$prev" = "-o" ]; then out=$arg; fi
-        prev=$arg
-    done
-    if [ -f "$ROOT/file_status" ]; then status=$(cat "$ROOT/file_status"); fi
-    if [ "$status" -ge 400 ]; then
-        printf '%s' '{"code":"not_found","message":"no such file"}' >"$out"
-    else
-        printf 'bytes of the file' >"$out"
-    fi
-    body=
-    ;;
-*/attachments/*)
-    body=
-    if [ -f "$ROOT/detach_body" ]; then
-        body=$(cat "$ROOT/detach_body")
-        status=403
-    fi
-    ;;
-*/api/tasks/]] .. first_id .. [[)
-    body=$(task_of "]] .. first_id .. [[")
-    if [ -f "$ROOT/owner_name" ]; then
-        body=$(printf '%s' "$body" | sed 's|,"owner":.*,"claim_fence":[0-9]*}$|}|')
-    fi
-    if [ -f "$ROOT/task.json" ]; then
-        if [ -n "$body" ]; then
-            body="$(printf '%s' "$body" | sed 's|}$|,|')$(sed 's|^{||' "$ROOT/task.json")"
-        else
-            body=$(cat "$ROOT/task.json")
-        fi
-    fi
-    if [ -f "$ROOT/task.seats.json" ]; then
-        body="$(printf '%s' "$body" | sed 's|}$|,"seats":|')$(cat "$ROOT/task.seats.json")}"
-    fi
-    if [ -f "$ROOT/owner_name" ]; then
-        body=$(printf '%s' "$body" | sed "s|^{|{\"owner\":{\"holder\":{\"kind\":\"agent\",\
-\"name\":\"$(cat "$ROOT/owner_name")\"},\"lease_expires_at\":null,\"live\":true,\"fence\":7},\
-\"claim\":{\"fence\":7},|")
-    fi
-    case "$*" in
-    *"-X PATCH"*)
-        if [ -f "$ROOT/label_fail" ]; then
-            body='{"message":"nope"}'
-            status=400
-        fi
-        ;;
-    *"-X DELETE"*)
-        if [ -f "$ROOT/delete_body" ]; then
-            body=$(cat "$ROOT/delete_body")
-            status=403
-        fi
-        ;;
-    esac
-    ;;
-*/api/tasks)
-    if [ -f "$ROOT/task.json" ]; then
-        body=$(cat "$ROOT/task.json")
-    else
-        body=$(task_of "]] .. first_id .. [[")
-    fi
-    ;;
-*/api/tasks/dddddddd-dddd-4ddd-8ddd-dddddddddddd)
-    body=$(cat "$ROOT/far.json")
-    if [ -f "$ROOT/far_gone" ]; then status=404; fi
-    ;;
-*/api/tasks/????????-????-????-????-????????????)
-    body=$(task_of "${last##*/}")
-    if [ -z "$body" ]; then body='{"ok":true}'; fi
-    ;;
-*/api/tasks/]] .. links_id .. [[/links) body=$(cat "$ROOT/holder_links.json") ;;
-*/links) body=$(cat "$ROOT/links.json") ;;
-*/subtasks)
-    body='{"id":"sub-1","name":"x","done":false}'
-    n=$(cat "$ROOT/sub_n" 2>/dev/null || echo 0)
-    n=$((n + 1))
-    echo "$n" >"$ROOT/sub_n"
-    if [ -f "$ROOT/sub_fail" ] && [ "$n" = "$(cat "$ROOT/sub_fail")" ]; then
-        body='{"message":"nope"}'
-        status=400
-    fi
-    ;;
-*/owner/renew)
-    body='{"live":true,"fence":7}'
-    if [ -f "$ROOT/hb_status" ]; then status=$(cat "$ROOT/hb_status"); fi
-    ;;
-*/owner/release) body= ;;
-*/comments/dddddddd*)
-    body='{"message":"not yours"}'
-    status=403
-    if [ -f "$ROOT/locked" ]; then body='{"code":"card_locked","message":"locked"}'; fi
-    ;;
-*/comments/*) body='{"ok":true}' ;;
-*/comments)
-    body=$(cat "$ROOT/comments.json")
-    case "$*" in
-    *"-X POST"*)
-        if [ -f "$ROOT/locked" ]; then
-            body='{"code":"card_locked","message":"locked"}'
-            status=403
-        fi
-        if [ -f "$ROOT/ask_refusal" ]; then
-            body=$(cat "$ROOT/ask_refusal")
-            status=400
-        fi
-        ;;
-    esac
-    ;;
-*/owner)
-    if [ -f "$ROOT/owner_held" ]; then
-        body='{"code":"owner_held","message":"task owned by dotfiles/other '\
-'until 2999-01-01T00:00:00Z"}'
-        status=409
-    else
-        printf '%s' "$*" | sed -n 's/.*"name":"\([^"]*\)".*/\1/p' >"$ROOT/owner_name"
-        body='{"holder":{"kind":"agent","name":"x"},'\
-'"lease_expires_at":"2999-01-01T00:00:00Z","live":true,"fence":7}'
-    fi
-    ;;
-*/api/boards/board-1/seats)
-    body='{"seats":[]}'
-    if [ -f "$ROOT/board_seats.json" ]; then body=$(cat "$ROOT/board_seats.json"); fi
-    case " $* " in
-    *" -X PUT "*)
-        if [ -f "$ROOT/board_seats_status" ]; then
-            status=$(cat "$ROOT/board_seats_status")
-            body='{"code":"permission_denied","message":"seats.manage is needed"}'
-        fi
-        ;;
-    esac
-    ;;
-*/seats/take)
-    if [ -f "$ROOT/no_seat" ]; then
-        body='{"message":"the task has no such seat"}'
-        status=404
-    fi
-    ;;
-*/seats)
-    if [ -f "$ROOT/seat_refused" ]; then
-        body='{"code":"permission_denied","message":"the role cannot add a seat"}'
-        status=403
-    fi
-    ;;
-*/seats\?name=*)
-    if [ -f "$ROOT/seat_drop_refused" ]; then
-        body='{"code":"permission_denied","message":"seats.manage is needed"}'
-        status=403
-    fi
-    ;;
-*) body='{"ok":true}' ;;
-esac
-]] .. M.PREFIX_MISS .. [[
-printf '%s\n%s' "$body" "$status"
-]]
-end
-
--- Pomb routes for the fake HTTP server (U12e): the answers of the old `pomb_curl` stub
-
+-- Pomb routes for the fake HTTP server
 local POMB = {}
 
 local function export_lines(root)
@@ -1278,7 +1092,6 @@ end
 ---@endsection
 
 -- Pomb fake routes for the board suites
-
 local TASK_PREFIX = "/api/tasks/"
 local EXTRA_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
 
@@ -1570,9 +1383,12 @@ end
 ---@param ids { first: string, second: string, links: string } the ids the routes answer for
 ---@param plan (support.PombPlan | support.Route[])? extra routes or a plan
 function M.pomb_plan_sync(server, root, ids, plan)
+    -- Read a control file of the sandbox
     local function control(name)
         return fs.read(root .. "/" .. name)
     end
+
+    -- Normalize the plan into one plan per step
     local plans = { {} }
     if plan then
         if plan.steps then
@@ -1583,6 +1399,8 @@ function M.pomb_plan_sync(server, root, ids, plan)
             plans = { { prepend = plan } }
         end
     end
+
+    -- Count the steps the control files call for
     local counted = 1
     local busy = tonumber(control("busy") or "") or 0
     counted = math.max(counted, busy + 2)
@@ -1595,6 +1413,8 @@ function M.pomb_plan_sync(server, root, ids, plan)
     if sub_fail then
         counted = math.max(counted, sub_fail + 1)
     end
+
+    -- Write one routes file per step, each advancing to the next
     local steps = math.max(counted, #plans)
     for step = 1, steps do
         local current = plans[math.min(step, #plans)]
@@ -1628,8 +1448,12 @@ end
 
 ---The role a clock counts for, by constant.
 M.ROLE = {
+    SCOPER = "scoper",
+    PLANNER = "planner",
     IMPLEMENTER = "implementer",
     REVIEWER = "reviewer",
+    VERIFIER = "verifier",
+    LEAD = "lead",
 }
 
 ---The second the clock helpers start a stretch at.
@@ -1646,14 +1470,19 @@ function M.start_aged(
     role: string,
     seconds: number
 ): (() -> (), { code: number?, message: string? })
+    -- Start the stretch at a fixed second
     local original = clock.now
     clock.now = function()
         return M.CLOCK_START
     end
     local started = clock.start(card, role)
+
+    -- Age the clock past the stretch
     clock.now = function()
         return M.CLOCK_START + seconds
     end
+
+    -- Hand back a way to restore the real clock
     return function()
         clock.now = original
     end, started

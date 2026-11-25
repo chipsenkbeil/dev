@@ -52,14 +52,18 @@ local function cells(selected)
 end
 
 check("parse reads the header, the defaults and each row", function()
+    -- Parse the variables manifest
     local rows = manifest.parse(VARS)
-    -- the rows and the header
+
+    -- Check the rows and the header
     same(#rows, 9)
     same(rows.header[3], "brew")
-    -- the @env defaults
+
+    -- Check the @env defaults
     same(rows.defaults.FOO, "bar_value")
     same(rows.defaults.SP, "asdf asdf")
-    -- the first row and its cells
+
+    -- Check the first row and its cells
     same(rows[1].name, "bare-foo")
     same(rows[1].binary, "x")
     same(rows[1].fields[3], "$FOO")
@@ -67,9 +71,12 @@ check("parse reads the header, the defaults and each row", function()
 end)
 
 check("a quoted cell with spaces is one cell and unquoted cells split on runs of blanks", function()
-    local rows = manifest.parse(
-        'name\tbinary  brew\nplain\tpl\tripgrep\nargs zzz "script:/tmp/x.sh --flag value"\n'
-    )
+    local rows = manifest.parse(table.concat({
+        "name\tbinary  brew",
+        "plain\tpl\tripgrep",
+        'args zzz "script:/tmp/x.sh --flag value"',
+        "",
+    }, "\n"))
     local column = assert(manifest.column(rows, "brew"))
     local picked = cells(assert(manifest.select(rows, { column = column })))
     same(picked.plain, "ripgrep")
@@ -77,8 +84,10 @@ check("a quoted cell with spaces is one cell and unquoted cells split on runs of
 end)
 
 check("select expands variables from the @env default and the environment", function()
+    -- Select the third column of the variables manifest
     local picked = cells(assert(manifest.select(manifest.parse(VARS), { column = 3 })))
-    -- variables that resolve through the defaults
+
+    -- Check the variables that resolve through the defaults
     same(picked["bare-foo"], "bar_value")
     same(picked["braced-foo"], "bar_value")
     same(picked["quoted-sp"], "asdf asdf")
@@ -86,18 +95,30 @@ check("select expands variables from the @env default and the environment", func
     same(picked["quoted-lit"], "/x --y")
     same(picked["mid-script"], "script:bar_value")
     same(picked["mid-copr"], "copr:p,repo:bar_value")
-    -- the escape forms
+
+    -- Check the escape forms
     same(picked.escape, "price$5")
     same(picked["escape-name"], "$FOO")
-    -- the environment against a default
-    local env = manifest.parse("# @env HOME not-this\nname binary brew\nx y $HOME\n")
+
+    -- Check the environment against a default
+    local env = manifest.parse(table.concat({
+        "# @env HOME not-this",
+        "name binary brew",
+        "x y $HOME",
+        "",
+    }, "\n"))
     local home = cells(assert(manifest.select(env, { column = 3 }))).x
     assert(home ~= "not-this" and home ~= "", "the environment should win over the default")
 end)
 
 check("an undefined variable fails the whole selection and names the variable and row", function()
     local selected, err = manifest.select(
-        manifest.parse("name binary brew\nnope-row x ${NOPE_U03}\nfine y ripgrep\n"),
+        manifest.parse(table.concat({
+            "name binary brew",
+            "nope-row x ${NOPE_U03}",
+            "fine y ripgrep",
+            "",
+        }, "\n")),
         { column = 3 }
     )
     same(selected, nil)
@@ -105,16 +126,27 @@ check("an undefined variable fails the whole selection and names the variable an
 end)
 
 check("a variable in another manager's column does not fail the selection", function()
-    local rows = manifest.parse("name binary brew pacman\nx y ripgrep ${NOPE_U03}\n")
+    local rows = manifest.parse(table.concat({
+        "name binary brew pacman",
+        "x y ripgrep ${NOPE_U03}",
+        "",
+    }, "\n"))
     same(names(assert(manifest.select(rows, { column = 3 }))), "x")
     same((manifest.select(rows, { column = 4 })), nil)
 end)
 
 check("select keeps the rows of one group, comma lists included", function()
-    local rows = manifest.parse(
-        "name binary brew groups\naa a aa-f base\nbb b bb-f rust\ncc c cc-f base,rust\ndd d dd-f -\n"
-    )
-    -- one group, then the unfiltered cases
+    -- Parse a manifest whose rows name groups
+    local rows = manifest.parse(table.concat({
+        "name binary brew groups",
+        "aa a aa-f base",
+        "bb b bb-f rust",
+        "cc c cc-f base,rust",
+        "dd d dd-f -",
+        "",
+    }, "\n"))
+
+    -- Select one group, then the unfiltered cases
     same(names(assert(manifest.select(rows, { column = 3, group = "base" }))), "aa,cc")
     same(names(assert(manifest.select(rows, { column = 3, group = "rust" }))), "bb,cc")
     same(names(assert(manifest.select(rows, { column = 3, group = "nope" }))), "")
@@ -124,7 +156,11 @@ check("select keeps the rows of one group, comma lists included", function()
 end)
 
 check("column finds a manager and never groups", function()
-    local rows = manifest.parse("name binary brew groups\naa a aa-f base\n")
+    local rows = manifest.parse(table.concat({
+        "name binary brew groups",
+        "aa a aa-f base",
+        "",
+    }, "\n"))
     same(manifest.column(rows, "brew"), 3)
     same(manifest.column(rows, "groups"), nil)
     same(manifest.column(rows, "nope"), nil)
@@ -132,7 +168,11 @@ check("column finds a manager and never groups", function()
 end)
 
 check("a manifest with no groups column has no groups", function()
-    local rows = manifest.parse("name binary brew\naa a aa-f\n")
+    local rows = manifest.parse(table.concat({
+        "name binary brew",
+        "aa a aa-f",
+        "",
+    }, "\n"))
     same(#assert(manifest.select(rows, { column = 3, group = "base" })), 0)
 end)
 

@@ -40,7 +40,9 @@ testing.test("standalone reports a .sh in a .dev folder that holds no commands",
 end)
 
 testing.test("standalone reports a bad line 2", function()
-    local root = project({ [".dev/standalone/x.sh"] = "#!/bin/sh\n# runs somewhere\n" })
+    local root = project({
+        [".dev/standalone/x.sh"] = table.concat({ "#!/bin/sh", "# runs somewhere", "" }, "\n"),
+    })
     testing.eq(standalone.problems(root), {
         ".dev/standalone/x.sh: line 2 must read: # standalone: runs on <where>, where dev is absent",
     })
@@ -49,7 +51,11 @@ end)
 
 testing.test("standalone reports an unknown where", function()
     local root = project({
-        [".dev/standalone/x.sh"] = "#!/bin/sh\n# standalone: runs on my laptop, where dev is absent\n",
+        [".dev/standalone/x.sh"] = table.concat({
+            "#!/bin/sh",
+            "# standalone: runs on my laptop, where dev is absent",
+            "",
+        }, "\n"),
     })
     testing.eq(standalone.problems(root), {
         ".dev/standalone/x.sh: where must be one of: production server, test sandbox, GitHub Actions",
@@ -60,9 +66,11 @@ end)
 testing.test("standalone passes a valid header", function()
     local files = {}
     for _, where in ipairs(standalone.WHERE) do
-        files[".dev/standalone/" .. where:gsub(" ", "_") .. ".sh"] = "#!/bin/sh\n# standalone: runs on "
-            .. where
-            .. ", where dev is absent\n"
+        files[".dev/standalone/" .. where:gsub(" ", "_") .. ".sh"] = table.concat({
+            "#!/bin/sh",
+            "# standalone: runs on " .. where .. ", where dev is absent",
+            "",
+        }, "\n")
     end
     local root = project(files)
     testing.eq(standalone.problems(root), {})

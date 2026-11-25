@@ -16,21 +16,35 @@ local function executable(path, body)
 end
 
 local function sandbox(listing, shown)
+    -- Write the listing and the box ci answers with
     local root = support.sandbox({}, {})
     assert(fs.write(root .. "/ls.json", listing))
     assert(fs.write(root .. "/show.json", shown or listing))
+
+    -- Stand in for ci with a script that logs its call and prints those files
     executable(
         root .. "/bin/ci",
-        '#!/bin/sh\nprintf "ci %s\\n" "$*" >>"'
-            .. root
-            .. '/calls"\n'
-            .. 'if [ "$2" = show ]; then cat "'
-            .. root
-            .. '/show.json"; else cat "'
-            .. root
-            .. '/ls.json"; fi\n'
+        table.concat({
+            "#!/bin/sh",
+            'printf "ci %s\\n" "$*" >>"' .. root .. '/calls"',
+            'if [ "$2" = show ]; then cat "'
+                .. root
+                .. '/show.json"; else cat "'
+                .. root
+                .. '/ls.json"; fi',
+            "",
+        }, "\n")
     )
-    executable(root .. "/bin/et", '#!/bin/sh\nprintf "et %s\\n" "$*" >>"' .. root .. '/calls"\n')
+
+    -- Stand in for et with a script that logs its call
+    executable(
+        root .. "/bin/et",
+        table.concat({
+            "#!/bin/sh",
+            'printf "et %s\\n" "$*" >>"' .. root .. '/calls"',
+            "",
+        }, "\n")
+    )
     return root
 end
 
@@ -68,46 +82,72 @@ end)
 testing.test(
     "a box name with a quote and a command substitution is refused before ci runs",
     function()
+        -- Show a box named with a quote and a command substitution
         local root = sandbox('{"ok":true,"boxes":[]}')
         local out, code = support.dev(root, { "box", "show", "a'$(touch PWNED)" })
+
+        -- Refuse the name
         testing.eq(code, 2)
         testing.eq(out:find("bad box name", 1, true) ~= nil, true)
+
+        -- Run neither ci nor the substitution
         testing.eq(calls(root), "")
         testing.eq(fs.exists(root .. "/PWNED"), false)
+
+        -- Remove the project
         fs.remove(root, { recursive = true })
     end
 )
 
 testing.test("a box name with a leading dash or a newline is refused", function()
+    -- Stop a box named with a newline
     local root = sandbox('{"ok":true,"boxes":[]}')
     local _, code = support.dev(root, { "box", "stop", "a\nb" })
+
+    -- Refuse the name and run nothing
     testing.eq(code, 2)
     testing.eq(calls(root), "")
+
+    -- Remove the project
     fs.remove(root, { recursive = true })
 end)
 
 testing.test("a project path with a quote is refused and nothing is run", function()
+    -- List a box whose project path holds a quote
     local listing = '{"ok":true,"boxes":[{"name":"b1","state":"running","target":"t","projects":'
         .. '[{"name":"p","path":"/srv/projects/a\'b"}],"tailnet_name":"b1"}],'
         .. '"cap":{"running":1,"running_max":3,"memory_limits_gib":1,"memory_max_gib":2}}'
     local root = sandbox(listing)
     local out, code = support.dev(root, { "connect", "b1", "--ssh" })
+
+    -- Refuse the path
     testing.eq(code, 1)
     testing.eq(out:find("Refusing the project path", 1, true) ~= nil, true)
+
+    -- Run nothing past the listing
     testing.eq(calls(root), "ci box ls --json\n")
+
+    -- Remove the project
     fs.remove(root, { recursive = true })
 end)
 
 testing.test("ls prints plain text with no escape bytes when piped", function()
+    -- List one running box
     local listing = '{"ok":true,"boxes":[{"name":"b1","state":"running","target":"t","machine":"m",'
         .. '"shape":"s","created_by":"agent:x","tmux_sessions":[],"projects":[],"expires_at":null}],'
         .. '"cap":{"running":1,"running_max":3,"memory_limits_gib":1,"memory_max_gib":2},"machines":[]}'
     local root = sandbox(listing)
     local out, code = support.dev(root, { "box", "ls" })
     testing.eq(code, 0)
+
+    -- Print no escape byte
     testing.eq(out:find("\27", 1, true), nil)
+
+    -- Print the room line and the box
     testing.eq(out:find("Boxes   1 of 3 running · 2 more can start", 1, true) ~= nil, true)
     testing.eq(out:find("● b1", 1, true) ~= nil, true)
+
+    -- Remove the project
     fs.remove(root, { recursive = true })
 end)
 
@@ -155,9 +195,14 @@ local function listing(user, host)
 end
 
 local function refused(user, host, args)
+    -- Run dev against a box with that user and host
     local root = sandbox(listing(user, host))
     local out, code = support.dev(root, args)
+
+    -- Keep the calls the stubs logged
     local ran = calls(root)
+
+    -- Remove the project
     fs.remove(root, { recursive = true })
     return out, code, ran
 end

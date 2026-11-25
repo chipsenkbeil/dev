@@ -50,6 +50,7 @@ local function interrupt()
 end
 
 local function on_terminal(handlers, body)
+    -- Make an interactive context
     local ctx = ui.context({
         color = false,
         interactive = true,
@@ -58,6 +59,8 @@ local function on_terminal(handlers, body)
             return nil
         end,
     })
+
+    -- Fake the terminal, the temp files and the spawn
     local made = {}
     local real_mktemp, real_spawn, real_isatty = fs.mktemp, dev_os.spawn, dev_os.isatty
     dev_os.isatty = function()
@@ -72,8 +75,12 @@ local function on_terminal(handlers, body)
         return path
     end
     dev_os.spawn = handlers.spawn
+
+    -- Run the body, then put the real functions back
     local ok, err = pcall(body, ctx, made)
     fs.mktemp, dev_os.spawn, dev_os.isatty = real_mktemp, real_spawn, real_isatty
+
+    -- Remove the temp files the body left
     for _, path in ipairs(made) do
         fs.remove(path)
     end

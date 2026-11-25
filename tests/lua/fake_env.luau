@@ -35,6 +35,7 @@ if pick then
     end
     local used = 0
     picker.run = function(_, items, opts)
+        -- Log the picker and its rows when asked
         local log = dev_os.getenv("PICK_LOG")
         if log then
             local lines = { "picker title=" .. opts.title .. " auto=" .. tostring(opts.auto) }
@@ -54,13 +55,19 @@ if pick then
             end
             assert(fs.append(log, table.concat(lines)))
         end
+
+        -- Cancel the picker when told to
         if pick == "CANCEL" then
             return nil
         end
+
+        -- Answer a series of single pickers one word at a time
         if not opts.multi and #queue > 1 then
             used = used + 1
             return queue[used]
         end
+
+        -- Answer a multi picker with every word and the toggles
         if opts.multi then
             local values, toggles = {}, {}
             for word in pick:gmatch("%S+") do
@@ -71,6 +78,8 @@ if pick then
             end
             return { values = values, toggles = toggles }
         end
+
+        -- Answer a lone single picker with the word
         return pick
     end
 end

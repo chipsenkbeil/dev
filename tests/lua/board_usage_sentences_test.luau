@@ -52,12 +52,15 @@ testing.test("every literal board usage message is a capitalised sentence with a
 end)
 
 testing.test("no board usage refusal opens with a flag, a variable or a lowercase word", function()
+    -- Gather the files that call usage
     local sources = {
         BOARD_SOURCE,
         LUA_ROOT .. "board/wiring.luau",
         LUA_ROOT .. "board/runner.luau",
         table.unpack(MOVED_SOURCES),
     }
+
+    -- Check how each call opens
     local checked = 0
     for _, path in ipairs(sources) do
         local text = assert(fs.read(path))
@@ -75,6 +78,8 @@ testing.test("no board usage refusal opens with a flag, a variable or a lowercas
             checked = checked + 1
         end
     end
+
+    -- Insist that enough calls were found
     testing.ok(checked >= 60, "only " .. checked .. " usage calls checked")
 end)
 

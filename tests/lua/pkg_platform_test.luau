@@ -7,8 +7,17 @@ local support = require("./support")
 local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local SHA = string.rep("a", 64)
 
-local UNAME = '#!/bin/sh\ncase "$1" in -m) echo "$FAKE_ARCH" ;; *) echo "$FAKE_KERNEL" ;; esac\n'
-local BREW = '#!/bin/sh\necho "$*" >>"$BREW_LOG"\nexit 1\n'
+local UNAME = table.concat({
+    "#!/bin/sh",
+    'case "$1" in -m) echo "$FAKE_ARCH" ;; *) echo "$FAKE_KERNEL" ;; esac',
+    "",
+}, "\n")
+local BREW = table.concat({
+    "#!/bin/sh",
+    'echo "$*" >>"$BREW_LOG"',
+    "exit 1",
+    "",
+}, "\n")
 
 local MANIFEST = table.concat({
     "name binary brew pacman darwin-x86_64 groups",
@@ -25,20 +34,23 @@ local function executable(path, text)
 end
 
 local function sandbox(manifest)
+    -- Put the stub package tools on a private path
     local dir = assert(fs.realpath(support.tempdir()))
     assert(fs.mkdir(dir .. "/stubs"))
     executable(dir .. "/stubs/uname", UNAME)
     executable(dir .. "/stubs/brew", BREW)
-    executable(dir .. "/stubs/pacman", "#!/bin/sh\nexit 1\n")
+    executable(dir .. "/stubs/pacman", table.concat({ "#!/bin/sh", "exit 1", "" }, "\n"))
+
+    -- Write the manifest and the pinned release
     assert(fs.write(dir .. "/tools.tsv", manifest or MANIFEST))
-    assert(
-        fs.write(
-            dir .. "/releases.tsv",
-            "name version sha256 url path\npinned 1.0 "
-                .. SHA
-                .. " https://example.test/pinned-${version} -\n"
-        )
-    )
+    assert(fs.write(
+        dir .. "/releases.tsv",
+        table.concat({
+            "name version sha256 url path",
+            "pinned 1.0 " .. SHA .. " https://example.test/pinned-${version} -",
+            "",
+        }, "\n")
+    ))
     return dir
 end
 
@@ -86,14 +98,22 @@ testing.test(
 )
 
 testing.test("a bare package in the darwin-x86_64 column is an error naming the row", function()
-    local dir =
-        sandbox("name binary brew darwin-x86_64 groups\nbare-row bare-zzz brew-bare ripgrep base\n")
+    -- Install from a manifest whose darwin cell is a bare package
+    local dir = sandbox(table.concat({
+        "name binary brew darwin-x86_64 groups",
+        "bare-row bare-zzz brew-bare ripgrep base",
+        "",
+    }, "\n"))
     local out, code = run(dir, "Darwin", "x86_64", { "install", "--dry-run" })
     testing.eq(code, 1)
     testing.ok(out:find("! bare-row: a darwin-x86_64 cell takes", 1, true), out)
+
+    -- Check the same manifest
     out, code = run(dir, "Darwin", "x86_64", { "check" })
     testing.eq(code, 1)
     testing.ok(out:find("[ ] bare-row", 1, true), out)
+
+    -- Confirm brew never ran
     testing.ok(not fs.exists(dir .. "/brew.log"), "brew must not run")
     fs.remove(dir, { recursive = true })
 end)
@@ -117,6 +137,7 @@ testing.test("Linux still reads its own manager column", function()
 end)
 
 testing.test("Linux with only apt-get reads the apt column", function()
+    -- Make a manifest with an apt column
     local dir = sandbox(table.concat({
         "name binary apt pacman groups",
         "fresh fresh-zzz apt-fresh pacman-fresh base",
@@ -125,14 +146,22 @@ testing.test("Linux with only apt-get reads the apt column", function()
         "dropped dropped-zzz - pacman-drop base",
         "",
     }, "\n"))
+
+    -- Leave apt-get as the only package manager
     assert(dev_os.run({ "rm", dir .. "/stubs/pacman", dir .. "/stubs/brew" }) == 0, "rm failed")
     executable(
         dir .. "/stubs/dpkg-query",
-        '#!/bin/sh\ncase "$4" in apt-present) echo "install ok installed" ;; *) exit 1 ;; esac\n'
+        table.concat({
+            "#!/bin/sh",
+            'case "$4" in apt-present) echo "install ok installed" ;; *) exit 1 ;; esac',
+            "",
+        }, "\n")
     )
-    executable(dir .. "/stubs/apt-get", "#!/bin/sh\nexit 0\n")
+    executable(dir .. "/stubs/apt-get", table.concat({ "#!/bin/sh", "exit 0", "" }, "\n"))
     assert(fs.mkdir(dir .. "/sys"))
     assert(dev_os.run({ "ln", "-s", "/bin/sh", dir .. "/sys/sh" }) == 0, "ln failed")
+
+    -- Install in a dry run on Linux
     local out, code = dev_os.capture({
         runtime.exe,
         "__pkg",
@@ -150,6 +179,8 @@ testing.test("Linux with only apt-get reads the apt column", function()
         },
     })
     testing.eq(code, 0)
+
+    -- Check the plan updates once and installs only the missing package
     local _, updates = out:gsub("apt%-get update", "")
     testing.eq(updates, 1)
     testing.ok(out:find("apt-get install -y -- apt-fresh", 1, true), out)
@@ -170,7 +201,7 @@ testing.test("an unknown kernel has no package manager to use", function()
 end)
 
 testing.test("a manifest without the manager column names the column", function()
-    local dir = sandbox("name binary groups\nsh sh base\n")
+    local dir = sandbox(table.concat({ "name binary groups", "sh sh base", "" }, "\n"))
     local out, code = run(dir, "Darwin", "arm64", { "check" })
     testing.eq(code, 1)
     testing.eq(out, 'Manager column "brew" not found in ' .. dir .. "/tools.tsv header.\n")
@@ -178,7 +209,11 @@ testing.test("a manifest without the manager column names the column", function(
 end)
 
 testing.test("a channel with no driver module fails its row", function()
-    local dir = sandbox("name binary brew groups\nwidget widget-zzz flatpak:org.widget base\n")
+    local dir = sandbox(table.concat({
+        "name binary brew groups",
+        "widget widget-zzz flatpak:org.widget base",
+        "",
+    }, "\n"))
     local out, code = run(dir, "Darwin", "arm64", { "install", "--scope", "user" })
     testing.eq(code, 1)
     testing.ok(out:find("No driver named flatpak.\n", 1, true), out)

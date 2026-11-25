@@ -4,7 +4,12 @@ local fs = require("@dev/fs")
 local support = require("./support")
 
 local TOKEN = "pomb_SECRETtoken0123456789"
-local POMB = '[board]\nbackend = "pomb"\nname = "dotfiles"\n'
+local POMB = table.concat({
+    "[board]",
+    'backend = "pomb"',
+    'name = "dotfiles"',
+    "",
+}, "\n")
 local NAME = support.COLUMN_NAME
 local READY = "col-ready"
 local DONE = "col-done"
@@ -38,6 +43,8 @@ local function sync(box)
     local function control(name)
         return fs.read(box.root .. "/" .. name)
     end
+
+    -- Collect every card id the fixture files mention
     local routes = {}
     local ids, seen = {}, {}
     for _, name in ipairs(fs.list(box.root) or {}) do
@@ -49,9 +56,13 @@ local function sync(box)
             end
         end
     end
+
+    -- Answer each search page by its cursor
     routes[#routes + 1] =
         { path = "/api/search*", contains = "cursor=c2", body = control("search2.json") }
     routes[#routes + 1] = { path = "/api/search*", body = control("search1.json") }
+
+    -- Answer each card from its file, or refuse it when it has none
     for _, id in ipairs(ids) do
         routes[#routes + 1] = { path = "/api/tasks/" .. id .. "/comments", body = "[]" }
         routes[#routes + 1] = { path = "/api/tasks/" .. id .. "/links", body = "[]" }
@@ -63,6 +74,8 @@ local function sync(box)
                 body = '{"code":"forbidden","message":"the token cannot read this board"}',
             }
     end
+
+    -- Answer the board-wide routes from their files
     local export = control("export.json") or '{"tasks":[]}'
     local plain = {
         { "/api/boards", control("boards.json") },
@@ -78,7 +91,11 @@ local function sync(box)
     routes[#routes + 1] = { path = "*", body = '{"ok":true}' }
     box.server:set(routes)
 end
-local PASS = string.format('#!/bin/sh\necho "%s"\n', TOKEN)
+local PASS = table.concat({
+    "#!/bin/sh",
+    string.format('echo "%s"', TOKEN),
+    "",
+}, "\n")
 
 local function executable(path, body)
     assert(fs.write(path, body))
@@ -111,18 +128,25 @@ local function page(hits, cursor)
 end
 
 local function sandbox(files)
+    -- Make a project, a home and a server to talk to
     local root = support.sandbox({ [".dev/config.toml"] = POMB }, {})
     local home = support.tempdir()
     local server = support.fake_http({})
+
+    -- Point the home config at the server
     assert(fs.mkdir(home .. "/.config/dev", { parents = true }))
-    assert(
-        fs.write(
-            home .. "/.config/dev/config.toml",
-            '[board.pomb]\nurl = "'
-                .. server.url
-                .. '"\nfield_prefix = "runner"\ntoken = "pass:secrets/worker/token/pomb"\n'
-        )
-    )
+    assert(fs.write(
+        home .. "/.config/dev/config.toml",
+        table.concat({
+            "[board.pomb]",
+            'url = "' .. server.url .. '"',
+            'field_prefix = "runner"',
+            'token = "pass:secrets/worker/token/pomb"',
+            "",
+        }, "\n")
+    ))
+
+    -- Write the answers the server gives, the caller's over the defaults
     local all = {
         ["boards.json"] = BOARDS,
         ["detail.json"] = DETAIL,
@@ -136,7 +160,9 @@ local function sandbox(files)
     for name, body in pairs(all) do
         assert(fs.write(root .. "/" .. name, body))
     end
-    executable(root .. "/bin/security", "#!/bin/sh\nexit 1\n")
+
+    -- Stub the keychain and the pass helper
+    executable(root .. "/bin/security", table.concat({ "#!/bin/sh", "exit 1", "" }, "\n"))
     executable(root .. "/bin/pass", PASS)
     return { root = root, home = home, server = server }
 end
@@ -173,6 +199,7 @@ local function at(text, needle)
 end
 
 testing.test("status --all lists cards of two boards newest first across pages", function()
+    -- Serve two boards' cards over two search pages
     local box = sandbox({
         ["search1.json"] = page({
             hit("a", "dotfiles", "Oldest card"),
@@ -183,21 +210,28 @@ testing.test("status --all lists cards of two boards newest first across pages",
         ["task_" .. uuid("b") .. ".json"] = task("b", "2026-11-03T10:00:00Z"),
         ["task_" .. uuid("c") .. ".json"] = task("c", "2026-11-02T10:00:00Z"),
     })
+
+    -- List the cards of every board
     local out, code = dev(box, { "board", "status", "--all" })
     testing.eq(code, 0, out)
     testing.ok(out:find("backend: pomb", 1, true), out)
+
+    -- Order the cards newest first and name their boards and epics
     local newest, middle, oldest = at(out, "bbbbbbbb"), at(out, "cccccccc"), at(out, "aaaaaaaa")
     testing.ok(newest < middle and middle < oldest, out)
     at(out, "other")
     at(out, "Big epic")
     at(out, "Newest card")
     testing.eq(out:find("unreadable", 1, true), nil)
+
+    -- Follow the search cursor to the second page
     local calls = box.server:requests()
     at(calls, "/api/search?q=label:needs:human&limit=100")
     at(calls, "cursor=c2")
 end)
 
 testing.test("status --all names a board it cannot read and lists the rest", function()
+    -- Serve a card on a board the token cannot read
     local box = sandbox({
         ["search1.json"] = page({
             hit("a", "dotfiles", "Readable card"),
@@ -205,21 +239,31 @@ testing.test("status --all names a board it cannot read and lists the rest", fun
         }),
         ["task_" .. uuid("a") .. ".json"] = task("a", "2026-11-01T10:00:00Z", "Big epic"),
     })
+
+    -- List the cards of every board
     local out, code = dev(box, { "board", "status", "--all" })
     testing.eq(code, 0, out)
+
+    -- Name the unreadable board beside the readable cards
     at(out, "Readable card")
     at(out, "Hidden card")
     at(out, "unreadable: secret")
 end)
 
 testing.test("status --all with no cards says so", function()
+    -- Serve a search with no hits
     local box = sandbox({ ["search1.json"] = page({}) })
+
+    -- List the cards of every board
     local out, code = dev(box, { "board", "status", "--all" })
     testing.eq(code, 0, out)
+
+    -- Say that no cards exist
     at(out, "No cards.")
 end)
 
 testing.test("show on an epic names the board of a child on another board", function()
+    -- Build an epic whose children sit on two boards
     local epic = uuid("e")
     local children = string.format(
         '[{"id":"%s","name":"Far child","board_id":"board-2","column_name":"%s","done":false},'
@@ -245,8 +289,12 @@ testing.test("show on an epic names the board of a child on another board", func
             .. children
             .. "}",
     })
+
+    -- Show the epic
     local out, code = dev(box, { "board", "show", "eeeeeeee" })
     testing.eq(code, 0, out)
+
+    -- Mark the child of the other board with its board name
     at(out, "children: 1 of 2 done")
     at(out, "- [other] ffffffff Far child (" .. NAME.READY .. ")")
     at(out, "- gggggggg Own child (" .. NAME.DONE .. ")")

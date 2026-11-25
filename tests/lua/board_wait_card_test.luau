@@ -102,12 +102,17 @@ testing.test("wait --card names every change that landed in one poll", function(
 end)
 
 testing.test("wait --card backs off while the card is unchanged and starts over", function()
+    -- Wait through five unchanged polls
     local result, seen = wait_card({ {}, {}, {}, {}, {}, { ticked = 1 } })
     testing.eq(result.output, "5af0e005 ticked outcomes 0 to 1")
     testing.eq(#seen.naps, 5)
+
+    -- Nap longer after each unchanged poll
     for i = 2, #seen.naps do
         testing.ok(seen.naps[i] > seen.naps[i - 1], "nap " .. i .. " did not grow")
     end
+
+    -- Cap the nap
     testing.ok(seen.naps[#seen.naps] <= 30)
 end)
 
@@ -189,12 +194,17 @@ local function wait_for(backend, mode)
 end
 
 testing.test("the cursor write prints the write sentence when it fails", function()
+    -- Serve one new Ready card
     local backend = summary_only({ { id = CARD_ID, column = COLUMN.READY } }, {
         { kind = "task_added", task_id = ID_B, column = COLUMN.READY },
     })
+
+    -- Block the cursor file with a directory
     local stem = support.tempdir() .. "/wait"
     local path = stem .. ".ready.cursor"
     assert(fs.mkdir(path, { parents = true }))
+
+    -- Wait for a Ready card
     local result = cmd_board.wait(backend, { ["for"] = "ready" }, {
         stem = stem,
         nap = function() end,
@@ -202,10 +212,13 @@ testing.test("the cursor write prints the write sentence when it fails", functio
             return 0
         end,
     })
+
+    -- Name the path in the write failure
     testing.eq(result.message:sub(1, #path + 15), "Cannot write " .. path .. ": ")
 end)
 
 testing.test("wait --for ready lists the unclaimed cards from the summary", function()
+    -- Serve one claimed and one unclaimed Ready card
     local backend, seen = summary_only({
         { id = CARD_ID, column = COLUMN.READY },
         { id = ID_B, column = COLUMN.READY, claimant = "x" },
@@ -213,13 +226,18 @@ testing.test("wait --for ready lists the unclaimed cards from the summary", func
         { kind = "task_added", task_id = CARD_ID, column = COLUMN.READY },
         { kind = "task_added", task_id = ID_B, column = COLUMN.READY },
     })
+
+    -- Wait for a Ready card
     local result = wait_for(backend, "ready")
+
+    -- Name the unclaimed card and read only summaries
     testing.eq(result.output, "added 5af0e005 to " .. COLUMN.READY)
     testing.eq(seen.export, 0)
     testing.ok(seen.summary > 0)
 end)
 
 testing.test("wait --for lead skips an epic with open children by its summary counts", function()
+    -- Serve an epic with an open child and an epic with none
     local backend, seen = summary_only({
         {
             id = CARD_ID,
@@ -237,7 +255,11 @@ testing.test("wait --for lead skips an epic with open children by its summary co
         { kind = "task_updated", task_id = CARD_ID, column = COLUMN.BLOCKED },
         { kind = "task_updated", task_id = ID_B, column = COLUMN.BLOCKED },
     })
+
+    -- Wait for a card that needs the lead
     local result = wait_for(backend, "lead")
+
+    -- Name the epic with no open child and read only summaries
     testing.eq(result.output, "11111111 is labelled needs:lead in " .. COLUMN.BLOCKED)
     testing.eq(seen.export, 0)
     testing.ok(seen.summary > 0)

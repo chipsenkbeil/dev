@@ -17,11 +17,14 @@ local function fresh()
 end
 
 check("try_lock takes a free lock and release frees it", function()
+    -- Take the lock and see a second try refused
     local dir, path = fresh()
     local handle = assert(lock.try_lock(path))
     local second, reason = lock.try_lock(path)
     assert(second == nil)
     assert(string.find(reason, "held", 1, true))
+
+    -- Release it and take it again
     handle:release()
     local third = assert(lock.try_lock(path))
     third:release()
@@ -29,11 +32,14 @@ check("try_lock takes a free lock and release frees it", function()
 end)
 
 check("a collected handle releases the lock", function()
+    -- Take the lock and drop the handle
     local dir, path = fresh()
     do
         local handle = assert(lock.try_lock(path))
         handle = nil
     end
+
+    -- Collect until the lock frees
     local deadline = os.clock() + 5
     local again
     while os.clock() < deadline do
@@ -59,13 +65,18 @@ check("shared locks coexist and block an exclusive one", function()
 end)
 
 check("lock gives up at its timeout", function()
+    -- Hold the lock
     local dir, path = fresh()
     local held = assert(lock.try_lock(path))
+
+    -- Wait on it with a short timeout
     local started = os.clock()
     local second, reason = lock.lock(path, { timeout = 0.2 })
     assert(second == nil)
     assert(string.find(reason, "timed out", 1, true))
     assert(os.clock() - started < 5)
+
+    -- Release it
     held:release()
     fs.remove(dir, { recursive = true })
 end)

@@ -11,6 +11,19 @@ local support = require("./support")
 local IDENT = { JJ_USER = "t", JJ_EMAIL = "t@example.com" }
 local BOARD = "mine"
 
+local PASSING_RELEASE = table.concat({
+    "",
+    "[board.release]",
+    'checks = ["true"]',
+    "",
+}, "\n")
+local FAILING_RELEASE = table.concat({
+    "",
+    "[board.release]",
+    'checks = ["false"]',
+    "",
+}, "\n")
+
 local function must(first, second)
     local code = type(first) == "number" and first or second
     assert(code == 0, tostring(first))
@@ -24,21 +37,31 @@ local function jj(root, ...)
 end
 
 local function project(extra)
+    -- Sandbox the project with a local board config
+    local config = table.concat({
+        "[board]",
+        'backend = "local"',
+        'name = "' .. BOARD .. '"',
+        "",
+    }, "\n")
     local root = support.sandbox({
-        [".dev/config.toml"] = '[board]\nbackend = "local"\nname = "'
-            .. BOARD
-            .. '"\n'
-            .. (extra or ""),
+        [".dev/config.toml"] = config .. (extra or ""),
     }, {})
+
+    -- Give the project an empty user config
     local home = support.tempdir()
     assert(fs.mkdir(home .. "/.config/dev", { parents = true }), "mkdir failed")
     assert(fs.write(home .. "/.config/dev/config.toml", ""), "write failed")
+
+    -- Make the bare remote and a jj repo that points at it
     local bare = support.tempdir()
     must(dev_os.run({ "git", "init", "--bare", "-q", "-b", "master", bare }, { stdout = "null" }))
     must(
         dev_os.run({ "jj", "git", "init", root }, { stdout = "null", stderr = "null", env = IDENT })
     )
     jj(root, "git", "remote", "add", "origin", bare)
+
+    -- Push a seed commit as trunk
     assert(fs.write(root .. "/seed.txt", "seed\n"), "write failed")
     jj(root, "commit", "-m", "base")
     jj(root, "bookmark", "create", "master", "-r", "@-")
@@ -91,6 +114,7 @@ local function push_commit(root, name)
 end
 
 local function release_card(root, home, name, outcomes, landed)
+    -- Build the add command with one flag per outcome
     local argv = {
         "board",
         "add",
@@ -108,9 +132,15 @@ local function release_card(root, home, name, outcomes, landed)
         argv[#argv + 1] = "--done-when"
         argv[#argv + 1] = outcome
     end
+
+    -- Add the card and read its id
     local out = dev(root, home, argv)
     local id = assert(out:match("added (%x+)"), out)
+
+    -- Move the card into Release
     support.place(support.board_file(home, BOARD), id, support.COLUMN_NAME.RELEASE)
+
+    -- Note the landing unless the card is meant to have none
     if landed ~= false then
         land_note(root, home, id, landed or trunk_commit(root))
     end
@@ -172,17 +202,24 @@ end
 
 if dev_os.which("jj") then
     testing.test("ship moves every release card with ticked outcomes to Done", function()
-        local root, home = project('\n[board.release]\nchecks = ["true"]\n')
+        -- Start a project with a passing release row
+        local root, home = project(PASSING_RELEASE)
         must(dev(root, home, { "board", "init" }))
+
+        -- Land three cards in Release and tick one outcome on each
         local first = release_card(root, home, "First", { "It works" })
         local second = release_card(root, home, "Second", { "It works" })
         local open = release_card(root, home, "Open", { "It works", "It ships" })
         tick(root, home, first)
         tick(root, home, second)
         tick(root, home, open)
+
+        -- Ship the board
         local trunk = trunk_commit(root)
         local out, code = dev(root, home, { "board", "ship" })
         testing.eq(code, 0, out)
+
+        -- Check the finished cards moved to Done with one note naming trunk
         for _, id in ipairs({ first, second }) do
             local column, comments = state(home, id)
             testing.eq(column, support.COLUMN_NAME.DONE)
@@ -190,6 +227,8 @@ if dev_os.which("jj") then
             testing.eq(#notes, 1)
             testing.ok(notes[1]:find(trunk:sub(1, 12), 1, true), notes[1])
         end
+
+        -- Check the unfinished card stayed and the report names it
         testing.eq((state(home, open)), support.COLUMN_NAME.RELEASE)
         testing.ok(out:find("shipped 2 cards", 1, true), out)
         testing.ok(out:find("These cards stay in Release:", 1, true), out)
@@ -197,10 +236,13 @@ if dev_os.which("jj") then
     end)
 
     testing.test("ship lists a card moved with no done note and exits 1", function()
+        -- Start a project with a ticked card in Release
         local root, home = project()
         must(dev(root, home, { "board", "init" }))
         local id = release_card(root, home, "First", { "It works" })
         tick(root, home, id)
+
+        -- Wrap the board so that every note is refused
         local backend = localboard.new({
             name = BOARD,
             path = support.board_file(home, BOARD),
@@ -211,6 +253,8 @@ if dev_os.which("jj") then
         backend.note = function()
             return nil, "The board refused the note."
         end
+
+        -- Ship through the wrapped board and read the report
         local result = cmd_board.run("ship", { "--", "true" }, backend)
         testing.eq(result.code, 1, result.message)
         testing.ok(
@@ -229,6 +273,8 @@ if dev_os.which("jj") then
             ),
             result.message
         )
+
+        -- Check the card still moved to Done without a note
         local column, comments = state(home, id)
         testing.eq(column, support.COLUMN_NAME.DONE)
         testing.eq(#done_notes(comments), 0)
@@ -245,19 +291,23 @@ if dev_os.which("jj") then
     end
 
     local SYNC_TEMPLATES = table.concat({
-        "\n[sync]\ntemplates = [",
-        '"dotfiles/claude/.claude/skills/style/lint",',
-        '"dotfiles/claude/.claude/skills/style/lintset.lua",',
-        '"init/README.md"]\n',
-    }, " ")
+        "",
+        "[sync]",
+        'templates = [ "dotfiles/claude/.claude/skills/style/lint",'
+            .. ' "dotfiles/claude/.claude/skills/style/lintset.lua", "init/README.md"]',
+        "",
+    }, "\n")
 
     local function ship_template_run(path, sync)
-        local root, home = project(
-            '\n[board.release]\nchecks = ["true"]\n' .. (sync == nil and SYNC_TEMPLATES or sync)
-        )
+        -- Start a project whose config may list sync templates
+        local root, home = project(PASSING_RELEASE .. (sync == nil and SYNC_TEMPLATES or sync))
         must(dev(root, home, { "board", "init" }))
+
+        -- Land a ticked card that touched the path
         local id = release_card(root, home, "First", { "It works" }, push_file(root, path))
         tick(root, home, id)
+
+        -- Ship the board
         local out, code = dev(root, home, { "board", "ship" })
         testing.eq(code, 0, out)
         return out
@@ -281,7 +331,12 @@ if dev_os.which("jj") then
     end)
 
     testing.test("ship lists the templates sync.templates names", function()
-        local sync = '\n[sync]\ntemplates = ["docs/other.md"]\n'
+        local sync = table.concat({
+            "",
+            "[sync]",
+            'templates = ["docs/other.md"]',
+            "",
+        }, "\n")
         local out = ship_template_run("docs/other.md", sync)
         testing.ok(out:find("The dev sync templates changed.", 1, true), out)
         testing.ok(out:find("  docs/other.md", 1, true), out)
@@ -300,6 +355,7 @@ if dev_os.which("jj") then
     end)
 
     testing.test("ship runs the release command with DEV_CI_PRIORITY set to 1", function()
+        -- Write a release check that records the priority variable
         local dir = support.tempdir()
         local mark = dir .. "/priority"
         local script = dir .. "/prio.sh"
@@ -310,10 +366,22 @@ if dev_os.which("jj") then
         }, "\n")
         assert(fs.write(script, body))
         must(dev_os.run({ "chmod", "755", script }))
-        local root, home = project('\n[board.release]\nchecks = ["' .. script .. '"]\n')
+
+        -- Start a project whose release row runs that check
+        local config = table.concat({
+            "",
+            "[board.release]",
+            'checks = ["' .. script .. '"]',
+            "",
+        }, "\n")
+        local root, home = project(config)
         must(dev(root, home, { "board", "init" }))
+
+        -- Land a ticked card in Release
         local id = release_card(root, home, "First", { "It works" })
         tick(root, home, id)
+
+        -- Ship the board and read what the check saw
         local out, code = dev(root, home, { "board", "ship" })
         testing.eq(code, 0, out)
         testing.eq(fs.read(mark), "1")
@@ -322,7 +390,12 @@ if dev_os.which("jj") then
     local function follow_script(root)
         local script = root .. "/.dev/commands/follow.sh"
         assert(fs.mkdir(fs.dirname(script), { parents = true }))
-        assert(fs.write(script, '#!/bin/sh\necho "followed $PWD"\n'), "write failed")
+        local body = table.concat({
+            "#!/bin/sh",
+            'echo "followed $PWD"',
+            "",
+        }, "\n")
+        assert(fs.write(script, body), "write failed")
         must(dev_os.run({ "chmod", "755", script }))
     end
 
@@ -333,11 +406,16 @@ if dev_os.which("jj") then
     end
 
     testing.test("ship.runs.the.project.follow.script.after.a.passing.ship", function()
-        local root, home = project('\n[board.release]\nchecks = ["true"]\n')
+        -- Start a project with a passing release row
+        local root, home = project(PASSING_RELEASE)
         must(dev(root, home, { "board", "init" }))
+
+        -- Land a ticked card in Release and give the project a follow command
         local id = release_card(root, home, "First", { "It works" })
         tick(root, home, id)
         follow_script(root)
+
+        -- Ship from a workspace on trunk
         local out, code = dev(trunk_workspace(root), home, { "board", "ship" })
         testing.eq(code, 0, out)
         testing.ok(out:find("followed " .. root, 1, true), out)
@@ -345,10 +423,13 @@ if dev_os.which("jj") then
     end)
 
     testing.test("ship.moves.a.clean.main.checkout.onto.trunk", function()
-        local root, home = project('\n[board.release]\nchecks = ["true"]\n')
+        -- Start a project with a ticked card in Release
+        local root, home = project(PASSING_RELEASE)
         must(dev(root, home, { "board", "init" }))
         local id = release_card(root, home, "First", { "It works" })
         tick(root, home, id)
+
+        -- Push a newer trunk commit from another clone
         local remote = jj(root, "git", "remote", "list"):match("^origin (%S+)")
         local parent = assert(fs.realpath(support.tempdir()))
         local other = parent .. "/other"
@@ -362,6 +443,8 @@ if dev_os.which("jj") then
         git("commit", "-q", "-m", "later")
         git("push", "-q", "origin", "master")
         local trunk = dev_os.capture({ "git", "-C", other, "rev-parse", "HEAD" }):gsub("\n$", "")
+
+        -- Fetch it and ship from a workspace on the new trunk
         jj(root, "git", "fetch")
         local out, code = dev(trunk_workspace(root), home, { "board", "ship" })
         testing.eq(code, 0, out)
@@ -370,11 +453,14 @@ if dev_os.which("jj") then
     end)
 
     testing.test("ship.with.no.rev.stays.on.the.tested.commit.when.trunk.moves", function()
-        local root, home = project('\n[board.release]\nchecks = ["true"]\n')
+        -- Start a project with a ticked card in Release
+        local root, home = project(PASSING_RELEASE)
         must(dev(root, home, { "board", "init" }))
         local id = release_card(root, home, "First", { "It works" })
         tick(root, home, id)
         local tested = trunk_commit(root)
+
+        -- Stage a newer commit in another clone
         local remote = jj(root, "git", "remote", "list"):match("^origin (%S+)")
         local parent = assert(fs.realpath(support.tempdir()))
         local other = parent .. "/other"
@@ -386,31 +472,51 @@ if dev_os.which("jj") then
         end
         git("add", "later.txt")
         git("commit", "-q", "-m", "later")
+
+        -- Ship with a command that pushes the commit while the rows run
         local push = "git -C " .. dev_os.quote(other) .. " push -q origin master"
         local out, code = dev(root, home, { "board", "ship", "--", "sh", "-c", push })
         testing.eq(code, 0, out)
         testing.eq((state(home, id)), support.COLUMN_NAME.DONE)
+
+        -- Check the checkout stayed on the tested commit
         testing.ok(out:find(root .. " is on " .. tested:sub(1, 12), 1, true), out)
         testing.eq(jj(root, "log", "-r", "@-", "--no-graph", "-T", "commit_id"), tested)
         testing.eq(fs.exists(root .. "/later.txt"), false)
     end)
 
     testing.test("ship.skips.follow.when.a.release.row.fails", function()
-        local root, home = project('\n[board.release]\nchecks = ["false"]\n')
+        -- Start a project whose release row fails
+        local root, home = project(FAILING_RELEASE)
         must(dev(root, home, { "board", "init" }))
+
+        -- Land a ticked card in Release and give the project a follow command
         local id = release_card(root, home, "First", { "It works" })
         tick(root, home, id)
         follow_script(root)
+
+        -- Ship the board
         local out, code = dev(root, home, { "board", "ship" })
         testing.eq(code, 1, out)
         testing.eq(out:find("followed", 1, true), nil, out)
     end)
 
     testing.test("ship with a failing row moves no card and names the row", function()
-        local root, home = project('\n[board.release]\nchecks = ["true", "false"]\n')
+        -- Start a project whose second release row fails
+        local config = table.concat({
+            "",
+            "[board.release]",
+            'checks = ["true", "false"]',
+            "",
+        }, "\n")
+        local root, home = project(config)
         must(dev(root, home, { "board", "init" }))
+
+        -- Land a ticked card in Release
         local id = release_card(root, home, "First", { "It works" })
         tick(root, home, id)
+
+        -- Ship the board
         local out, code = dev(root, home, { "board", "ship" })
         testing.eq(code, 1, out)
         testing.ok(out:find("No card moved", 1, true), out)
@@ -419,11 +525,19 @@ if dev_os.which("jj") then
         testing.eq(#done_notes(select(2, state(home, id))), 0)
     end)
 
-    local SHIP_ROOTS = '\n[board.ship]\nsource_roots = ["lua/"]\n'
+    local SHIP_ROOTS = table.concat({
+        "",
+        "[board.ship]",
+        'source_roots = ["lua/"]',
+        "",
+    }, "\n")
 
     local function red_ship(failing, landed, extra)
+        -- Start a project that names its source roots
         local root, home = project(extra or SHIP_ROOTS)
         must(dev(root, home, { "board", "init" }))
+
+        -- Land each change, as a ticked card when it has a name
         local pushed = {}
         for _, card in ipairs(landed) do
             if card.name then
@@ -440,6 +554,8 @@ if dev_os.which("jj") then
                 push_file(root, card.path, card.text)
             end
         end
+
+        -- Ship with a command that fails and check no card moved
         local echo = "echo " .. (failing and "FAIL " .. failing or "no failure line") .. "; exit 1"
         local out, code = dev(root, home, { "board", "ship", "--", "sh", "-c", echo })
         testing.eq(code, 1, out)
@@ -553,13 +669,23 @@ if dev_os.which("jj") then
     end)
 
     local RED_FILE = "tests/lua/x_test.lua"
-    local REVERT_NOW = "\n[board.release]\nrevert_after = 0\n"
+    local REVERT_NOW = table.concat({
+        "",
+        "[board.release]",
+        "revert_after = 0",
+        "",
+    }, "\n")
 
     local function red_card(extra)
+        -- Start a project with the given release config
         local root, home = project(extra)
         must(dev(root, home, { "board", "init" }))
+
+        -- Land a change to the red file as a Release card
         local landed = push_file(root, RED_FILE)
         local id = release_card(root, home, "Touched", READY_OUTCOMES, landed)
+
+        -- Give the card its checks and tick every outcome
         must(dev(root, home, { "board", "checks", id, READY_CHECKS }))
         for n = 1, #READY_OUTCOMES do
             must(
@@ -626,27 +752,37 @@ if dev_os.which("jj") then
     end)
 
     testing.test("ship.keeps.a.reverted.card.in.release.until.its.revert.lands", function()
+        -- Revert a suspect that is red twice
         local root, home, id = red_card(REVERT_NOW)
         red_ship_again(root, home)
         red_ship_again(root, home)
         testing.eq((state(home, id)), support.COLUMN_NAME.RELEASE)
         testing.ok(dev(root, home, { "board", "show", id }):find("[x]", 1, true), "outcomes ticked")
+
+        -- Ship again before the revert lands on trunk
         jj(root, "new", "master@origin")
         local out, code = dev(root, home, { "board", "ship", "--", "true" })
         testing.eq(code, 0, out)
+
+        -- Check the card kept its place and its ticks
         testing.ok(out:find("has not landed", 1, true), out)
         testing.eq((state(home, id)), support.COLUMN_NAME.RELEASE)
         testing.ok(dev(root, home, { "board", "show", id }):find("[x]", 1, true), "outcomes ticked")
     end)
 
     testing.test("ship.names.no.suspect.for.a.card.with.a.pending.revert", function()
+        -- Revert a suspect that is red twice
         local root, home, id = red_card(REVERT_NOW)
         red_ship_again(root, home)
         red_ship_again(root, home)
+
+        -- Ship red again before the revert lands on trunk
         jj(root, "new", "master@origin")
         local out, code = red_ship_again(root, home)
         testing.eq(code, 1, out)
         testing.eq(out:find("until it lands", 1, true), nil)
+
+        -- Check the card got one revert note and kept its place
         local reverts = 0
         for _, comment in ipairs(select(2, state(home, id))) do
             if comment.body:find("^Reverted landed commit") then
@@ -658,11 +794,16 @@ if dev_os.which("jj") then
     end)
 
     testing.test("ship.requeues.a.card.whose.revert.landed", function()
+        -- Revert a suspect that is red twice
         local root, home, id = red_card(REVERT_NOW)
         red_ship_again(root, home)
         red_ship_again(root, home)
+
+        -- Land the revert on trunk
         jj(root, "bookmark", "set", "master", "-r", "@-")
         jj(root, "git", "push", "--remote", "origin", "--bookmark", "master")
+
+        -- Ship and check the card returned to Ready with its ticks cleared
         local out, code = dev(root, home, { "board", "ship", "--", "true" })
         testing.eq(code, 0, out)
         testing.eq((state(home, id)), support.COLUMN_NAME.READY)
@@ -671,12 +812,17 @@ if dev_os.which("jj") then
     end)
 
     testing.test("ship.leaves.a.suspect.red.on.a.different.case", function()
+        -- Ship red on one case, then on another
         local root, home, id = red_card(REVERT_NOW)
         red_ship_again(root, home, "first case")
         local out, code = red_ship_again(root, home, "other case")
+
+        -- Check the card is noted again and not reverted
         testing.eq(code, 1, out)
         testing.ok(out:find("First red, so the card is noted.", 1, true), out)
         testing.eq((state(home, id)), support.COLUMN_NAME.RELEASE)
+
+        -- Check each note names its own case
         local bodies = red_bodies(home, id)
         testing.eq(#bodies, 2)
         testing.ok(bodies[1]:find(" on first case with this card", 1, true), bodies[1])
@@ -723,9 +869,14 @@ if dev_os.which("jj") then
     end)
 
     testing.test("ship.starts.a.suspect.over.when.it.lands.again", function()
+        -- Ship red once for a landed card
         local root, home, id = red_card(REVERT_NOW)
         red_ship_again(root, home)
+
+        -- Land the card again with a newer commit
         land_note(root, home, id, push_file(root, RED_FILE, "again\n"))
+
+        -- Ship red and check the card is noted as a first red
         local out, code = red_ship_again(root, home)
         testing.eq(code, 1, out)
         testing.ok(out:find("First red, so the card is noted.", 1, true), out)
@@ -734,10 +885,15 @@ if dev_os.which("jj") then
     end)
 
     testing.test("ship.leaves.a.suspect.whose.revert.conflicts", function()
+        -- Change the red file again after the card landed
         local root, home, id = red_card(REVERT_NOW)
         push_file(root, RED_FILE, "later\n")
+
+        -- Ship red twice
         red_ship_again(root, home)
         local out, code = red_ship_again(root, home)
+
+        -- Check the conflict is reported and nothing was reverted
         testing.eq(code, 1, out)
         testing.ok(out:find("conflicts with later changes", 1, true), out)
         testing.eq((state(home, id)), support.COLUMN_NAME.RELEASE)
@@ -748,10 +904,15 @@ if dev_os.which("jj") then
     end)
 
     testing.test("ship with a command runs it once in place of the rows", function()
-        local root, home = project('\n[board.release]\nchecks = ["false"]\n')
+        -- Start a project whose release row would fail
+        local root, home = project(FAILING_RELEASE)
         must(dev(root, home, { "board", "init" }))
+
+        -- Land a ticked card in Release
         local id = release_card(root, home, "First", { "It works" })
         tick(root, home, id)
+
+        -- Ship with a command that logs each run
         local log = support.tempdir() .. "/ran"
         local out, code = dev(root, home, { "board", "ship", "--", "sh", "-c", "echo x >>" .. log })
         testing.eq(code, 0, out)
@@ -760,10 +921,15 @@ if dev_os.which("jj") then
     end)
 
     testing.test("ship with neither a command nor rows refuses", function()
+        -- Start a project with no release rows
         local root, home = project()
         must(dev(root, home, { "board", "init" }))
+
+        -- Land a ticked card in Release
         local id = release_card(root, home, "First", { "It works" })
         tick(root, home, id)
+
+        -- Ship the board
         local out, code = dev(root, home, { "board", "ship" })
         testing.eq(code, 2, out)
         testing.ok(out:find("[board.release]", 1, true), out)
@@ -771,10 +937,15 @@ if dev_os.which("jj") then
     end)
 
     testing.test("ship with a bare -- refuses and does not run the rows", function()
-        local root, home = project('\n[board.release]\nchecks = ["true"]\n')
+        -- Start a project with a passing release row
+        local root, home = project(PASSING_RELEASE)
         must(dev(root, home, { "board", "init" }))
+
+        -- Land a ticked card in Release
         local id = release_card(root, home, "First", { "It works" })
         tick(root, home, id)
+
+        -- Ship with a dash and no command
         local out, code = dev(root, home, { "board", "ship", "--" })
         testing.eq(code, 2, out)
         testing.ok(out:find("Needs a command after --.", 1, true), out)
@@ -782,11 +953,16 @@ if dev_os.which("jj") then
     end)
 
     testing.test("ship writes no note for a refused move", function()
-        local root, home = project('\n[board.release]\nchecks = ["true"]\n')
+        -- Start a project with a passing release row
+        local root, home = project(PASSING_RELEASE)
         must(dev(root, home, { "board", "init" }))
+
+        -- Land a ticked card in Release that waits on the owner
         local id = release_card(root, home, "First", { "It works" })
         tick(root, home, id)
         label_owner_hold(home, id)
+
+        -- Ship twice and check each run refuses without a note
         for _ = 1, 2 do
             local out, code = dev(root, home, { "board", "ship" })
             testing.eq(code, 1, out)
@@ -798,13 +974,20 @@ if dev_os.which("jj") then
     end)
 
     testing.test("a ship rerun after a refused move writes one note", function()
-        local root, home = project('\n[board.release]\nchecks = ["true"]\n')
+        -- Start a project with a passing release row
+        local root, home = project(PASSING_RELEASE)
         must(dev(root, home, { "board", "init" }))
+
+        -- Land a ticked card in Release that waits on the owner
         local id = release_card(root, home, "First", { "It works" })
         tick(root, home, id)
         label_owner_hold(home, id)
+
+        -- Ship once and see the move refused
         local out, code = dev(root, home, { "board", "ship" })
         testing.eq(code, 1, out)
+
+        -- Release the hold, ship again and check the card moved with one note
         must(dev(root, home, { "board", "label", id, "--remove", "needs:human" }))
         out, code = dev(root, home, { "board", "ship" })
         testing.eq(code, 0, out)
@@ -813,20 +996,29 @@ if dev_os.which("jj") then
     end)
 
     testing.test("ship leaves a card landed after the rev in release", function()
-        local root, home = project('\n[board.release]\nchecks = ["true"]\n')
+        -- Start a project with a passing release row
+        local root, home = project(PASSING_RELEASE)
         must(dev(root, home, { "board", "init" }))
+
+        -- Land one card at the pinned commit and one after it
         local early = release_card(root, home, "Early", { "It works" })
         local pinned = trunk_commit(root)
         local late = release_card(root, home, "Late", { "It works" }, push_commit(root, "later"))
         tick(root, home, early)
         tick(root, home, late)
+
+        -- Ship at the pinned commit
         jj(root, "new", pinned)
         local out, code = dev(root, home, { "board", "ship", "--rev", pinned })
         testing.eq(code, 0, out)
+
+        -- Check the early card moved with a note naming the pinned commit
         testing.eq((state(home, early)), support.COLUMN_NAME.DONE)
         local notes = done_notes(select(2, state(home, early)))
         testing.eq(#notes, 1)
         testing.ok(notes[1]:find(pinned:sub(1, 12), 1, true), notes[1])
+
+        -- Check the late card stayed and the checkout sits on the pinned commit
         testing.eq((state(home, late)), support.COLUMN_NAME.RELEASE)
         testing.ok(out:find("These cards stay in Release:", 1, true), out)
         testing.ok(out:find(late:sub(1, 4), 1, true), out)
@@ -837,8 +1029,11 @@ if dev_os.which("jj") then
     end)
 
     testing.test("ship reads a pomb land note and moves the card", function()
-        local root, home = project('\n[board.release]\nchecks = ["true"]\n')
+        -- Start a project with a passing release row
+        local root, home = project(PASSING_RELEASE)
         must(dev(root, home, { "board", "init" }))
+
+        -- Land a card whose only note is a pomb land note
         local id = release_card(root, home, "Pomb", { "It works" }, false)
         must(
             dev(
@@ -848,18 +1043,25 @@ if dev_os.which("jj") then
             )
         )
         tick(root, home, id)
+
+        -- Ship the board
         local out, code = dev(root, home, { "board", "ship" })
         testing.eq(code, 0, out)
         testing.eq((state(home, id)), support.COLUMN_NAME.DONE)
     end)
 
     testing.test("ship reads the newest land note", function()
-        local root, home = project('\n[board.release]\nchecks = ["true"]\n')
+        -- Start a project with a passing release row
+        local root, home = project(PASSING_RELEASE)
         must(dev(root, home, { "board", "init" }))
+
+        -- Land a card at a newer commit and note an older landing last
         local pinned = trunk_commit(root)
         local id = release_card(root, home, "Twice", { "It works" }, push_commit(root, "later"))
         land_note(root, home, id, pinned)
         tick(root, home, id)
+
+        -- Ship at the older commit
         jj(root, "new", pinned)
         local out, code = dev(root, home, { "board", "ship", "--rev", pinned })
         testing.eq(code, 0, out)
@@ -867,11 +1069,16 @@ if dev_os.which("jj") then
     end)
 
     testing.test("ship refuses a working copy that differs from the rev", function()
-        local root, home = project('\n[board.release]\nchecks = ["true"]\n')
+        -- Start a project with a ticked card in Release
+        local root, home = project(PASSING_RELEASE)
         must(dev(root, home, { "board", "init" }))
         local id = release_card(root, home, "First", { "It works" })
         tick(root, home, id)
+
+        -- Dirty the working copy
         assert(fs.write(root .. "/extra.txt", "extra\n"), "write failed")
+
+        -- Ship with a command and check it never ran
         local log = support.tempdir() .. "/ran"
         local out, code = dev(root, home, { "board", "ship", "--", "sh", "-c", "echo x >>" .. log })
         testing.eq(code, 1, out)
@@ -881,12 +1088,17 @@ if dev_os.which("jj") then
     end)
 
     testing.test("ship refuses a working copy on an older trunk", function()
-        local root, home = project('\n[board.release]\nchecks = ["true"]\n')
+        -- Start a project with a passing release row
+        local root, home = project(PASSING_RELEASE)
         must(dev(root, home, { "board", "init" }))
+
+        -- Land a ticked card on a newer trunk and move the working copy back
         local pinned = trunk_commit(root)
         local id = release_card(root, home, "Late", { "It works" }, push_commit(root, "later"))
         tick(root, home, id)
         jj(root, "new", pinned)
+
+        -- Ship the board
         local out, code = dev(root, home, { "board", "ship" })
         testing.eq(code, 1, out)
         testing.ok(out:find("working copy is not at", 1, true), out)
@@ -894,10 +1106,15 @@ if dev_os.which("jj") then
     end)
 
     testing.test("ship leaves a card with no landed commit in release and says why", function()
-        local root, home = project('\n[board.release]\nchecks = ["true"]\n')
+        -- Start a project with a passing release row
+        local root, home = project(PASSING_RELEASE)
         must(dev(root, home, { "board", "init" }))
+
+        -- Put a ticked card in Release with no landing note
         local id = release_card(root, home, "Bare", { "It works" }, false)
         tick(root, home, id)
+
+        -- Ship the board
         local out, code = dev(root, home, { "board", "ship" })
         testing.eq(code, 0, out)
         testing.eq((state(home, id)), support.COLUMN_NAME.RELEASE)
@@ -905,7 +1122,7 @@ if dev_os.which("jj") then
     end)
 
     testing.test("ship names an unticked outcome as the reason", function()
-        local root, home = project('\n[board.release]\nchecks = ["true"]\n')
+        local root, home = project(PASSING_RELEASE)
         must(dev(root, home, { "board", "init" }))
         local id = release_card(root, home, "Open", { "It works" })
         local out, code = dev(root, home, { "board", "ship" })
@@ -915,18 +1132,23 @@ if dev_os.which("jj") then
     end)
 
     testing.test("ship takes --rev with a command", function()
+        -- Start a project with no release rows
         local root, home = project()
         must(dev(root, home, { "board", "init" }))
+
+        -- Land a ticked card at the pinned commit
         local pinned = trunk_commit(root)
         local id = release_card(root, home, "First", { "It works" })
         tick(root, home, id)
+
+        -- Ship at that commit with a command
         local out, code = dev(root, home, { "board", "ship", "--rev", pinned, "--", "true" })
         testing.eq(code, 0, out)
         testing.eq((state(home, id)), support.COLUMN_NAME.DONE)
     end)
 
     testing.test("ship with --rev and a bare -- refuses", function()
-        local root, home = project('\n[board.release]\nchecks = ["true"]\n')
+        local root, home = project(PASSING_RELEASE)
         must(dev(root, home, { "board", "init" }))
         local out, code = dev(root, home, { "board", "ship", "--rev", "master@origin", "--" })
         testing.eq(code, 2, out)
@@ -934,10 +1156,15 @@ if dev_os.which("jj") then
     end)
 
     testing.test("ship with an unreadable rev moves no card", function()
-        local root, home = project('\n[board.release]\nchecks = ["true"]\n')
+        -- Start a project with a passing release row
+        local root, home = project(PASSING_RELEASE)
         must(dev(root, home, { "board", "init" }))
+
+        -- Land a ticked card in Release
         local id = release_card(root, home, "First", { "It works" })
         tick(root, home, id)
+
+        -- Ship at a rev that does not exist
         local out, code = dev(root, home, { "board", "ship", "--rev", "nosuchrev" })
         testing.eq(code, 1, out)
         testing.eq((state(home, id)), support.COLUMN_NAME.RELEASE)
@@ -965,19 +1192,34 @@ local function git_head(root)
 end
 
 local function git_project(revert_after)
+    -- Sandbox the project with a local board config
+    local lines = {
+        "[board]",
+        'backend = "local"',
+        'name = "' .. BOARD .. '"',
+        "[board.release]",
+        'checks = ["true"]',
+    }
+    if revert_after then
+        lines[#lines + 1] = "revert_after = " .. revert_after
+    end
+    lines[#lines + 1] = ""
     local root = support.sandbox({
-        [".dev/config.toml"] = '[board]\nbackend = "local"\nname = "'
-            .. BOARD
-            .. '"\n[board.release]\nchecks = ["true"]\n'
-            .. (revert_after and "revert_after = " .. revert_after .. "\n" or ""),
+        [".dev/config.toml"] = table.concat(lines, "\n"),
     }, {})
+
+    -- Give the project an empty user config
     local home = support.tempdir()
     assert(fs.mkdir(home .. "/.config/dev", { parents = true }), "mkdir failed")
     assert(fs.write(home .. "/.config/dev/config.toml", ""), "write failed")
+
+    -- Make the bare remote and a git repo that points at it
     local bare = assert(fs.realpath(support.tempdir()))
     must(dev_os.run({ "git", "init", "--bare", "-q", "-b", "master", bare }, { stdout = "null" }))
     must(dev_os.run({ "git", "init", "-q", "-b", "master", root }, { stdout = "null" }))
     git(root, "remote", "add", "origin", bare)
+
+    -- Push a seed commit as trunk
     assert(fs.write(root .. "/seed.txt", "seed\n"), "write failed")
     git(root, "add", "seed.txt", ".dev")
     git(root, "commit", "-q", "-m", "base")
@@ -995,6 +1237,8 @@ end
 
 local function git_release_card(root, home, name, landed, outcomes)
     outcomes = outcomes or { "It works" }
+
+    -- Build the add command with one flag per outcome
     local argv = {
         "board",
         "add",
@@ -1012,9 +1256,13 @@ local function git_release_card(root, home, name, landed, outcomes)
         argv[#argv + 1] = "--done-when"
         argv[#argv + 1] = outcome
     end
+
+    -- Add the card and move it into Release
     local out = dev(root, home, argv)
     local id = assert(out:match("added (%x+)"), out)
     support.place(support.board_file(home, BOARD), id, support.COLUMN_NAME.RELEASE)
+
+    -- Note the landing and tick every outcome
     land_note(root, home, id, landed)
     for n = 1, #outcomes do
         must(dev(root, home, { "board", "outcome", id, "--tick", tostring(n), "--as", "verifier" }))
@@ -1023,12 +1271,17 @@ local function git_release_card(root, home, name, landed, outcomes)
 end
 
 testing.test("ship.in.a.git.project.moves.a.card.landed.in.trunk", function()
+    -- Start a git project with a card landed on trunk
     local root, home = git_project()
     must(dev(root, home, { "board", "init" }))
     local id = git_release_card(root, home, "First", git_head(root))
     local trunk = git_head(root)
+
+    -- Ship the board
     local out, code = dev(root, home, { "board", "ship" })
     testing.eq(code, 0, out)
+
+    -- Check the card moved to Done with one note naming trunk
     testing.eq((state(home, id)), support.COLUMN_NAME.DONE)
     local notes = done_notes(select(2, state(home, id)))
     testing.eq(#notes, 1)
@@ -1037,14 +1290,19 @@ testing.test("ship.in.a.git.project.moves.a.card.landed.in.trunk", function()
 end)
 
 testing.test("ship.in.a.git.project.leaves.a.card.landed.after.the.rev", function()
+    -- Start a git project with one card at the pinned commit and one after it
     local root, home = git_project()
     must(dev(root, home, { "board", "init" }))
     local pinned = git_head(root)
     local early = git_release_card(root, home, "Early", pinned)
     local late = git_release_card(root, home, "Late", git_push_commit(root, "later"))
+
+    -- Ship at the pinned commit
     git(root, "checkout", "-q", "--detach", pinned)
     local out, code = dev(root, home, { "board", "ship", "--rev", pinned })
     testing.eq(code, 0, out)
+
+    -- Check only the early card moved
     testing.eq((state(home, early)), support.COLUMN_NAME.DONE)
     testing.eq((state(home, late)), support.COLUMN_NAME.RELEASE)
     testing.ok(out:find("is not in", 1, true), out)
@@ -1052,21 +1310,28 @@ testing.test("ship.in.a.git.project.leaves.a.card.landed.after.the.rev", functio
 end)
 
 testing.test("ship.reverts.a.suspect.in.a.git.project", function()
+    -- Start a git project with a landed card whose checks are set
     local root, home = git_project(0)
     must(dev(root, home, { "board", "init" }))
     local landed = git_push_commit(root, "g_test")
     local id = git_release_card(root, home, "Touched", landed, READY_OUTCOMES)
     must(dev(root, home, { "board", "checks", id, READY_CHECKS }))
+
+    -- Ship red once and see the card noted
     local echo = "echo FAIL g_test.txt; exit 1"
     local out, code = dev(root, home, { "board", "ship", "--", "sh", "-c", echo })
     testing.eq(code, 1, out)
     testing.ok(out:find("First red, so the card is noted.", 1, true), out)
+
+    -- Ship red again and see the card reverted
     out, code = dev(root, home, { "board", "ship", "--", "sh", "-c", echo })
     testing.eq(code, 1, out)
     testing.ok(out:find("until it lands", 1, true), out)
     testing.eq((state(home, id)), support.COLUMN_NAME.RELEASE)
     local subject = dev_os.capture({ "git", "-C", root, "log", "-1", "--format=%s" })
     testing.ok(subject:find("Revert", 1, true), subject)
+
+    -- Land the revert and check the card returned to Ready
     git(root, "push", "-q", "origin", "master")
     out, code = dev(root, home, { "board", "ship" })
     testing.eq(code, 0, out)
@@ -1075,15 +1340,22 @@ testing.test("ship.reverts.a.suspect.in.a.git.project", function()
 end)
 
 testing.test("ship.leaves.a.suspect.whose.git.revert.conflicts", function()
+    -- Start a git project with a landed card
     local root, home = git_project(0)
     must(dev(root, home, { "board", "init" }))
     local id = git_release_card(root, home, "Touched", git_push_commit(root, "g_test"))
+
+    -- Change the same file again after the card landed
     assert(fs.write(root .. "/g_test.txt", "later\n"), "write failed")
     git(root, "commit", "-q", "-am", "later edit")
     git(root, "push", "-q", "origin", "master")
+
+    -- Ship red twice
     local echo = "echo FAIL g_test.txt; exit 1"
     dev(root, home, { "board", "ship", "--", "sh", "-c", echo })
     local out, code = dev(root, home, { "board", "ship", "--", "sh", "-c", echo })
+
+    -- Check the conflict is reported and the tree is untouched
     testing.eq(code, 1, out)
     testing.ok(out:find("conflicts with later changes", 1, true), out)
     testing.eq((state(home, id)), support.COLUMN_NAME.RELEASE)
@@ -1093,22 +1365,30 @@ testing.test("ship.leaves.a.suspect.whose.git.revert.conflicts", function()
 end)
 
 testing.test("ship.reverts.suspects.newest.landed.first.by.short.commit.id", function()
+    -- Start a git project with two commits that both touch the red file
     local root, home = git_project(0)
     must(dev(root, home, { "board", "init" }))
     local older = git_push_commit(root, "g_test")
-    assert(fs.write(root .. "/g_test.txt", "g_test\nmore\n"), "write failed")
+    local more = table.concat({ "g_test", "more", "" }, "\n")
+    assert(fs.write(root .. "/g_test.txt", more), "write failed")
     git(root, "commit", "-q", "-am", "newer edit")
     git(root, "push", "-q", "origin", "master")
     local newer = git_head(root)
+
+    -- Land a card for each of them and one for an unrelated commit
     local old_id = git_release_card(root, home, "Older", older:sub(1, 12), READY_OUTCOMES)
     local new_id = git_release_card(root, home, "Newer", newer:sub(1, 12), READY_OUTCOMES)
     local other = git_push_commit(root, "bystander")
     local other_id = git_release_card(root, home, "Bystander", other:sub(1, 12), READY_OUTCOMES)
     must(dev(root, home, { "board", "checks", old_id, READY_CHECKS }))
     must(dev(root, home, { "board", "checks", new_id, READY_CHECKS }))
+
+    -- Ship red twice
     local echo = "echo FAIL g_test.txt; exit 1"
     dev(root, home, { "board", "ship", "--", "sh", "-c", echo })
     local out, code = dev(root, home, { "board", "ship", "--", "sh", "-c", echo })
+
+    -- Check the newest card was reverted first and the bystander was spared
     testing.eq(code, 1, out)
     testing.ok(state(home, new_id) == support.COLUMN_NAME.RELEASE, out)
     testing.ok(state(home, old_id) == support.COLUMN_NAME.RELEASE, out)
@@ -1118,20 +1398,28 @@ testing.test("ship.reverts.suspects.newest.landed.first.by.short.commit.id", fun
 end)
 
 testing.test("ship.names.no.suspect.when.every.card.matches", function()
+    -- Start a git project with two commits that both touch the red file
     local root, home = git_project(0)
     must(dev(root, home, { "board", "init" }))
     local first = git_push_commit(root, "g_test")
-    assert(fs.write(root .. "/g_test.txt", "g_test\nmore\n"), "write failed")
+    local more = table.concat({ "g_test", "more", "" }, "\n")
+    assert(fs.write(root .. "/g_test.txt", more), "write failed")
     git(root, "commit", "-q", "-am", "second edit")
     git(root, "push", "-q", "origin", "master")
     local second = git_head(root)
+
+    -- Land a card for each of them
     local a_id = git_release_card(root, home, "First", first:sub(1, 12), READY_OUTCOMES)
     local b_id = git_release_card(root, home, "Second", second:sub(1, 12), READY_OUTCOMES)
+
+    -- Ship red and check no card is named a suspect
     local echo = "echo FAIL g_test.txt; exit 1"
     local out, code = dev(root, home, { "board", "ship", "--", "sh", "-c", echo })
     testing.eq(code, 1, out)
     testing.ok(out:find("Every landed card matches the failing files", 1, true), out)
     testing.eq(out:find("First red", 1, true), nil)
+
+    -- Ship red again and check neither card was noted
     dev(root, home, { "board", "ship", "--", "sh", "-c", echo })
     testing.eq((state(home, a_id)), support.COLUMN_NAME.RELEASE)
     testing.eq((state(home, b_id)), support.COLUMN_NAME.RELEASE)
@@ -1140,10 +1428,13 @@ testing.test("ship.names.no.suspect.when.every.card.matches", function()
 end)
 
 testing.test("ship.in.a.git.project.refuses.a.head.off.the.rev", function()
+    -- Start a git project with a card landed after the pinned commit
     local root, home = git_project()
     must(dev(root, home, { "board", "init" }))
     local pinned = git_head(root)
     local id = git_release_card(root, home, "Late", git_push_commit(root, "later"))
+
+    -- Move HEAD back to the pinned commit and ship
     git(root, "checkout", "-q", "--detach", pinned)
     local out, code = dev(root, home, { "board", "ship" })
     testing.eq(code, 1, out)

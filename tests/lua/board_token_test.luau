@@ -23,11 +23,22 @@ local CREATED = '{"name":"'
     .. ',"raw_token":"'
     .. RAW
     .. '"}'
-local function user_config(url)
-    return '[board.pomb]\nurl = "'
-        .. url
-        .. '"\ntoken = "pass:secrets/worker/token/pomb"\n'
-        .. 'lead_token = "pass:secrets/lead/token/pomb"\n'
+local function user_config(url, extra)
+    local lines = {
+        "[board.pomb]",
+        'url = "' .. url .. '"',
+        'token = "pass:secrets/worker/token/pomb"',
+        'lead_token = "pass:secrets/lead/token/pomb"',
+    }
+    for _, line in ipairs(extra or {}) do
+        lines[#lines + 1] = line
+    end
+    lines[#lines + 1] = ""
+    return table.concat(lines, "\n")
+end
+
+local function token_text(token, expires)
+    return table.concat({ token, expires, "" }, "\n")
 end
 
 local SERVERS = {}
@@ -35,13 +46,18 @@ local URLS = {}
 
 ---Make the server answer the way the old curl stub answered, from the control files in `root`.
 local function sync(root, swap_to)
+    -- Read the control files the test left in the root
     local function control(name)
         return fs.read(root .. "/" .. name)
     end
+
+    -- Refuse every request when the test asks for it
     local routes = {}
     if fs.exists(root .. "/refuse") then
         routes[#routes + 1] = { path = "*", status = 401, body = '{"message":"bad"}' }
     end
+
+    -- Expire the token the test names and optionally swap the token file
     local expire = control("expire")
     if expire then
         local route = {
@@ -55,6 +71,8 @@ local function sync(root, swap_to)
         end
         routes[#routes + 1] = route
     end
+
+    -- Route the child token endpoints from the control files
     local children_status = tonumber((control("children_status"))) or 200
     local revoke = control("revoke.json") or "{}"
     local listing = control("list.json")
@@ -76,6 +94,8 @@ local function sync(root, swap_to)
         status = tonumber((control("post_status"))) or children_status,
         body = created,
     }
+
+    -- Answer the board, whoami and role routes with fixed bodies
     local plain = {
         { "/api/boards", '[{"id":"board-1","name":"dotfiles","archived":false}]' },
         {
@@ -88,6 +108,8 @@ local function sync(root, swap_to)
     for _, entry in ipairs(plain) do
         routes[#routes + 1] = { path = entry[1], body = entry[2] }
     end
+
+    -- Answer anything else with an empty object and install the routes
     routes[#routes + 1] = { path = "*", body = "{}" }
     SERVERS[root]:set(routes)
 end
@@ -103,34 +125,50 @@ local function executable(path, body)
 end
 
 local function sandbox()
+    -- Sandbox the project on a pomb board served by a fake server
+    local config = table.concat({
+        "[board]",
+        'backend = "pomb"',
+        'name = "dotfiles"',
+        "",
+    }, "\n")
     local root = support.sandbox({
-        [".dev/config.toml"] = '[board]\nbackend = "pomb"\nname = "dotfiles"\n',
+        [".dev/config.toml"] = config,
     }, {})
     local home = support.tempdir()
     SERVERS[root] = support.fake_http({})
     URLS[home] = SERVERS[root].url
+
+    -- Give the user a config that points at the server and seed the control files
     assert(fs.mkdir(home .. "/.config/dev", { parents = true }))
     assert(fs.write(home .. "/.config/dev/config.toml", user_config(SERVERS[root].url)))
     assert(fs.write(root .. "/roles.json", ROLES))
     assert(fs.write(root .. "/children.json", CREATED))
-    executable(root .. "/bin/security", "#!/bin/sh\nexit 1\n")
+
+    -- Stub the credential helpers so each role finds its own standing token
+    executable(root .. "/bin/security", table.concat({ "#!/bin/sh", "exit 1", "" }, "\n"))
     executable(
         root .. "/bin/pass",
-        '#!/bin/sh\nprintf "pass %s\\n" "$*" >>"$ROOT/calls"\n'
-            .. 'case "$*" in *lead*) echo "'
-            .. LEAD
-            .. '" ;; *reviewer*) echo "'
-            .. STANDING
-            .. '" ;; *verifier*) echo "'
-            .. VERIFIER_STANDING
-            .. '" ;; *) echo "'
-            .. WORKER
-            .. '" ;; esac\n'
+        table.concat({
+            "#!/bin/sh",
+            'printf "pass %s\\n" "$*" >>"$ROOT/calls"',
+            'case "$*" in *lead*) echo "'
+                .. LEAD
+                .. '" ;; *reviewer*) echo "'
+                .. STANDING
+                .. '" ;; *verifier*) echo "'
+                .. VERIFIER_STANDING
+                .. '" ;; *) echo "'
+                .. WORKER
+                .. '" ;; esac',
+            "",
+        }, "\n")
     )
     return root, home
 end
 
 local function dev(root, home, args, opts)
+    -- Build the environment for the agent the test runs as
     opts = opts or {}
     local env = {
         HOME = home,
@@ -141,9 +179,13 @@ local function dev(root, home, args, opts)
         DEV_AGENT = opts.agent or "dotfiles/lead/1",
         DEV_PASS_LOCK = root .. "/pass.lock",
     }
+
+    -- Let the test override any variable
     for name, value in pairs(opts.env or {}) do
         env[name] = value
     end
+
+    -- Point the server at the control files and run dev
     sync(root, env.SWAPTO)
     return support.dev(root, args, { env = env })
 end
@@ -283,6 +325,7 @@ testing.test(
 testing.test(
     "token-mint-silent never prints the token or puts it in a request line or a pass argument",
     function()
+        -- Mint a token and look for the new secret in every output
         local root, home = sandbox()
         local out, code = mint(root, home)
         testing.ok(code == 0, out)
@@ -290,8 +333,12 @@ testing.test(
         testing.eq(read(root, "calls"):find(RAW, 1, true), nil)
         testing.eq(requests(root):find(RAW, 1, true), nil)
         testing.eq(targets(root):find(RAW, 1, true), nil)
+
+        -- Look for the lead token in the pass calls and the request lines
         testing.eq(occurrences(read(root, "calls"), LEAD), 0)
         testing.eq(occurrences(targets(root), LEAD), 0)
+
+        -- Mint through a refusal that echoes the secret and look again
         assert(fs.write(root .. "/children_status", "409"))
         assert(fs.write(root .. "/children.json", '{"message":"' .. RAW .. '"}'))
         out = mint(root, home)
@@ -300,11 +347,14 @@ testing.test(
 )
 
 testing.test("token-mint-file writes a 0600 file in a 0700 dir named by a hash of NAME", function()
+    -- Mint with a runtime directory
     local root, home = sandbox()
     local runtime = root .. "/run"
     assert(fs.mkdir(runtime, { parents = true }))
     local out, code = mint(root, home, { runtime = runtime })
     testing.ok(code == 0, out)
+
+    -- Check the file sits under the runtime directory with the right modes and content
     local dir = runtime .. "/dev/tokens"
     local files = token_files(dir)
     testing.eq(#files, 1)
@@ -312,7 +362,9 @@ testing.test("token-mint-file writes a 0600 file in a 0700 dir named by a hash o
     testing.eq(files[1]:find("implementer", 1, true), nil)
     testing.eq(mode_of(dir), tonumber("700", 8))
     testing.eq(mode_of(dir .. "/" .. files[1]), tonumber("600", 8))
-    testing.eq(fs.read(dir .. "/" .. files[1]), RAW .. "\n" .. EXPIRES .. "\n")
+    testing.eq(fs.read(dir .. "/" .. files[1]), token_text(RAW, EXPIRES))
+
+    -- Mint without one and check the file sits under the state home
     root, home = sandbox()
     out, code = mint(root, home)
     testing.ok(code == 0, out)
@@ -324,29 +376,39 @@ testing.test("token-mint-file writes a 0600 file in a 0700 dir named by a hash o
 end)
 
 testing.test("a token file write that cannot make its directory returns the make reason", function()
+    -- Point the token directories at a state home that holds a file where a directory goes
     local previous_state = dev_os.getenv("XDG_STATE_HOME") or ""
     local previous_runtime = dev_os.getenv("XDG_RUNTIME_DIR") or ""
     local state = support.tempdir()
     dev_os.setenv("XDG_RUNTIME_DIR", "")
     dev_os.setenv("XDG_STATE_HOME", state)
     assert(fs.write(state .. "/dev", "not a directory"))
+
+    -- Write a token file
     local ok, message, reason, detail = tokenfile.write(NAME, RAW, EXPIRES)
     local dir = tokenfile.dir()
+
+    -- Restore the environment and check the reason names the directory
     dev_os.setenv("XDG_STATE_HOME", previous_state)
     dev_os.setenv("XDG_RUNTIME_DIR", previous_runtime)
     testing.eq({ ok, message, reason, detail }, { nil, nil, board.FileReason.MAKE_DIR, dir })
 end)
 
 testing.test("token-mint-write-failure revokes the token it just issued", function()
+    -- Block the state directory and list the child Pomb would issue
     local root, home = sandbox()
     assert(fs.mkdir(home .. "/state", { parents = true }))
     assert(fs.write(home .. "/state/dev", "not a directory"))
     assert(fs.write(root .. "/list.json", '[{"id":"tok-child-9","name":"' .. NAME .. '"}]'))
+
+    -- Mint and see the failure with the revoke note
     local out, code = mint(root, home)
     testing.ok(code == 1, out)
     testing.ok(out:find("Cannot make ", 1, true), out)
     testing.ok(out:find("The token was revoked.", 1, true), out)
     testing.eq(out:find("..", 1, true), nil, out)
+
+    -- Check Pomb was asked to delete the child and never saw the secret
     local calls = requests(root)
     testing.ok(calls:find("DELETE /", 1, true), calls)
     testing.ok(calls:find("/api/v1/auth/tokens/children/tok-child-9 body=", 1, true), calls)
@@ -367,9 +429,8 @@ testing.test("token-mint-write-none says Pomb listed no token to revoke", functi
 end)
 
 testing.test("token-mint-write-and-delete-both-fail names the revoke once", function()
-    local root, home = sandbox()
-
     -- Resolve the token file path under the sandbox state home
+    local root, home = sandbox()
     local previous_state = dev_os.getenv("XDG_STATE_HOME") or ""
     local previous_runtime = dev_os.getenv("XDG_RUNTIME_DIR") or ""
     dev_os.setenv("XDG_RUNTIME_DIR", "")
@@ -417,14 +478,19 @@ testing.test("token-mint-write-stays says the token stays issued when the revoke
 end)
 
 testing.test("token-read-junk returns the not-a-token-file reason and the path", function()
+    -- Point the token directories at a fresh state home
     local previous_state = dev_os.getenv("XDG_STATE_HOME") or ""
     local previous_runtime = dev_os.getenv("XDG_RUNTIME_DIR") or ""
     dev_os.setenv("XDG_RUNTIME_DIR", "")
     dev_os.setenv("XDG_STATE_HOME", support.tempdir())
+
+    -- Read a token file that holds only junk
     assert(fs.mkdir(tokenfile.dir(), { parents = true }))
     local path = assert(tokenfile.path(NAME))
     assert(fs.write(path, "junk\n"))
     local found, message, reason, detail = tokenfile.read(NAME)
+
+    -- Restore the environment and check the reason names the path
     dev_os.setenv("XDG_STATE_HOME", previous_state)
     dev_os.setenv("XDG_RUNTIME_DIR", previous_runtime)
     testing.eq(
@@ -434,13 +500,18 @@ testing.test("token-read-junk returns the not-a-token-file reason and the path",
 end)
 
 testing.test("token-mint-sweep deletes expired token files and keeps live ones", function()
+    -- Leave an expired token file and a live one in the token directory
     local root, home = sandbox()
     local dir = home .. "/state/dev/tokens"
     assert(fs.mkdir(dir, { parents = true }))
-    assert(fs.write(dir .. "/expired", "pomb_OLD0123456789\n1\n"))
-    assert(fs.write(dir .. "/live", "pomb_LIVE0123456789\n" .. EXPIRES .. "\n"))
+    assert(fs.write(dir .. "/expired", token_text("pomb_OLD0123456789", 1)))
+    assert(fs.write(dir .. "/live", token_text("pomb_LIVE0123456789", EXPIRES)))
+
+    -- Mint a new token
     local out, code = mint(root, home)
     testing.ok(code == 0, out)
+
+    -- Check only the expired file was swept
     testing.eq(fs.exists(dir .. "/expired"), false)
     testing.eq(fs.exists(dir .. "/live"), true)
     testing.eq(#token_files(dir), 2)
@@ -452,9 +523,9 @@ testing.test(
         local root, home = sandbox()
         local dir = home .. "/state/dev/tokens"
         assert(fs.mkdir(dir, { parents = true }))
-        assert(fs.write(dir .. "/expired", "pomb_OLD0123456789\n1\n"))
-        assert(fs.write(dir .. "/soon", "pomb_SOON0123456789\n" .. os.time() + 600 .. "\n"))
-        assert(fs.write(dir .. "/live", "pomb_LIVE0123456789\n" .. EXPIRES .. "\n"))
+        assert(fs.write(dir .. "/expired", token_text("pomb_OLD0123456789", 1)))
+        assert(fs.write(dir .. "/soon", token_text("pomb_SOON0123456789", os.time() + 600)))
+        assert(fs.write(dir .. "/live", token_text("pomb_LIVE0123456789", EXPIRES)))
         local out, code = dev(root, home, { "board", "status" })
         testing.ok(code == 0, out)
         testing.ok(out:find("tokens: 1 expire within an hour, 1 expired", 1, true), out)
@@ -466,7 +537,7 @@ testing.test("token-status-quiet prints no tokens line when every file is live",
     local root, home = sandbox()
     local dir = home .. "/state/dev/tokens"
     assert(fs.mkdir(dir, { parents = true }))
-    assert(fs.write(dir .. "/live", "pomb_LIVE0123456789\n" .. EXPIRES .. "\n"))
+    assert(fs.write(dir .. "/live", token_text("pomb_LIVE0123456789", EXPIRES)))
     local out, code = dev(root, home, { "board", "status" })
     testing.ok(code == 0, out)
     testing.eq(out:find("tokens:", 1, true), nil, out)
@@ -475,12 +546,15 @@ end)
 testing.test(
     "token-mint-refused shows an unknown role, exceeds_grant and a taken name in words",
     function()
+        -- Refuse a role that Pomb does not list and name the roles it does
         local root, home = sandbox()
         local out, code =
             dev(root, home, { "board", "token", "mint", "--role", "ghost", "--as", NAME })
         testing.ok(code == 1, out)
         testing.ok(out:find("no agent role named ghost", 1, true), out)
         testing.ok(out:find("implementer, reviewer", 1, true), out)
+
+        -- Show an unknown_role refusal in words
         assert(fs.write(root .. "/children_status", "400"))
         assert(
             fs.write(
@@ -491,12 +565,16 @@ testing.test(
         out, code = mint(root, home)
         testing.ok(code == 1, out)
         testing.ok(out:find("no agent role named implementer", 1, true), out)
+
+        -- Show an exceeds_grant refusal in words
         assert(fs.write(root .. "/children_status", "403"))
         assert(fs.write(root .. "/children.json", '{"code":"exceeds_grant","message":"tasks.bin"}'))
         out, code = mint(root, home)
         testing.ok(code == 1, out)
         testing.ok(out:find("cannot issue the implementer role", 1, true), out)
         testing.ok(out:find("tasks.bin", 1, true), out)
+
+        -- Show a taken name in words and write no token file
         assert(fs.write(root .. "/children_status", "409"))
         assert(
             fs.write(
@@ -508,9 +586,13 @@ testing.test(
         testing.ok(code == 1, out)
         testing.ok(out:find("Another token already has the name " .. NAME, 1, true), out)
         testing.eq(fs.exists(home .. "/state/dev/tokens"), false)
+
+        -- Leave minting to the lead
         out, code = mint(root, home, { agent = "dotfiles/implementer/other/1" })
         testing.ok(code == 1, out)
         testing.ok(out:find("Only the lead mints a role token", 1, true), out)
+
+        -- Require a name to mint as
         out, code = dev(root, home, { "board", "token", "mint", "--role", "implementer" })
         testing.ok(code == 2, out)
     end
@@ -529,6 +611,7 @@ end
 testing.test(
     "token-lookup-order reads DEV_BOARD_TOKEN, then the file for DEV_AGENT, then pass",
     function()
+        -- Prefer the environment token over the agent's file
         local root, home = minted()
         local out, code = dev(root, home, { "board", "boards" }, {
             agent = NAME,
@@ -538,11 +621,15 @@ testing.test(
         testing.ok(last(root):find("Bearer " .. ENV_TOKEN, 1, true), requests(root))
         testing.eq(requests(root):find(RAW, 1, true), nil)
         testing.eq(occurrences(read(root, "calls"), "pass show"), 0)
+
+        -- Read the agent's own file when there is no environment token
         assert(fs.write(SERVERS[root].log, ""))
         out, code = dev(root, home, { "board", "boards" }, { agent = NAME })
         testing.ok(code == 0, out)
         testing.ok(last(root):find("Bearer " .. RAW, 1, true), requests(root))
         testing.eq(occurrences(read(root, "calls"), "pass show"), 0)
+
+        -- Fall back to the worker token for an agent with no file
         assert(fs.write(SERVERS[root].log, ""))
         out, code = dev(
             root,
@@ -552,6 +639,8 @@ testing.test(
         )
         testing.ok(code == 0, out)
         testing.ok(last(root):find("Bearer " .. WORKER, 1, true), requests(root))
+
+        -- Fall back to the worker token for the default agent
         assert(fs.write(SERVERS[root].log, ""))
         out, code = dev(root, home, { "board", "boards" })
         testing.ok(code == 0, out)
@@ -560,8 +649,11 @@ testing.test(
 )
 
 testing.test("token-lookup-refused never retries a refused file token with pass", function()
+    -- Make Pomb refuse every request
     local root, home = minted()
     assert(fs.write(root .. "/refuse", ""))
+
+    -- Call with the file token and check pass is never tried
     local out, code = dev(root, home, { "board", "boards" }, { agent = NAME })
     testing.ok(code == 1, out)
     testing.ok(out:find("role token file for DEV_AGENT was refused", 1, true), out)
@@ -569,9 +661,11 @@ testing.test("token-lookup-refused never retries a refused file token with pass"
     testing.eq(out:find(RAW, 1, true), nil, out)
     testing.eq(read(root, "calls"):find(RAW, 1, true), nil)
     testing.eq(targets(root):find(RAW, 1, true), nil)
+
+    -- Expire the file token and call again
     assert(fs.remove(root .. "/refuse"))
     local dir = home .. "/state/dev/tokens"
-    assert(fs.write(dir .. "/" .. token_files(dir)[1], RAW .. "\n1\n"))
+    assert(fs.write(dir .. "/" .. token_files(dir)[1], token_text(RAW, 1)))
     out, code = dev(root, home, { "board", "boards" }, { agent = NAME })
     testing.ok(code == 1, out)
     testing.ok(out:find("expired", 1, true), out)
@@ -608,11 +702,14 @@ end
 testing.test(
     "token-revoke-issue finds the child by NAME in the lead's list and revokes it",
     function()
+        -- Revoke the child listed under the name
         local root, home = minted()
         listed(root, NAME)
         local out, code = revoke(root, home)
         testing.ok(code == 0, out)
         testing.eq(out, "Revoked the role token of " .. NAME .. "\n")
+
+        -- Check the delete follows the lead's list and spares other children
         local calls = requests(root)
         local listing = calls:find("GET /", 1, true)
         local revoking = calls:find("DELETE /", 1, true)
@@ -624,6 +721,8 @@ testing.test(
         testing.eq(calls:find("tok-other", 1, true), nil, calls)
         testing.ok(requests(root):find("Bearer " .. LEAD, 1, true), requests(root))
         testing.eq(requests(root):find(RAW, 1, true), nil)
+
+        -- Refuse a caller that is not the lead and a call with no name
         out, code = revoke(root, home, { agent = "dotfiles/implementer/other/1" })
         testing.ok(code == 1, out)
         testing.ok(out:find("Only the lead revokes a role token", 1, true), out)
@@ -635,14 +734,19 @@ testing.test(
 testing.test(
     "token-revoke-file deletes the file after Pomb accepts and keeps it when Pomb refuses",
     function()
+        -- List the child and make Pomb refuse its revoke
         local root, home = minted()
         listed(root, NAME)
         local dir = home .. "/state/dev/tokens"
         assert(fs.write(root .. "/revoke_status", "403"))
         assert(fs.write(root .. "/revoke.json", '{"code":"permission_denied","message":"no"}'))
+
+        -- Revoke and check the file stays
         local out, code = revoke(root, home)
         testing.ok(code == 1, out)
         testing.eq(#token_files(dir), 1)
+
+        -- Let Pomb accept the revoke and check the file goes
         assert(fs.remove(root .. "/revoke_status"))
         assert(fs.write(root .. "/revoke.json", '{"revoked":"' .. CHILD_ID .. '"}'))
         out, code = revoke(root, home)
@@ -652,14 +756,19 @@ testing.test(
 )
 
 testing.test("token-revoke-none exits 0 for an unknown or already revoked name", function()
+    -- List a child under a different name
     local root, home = minted()
     local dir = home .. "/state/dev/tokens"
     listed(root, "dotfiles/reviewer/another/1")
+
+    -- Revoke and check nothing was left to revoke
     local out, code = revoke(root, home)
     testing.ok(code == 0, out)
     testing.eq(out, "Nothing was left to revoke for " .. NAME .. ".\n")
     testing.eq(requests(root):find("DELETE /", 1, true), nil)
     testing.eq(#token_files(dir), 0)
+
+    -- List the child again and make Pomb answer that it is already gone
     root, home = minted()
     listed(root, NAME)
     assert(fs.write(root .. "/revoke_status", "404"))
@@ -682,15 +791,20 @@ local function curl_calls(root)
 end
 
 testing.test("token-remint-retry retries once with the new token the file holds", function()
+    -- Expire the file token and prepare the token that replaces it
     local root, home = minted()
     local path = filed_path(home)
     assert(fs.write(root .. "/expire", RAW))
-    assert(fs.write(root .. "/swap", NEW .. "\n" .. EXPIRES .. "\n"))
+    assert(fs.write(root .. "/swap", token_text(NEW, EXPIRES)))
+
+    -- Call as the agent so the expired token is swapped
     local out, code = dev(root, home, { "board", "boards" }, {
         agent = NAME,
         env = { SWAPTO = path },
     })
     testing.ok(code == 0, out)
+
+    -- Check the expired token was sent once and the new one after it
     testing.eq(occurrences(requests(root), "Bearer " .. RAW), 1)
     local sent = requests(root)
     local old = sent:find("Bearer " .. RAW, 1, true)
@@ -701,7 +815,7 @@ end)
 testing.test("token-remint-stale fails with the expired message and no second retry", function()
     local root, home = minted()
     assert(fs.write(root .. "/expire", RAW))
-    assert(fs.write(root .. "/swap", RAW .. "\n" .. EXPIRES .. "\n"))
+    assert(fs.write(root .. "/swap", token_text(RAW, EXPIRES)))
     local out, code = dev(root, home, { "board", "boards" }, {
         agent = NAME,
         env = { SWAPTO = filed_path(home) },
@@ -713,9 +827,12 @@ testing.test("token-remint-stale fails with the expired message and no second re
 end)
 
 testing.test("token-remint-env never retries an expired env or pass token from the file", function()
+    -- Expire the environment token and offer a swap file
     local root, home = minted()
     assert(fs.write(root .. "/expire", ENV_TOKEN))
-    assert(fs.write(root .. "/swap", NEW .. "\n" .. EXPIRES .. "\n"))
+    assert(fs.write(root .. "/swap", token_text(NEW, EXPIRES)))
+
+    -- Call and check the environment token is never retried from the file
     local out, code = dev(root, home, { "board", "boards" }, {
         agent = NAME,
         env = { DEV_BOARD_TOKEN = ENV_TOKEN, SWAPTO = filed_path(home) },
@@ -724,9 +841,11 @@ testing.test("token-remint-env never retries an expired env or pass token from t
     testing.ok(out:find("expired", 1, true), out)
     testing.eq(curl_calls(root), 2)
     testing.eq(requests(root):find(NEW, 1, true), nil)
+
+    -- Do the same with an expired pass token
     root, home = minted()
     assert(fs.write(root .. "/expire", WORKER))
-    assert(fs.write(root .. "/swap", NEW .. "\n" .. EXPIRES .. "\n"))
+    assert(fs.write(root .. "/swap", token_text(NEW, EXPIRES)))
     out, code = dev(root, home, { "board", "boards" }, {
         env = { SWAPTO = filed_path(home) },
     })
@@ -739,17 +858,22 @@ end)
 testing.test(
     "token-remint-name replaces the file under the same name and refuses a live clash",
     function()
+        -- Have Pomb issue a new token under the same name
         local root, home = minted()
         local path = filed_path(home)
         assert(fs.write(root .. "/children.json", (CREATED:gsub(RAW, NEW))))
         assert(fs.write(root .. "/calls", ""))
         assert(fs.write(SERVERS[root].log, ""))
+
+        -- Mint again and check the file is replaced in place
         local out, code = mint(root, home)
         testing.ok(code == 0, out)
         testing.eq(occurrences(requests(root), '"name":"' .. NAME .. '"'), 1)
         testing.eq(#token_files(home .. "/state/dev/tokens"), 1)
         testing.eq(filed_path(home), path)
-        testing.eq(fs.read(path), NEW .. "\n" .. EXPIRES .. "\n")
+        testing.eq(fs.read(path), token_text(NEW, EXPIRES))
+
+        -- Refuse a live name clash and keep the file
         assert(fs.write(root .. "/children_status", "409"))
         assert(
             fs.write(
@@ -760,7 +884,7 @@ testing.test(
         out, code = mint(root, home)
         testing.ok(code == 1, out)
         testing.ok(out:find("Another token already has the name " .. NAME, 1, true), out)
-        testing.eq(fs.read(path), NEW .. "\n" .. EXPIRES .. "\n")
+        testing.eq(fs.read(path), token_text(NEW, EXPIRES))
     end
 )
 
@@ -788,6 +912,7 @@ local function renew(root, home)
 end
 
 testing.test("token mint renew replaces a live token and never deletes its file", function()
+    -- List the live child and have Pomb issue the replacement under a new secret
     local root, home = minted()
     local path = filed_path(home)
     assert(fs.write(root .. "/children.json", (CREATED:gsub(RAW, NEW))))
@@ -802,7 +927,7 @@ testing.test("token mint renew replaces a live token and never deletes its file"
     testing.ok(deleting and posting and deleting < posting, calls)
     testing.eq(calls:find("tok-other", 1, true), nil, calls)
     testing.eq(filed_path(home), path)
-    testing.eq(fs.read(path), NEW .. "\n" .. EXPIRES .. "\n")
+    testing.eq(fs.read(path), token_text(NEW, EXPIRES))
 
     -- Refuse the issue after the delete and keep the file
     assert(fs.write(root .. "/post_status", "409"))
@@ -810,7 +935,7 @@ testing.test("token mint renew replaces a live token and never deletes its file"
     out, code = renew(root, home)
     testing.ok(code == 1, out)
     testing.ok(out:find("The old token was already deleted", 1, true), out)
-    testing.eq(fs.read(path), NEW .. "\n" .. EXPIRES .. "\n")
+    testing.eq(fs.read(path), token_text(NEW, EXPIRES))
 end)
 
 testing.test("token mint renew with no live token still mints", function()
@@ -835,7 +960,7 @@ testing.test("token mint renew issues nothing when the delete fails", function()
     local out, code = renew(root, home)
     testing.ok(code == 1, out)
     testing.eq(requests(root):find("POST /", 1, true), nil, requests(root))
-    testing.eq(fs.read(path), RAW .. "\n" .. EXPIRES .. "\n")
+    testing.eq(fs.read(path), token_text(RAW, EXPIRES))
 end)
 
 testing.test("token mint without renew still refuses a live name and deletes nothing", function()
@@ -848,7 +973,7 @@ testing.test("token mint without renew still refuses a live name and deletes not
     testing.ok(code == 1, out)
     testing.ok(out:find("Another token already has the name " .. NAME, 1, true), out)
     testing.eq(requests(root):find("DELETE /", 1, true), nil, requests(root))
-    testing.eq(fs.read(path), RAW .. "\n" .. EXPIRES .. "\n")
+    testing.eq(fs.read(path), token_text(RAW, EXPIRES))
 end)
 
 local REVIEWERS = {}
@@ -860,11 +985,11 @@ local SEATS = table.clone(REVIEWERS)
 table.insert(SEATS, VERIFIER)
 
 local function standing(home, verifier)
-    local lines = user_config(URLS[home]) .. 'reviewer_token = "pass:secrets/reviewer/token/pomb"\n'
+    local extra = { 'reviewer_token = "pass:secrets/reviewer/token/pomb"' }
     if verifier then
-        lines = lines .. 'verifier_token = "pass:secrets/verifier/token/pomb"\n'
+        extra[#extra + 1] = 'verifier_token = "pass:secrets/verifier/token/pomb"'
     end
-    assert(fs.write(home .. "/.config/dev/config.toml", lines))
+    assert(fs.write(home .. "/.config/dev/config.toml", user_config(URLS[home], extra)))
 end
 
 local function filed_as(root, home, name)

@@ -30,15 +30,26 @@ local function problems(root)
 end
 
 testing.test("a topic naming a missing command is reported at its line", function()
-    local root = project({ ["help/a.md"] = "# a: A topic\n\nSee `dev nope` here.\n" })
+    local root = project({
+        ["help/a.md"] = table.concat({ "# a: A topic", "", "See `dev nope` here.", "" }, "\n"),
+    })
     testing.eq(problems(root), { ".dev/help/a.md:3: `dev nope`: no command nope" })
     fs.remove(root, { recursive = true })
 end)
 
 testing.test("a fenced command is checked, a placeholder and a global flag are not", function()
     local root = project({
-        ["help/a.md"] = "# a: A topic\n\n```\ndev -vv --remote lint\ndev -C some/dir lint\n"
-            .. "dev <command> --x\ndev nope\n```\n",
+        ["help/a.md"] = table.concat({
+            "# a: A topic",
+            "",
+            "```",
+            "dev -vv --remote lint",
+            "dev -C some/dir lint",
+            "dev <command> --x",
+            "dev nope",
+            "```",
+            "",
+        }, "\n"),
     })
     testing.eq(problems(root), { ".dev/help/a.md:7: no command nope" })
     fs.remove(root, { recursive = true })
@@ -46,8 +57,15 @@ end)
 
 testing.test("a flag the command does not list and a missing subcommand are reported", function()
     local root = project({
-        ["help/a.md"] = "# a: A topic\n\n`dev help --nope`\n`dev tools nope`\n`dev help -a`\n"
-            .. "`dev box ls [--all] --x=1`\n",
+        ["help/a.md"] = table.concat({
+            "# a: A topic",
+            "",
+            "`dev help --nope`",
+            "`dev tools nope`",
+            "`dev help -a`",
+            "`dev box ls [--all] --x=1`",
+            "",
+        }, "\n"),
     })
     testing.eq(problems(root), {
         ".dev/help/a.md:3: `dev help --nope`: dev help takes no flag --nope",
@@ -73,9 +91,25 @@ end)
 
 testing.test("a script that declares -h or --help is reported", function()
     local root = project({
-        ["a.sh"] = "#!/usr/bin/env bash\n# A.\n# flag: help short=h -- Bad\n# flag: ok -- Fine\n",
-        ["n/x.sh"] = "#!/usr/bin/env bash\n# X.\n# flag: help -- Bad\n",
-        ["fine.sh"] = "#!/usr/bin/env bash\n# Fine.\n# flag: ok -- Fine\n",
+        ["a.sh"] = table.concat({
+            "#!/usr/bin/env bash",
+            "# A.",
+            "# flag: help short=h -- Bad",
+            "# flag: ok -- Fine",
+            "",
+        }, "\n"),
+        ["n/x.sh"] = table.concat({
+            "#!/usr/bin/env bash",
+            "# X.",
+            "# flag: help -- Bad",
+            "",
+        }, "\n"),
+        ["fine.sh"] = table.concat({
+            "#!/usr/bin/env bash",
+            "# Fine.",
+            "# flag: ok -- Fine",
+            "",
+        }, "\n"),
     })
     local message = "the spec declares -h or --help, which dev reserves before --"
     testing.eq(
@@ -87,8 +121,18 @@ end)
 
 testing.test("a project command's declared flags are accepted in a topic", function()
     local root = project({
-        ["a.sh"] = "#!/usr/bin/env bash\n# A.\n# flag: ok -- Fine\n",
-        ["help/b.md"] = "# b: A topic\n\n`dev a --ok` and `dev a --bad`\n",
+        ["a.sh"] = table.concat({
+            "#!/usr/bin/env bash",
+            "# A.",
+            "# flag: ok -- Fine",
+            "",
+        }, "\n"),
+        ["help/b.md"] = table.concat({
+            "# b: A topic",
+            "",
+            "`dev a --ok` and `dev a --bad`",
+            "",
+        }, "\n"),
     })
     testing.eq(problems(root), { ".dev/help/b.md:3: `dev a --bad`: dev a takes no flag --bad" })
     fs.remove(root, { recursive = true })
@@ -96,8 +140,13 @@ end)
 
 testing.test("a topic accepts a flag of the built-in command a project script replaces", function()
     local root = project({
-        ["push.sh"] = "#!/usr/bin/env bash\n# Push.\n",
-        ["help/b.md"] = "# b: A topic\n\n`dev push --tag` and `dev push --bad`\n",
+        ["push.sh"] = table.concat({ "#!/usr/bin/env bash", "# Push.", "" }, "\n"),
+        ["help/b.md"] = table.concat({
+            "# b: A topic",
+            "",
+            "`dev push --tag` and `dev push --bad`",
+            "",
+        }, "\n"),
     })
     testing.eq(
         problems(root),
@@ -108,7 +157,12 @@ end)
 
 testing.test("a see_also name that is no help page is reported", function()
     local root = project({
-        ["a.sh"] = "#!/usr/bin/env bash\n# A.\n# see_also: boards nope mine\n",
+        ["a.sh"] = table.concat({
+            "#!/usr/bin/env bash",
+            "# A.",
+            "# see_also: boards nope mine",
+            "",
+        }, "\n"),
         ["help/mine.md"] = "# mine: A topic\n",
     })
     testing.eq(problems(root), {
@@ -128,11 +182,18 @@ testing.test("a .luau spec that declares -h is reported", function()
 end)
 
 testing.test("built-in topics are not checked against another project's commands", function()
-    local root = project({ ["help/b.md"] = "# b: A topic\n\n`dev nope`\n" })
+    -- Make a project whose own topic names a missing command
+    local root = project({
+        ["help/b.md"] = table.concat({ "# b: A topic", "", "`dev nope`", "" }, "\n"),
+    })
+
+    -- Check only the project's files are reported
     local reg = registry.load(root, { warn = function() end })
     for _, found in ipairs(topics.check(reg)) do
         testing.ok(found.file:sub(1, 5) == ".dev/", found.file .. ": " .. found.message)
     end
+
+    -- Check exactly one problem remains
     testing.eq(#problems(root), 1)
     fs.remove(root, { recursive = true })
 end)

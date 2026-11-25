@@ -76,7 +76,18 @@ end)
 
 check("header reads the spec fields of a shell command", function()
     local checked = header.parse(
-        "#!/usr/bin/env bash\n# summary: Hi\n# flag: label short=l repeatable -- A label\n# arg: t required -- T\n# requires: workspace\n# remote: false\n# hidden\n# plain note\necho\n",
+        table.concat({
+            "#!/usr/bin/env bash",
+            "# summary: Hi",
+            "# flag: label short=l repeatable -- A label",
+            "# arg: t required -- T",
+            "# requires: workspace",
+            "# remote: false",
+            "# hidden",
+            "# plain note",
+            "echo",
+            "",
+        }, "\n"),
         "x.sh"
     )
     same(checked.summary, "Hi")
@@ -90,16 +101,20 @@ check("header reads the spec fields of a shell command", function()
 end)
 
 check("header refuses a gone marker with its replacement", function()
-    local checked, reason = header.parse("#!/bin/sh\n# flags: --x\n", "x.sh")
+    local checked, reason =
+        header.parse(table.concat({ "#!/bin/sh", "# flags: --x", "" }, "\n"), "x.sh")
     same(checked, nil)
     holds(reason, "# flag: NAME")
-    local _, local_reason = header.parse("#!/bin/sh\n# local\n", "x.sh")
+    local _, local_reason = header.parse(table.concat({ "#!/bin/sh", "# local", "" }, "\n"), "x.sh")
     holds(local_reason, "runs_local")
 end)
 
 check("header takes the first plain comment as the summary", function()
     same(
-        header.parse("#!/bin/sh\n# shellcheck disable=SC1\n# First line\n", "x.sh").summary,
+        header.parse(
+            table.concat({ "#!/bin/sh", "# shellcheck disable=SC1", "# First line", "" }, "\n"),
+            "x.sh"
+        ).summary,
         "First line"
     )
 end)

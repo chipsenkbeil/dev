@@ -49,10 +49,13 @@ testing.test("calling dev.command checks the spec and names a wrong field", func
 end)
 
 testing.test("load returns the reserved flag code for a spec that declares -h", function()
+    -- Load the modules the spec check needs
     local fs = require("@dev/fs")
     local testenv = require("@dev/testenv")
     local dev_command = require("@dev/command")
     local spec_check = require("@dev/spec")
+
+    -- Write a spec that declares -h as a short flag
     local path = testenv.tempdir() .. "/a.luau"
     assert(fs.write(
         path,
@@ -66,6 +69,8 @@ testing.test("load returns the reserved flag code for a spec that declares -h", 
             "",
         }, "\n")
     ))
+
+    -- Load it and see the reserved flag code
     local spec, reason, code = dev_command.load(path)
     testing.eq(spec, nil)
     testing.ok(reason, "load names why the spec is refused")

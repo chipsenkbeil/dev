@@ -11,31 +11,35 @@ local SLEEP_POLLS = 100
 local SLEEP_POLL_SECONDS = 0.05
 local IDENT = { JJ_USER = "t", JJ_EMAIL = "t@example.com" }
 
-local JJ_STUB = [[#!/bin/sh
-if [ "$1" = "--no-pager" ]; then shift; fi
-if [ "$1" = root ]; then pwd; exit 0; fi
-case "$*" in
-    *" git root") echo "${GIT_ROOT:-.git}"; exit 0 ;;
-    *" git remote list") printf '%s' "$REMOTES"; exit 0 ;;
-    *" git fetch "*) echo "jj $*" >> "$LOG"; printf '%s' "$FETCH_OUT"; exit "${FETCH_CODE:-0}" ;;
-    *" workspace update-stale") echo "jj $*" >> "$LOG"; exit 0 ;;
-esac
-echo "jj $*" >> "$LOG"
-mkdir -p "$(eval echo \$$#)"
-]]
-local GIT_STUB = [[#!/bin/sh
-case "$*" in
-    *"--show-toplevel"*) pwd; exit 0 ;;
-    *"--git-common-dir"*) echo "${COMMON_DIR:-$(pwd)/.git}"; exit 0 ;;
-    *" remote") printf '%s' "$REMOTES"; exit 0 ;;
-    *"config --get"*) exit 1 ;;
-    *" fetch "*) echo "git $*" >> "$LOG"; printf '%s' "$FETCH_OUT"; exit "${FETCH_CODE:-0}" ;;
-    *"for-each-ref"*) printf '%s' "$REFS"; exit 0 ;;
-esac
-echo "git $*" >> "$LOG"
-mkdir -p "$(eval echo \$$#)"
-]]
-local NO_GIT = "#!/bin/sh\nexit 1\n"
+local JJ_STUB = table.concat({
+    "#!/bin/sh",
+    'if [ "$1" = "--no-pager" ]; then shift; fi',
+    'if [ "$1" = root ]; then pwd; exit 0; fi',
+    'case "$*" in',
+    '    *" git root") echo "${GIT_ROOT:-.git}"; exit 0 ;;',
+    '    *" git remote list") printf \'%s\' "$REMOTES"; exit 0 ;;',
+    '    *" git fetch "*) echo "jj $*" >> "$LOG"; printf \'%s\' "$FETCH_OUT"; exit "${FETCH_CODE:-0}" ;;',
+    '    *" workspace update-stale") echo "jj $*" >> "$LOG"; exit 0 ;;',
+    "esac",
+    'echo "jj $*" >> "$LOG"',
+    'mkdir -p "$(eval echo \\$$#)"',
+    "",
+}, "\n")
+local GIT_STUB = table.concat({
+    "#!/bin/sh",
+    'case "$*" in',
+    '    *"--show-toplevel"*) pwd; exit 0 ;;',
+    '    *"--git-common-dir"*) echo "${COMMON_DIR:-$(pwd)/.git}"; exit 0 ;;',
+    '    *" remote") printf \'%s\' "$REMOTES"; exit 0 ;;',
+    '    *"config --get"*) exit 1 ;;',
+    '    *" fetch "*) echo "git $*" >> "$LOG"; printf \'%s\' "$FETCH_OUT"; exit "${FETCH_CODE:-0}" ;;',
+    '    *"for-each-ref"*) printf \'%s\' "$REFS"; exit 0 ;;',
+    "esac",
+    'echo "git $*" >> "$LOG"',
+    'mkdir -p "$(eval echo \\$$#)"',
+    "",
+}, "\n")
+local NO_GIT = table.concat({ "#!/bin/sh", "exit 1", "" }, "\n")
 local NO_REMOTE_MESSAGE = 'The trunk cannot be compared: "The remote of record origin '
     .. "is not a remote of this project (detected: no gerrit remote "
     .. 'and origin is not on github.com)".\n'
@@ -46,9 +50,12 @@ local function stub(root, name, body)
 end
 
 local function setup(kind)
+    -- Make a project and a workspace root beside it
     local root = support.sandbox({}, {})
     local ws = support.tempdir()
     local log = ws .. "/log"
+
+    -- Stub the version-control tools to match the kind of project
     if kind == "jj" then
         assert(fs.mkdir(root .. "/.jj"))
         stub(root, "jj", JJ_STUB)
@@ -61,9 +68,13 @@ local function setup(kind)
         stub(root, "jj", NO_GIT)
         stub(root, "git", NO_GIT)
     end
+
+    -- Point the command at the workspace root, the log and one remote
     local env = {
         env = { DEV_WS_ROOT = ws .. "/ws", LOG = log, JJ_FORGE = "", REMOTES = "origin\n" },
     }
+
+    -- Hand back the project, the workspace path, the env and the log
     return root, ws .. "/ws/" .. fs.basename(root) .. "/feat", env, log
 end
 
@@ -79,17 +90,12 @@ testing.test("new in a jj project fetches the remote of record first", function(
     testing.eq(out, path .. "\n")
     testing.eq(
         fs.read(log),
-        "jj --color never -R "
-            .. root
-            .. " --ignore-working-copy git fetch --remote origin\n"
-            .. "jj -R "
-            .. root
-            .. " workspace update-stale\n"
-            .. "jj -R "
-            .. root
-            .. " workspace add --name feat -r trunk() "
-            .. path
-            .. "\n"
+        table.concat({
+            "jj --color never -R " .. root .. " --ignore-working-copy git fetch --remote origin",
+            "jj -R " .. root .. " workspace update-stale",
+            "jj -R " .. root .. " workspace add --name feat -r trunk() " .. path,
+            "",
+        }, "\n")
     )
 end)
 
@@ -97,7 +103,7 @@ testing.test("new in a jj project fetches the gerrit remote of record", function
     -- Make gerrit the remote of record
     local root, path, env, log = setup("jj")
     env.env.JJ_FORGE = "gerrit"
-    env.env.REMOTES = "origin\ngerrit\n"
+    env.env.REMOTES = table.concat({ "origin", "gerrit", "" }, "\n")
 
     -- Create the workspace so the fetch targets the gerrit remote
     local out, code = support.dev(root, { "ws", "new", "feat" }, env)
@@ -107,17 +113,12 @@ testing.test("new in a jj project fetches the gerrit remote of record", function
     testing.eq(out, path .. "\n")
     testing.eq(
         fs.read(log),
-        "jj --color never -R "
-            .. root
-            .. " --ignore-working-copy git fetch --remote gerrit\n"
-            .. "jj -R "
-            .. root
-            .. " workspace update-stale\n"
-            .. "jj -R "
-            .. root
-            .. " workspace add --name feat -r trunk() "
-            .. path
-            .. "\n"
+        table.concat({
+            "jj --color never -R " .. root .. " --ignore-working-copy git fetch --remote gerrit",
+            "jj -R " .. root .. " workspace update-stale",
+            "jj -R " .. root .. " workspace add --name feat -r trunk() " .. path,
+            "",
+        }, "\n")
     )
 end)
 
@@ -218,7 +219,7 @@ end)
 testing.test("new in a git project adds a worktree on the fetched trunk", function()
     -- Offer main as the only trunk branch
     local root, path, env, log = setup("git")
-    env.env.REFS = "origin/HEAD\norigin/feat\norigin/main\n"
+    env.env.REFS = table.concat({ "origin/HEAD", "origin/feat", "origin/main", "" }, "\n")
 
     -- Create the workspace so the worktree branches from the offered main
     local out, code = support.dev(root, { "ws", "new", "feat" }, env)
@@ -368,12 +369,14 @@ testing.test("new refuses a path that exists", function()
     testing.eq(fs.exists(log), false)
 end)
 
-local LIST_GIT_STUB = [[#!/bin/sh
-case "$*" in
-    *"worktree list"*) printf '%s' "$WORKTREES"; exit 0 ;;
-esac
-echo "git $*" >> "$LOG"
-]]
+local LIST_GIT_STUB = table.concat({
+    "#!/bin/sh",
+    'case "$*" in',
+    '    *"worktree list"*) printf \'%s\' "$WORKTREES"; exit 0 ;;',
+    "esac",
+    'echo "git $*" >> "$LOG"',
+    "",
+}, "\n")
 
 local function record(path, note)
     return table.concat({
@@ -387,13 +390,21 @@ local function record(path, note)
 end
 
 local function stale_setup(others)
+    -- Stub git to list worktrees from the env
     local root, path, env, log = setup("jj")
     stub(root, "git", LIST_GIT_STUB)
     env.env.GIT_ROOT = root .. "/.git"
-    env.env.WORKTREES = "worktree " .. root .. "\nHEAD x\n\n" .. record(path, "prunable gone")
+
+    -- List the project and a gone record for the path
+    env.env.WORKTREES = table.concat({ "worktree " .. root, "HEAD x", "", "" }, "\n")
+        .. record(path, "prunable gone")
+
+    -- Add a gone record for each other path
     for _, other in ipairs(others) do
         env.env.WORKTREES = env.env.WORKTREES .. record(other, "prunable gone")
     end
+
+    -- Hand back the project, the path, the env and the log
     return root, path, env, log
 end
 
@@ -428,7 +439,7 @@ end)
 testing.test("new runs no prune when git holds no record of its path", function()
     -- List only a live worktree
     local root, _, env, log = stale_setup({})
-    env.env.WORKTREES = "worktree " .. root .. "\nHEAD x\n\n"
+    env.env.WORKTREES = table.concat({ "worktree " .. root, "HEAD x", "", "" }, "\n")
 
     -- Make the workspace
     local out, code = support.dev(root, { "ws", "new", "feat" }, env)
@@ -490,53 +501,69 @@ testing.test(
     end
 )
 
-local RM_JJ_STUB = [[#!/bin/sh
-if [ "$1" = "--no-pager" ]; then shift; fi
-case "$*" in
-    root) pwd; exit 0 ;;
-    *"workspace list"*) printf '%s\n' "$WORKSPACES"; exit 0 ;;
-    *" git root") printf '%s' "$GIT_ROOT"; exit 0 ;;
-    *" workspace update-stale")
-        if [ -n "$UPDATE_FAIL" ]; then echo "update failed" >&2; exit 1; fi
-        rm -f "$STALE"; exit 0 ;;
-    *" log "*)
-        if [ -e "$STALE" ]; then echo "The working copy is stale" >&2; exit 1; fi
-        case "$*" in *"@ ~ ::trunk()"*)
-            if [ -n "$TEMPLATE_LOG" ]; then echo "$*" >> "$TEMPLATE_LOG"; fi
-            if [ -n "$LANDED" ]; then exit 0; fi ;; esac
-        printf '%s' "$DIRTY"; exit "${LOG_CODE:-0}" ;;
-esac
-echo "jj $*" >> "$LOG"
-]]
-local RM_GIT_STUB = [[#!/bin/sh
-case "$*" in
-    *"--show-toplevel"*) pwd; exit 0 ;;
-    *"--git-common-dir"*) echo "${COMMON_DIR:-$(pwd)/.git}"; exit 0 ;;
-    *"worktree list"*) if [ -n "$LIST_FAIL" ]; then exit 128; fi; printf '%s' "$WORKTREES"; exit 0 ;;
-    *"status --porcelain"*) printf '%s' "$DIRTY"; exit 0 ;;
-esac
-echo "git $*" >> "$LOG"
-if [ -n "$FAIL" ]; then exit 3; fi
-]]
+local RM_JJ_STUB = table.concat({
+    "#!/bin/sh",
+    'if [ "$1" = "--no-pager" ]; then shift; fi',
+    'case "$*" in',
+    "    root) pwd; exit 0 ;;",
+    '    *"workspace list"*) printf \'%s\\n\' "$WORKSPACES"; exit 0 ;;',
+    '    *" git root") printf \'%s\' "$GIT_ROOT"; exit 0 ;;',
+    '    *" workspace update-stale")',
+    '        if [ -n "$UPDATE_FAIL" ]; then echo "update failed" >&2; exit 1; fi',
+    '        rm -f "$STALE"; exit 0 ;;',
+    '    *" log "*)',
+    '        if [ -e "$STALE" ]; then echo "The working copy is stale" >&2; exit 1; fi',
+    '        case "$*" in *"@ ~ ::trunk()"*)',
+    '            if [ -n "$TEMPLATE_LOG" ]; then echo "$*" >> "$TEMPLATE_LOG"; fi',
+    '            if [ -n "$LANDED" ]; then exit 0; fi ;; esac',
+    '        printf \'%s\' "$DIRTY"; exit "${LOG_CODE:-0}" ;;',
+    "esac",
+    'echo "jj $*" >> "$LOG"',
+    "",
+}, "\n")
+local RM_GIT_STUB = table.concat({
+    "#!/bin/sh",
+    'case "$*" in',
+    '    *"--show-toplevel"*) pwd; exit 0 ;;',
+    '    *"--git-common-dir"*) echo "${COMMON_DIR:-$(pwd)/.git}"; exit 0 ;;',
+    '    *"worktree list"*) if [ -n "$LIST_FAIL" ]; then exit 128; fi; printf \'%s\' "$WORKTREES"; exit 0 ;;',
+    '    *"status --porcelain"*) printf \'%s\' "$DIRTY"; exit 0 ;;',
+    "esac",
+    'echo "git $*" >> "$LOG"',
+    'if [ -n "$FAIL" ]; then exit 3; fi',
+    "",
+}, "\n")
 
 local function rm_setup(kind)
+    -- Stub the tools to match the kind of project
     local root, path, env, log = setup(kind)
     stub(root, "jj", kind == "jj" and RM_JJ_STUB or NO_GIT)
     stub(root, "git", kind == "git" and RM_GIT_STUB or NO_GIT)
+
+    -- Make the workspace folder with a file in it
     assert(fs.mkdir(path, { parents = true }))
     assert(fs.write(path .. "/file", "x"))
+
+    -- Mark the folder as a workspace of its kind
     if kind == "jj" then
         assert(fs.mkdir(path .. "/.jj"))
     elseif kind == "git" then
         assert(fs.write(path .. "/.git", "gitdir: elsewhere\n"))
     end
+
+    -- Start with a clean tree and two workspaces
     env.env.DIRTY = ""
-    env.env.WORKSPACES = "default\nfeat"
+    env.env.WORKSPACES = table.concat({ "default", "feat" }, "\n")
+
+    -- Hand back the project, the path, the env and the log
     return root, path, env, log
 end
 
 local function outside_caller(root, kind)
+    -- Name a caller folder beside the project
     local caller = root .. "-lead"
+
+    -- Make the caller a secondary workspace of the project's kind
     if kind == "jj" then
         assert(fs.mkdir(root .. "/.jj/repo", { parents = true }))
         assert(fs.mkdir(caller .. "/.jj", { parents = true }))
@@ -545,6 +572,8 @@ local function outside_caller(root, kind)
         assert(fs.mkdir(caller, { parents = true }))
         assert(fs.write(caller .. "/.git", "gitdir: elsewhere\n"))
     end
+
+    -- Hand back the caller folder
     return caller
 end
 
@@ -639,13 +668,18 @@ local function trash_dir(env, root)
 end
 
 local function trashed(env, root, name)
+    -- Collect the trash entries stamped for the name
     local found = {}
     for _, entry in ipairs(fs.list(trash_dir(env, root)) or {}) do
         if entry:match("^" .. name .. "%-%d%d%d%d%d%d%d%dT%d%d%d%d%d%dZ$") then
             found[#found + 1] = entry
         end
     end
+
+    -- Check exactly one entry matched
     testing.eq(#found, 1)
+
+    -- Hand back its path
     return trash_dir(env, root) .. "/" .. found[1]
 end
 
@@ -861,11 +895,20 @@ testing.test("rm puts a folder back when the git prune fails", function()
 end)
 
 local function worktrees(root, ...)
-    local blocks = { "worktree " .. root .. "\nHEAD x\nbranch refs/heads/master" }
+    -- List the main checkout
+    local lines = { "worktree " .. root, "HEAD x", "branch refs/heads/master" }
+
+    -- List each further worktree after a blank line
     for _, path in ipairs({ ... }) do
-        blocks[#blocks + 1] = "worktree " .. path .. "\nHEAD x\nbranch refs/heads/x"
+        table.insert(lines, "")
+        table.insert(lines, "worktree " .. path)
+        table.insert(lines, "HEAD x")
+        table.insert(lines, "branch refs/heads/x")
     end
-    return table.concat(blocks, "\n\n") .. "\n"
+
+    -- End the listing with a line break
+    table.insert(lines, "")
+    return table.concat(lines, "\n")
 end
 
 testing.test("rm refuses and says so when git worktree list fails", function()
@@ -1160,7 +1203,12 @@ testing.test("rm leaves the folder when the version control command fails", func
     stub(
         root,
         "git",
-        '#!/bin/sh\ncase "$*" in *--git-common-dir*) echo "$(pwd)/.git"; exit 0;; *--show-toplevel*) pwd; exit 0;; *status*) exit 0;; *worktree*list*) exit 0;; esac\nexit 3\n'
+        table.concat({
+            "#!/bin/sh",
+            'case "$*" in *--git-common-dir*) echo "$(pwd)/.git"; exit 0;; *--show-toplevel*) pwd; exit 0;; *status*) exit 0;; *worktree*list*) exit 0;; esac',
+            "exit 3",
+            "",
+        }, "\n")
     )
 
     -- Remove the folder while git fails every command but the probes
@@ -1280,71 +1328,87 @@ testing.test("rm refuses a repo folder that links outside the root", function()
     testing.eq(fs.exists(outside .. "/feat/precious"), true)
 end)
 
-local PRUNE_JJ_STUB = [[#!/bin/sh
-if [ "$1" = "--no-pager" ]; then shift; fi
-case "$*" in
-    root) pwd; exit 0 ;;
-    *"workspace list"*) printf '%s\n' "$WORKSPACES"; exit 0 ;;
-    *" git root") exit 0 ;;
-    *" workspace update-stale") echo "update-stale" >> "${UPDATES:-/dev/null}"; exit 0 ;;
-    *"workspace root --name "*)
-        for last; do :; done
-        printf '%s\n' "$ROOTS" | while read -r name path; do
-            if [ "$name" = "$last" ]; then echo "$path"; fi
-        done
-        exit 0 ;;
-    *"log -r @ "*)
-        case "$*" in *--ignore-working-copy*)
-            if [ -n "$STALE_READ" ]; then printf '%s' "$DIRTY"; exit 0; fi ;;
-        esac
-        if [ -n "$ERROR" ]; then printf '%s\n' "$ERROR" >&2; exit 1; fi
-        printf '%s' "$WARN" >&2; printf '%s' "$DIRTY"; exit 0 ;;
-    *"& empty()"*)
-        case "$*" in *'~ "gone1"@'*) printf '%s' "$FREED_EMPTY"; exit 0 ;; esac
-        printf '%s' "$EMPTY"; exit 0 ;;
-    *"~ empty()"*)
-        case "$*" in *'~ "gone1"@'*) printf '%s' "$FREED_STRAYS"; exit 0 ;; esac
-        printf '%s' "$STRAYS"; exit 0 ;;
-    *"bookmark list"*) printf '%s' "$BOOKMARKS"; exit 0 ;;
-    *"change_id ++"*) printf '%s' "$HEAD_DESCRIPTION"; exit 0 ;;
-    *"description(substring:\"Change-Id"*) printf '%s' "$TRUNK_MATCHES"; exit 0 ;;
-    *"description(substring"*) printf '%s' "$TITLE_MATCHES"; exit 0 ;;
-    *"::trunk()"*) printf '%s' "$TRUNK_MATCHES"; exit 0 ;;
-    *interdiff*) printf '%s' "$INTERDIFF"; exit 0 ;;
-esac
-echo "jj $*" >> "$LOG"
-if [ -n "$FAIL" ]; then exit 3; fi
-]]
-local PRUNE_GIT_STUB = [[#!/bin/sh
-case "$*" in
-    *"--show-toplevel"*) pwd; exit 0 ;;
-    *"--git-common-dir"*) echo "$(pwd)/.git"; exit 0 ;;
-    *"worktree list"*)
-        if [ -n "$AFTER" ] && grep -q "worktree remove" "$LOG" 2>/dev/null; then
-            printf '%s' "$AFTER"; exit 0
-        fi
-        printf '%s' "$WORKTREES"; exit 0 ;;
-    *"status --porcelain"*) printf '%s' "$DIRTY"; exit 0 ;;
-    *"for-each-ref"*) printf '%s' "$BRANCHES"; exit 0 ;;
-esac
-echo "git $*" >> "$LOG"
-if [ -n "$FAIL" ]; then exit 3; fi
-]]
+local PRUNE_JJ_STUB = table.concat({
+    "#!/bin/sh",
+    'if [ "$1" = "--no-pager" ]; then shift; fi',
+    'case "$*" in',
+    "    root) pwd; exit 0 ;;",
+    '    *"workspace list"*) printf \'%s\\n\' "$WORKSPACES"; exit 0 ;;',
+    '    *" git root") exit 0 ;;',
+    '    *" workspace update-stale") echo "update-stale" >> "${UPDATES:-/dev/null}"; exit 0 ;;',
+    '    *"workspace root --name "*)',
+    "        for last; do :; done",
+    "        printf '%s\\n' \"$ROOTS\" | while read -r name path; do",
+    '            if [ "$name" = "$last" ]; then echo "$path"; fi',
+    "        done",
+    "        exit 0 ;;",
+    '    *"log -r @ "*)',
+    '        case "$*" in *--ignore-working-copy*)',
+    '            if [ -n "$STALE_READ" ]; then printf \'%s\' "$DIRTY"; exit 0; fi ;;',
+    "        esac",
+    '        if [ -n "$ERROR" ]; then printf \'%s\\n\' "$ERROR" >&2; exit 1; fi',
+    "        printf '%s' \"$WARN\" >&2; printf '%s' \"$DIRTY\"; exit 0 ;;",
+    '    *"& empty()"*)',
+    '        case "$*" in *\'~ "gone1"@\'*) printf \'%s\' "$FREED_EMPTY"; exit 0 ;; esac',
+    "        printf '%s' \"$EMPTY\"; exit 0 ;;",
+    '    *"~ empty()"*)',
+    '        case "$*" in *\'~ "gone1"@\'*) printf \'%s\' "$FREED_STRAYS"; exit 0 ;; esac',
+    "        printf '%s' \"$STRAYS\"; exit 0 ;;",
+    '    *"bookmark list"*) printf \'%s\' "$BOOKMARKS"; exit 0 ;;',
+    '    *"change_id ++"*) printf \'%s\' "$HEAD_DESCRIPTION"; exit 0 ;;',
+    '    *"description(substring:\\"Change-Id"*) printf \'%s\' "$TRUNK_MATCHES"; exit 0 ;;',
+    '    *"description(substring"*) printf \'%s\' "$TITLE_MATCHES"; exit 0 ;;',
+    '    *"::trunk()"*) printf \'%s\' "$TRUNK_MATCHES"; exit 0 ;;',
+    "    *interdiff*) printf '%s' \"$INTERDIFF\"; exit 0 ;;",
+    "esac",
+    'echo "jj $*" >> "$LOG"',
+    'if [ -n "$FAIL" ]; then exit 3; fi',
+    "",
+}, "\n")
+local PRUNE_GIT_STUB = table.concat({
+    "#!/bin/sh",
+    'case "$*" in',
+    '    *"--show-toplevel"*) pwd; exit 0 ;;',
+    '    *"--git-common-dir"*) echo "$(pwd)/.git"; exit 0 ;;',
+    '    *"worktree list"*)',
+    '        if [ -n "$AFTER" ] && grep -q "worktree remove" "$LOG" 2>/dev/null; then',
+    "            printf '%s' \"$AFTER\"; exit 0",
+    "        fi",
+    "        printf '%s' \"$WORKTREES\"; exit 0 ;;",
+    '    *"status --porcelain"*) printf \'%s\' "$DIRTY"; exit 0 ;;',
+    '    *"for-each-ref"*) printf \'%s\' "$BRANCHES"; exit 0 ;;',
+    "esac",
+    'echo "git $*" >> "$LOG"',
+    'if [ -n "$FAIL" ]; then exit 3; fi',
+    "",
+}, "\n")
+
 local function seed_board(root, env, cards)
-    assert(
-        fs.write(
-            root .. "/.dev/config.toml",
-            '[board]\nbackend = "local"\nname = "mine"\npath = ".dev/board.json"\n'
-        )
-    )
+    -- Point the project at a local board file
+    assert(fs.write(
+        root .. "/.dev/config.toml",
+        table.concat({
+            "[board]",
+            'backend = "local"',
+            'name = "mine"',
+            'path = ".dev/board.json"',
+            "",
+        }, "\n")
+    ))
+
+    -- Give the command a private home with an empty user config
     local home = support.tempdir()
     env.env.HOME = home
     env.env.XDG_STATE_HOME = home .. "/state"
     assert(fs.mkdir(home .. "/.config/dev", { parents = true }))
     assert(fs.write(home .. "/.config/dev/config.toml", ""))
+
+    -- Create the board and read it back
     local out, code = support.dev(root, { "board", "init" }, env)
     testing.eq(code, 0, out)
     local doc = assert(json.decode(assert(fs.read(root .. "/.dev/board.json"))))
+
+    -- Find the done column and the column of open cards
     local done, open
     for _, column in ipairs(doc.columns) do
         if column.is_done then
@@ -1353,6 +1417,8 @@ local function seed_board(root, env, cards)
             open = column.id
         end
     end
+
+    -- Add one card per entry
     for i, card in ipairs(cards) do
         doc.cards[#doc.cards + 1] = {
             id = card.id .. "-1111-4aaa-8aaa-aaaaaaaaaaaa",
@@ -1363,21 +1429,30 @@ local function seed_board(root, env, cards)
             description = "",
         }
     end
+
+    -- Save the board
     assert(fs.write(root .. "/.dev/board.json", assert(json.encode(doc))))
 end
 
 local function prune_setup(kind)
+    -- Stub the tools to match the kind of project
     local root, path, env, log = setup(kind)
     stub(root, "jj", kind == "jj" and PRUNE_JJ_STUB or NO_GIT)
     stub(root, "git", kind == "git" and PRUNE_GIT_STUB or NO_GIT)
+
+    -- Make the folder that holds the repo's workspaces
     local dir = fs.dirname(path) .. "/"
     assert(fs.mkdir(dir, { parents = true }))
+
+    -- Start with a clean tree, no empty heads, strays or bookmarks
     env.env.DIRTY = ""
     env.env.EMPTY = ""
     env.env.STRAYS = ""
     env.env.FREED_EMPTY = ""
     env.env.FREED_STRAYS = ""
     env.env.BOOKMARKS = ""
+
+    -- Hand back the project, the folder, the env and the log
     return root, dir, env, log
 end
 
@@ -1388,16 +1463,21 @@ local function lines(...)
 end
 
 local function folder(dir, name)
+    -- Make a jj workspace folder under the directory
     local path = dir .. name
     assert(fs.mkdir(path .. "/.jj", { parents = true }))
+
+    -- Put a file in it
     assert(fs.write(path .. "/file", "x"))
+
+    -- Hand back its path
     return path
 end
 
 testing.test("prune forgets a jj workspace whose folder is gone", function()
     -- List a workspace whose folder does not exist
     local root, dir, env, log = prune_setup("jj")
-    env.env.WORKSPACES = "default\ngone1"
+    env.env.WORKSPACES = table.concat({ "default", "gone1" }, "\n")
     env.env.ROOTS = "gone1 " .. dir .. "gone1"
 
     -- Prune so the workspace whose folder is gone is forgotten
@@ -2222,6 +2302,7 @@ end)
 ---@field name string? sleep when nil, the command name the process runs under
 
 local function start_sleep(dir, opts)
+    -- Default to the system sleep under its own name
     local name = opts and opts.name or "sleep"
     local program = "sleep"
 
@@ -2249,6 +2330,8 @@ local function start_sleep(dir, opts)
         end
         dev_os.nap(SLEEP_POLL_SECONDS)
     end
+
+    -- Hand back the process id
     return pid
 end
 
@@ -2317,7 +2400,10 @@ local function finds_the_sleep(find)
 end
 
 local function adopt_env()
+    -- Make a central workspace root
     local ws = assert(fs.realpath(support.tempdir()))
+
+    -- Point the command at it with a jj identity
     local env = {
         env = {
             DEV_WS_ROOT = ws,
@@ -2326,20 +2412,27 @@ local function adopt_env()
             JJ_EMAIL = IDENT.JJ_EMAIL,
         },
     }
+
+    -- Hand back the env and the root
     return env, ws
 end
 
 if dev_os.which("jj") then
     local function adopt_jj_project()
+        -- Make a jj project with a base commit
         local root = support.sandbox({}, {})
         local init = { stdout = "null", stderr = "null", env = IDENT }
         assert(dev_os.run({ "jj", "git", "init", root }, init) == 0, "jj git init failed")
         assert(fs.write(root .. "/base", "1"))
         local _, code = real_jj(root, "commit", "-m", "base")
         testing.eq(code, 0)
+
+        -- Add a workspace outside the central root
         local old = assert(fs.realpath(support.tempdir())) .. "/feat"
         _, code = real_jj(root, "workspace", "add", "--name", "feat", old)
         testing.eq(code, 0)
+
+        -- Hand back the project, the old folder, the target and the env
         local env, ws = adopt_env()
         return root, old, ws .. "/" .. fs.basename(root) .. "/feat", env
     end
@@ -2575,6 +2668,7 @@ testing.test("adopt needs one PATH", function()
 end)
 
 testing.test("describe writes a sentence for every refusal", function()
+    -- Fill every field a refusal may name
     local why = {
         path = "/w/card",
         name = "card",
@@ -2583,6 +2677,8 @@ testing.test("describe writes a sentence for every refusal", function()
         code = 3,
         detail = "no such file",
     }
+
+    -- Describe each refusal as one capitalized sentence
     local seen = 0
     for _, reason in pairs(cmd_ws.Refusal) do
         why.reason = reason
@@ -2590,6 +2686,8 @@ testing.test("describe writes a sentence for every refusal", function()
         testing.ok(text:find("^[%u/]") and text:find("%.$"), reason .. ": " .. text)
         seen = seen + 1
     end
+
+    -- Check the refusals counted and two sentences word for word
     testing.eq(seen, 19)
     testing.eq(
         cmd_ws.describe({ reason = cmd_ws.Refusal.LINK, path = "/w/card" }),
@@ -2615,6 +2713,7 @@ end
 
 if dev_os.which("jj") then
     local function foreign_workspace()
+        -- Make a jj project with a base commit
         local env, base = adopt_env()
         local root = support.sandbox({}, {})
         local init = { stdout = "null", stderr = "null", env = IDENT }
@@ -2622,18 +2721,25 @@ if dev_os.which("jj") then
         assert(fs.write(root .. "/base", "1"))
         local _, code = real_jj(root, "commit", "-m", "base")
         testing.eq(code, 0)
+
+        -- Add a workspace under a repo folder named for something else
         local path = base .. "/elsewhere/feat"
         assert(fs.mkdir(base .. "/elsewhere", { parents = true }))
         _, code = real_jj(root, "workspace", "add", "--name", "feat", "-r", "@-", path)
         testing.eq(code, 0)
+
+        -- Hand back the project, the workspace path, the env and the root
         return root, path, env, base
     end
 
     testing.test("rm removes a jj workspace made under another repo folder name", function()
+        -- Make a workspace under another repo folder name
         local root, path, env, base = foreign_workspace()
 
+        -- Remove it by name
         local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
 
+        -- Expect the move to the trash and the workspace forgotten
         testing.eq(code, 0, out)
         testing.ok(
             out:find("Moved " .. path .. " to " .. base .. "/.trash/elsewhere/feat-", 1, true),
@@ -2644,6 +2750,7 @@ if dev_os.which("jj") then
     end)
 
     local function sibling_workspace()
+        -- Make a main checkout under another repo folder with a base commit
         local env, base = adopt_env()
         local main = base .. "/elsewhere/main"
         assert(fs.mkdir(main, { parents = true }))
@@ -2652,35 +2759,46 @@ if dev_os.which("jj") then
         assert(fs.write(main .. "/base", "1"))
         local _, code = real_jj(main, "commit", "-m", "base")
         testing.eq(code, 0)
+
+        -- Add a sibling workspace under the central root
         assert(fs.mkdir(base .. "/mine", { parents = true }))
         local sibling = base .. "/mine/lead"
         _, code = real_jj(main, "workspace", "add", "--name", "lead", "-r", "@-", sibling)
         testing.eq(code, 0)
+
+        -- Hand back the main checkout, the sibling, the env and the root
         return main, sibling, env, base
     end
 
     testing.test("rm by name from a sibling workspace finds another repo folder", function()
+        -- Add a workspace under another repo folder
         local main, sibling, env, base = sibling_workspace()
         local path = base .. "/elsewhere/feat"
         local _, code = real_jj(main, "workspace", "add", "--name", "feat", "-r", "@-", path)
         testing.eq(code, 0)
 
+        -- Remove it by name from the sibling
         local out, rm_code = support.dev(sibling, { "ws", "rm", "feat" }, env)
 
+        -- Expect the workspace removed
         testing.eq(rm_code, 0, out)
         testing.eq(fs.exists(path), false)
     end)
 
     testing.test("rm by name from a sibling workspace refuses a name jj does not list", function()
+        -- Work from a sibling workspace
         local _, sibling, env, base = sibling_workspace()
 
+        -- Remove a name no workspace has
         local out, rm_code = support.dev(sibling, { "ws", "rm", "nope" }, env)
 
+        -- Expect a refusal naming the folder it would be
         testing.eq(rm_code, 1, out)
         testing.eq(out, base .. "/mine/nope is not a workspace folder.\n")
     end)
 
     testing.test("rm forgets a jj workspace while the main checkout is stale", function()
+        -- Make the main checkout stale by restoring an older operation from the workspace
         local root, path, env = foreign_workspace()
         local before =
             real_jj(root, "--ignore-working-copy", "op", "log", "--no-graph", "-n", "1", "-T", "id")
@@ -2694,13 +2812,16 @@ if dev_os.which("jj") then
         local status = real_jj(root, "status")
         testing.ok(status:find("The working copy is stale", 1, true) ~= nil, status)
 
+        -- Remove the workspace
         local out, rm_code = support.dev(root, { "ws", "rm", "feat" }, env)
 
+        -- Expect the workspace removed all the same
         testing.eq(rm_code, 0, out)
         testing.eq(fs.exists(path), false)
     end)
 
     testing.test("rm names the jj message and keeps the folder when the forget fails", function()
+        -- Put a jj on PATH that refuses to forget
         local root, path, env = foreign_workspace()
         local bin = support.tempdir()
         local script = table.concat({
@@ -2718,22 +2839,27 @@ if dev_os.which("jj") then
         assert(dev_os.run({ "chmod", "755", bin .. "/jj" }) == 0, "chmod failed")
         env.env.PATH = bin .. ":" .. dev_os.getenv("PATH")
 
+        -- Remove the workspace
         local out, code = support.dev(root, { "ws", "rm", "feat" }, env)
 
+        -- Expect jj's message named and the folder kept
         testing.eq(code, 1, out)
         testing.eq(out, "The jj command exited 1: forget refused.\n")
         testing.eq(fs.is_dir(path), true)
     end)
 
     local function refuses_listed(place)
+        -- Add a workspace at the place the caller picks
         local root, _, env, base = foreign_workspace()
         local target = place(base) .. "/other"
         fs.mkdir(fs.dirname(target), { parents = true })
         local _, code = real_jj(root, "workspace", "add", "--name", "other", "-r", "@-", target)
         testing.eq(code, 0)
 
+        -- Remove it by name
         local out, rm_code = support.dev(root, { "ws", "rm", "other" }, env)
 
+        -- Expect a refusal with the folder kept and the workspace still listed
         testing.eq(rm_code, 1, out)
         testing.eq(fs.is_dir(target), true)
         testing.ok(real_jj(root, "workspace", "list"):find("other:", 1, true) ~= nil)
@@ -2767,6 +2893,7 @@ if dev_os.which("jj") then
     end
 
     local function landed_project()
+        -- Make a jj project with a base commit
         local root = support.sandbox({}, {})
         local init = { stdout = "null", stderr = "null", env = IDENT }
         assert(dev_os.run({ "jj", "git", "init", root }, init) == 0, "jj git init failed")
@@ -2778,21 +2905,26 @@ if dev_os.which("jj") then
             assert(fs.write(root .. "/" .. file, text))
             return (real_jj(root, "log", "-r", "@", "--no-graph", "-T", "commit_id"))
         end
-        change(base, "feat: one\n\nChange-Id: I1111111111111111111111111111111111111111", "t1", "1")
+
+        -- Land two changes on a trunk bookmark, the first carrying a Change-Id
+        local trailer = "Change-Id: I1111111111111111111111111111111111111111"
+        change(base, table.concat({ "feat: one", "", trailer }, "\n"), "t1", "1")
         change("@", "feat: two", "t2", "2")
         real_jj(root, "bookmark", "create", "tip", "-r", "@")
         real_jj(root, "config", "set", "--repo", 'revset-aliases."trunk()"', "tip")
-        local by_trailer = change(
-            base,
-            "feat: one, rewritten\n\nChange-Id: I1111111111111111111111111111111111111111",
-            "other",
-            "x"
-        )
+
+        -- Hold a rewritten copy by Change-Id, one by title and diff, and one unlanded head
+        local by_trailer =
+            change(base, table.concat({ "feat: one, rewritten", "", trailer }, "\n"), "other", "x")
         local by_title = change(base, "feat: two", "t2", "2")
         local unlanded = change(base, "feat: three", "t3", "3")
+
+        -- Leave the working copy on trunk with the config folder visible to dev
         real_jj(root, "new", "tip")
         local env = adopt_env()
         env.env.XDG_CONFIG_HOME = dev_os.getenv("XDG_CONFIG_HOME")
+
+        -- Hand back the project, the env and the three heads
         return root, env, { trailer = by_trailer, title = by_title, unlanded = unlanded }
     end
 
@@ -2861,19 +2993,26 @@ if dev_os.which("jj") then
 end
 
 local function branch_project()
+    -- Make a git project with a base commit on main
     local root = support.sandbox({}, {})
     local code = dev_os.run({ "git", "init", "-q", "-b", "main", root }, { stdout = "null" })
     assert(code == 0, "git init failed")
     assert(fs.write(root .. "/base", "1"))
     support.git(root, "add", "-A")
     support.git(root, "commit", "-q", "-m", "base")
+
+    -- Branch one branch that trunk holds and one with its own commit
     support.git(root, "branch", "merged")
     support.git(root, "checkout", "-q", "-b", "unmerged")
     assert(fs.write(root .. "/work", "1"))
     support.git(root, "add", "-A")
     support.git(root, "commit", "-q", "-m", "feat: work")
+
+    -- Return to main and point the command at a central root
     support.git(root, "checkout", "-q", "main")
     local env = adopt_env()
+
+    -- Hand back the project and the env
     return root, env
 end
 
@@ -2930,6 +3069,7 @@ end)
 
 if dev_os.which("jj") then
     local function gone_workspace(change)
+        -- Make a jj project with a base commit
         local env, base = adopt_env()
         local root = support.sandbox({}, {})
         local init = { stdout = "null", stderr = "null", env = IDENT }
@@ -2937,15 +3077,23 @@ if dev_os.which("jj") then
         assert(fs.write(root .. "/base", "1"))
         local _, code = real_jj(root, "commit", "-m", "base")
         testing.eq(code, 0)
+
+        -- Add a workspace under another repo folder
         local path = base .. "/elsewhere/gone"
         assert(fs.mkdir(base .. "/elsewhere", { parents = true }))
         _, code = real_jj(root, "workspace", "add", "--name", "gone", "-r", "@-", path)
         testing.eq(code, 0)
+
+        -- Leave an undescribed change in it when asked
         if change then
             assert(fs.write(path .. "/work", "1"))
         end
+
+        -- Note its head, then lose its folder
         local head = real_jj(path, "log", "-r", "@", "--no-graph", "-T", "commit_id")
         assert(fs.remove(path, { recursive = true }))
+
+        -- Hand back the project, the lost path, the env and the head
         return root, path, env, head
     end
 
@@ -2998,15 +3146,22 @@ if dev_os.which("jj") then
 end
 
 local function with_vars(vars, run)
+    -- Set each variable and remember what it held
     local previous = {}
     for name, value in pairs(vars) do
         previous[name] = dev_os.getenv(name)
         dev_os.setenv(name, value)
     end
+
+    -- Run the body and keep its outcome
     local ok, err = pcall(run)
+
+    -- Restore the variables
     for name in pairs(vars) do
         dev_os.setenv(name, previous[name] or "")
     end
+
+    -- Raise the body's failure after the restore
     assert(ok, err)
 end
 
@@ -3023,9 +3178,12 @@ end
 
 if dev_os.which("jj") and dev_os.which("git") then
     local function jj_project()
+        -- Make a jj project with a bare remote
         local root = assert(fs.realpath(support.tempdir()))
         quietly({ "jj", "git", "init", root }, IDENT)
         quietly({ "jj", "-R", root, "git", "remote", "add", "origin", bare_remote() }, IDENT)
+
+        -- Commit a base and publish it as master
         assert(fs.write(root .. "/base", "1"))
         quietly({ "jj", "-R", root, "commit", "-m", "base" }, IDENT)
         quietly({ "jj", "-R", root, "bookmark", "create", "master", "-r", "@-" }, IDENT)
@@ -3033,18 +3191,25 @@ if dev_os.which("jj") and dev_os.which("git") then
             { "jj", "-R", root, "git", "push", "--remote", "origin", "--bookmark", "master" },
             IDENT
         )
+
+        -- Hand back the project
         return root
     end
 
     local function made_in(root, base, name)
+        -- Make the workspace with a central root and a jj identity in the env
         local vars =
             { DEV_WS_ROOT = base, JJ_FORGE = "", JJ_USER = "t", JJ_EMAIL = "t@example.com" }
         local path, message, code
         with_vars(vars, function()
             path, message, code = cmd_ws.make(root, name, function() end)
         end)
+
+        -- Check it raised no refusal
         testing.eq(message, nil)
         testing.eq(code, nil)
+
+        -- Hand back its path
         return assert(path)
     end
 
@@ -3108,13 +3273,18 @@ end
 
 if dev_os.which("git") then
     local function git_project()
+        -- Make a git project with a base commit
         local root = assert(fs.realpath(support.tempdir()))
         quietly({ "git", "init", "-q", "-b", "master", root })
         assert(fs.write(root .. "/base", "1"))
         support.git(root, "add", "-A")
         support.git(root, "commit", "-q", "-m", "base")
+
+        -- Publish master to a bare remote
         support.git(root, "remote", "add", "origin", bare_remote())
         support.git(root, "push", "-q", "origin", "master")
+
+        -- Hand back the project
         return root
     end
 

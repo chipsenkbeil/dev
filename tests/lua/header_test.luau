@@ -45,11 +45,14 @@ testing.test("code before any comment leaves the summary empty", function()
 end)
 
 testing.test("a flag line declares its short, kind, choices, default and help", function()
+    -- Parse three flag lines
     local spec = parse(
         "# flag: wait short=w kind=number default=30 -- Seconds to wait",
         "# flag: mode choices=a,b required",
         "# flag: label repeatable"
     )
+
+    -- Read the short, kind, default and help
     testing.eq(spec.flags[1], {
         name = "wait",
         short = "w",
@@ -57,8 +60,12 @@ testing.test("a flag line declares its short, kind, choices, default and help", 
         default = 30,
         help = "Seconds to wait",
     })
+
+    -- Read the choices and required
     testing.eq(spec.flags[2].choices, { "a", "b" })
     testing.eq(spec.flags[2].required, true)
+
+    -- Read repeatable
     testing.eq(spec.flags[3].repeatable, true)
 end)
 
@@ -115,11 +122,13 @@ testing.test("an unknown word on a requires line fails the header", function()
 end)
 
 testing.test("CRLF line endings do not reach the fields", function()
-    local spec = assert(header.parse("#!/bin/sh\r\n# flag: a -- A\r\n", "/p/x.sh"))
+    local text = table.concat({ "#!/bin/sh", "# flag: a -- A", "" }, "\r\n")
+    local spec = assert(header.parse(text, "/p/x.sh"))
     testing.eq(spec.flags[1].help, "A")
 end)
 
 testing.test("a powershell header has no shebang", function()
-    local spec = assert(header.parse("# summary: Hi\nWrite-Host hi\n", "/p/x.ps1"))
+    local text = table.concat({ "# summary: Hi", "Write-Host hi", "" }, "\n")
+    local spec = assert(header.parse(text, "/p/x.ps1"))
     testing.eq(spec.summary, "Hi")
 end)

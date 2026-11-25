@@ -102,22 +102,32 @@ testing.test("multi mode: a row marked checked starts checked", function()
 end)
 
 testing.test("a checked row is ignored outside multi mode and when disabled", function()
+    -- Mark two rows checked, one of them disabled
     local list = items()
     list[1].checked = true
     list[2].checked = true
     list[2].disabled = "no"
+
+    -- Expect only the enabled checked row in a multi picker's result
     local model = picker.new(list, { title = "Pick", multi = true })
     press(model, { Key.ENTER })
     testing.eq(model:result(), { "one" })
+
+    -- Expect no checked rows to matter outside multi mode
     model = picker.new(items(), { title = "Pick" })
     press(model, { Key.ENTER })
     testing.eq(model:result(), "one")
 end)
 
 testing.test("required multi mode: enter waits until a row is checked", function()
+    -- Start a picker that needs one row checked
     local model = picker.new(items(), { title = "Pick", multi = true, required = true })
+
+    -- Expect enter to wait while nothing is checked
     testing.eq(press(model, { Key.ENTER }), nil)
     testing.eq(model:result(), nil)
+
+    -- Expect enter to pick once a row is checked
     testing.eq(press(model, { Key.SPACE, Key.ENTER }), picker.Outcome.PICK)
     testing.eq(model:result(), { "one" })
 end)
@@ -125,20 +135,30 @@ end)
 testing.test(
     "required multi mode: clearing every box blocks enter again, and q still cancels",
     function()
+        -- Start a required picker with one row checked
         local list = items()
         list[1].checked = true
         local model = picker.new(list, { title = "Pick", multi = true, required = true })
+
+        -- Expect unchecking that row to block enter
         testing.eq(press(model, { Key.SPACE, Key.ENTER }), nil)
+
+        -- Expect q to cancel regardless
         testing.eq(press(model, { "q" }), picker.Outcome.CANCEL)
         testing.eq(model:result(), nil)
     end
 )
 
 testing.test("a toggle flips its value in the result", function()
+    -- Offer a dry-run toggle
     local toggles = { { key = "d", value = "--dry-run", label = "Dry run" } }
+
+    -- Expect one press to turn it on in the result
     local model = picker.new(items(), { title = "Pick", toggles = toggles })
     press(model, { "d", Key.ENTER })
     testing.eq(model:result(), { values = "one", toggles = { "--dry-run" } })
+
+    -- Expect a second press to turn it off again
     model = picker.new(items(), { title = "Pick", toggles = toggles })
     press(model, { "d", "d", Key.ENTER })
     testing.eq(model:result(), { values = "one", toggles = {} })
@@ -152,13 +172,18 @@ testing.test("a toggle that starts on is on in the result", function()
 end)
 
 testing.test("lines stay within the width", function()
+    -- Make a narrow screen and a list with long cells and a long disabled reason
     local ctx = ui.context({ color = false, interactive = true, width = 30 })
     local list = items()
     list[1].cells = { "A-very-long-name-with-é", "and a long description" }
     list[2].disabled = "needs 8 GiB more than this box has"
+
+    -- Add a toggle with a long label and a long note
     local toggles = { { key = "d", value = "--dry-run", label = "Dry run with a long label" } }
     local model =
         picker.new(list, { title = "Pick a box", note = "a long note here", toggles = toggles })
+
+    -- Expect every drawn line to fit the width
     for _, line in ipairs(model:lines(ctx)) do
         testing.ok(text.width(line) <= 30, line)
     end
@@ -185,9 +210,14 @@ testing.test("a disabled row shows its reason", function()
 end)
 
 testing.test("multi rows show boxes and the toggle line shows its key", function()
+    -- Make a multi picker with a toggle
     local toggles = { { key = "d", value = "--dry-run", label = "Dry run" } }
     local model = picker.new(items(), { title = "Pick", multi = true, toggles = toggles })
+
+    -- Check the first row
     press(model, { Key.SPACE })
+
+    -- Expect boxes on the rows and the toggle's key on its line
     local lines = model:lines(plain)
     testing.ok(lines[2]:find("[x]", 1, true))
     testing.ok(lines[3]:find("[ ]", 1, true))
@@ -239,11 +269,16 @@ testing.test("a tall list never draws more lines than the height", function()
 end)
 
 testing.test("a tall list keeps the cursor row in the window as it moves", function()
+    -- Start a tall list at the top
     local model = picker.new(many(30), { title = "Pick" })
+
+    -- Expect the cursor row to stay in view moving down
     for _ = 1, 12 do
         model:key(Key.DOWN)
         testing.ok(cursor_row(model:lines(tall(10))), "cursor row missing")
     end
+
+    -- Expect it to stay in view moving back up
     for _ = 1, 12 do
         model:key(Key.UP)
         testing.ok(cursor_row(model:lines(tall(10))), "cursor row missing")
@@ -259,25 +294,35 @@ testing.test("the first draw of a tall list shows only a down indicator", functi
 end)
 
 testing.test("at the end of a tall list only an up indicator shows", function()
+    -- Jump to the end of a tall list
     local model = picker.new(many(30), { title = "Pick" })
     press(model, { Key.END })
+
+    -- Expect the window to end on the last row under an up indicator
     local lines = model:lines(tall(10))
     testing.eq(#lines, 10)
     testing.eq(lines[2], "↑ 23 more")
     testing.ok(lines[#lines - 1]:find("Row 30", 1, true))
+
+    -- Expect no down indicator
     for _, line in ipairs(lines) do
         testing.ok(not line:find("^↓ %d+ more"), line)
     end
 end)
 
 testing.test("in the middle both indicators count the rows cut off", function()
+    -- Move a tall list's cursor to the middle
     local model = picker.new(many(30), { title = "Pick" })
     for _ = 1, 12 do
         model:key(Key.DOWN)
     end
+
+    -- Read the counts the two indicators show
     local lines = model:lines(tall(10))
     local up = tonumber(lines[2]:match("^↑ (%d+) more$"))
     local down = tonumber(lines[#lines - 1]:match("^↓ (%d+) more$"))
+
+    -- Expect the counts and the visible rows to cover every row
     testing.eq(up + down + (#lines - 4), 30)
 end)
 
@@ -289,30 +334,42 @@ testing.test("toggles take one line from the window", function()
 end)
 
 testing.test("pgdn and pgup move by a window and home and end by the list", function()
+    -- Expect a page down to move by one window
     local model = picker.new(many(30), { title = "Pick" })
     model:lines(tall(10))
     press(model, { Key.PGDN, Key.ENTER })
     testing.eq(model:result(), "v9")
+
+    -- Expect a page up to come back to the first row
     model = picker.new(many(30), { title = "Pick" })
     model:lines(tall(10))
     press(model, { Key.PGDN, Key.PGUP, Key.ENTER })
     testing.eq(model:result(), "v1")
+
+    -- Expect end to jump to the last row
     model = picker.new(many(30), { title = "Pick" })
     press(model, { Key.END, Key.ENTER })
     testing.eq(model:result(), "v30")
+
+    -- Expect home to jump back to the first row
     model = picker.new(many(30), { title = "Pick" })
     press(model, { Key.END, Key.HOME, Key.ENTER })
     testing.eq(model:result(), "v1")
 end)
 
 testing.test("paging and the ends skip disabled rows", function()
+    -- Disable the last row and the row a page down would land on
     local list = many(30)
     list[30].disabled = "no"
     list[9].disabled = "no"
+
+    -- Expect end to land on the last enabled row
     local model = picker.new(list, { title = "Pick" })
     model:lines(tall(10))
     press(model, { Key.END, Key.ENTER })
     testing.eq(model:result(), "v29")
+
+    -- Expect a page down to skip past the disabled row
     model = picker.new(list, { title = "Pick" })
     model:lines(tall(10))
     press(model, { Key.PGDN, Key.ENTER })
@@ -320,18 +377,25 @@ testing.test("paging and the ends skip disabled rows", function()
 end)
 
 testing.test("paging goes past a run of disabled rows", function()
+    -- Disable a run of rows after the first
     local list = many(30)
     for i = 2, 11 do
         list[i].disabled = "no"
     end
+
+    -- Expect a page down to land past the run
     local model = picker.new(list, { title = "Pick" })
     model:lines(tall(10))
     press(model, { Key.PGDN, Key.ENTER })
     testing.eq(model:result(), "v12")
+
+    -- Disable a run of rows before the last
     list = many(30)
     for i = 20, 29 do
         list[i].disabled = "no"
     end
+
+    -- Expect a page up from the last row to land before the run
     model = picker.new(list, { title = "Pick", initial = "v30" })
     model:lines(tall(10))
     press(model, { Key.PGUP, Key.ENTER })

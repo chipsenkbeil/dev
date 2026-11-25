@@ -22,11 +22,16 @@ local function git(root, ...)
 end
 
 local function fixture()
+    -- Make a bare remote
     local remote = assert(fs.realpath(support.tempdir()))
     git(remote, "init", "-q", "--bare")
+
+    -- Make a repository that pushes to it
     local root = assert(fs.realpath(support.tempdir()))
     git(root, "init", "-q")
     git(root, "remote", "add", "origin", remote)
+
+    -- Give it a first commit
     git(root, "commit", "-q", "--allow-empty", "-m", "one")
     return root, remote
 end
@@ -100,15 +105,20 @@ testing.test("push refuses a jj repo with no trunk bookmark in a sentence", func
 end)
 
 testing.test("push.tag.sends.each.tag.to.the.remote.of.record", function()
+    -- Push a lightweight and an annotated tag
     local root, remote = fixture()
     git(root, "tag", "v1")
     git(root, "tag", "-a", "-m", "batch", "batch-1")
     local out, code = support.dev(root, { "push", "--tag", "v1", "--tag", "batch-1" })
     testing.eq(code, 0, out)
     testing.eq(out:find("Pushed tags v1 batch-1 to origin.", 1, true) ~= nil, true, out)
+
+    -- Check the remote holds both at the head
     local head = git(root, "rev-parse", "HEAD")
     testing.eq(git(remote, "rev-parse", "refs/tags/v1^{commit}"), head)
     testing.eq(git(remote, "rev-parse", "refs/tags/batch-1^{commit}"), head)
+
+    -- Push them again and see nothing sent
     local again, again_code = support.dev(root, { "push", "--tag", "v1", "--tag", "batch-1" })
     testing.eq(again_code, 0, again)
     testing.eq(again:find("Tag v1 is already on origin.", 1, true) ~= nil, true, again)
@@ -127,28 +137,40 @@ testing.test("push.tag.folds.a.repeated.tag.into.one.push", function()
 end)
 
 testing.test("push.tag.refuses.a.missing.local.tag", function()
+    -- Push a real tag together with a missing one
     local root, remote = fixture()
     git(root, "tag", "v1")
     local out, code = support.dev(root, { "push", "--tag", "v1", "--tag", "nosuch" })
     testing.eq(code, 1)
+
+    -- Check the refusal names the missing tag
     local want = "There is no local tag nosuch. No tag was pushed."
     testing.eq(out:find(want, 1, true) ~= nil, true, out)
+
+    -- Check the remote got nothing
     testing.eq(git(remote, "tag", "--list"), "")
     cleanup(root, remote)
 end)
 
 testing.test("push.tag.refuses.a.tag.the.remote.holds.at.another.commit", function()
+    -- Publish a tag at the first commit
     local root, remote = fixture()
     git(root, "tag", "v1")
     local first = git(root, "rev-parse", "HEAD")
     local _, pushed = support.dev(root, { "push", "--tag", "v1" })
     testing.eq(pushed, 0)
+
+    -- Move the tag to a new commit and add a second tag
     git(root, "commit", "-q", "--allow-empty", "-m", "two")
     git(root, "tag", "-f", "v1")
     git(root, "tag", "v2")
+
+    -- Push both and see the moved tag refused
     local out, code = support.dev(root, { "push", "--tag", "v2", "--tag", "v1" })
     testing.eq(code, 1)
     testing.eq(out:find("origin holds tag v1 at " .. first, 1, true) ~= nil, true, out)
+
+    -- Check the remote kept the old tag and took no new one
     testing.eq(git(remote, "rev-parse", "refs/tags/v1^{commit}"), first)
     testing.eq(git(remote, "tag", "--list", "v2"), "")
     cleanup(root, remote)
@@ -165,6 +187,7 @@ testing.test("push.tag.works.on.a.detached.head", function()
 end)
 
 local function jj_tag_push(message)
+    -- Make a bare remote and a jj repository that pushes to it
     local remote = assert(fs.realpath(support.tempdir()))
     git(remote, "init", "-q", "--bare")
     local root = assert(fs.realpath(support.tempdir()))
@@ -183,10 +206,14 @@ local function jj_tag_push(message)
     })
     testing.eq(made, 0)
     jj("git", "remote", "add", "origin", remote)
+
+    -- Commit a change and tag it through git
     jj("--config", "user.name=t", "--config", "user.email=t@t", "commit", "-m", message)
     local sha = jj("log", "--no-graph", "-r", "@-", "-T", "commit_id")
     local _, tagged = dev_os.capture({ "git", "--git-dir=" .. jj("git", "root"), "tag", "v1", sha })
     testing.eq(tagged, 0)
+
+    -- Push the tag
     local out, code = support.dev(root, { "push", "--tag", "v1" })
     return out, code, remote, root, sha
 end

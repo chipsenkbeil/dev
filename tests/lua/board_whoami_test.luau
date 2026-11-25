@@ -6,7 +6,12 @@ local support = require("./support")
 local WORKER = "pomb_WORKERtoken0123456789"
 local EXPIRES = 4102444800
 local function user_config(url)
-    return '[board.pomb]\nurl = "' .. url .. '"\ntoken = "pass:secrets/worker/token/pomb"\n'
+    return table.concat({
+        "[board.pomb]",
+        'url = "' .. url .. '"',
+        'token = "pass:secrets/worker/token/pomb"',
+        "",
+    }, "\n")
 end
 local ROLE_WHO = '{"kind":"token","name":"dotfiles/implementer/72f0e012/1","scope":"write",'
     .. '"expires_at":'
@@ -39,16 +44,29 @@ local function executable(path, body)
 end
 
 local function sandbox(who)
+    -- Make a project on a Pomb board and a home that points at a server
     local root = support.sandbox({
-        [".dev/config.toml"] = '[board]\nbackend = "pomb"\nname = "dotfiles"\n',
+        [".dev/config.toml"] = table.concat({
+            "[board]",
+            'backend = "pomb"',
+            'name = "dotfiles"',
+            "",
+        }, "\n"),
     }, {})
     local home = support.tempdir()
     assert(fs.mkdir(home .. "/.config/dev", { parents = true }))
     SERVERS[root] = support.fake_http({})
     assert(fs.write(home .. "/.config/dev/config.toml", user_config(SERVERS[root].url)))
+
+    -- Have the server say who the token is
     assert(fs.write(root .. "/who.json", who))
-    executable(root .. "/bin/security", "#!/bin/sh\nexit 1\n")
-    executable(root .. "/bin/pass", '#!/bin/sh\necho "' .. WORKER .. '"\n')
+
+    -- Stub the keychain and the pass helper
+    executable(root .. "/bin/security", table.concat({ "#!/bin/sh", "exit 1", "" }, "\n"))
+    executable(
+        root .. "/bin/pass",
+        table.concat({ "#!/bin/sh", 'echo "' .. WORKER .. '"', "" }, "\n")
+    )
     return root, home
 end
 
@@ -71,12 +89,16 @@ testing.test(
     "whoami-fields prints the name, kind, scope, role, label, issuer and expiry",
     function()
         local root, home = sandbox(ROLE_WHO)
+
+        -- Ask who the token is
         local out, code = whoami(root, home)
         testing.ok(code == 0, out)
         testing.ok(
             SERVERS[root]:requests():find("/api/v1/auth/whoami", 1, true),
             SERVERS[root]:requests()
         )
+
+        -- Print each field
         testing.ok(out:find("name: dotfiles/implementer/72f0e012/1\n", 1, true), out)
         testing.ok(out:find("kind: token\n", 1, true), out)
         testing.ok(out:find("scope: write\n", 1, true), out)
@@ -101,6 +123,7 @@ testing.test(
 )
 
 testing.test("whoami-silent prints the boards and permissions and never the token", function()
+    -- Print the boards and permissions of a role token
     local root, home = sandbox(ROLE_WHO)
     local out, code = whoami(root, home)
     testing.ok(code == 0, out)
@@ -108,9 +131,13 @@ testing.test("whoami-silent prints the boards and permissions and never the toke
     testing.ok(out:find("permissions: cards.read, cards.write", 1, true), out)
     testing.eq(out:find(WORKER, 1, true), nil, out)
     testing.eq(out:find(WORKER, 1, true), nil, out)
+
+    -- Print all boards for a token that spans them
     root, home = sandbox(PLAIN_WHO)
     out, code = whoami(root, home)
     testing.ok(out:find("boards: all\n", 1, true), out)
+
+    -- Refuse an expired token without printing it
     assert(fs.write(root .. "/who.json", '{"code":"token_expired","message":"' .. WORKER .. '"}'))
     assert(fs.write(root .. "/who_status", "401"))
     out, code = whoami(root, home)

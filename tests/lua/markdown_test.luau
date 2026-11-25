@@ -86,8 +86,9 @@ testing.test("a fenced line is never wrapped and prose never passes the width", 
 end)
 
 testing.test("a table narrower than the width keeps one line per row", function()
-    local out = markdown("| a | b |\n|---|---|\n| 1 | 2 |\n", { width = 80 })
-    testing.eq(out, "  a  b\n  1  2\n")
+    local out =
+        markdown(table.concat({ "| a | b |", "|---|---|", "| 1 | 2 |", "" }, "\n"), { width = 80 })
+    testing.eq(out, table.concat({ "  a  b", "  1  2", "" }, "\n"))
 end)
 
 testing.test("empty text renders to nothing", function()
@@ -95,16 +96,27 @@ testing.test("empty text renders to nothing", function()
 end)
 
 testing.test("code inside bold, an escaped pipe and an empty fence render cleanly", function()
-    local out = markdown(
-        "**use `dev help` now**\n\n```\n```\n\n| a | b |\n|---|---|\n| x\\|y | `p|q` |\n",
-        {
-            width = 80,
-            color = true,
-        }
-    )
-    testing.eq(
-        out,
-        "\27[1muse\27[0m \27[36m\27[1mdev\27[0m \27[36m\27[1mhelp\27[0m \27[1mnow\27[0m\n\n"
-            .. "  \27[1ma\27[0m    \27[1mb\27[0m\n  x|y  \27[36mp|q\27[0m\n"
-    )
+    local source = table.concat({
+        "**use `dev help` now**",
+        "",
+        "```",
+        "```",
+        "",
+        "| a | b |",
+        "|---|---|",
+        "| x\\|y | `p|q` |",
+        "",
+    }, "\n")
+    local want = table.concat({
+        "\27[1muse\27[0m \27[36m\27[1mdev\27[0m \27[36m\27[1mhelp\27[0m \27[1mnow\27[0m",
+        "",
+        "  \27[1ma\27[0m    \27[1mb\27[0m",
+        "  x|y  \27[36mp|q\27[0m",
+        "",
+    }, "\n")
+    local out = markdown(source, {
+        width = 80,
+        color = true,
+    })
+    testing.eq(out, want)
 end)

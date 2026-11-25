@@ -12,7 +12,13 @@ local has_jj = dev_os.which("jj") ~= nil
 local IDENT = { JJ_USER = "t", JJ_EMAIL = "t@example.com" }
 
 local function setup(files)
-    local all = { [".dev/config.toml"] = '[board]\nbackend = "local"\nname = "mine"\n' }
+    local config = table.concat({
+        "[board]",
+        'backend = "local"',
+        'name = "mine"',
+        "",
+    }, "\n")
+    local all = { [".dev/config.toml"] = config }
     for name, text in pairs(files or {}) do
         all[name] = text
     end
@@ -29,10 +35,12 @@ local function passing_ci_path()
     if not passing_ci_bin then
         passing_ci_bin = support.tempdir() .. "/bin"
         assert(fs.mkdir(passing_ci_bin, { parents = true }), "mkdir failed")
-        assert(
-            fs.write(passing_ci_bin .. "/ci", '#!/bin/sh\necho \'{"status":"passed"}\'\n'),
-            "write failed"
-        )
+        local script = table.concat({
+            "#!/bin/sh",
+            [[echo '{"status":"passed"}']],
+            "",
+        }, "\n")
+        assert(fs.write(passing_ci_bin .. "/ci", script), "write failed")
         assert(dev_os.run({ "chmod", "755", passing_ci_bin .. "/ci" }) == 0, "chmod failed")
     end
     return passing_ci_bin .. ":" .. dev_os.getenv("PATH")
@@ -66,8 +74,11 @@ local function must(first, second)
 end
 
 local function card_with(root, home, rows)
+    -- Start an empty board without the turn card
     must(dev(root, home, { "board", "init" }))
     support.drop_turn_card(support.board_file(home, "mine"))
+
+    -- Add a one-Pomodoro card
     local out = dev(root, home, {
         "board",
         "add",
@@ -84,6 +95,8 @@ local function card_with(root, home, rows)
         "a",
     })
     local id = assert(out:match("added (%x+)"), out)
+
+    -- Give the card its checks rows
     local args = { "board", "checks", id }
     for _, row in ipairs(rows) do
         args[#args + 1] = row
@@ -93,15 +106,20 @@ local function card_with(root, home, rows)
 end
 
 local function git_root(files)
+    -- Make the sandbox and a runner for git commands in it
     local root, home = setup(files)
     local function git(...)
         local argv =
             { "git", "-C", root, "-c", "user.name=t", "-c", "user.email=t@example.com", ... }
         must(dev_os.run(argv, { stdout = "null" }))
     end
+
+    -- Commit the whole sandbox as the base
     must(dev_os.run({ "git", "init", "-q", root }, { stdout = "null" }))
     git("add", "-A")
     git("commit", "-q", "-m", "base")
+
+    -- Read the commit the checks run at
     local head = dev_os.capture({ "git", "-C", root, "rev-parse", "HEAD" }):gsub("\n$", "")
     return root, home, head
 end
@@ -154,7 +172,10 @@ local function expected_head(commit, change, mode, commands)
 end
 
 testing.test("a row is split into words and a shell character is refused", function()
+    -- Split a row into words
     testing.eq(check.argv("dev --remote  lint"), { "dev", "--remote", "lint" })
+
+    -- Refuse every row that only a shell reads
     for _, row in ipairs({
         "a; b",
         "a | b",
@@ -169,6 +190,8 @@ testing.test("a row is split into words and a shell character is refused", funct
         testing.eq(argv, nil, row)
         testing.ok(why:find("only a shell reads", 1, true), why)
     end
+
+    -- Refuse a blank row
     testing.eq(check.argv("  "), nil)
 end)
 
@@ -229,6 +252,7 @@ testing.test("checks refuses a bare test name", function()
 end)
 
 testing.test("a negated row passes on no match, fails on a match and fails as an error", function()
+    -- Make a directory with one file that matches and one that does not
     local root = support.tempdir()
     assert(fs.write(root .. "/hit.txt", "needle\n"))
     assert(fs.write(root .. "/miss.txt", "hay\n"))
@@ -236,16 +260,24 @@ testing.test("a negated row passes on no match, fails on a match and fails as an
         local argv = assert(check.argv(row))
         return check.run({ root = root, run = row, argv = argv, seconds = 30 })
     end
+
+    -- Pass a negated row when nothing matches
     local row = ran("! grep -q needle miss.txt")
     testing.eq(row.result, "pass")
     testing.eq(row.code, 1)
+
+    -- Fail it when something matches
     row = ran("! grep -q needle hit.txt")
     testing.eq(row.result, "fail")
     testing.ok(row.tail:find("A match was found.", 1, true), row.tail)
+
+    -- Fail it as an error when the file is absent
     row = ran("! grep -q needle absent.txt")
     testing.eq(row.result, "fail")
     testing.eq(row.code, 2)
     testing.ok(row.tail:find("is an error", 1, true), row.tail)
+
+    -- Drop the bang from the argv and refuse it anywhere but first
     testing.eq(check.argv("! grep -q needle miss.txt"), { "grep", "-q", "needle", "miss.txt" })
     for _, bad in ipairs({ "grep ! needle miss.txt", "! grep -q ! miss.txt", "!grep x y" }) do
         local argv, why = check.argv(bad)
@@ -279,22 +311,32 @@ testing.test("an rg row with a word that is no path is unrunnable", function()
 end)
 
 testing.test("a row whose rg exits 2 is an error with rg's stderr", function()
+    -- Make an empty directory
     local root = support.tempdir()
+
+    -- Run an rg row on a file that is absent
     local row = check.run({
         root = root,
         run = "rg word absent.txt",
         argv = { "rg", "word", "absent.txt" },
         seconds = 30,
     })
+
+    -- Check the row is an error carrying rg's stderr
     testing.eq(row.result, "error")
     testing.eq(row.code, 2)
     testing.ok(row.tail:find("absent.txt", 1, true), row.tail)
 end)
 
 testing.test("board check prints the row error and rg's stderr for an rg exit 2", function()
+    -- Give a card an rg row with a bad pattern
     local root, home = git_root({ ["a.txt"] = "x\n" })
     local id = card_with(root, home, { "rg [ a.txt" })
+
+    -- Check the card
     local out, code = dev(root, home, { "board", "check", id })
+
+    -- Check the run failed with the row error, rg's stderr and an error record
     testing.ok(code ~= 0, out)
     testing.ok(out:find("rg exited 2", 1, true), out)
     testing.ok(out:find("regex parse error", 1, true), out)
@@ -302,11 +344,16 @@ testing.test("board check prints the row error and rg's stderr for an rg exit 2"
 end)
 
 testing.test("board checks refuses an unrunnable row and keeps the old rows", function()
+    -- Give a card one runnable row
     local root, home = git_root({ ["a.txt"] = "x\n" })
     local id = card_with(root, home, { "true" })
+
+    -- Refuse a row naming a command off PATH
     local out, code = dev(root, home, { "board", "checks", id, "no-such-tool-xyz" })
     testing.ok(code ~= 0, out)
     testing.ok(out:find("not on PATH", 1, true), out)
+
+    -- Refuse an rg row with a word that is no path
     out, code = dev(root, home, { "board", "checks", id, "rg two words a.txt" })
     testing.ok(code ~= 0, out)
     testing.ok(out:find('"words"', 1, true), out)
@@ -363,20 +410,34 @@ local function ready_candidate(root, home, row)
 end
 
 testing.test("move ready refuses a card whose rg row names a missing path", function()
+    -- Make a Ready candidate whose rg row names a file
     local root, home = git_root({ ["a.txt"] = "x\n" })
     local id = ready_candidate(root, home, "rg -n x a.txt")
+
+    -- Delete that file
     assert(fs.remove(root .. "/a.txt"))
+
+    -- Try to move the card to Ready
     local out, code = dev(root, home, { "board", "move", id, "ready" })
+
+    -- Check the move was refused and names the missing path
     testing.eq(code, 1, out)
     testing.ok(out:find("has a checks row that cannot run and cannot enter Ready.", 1, true), out)
     testing.ok(out:find('gives rg the word "a.txt"', 1, true), out)
 end)
 
 testing.test("move ready refuses a card whose dev test row names a missing suite", function()
+    -- Make a Ready candidate whose dev test row names a suite
     local root, home = git_root({ ["tests/a_test.lua"] = "x\n" })
     local id = ready_candidate(root, home, "dev --remote test -- tests/a_test.lua")
+
+    -- Delete that suite
     assert(fs.remove(root .. "/tests/a_test.lua"))
+
+    -- Try to move the card to Ready
     local out, code = dev(root, home, { "board", "move", id, "ready" })
+
+    -- Check the move was refused and names the missing suite
     testing.eq(code, 1, out)
     testing.ok(out:find("has a checks row that cannot run and cannot enter Ready.", 1, true), out)
     testing.ok(out:find("names no suite in the workspace", 1, true), out)
@@ -388,14 +449,25 @@ testing.test("the reserved prefix is found whatever its case and leading space",
     testing.eq(board.reserved("Tests pass, dev-check: fine"), false)
 end)
 
-local BARE_CONFIG =
-    '[board]\nbackend = "local"\nname = "mine"\n[board.lint]\nbare_rows = ["dev --remote test"]\n'
+local BARE_CONFIG = table.concat({
+    "[board]",
+    'backend = "local"',
+    'name = "mine"',
+    "[board.lint]",
+    'bare_rows = ["dev --remote test"]',
+    "",
+}, "\n")
 
 testing.test("check refuses a card with no bare row before it runs any row", function()
+    -- Give a card rows when the config demands a bare one
     local root, home =
         git_root({ [".dev/config.toml"] = BARE_CONFIG, ["tests/a_test.lua"] = "x\n" })
     local id = card_with(root, home, { "true", "dev --remote test -- tests/a_test.lua" })
+
+    -- Check the card
     local out, code = dev(root, home, { "board", "check", id })
+
+    -- Check it was refused before any row ran
     testing.eq(code, 1, out)
     testing.ok(
         out:find("lacks the bare row dev --remote test and cannot be checked.", 1, true),
@@ -406,24 +478,50 @@ testing.test("check refuses a card with no bare row before it runs any row", fun
 end)
 
 testing.test("check refuses a bare_rows that is not a list of commands", function()
-    local config = '[board]\nbackend = "local"\nname = "mine"\n[board.lint]\nbare_rows = "x"\n'
+    -- Give a card a row when the config sets bare_rows to a string
+    local config = table.concat({
+        "[board]",
+        'backend = "local"',
+        'name = "mine"',
+        "[board.lint]",
+        'bare_rows = "x"',
+        "",
+    }, "\n")
     local root, home = git_root({ [".dev/config.toml"] = config })
     local id = card_with(root, home, { "true" })
+
+    -- Check the card
     local out, code = dev(root, home, { "board", "check", id })
+
+    -- Check the setting was refused
     testing.eq(code, 1, out)
     testing.ok(out:find("`bare_rows` setting of `[board.lint]` must be a list", 1, true), out)
 end)
 
 testing.test("check records each row and the commit, and the run is clean in git", function()
+    -- Give a card one passing and one failing row
     local root, home, head = git_root()
     local id = card_with(root, home, { "true", "false" })
+
+    -- Check the card and read what it printed
     local out, code = dev(root, home, { "board", "check", id })
     testing.eq(code, 1, out)
     testing.ok(out:find("1 pass - true", 1, true) and out:find("2 fail - false", 1, true), out)
     testing.ok(out:find("recorded on " .. id .. " at commit " .. head:sub(1, 12), 1, true), out)
+
+    -- Check the recorded comment
     local body = comments(home)[1].body
-    testing.eq(body, expected_head(head, "-", "run", { "true", "false" }) .. "\n1 pass -\n2 fail -")
+    testing.eq(
+        body,
+        table.concat({
+            expected_head(head, "-", "run", { "true", "false" }),
+            "1 pass -",
+            "2 fail -",
+        }, "\n")
+    )
     testing.eq(comments(home)[1].kind, "status")
+
+    -- Fix the rows and check again
     must(dev(root, home, { "board", "checks", id, "true" }))
     out, code = dev(root, home, { "board", "check", id })
     testing.eq(code, 0, out)
@@ -431,12 +529,17 @@ testing.test("check records each row and the commit, and the run is clean in git
 end)
 
 testing.test("check records the ci run id each row printed", function()
+    -- Give a card two rows that print ci run ids
     local root, home, head = git_root()
     local id = card_with(root, home, { "echo run 8cb600", "echo run 1f2e3d" })
+
+    -- Check the card
     local out, code = dev(root, home, { "board", "check", id })
     testing.eq(code, 0, out)
     testing.ok(out:find("1 pass 8cb600 echo run 8cb600", 1, true), out)
     testing.ok(out:find("2 pass 1f2e3d echo run 1f2e3d", 1, true), out)
+
+    -- Check the record keeps each run id
     local record = check.parse(comments(home)[1].body)
     testing.eq(record.commit, head)
     testing.eq(record.rows, {
@@ -446,30 +549,51 @@ testing.test("check records the ci run id each row printed", function()
 end)
 
 testing.test("check records each passed row as a partial record before the next row", function()
+    -- Make a repo to hold the card
     local root, home, head = git_root()
+
+    -- Give a card two passing rows and a failing one
     local rows = { "true", "echo run 8cb600", "false" }
     local id = card_with(root, home, rows)
+
+    -- Check the card
     local out, code = dev(root, home, { "board", "check", id })
     testing.eq(code, 1, out)
+
+    -- Check a partial record followed each pass and the run record closed the list
     local held = all_comments(home)
     testing.eq(#held, 3)
     testing.eq(held[1].body, expected_head(head, "-", "partial", { rows[1] }) .. "\n1 pass -")
     testing.eq(
         held[2].body,
-        expected_head(head, "-", "partial", { rows[1], rows[2] }) .. "\n1 pass -\n2 pass 8cb600"
+        table.concat({
+            expected_head(head, "-", "partial", { rows[1], rows[2] }),
+            "1 pass -",
+            "2 pass 8cb600",
+        }, "\n")
     )
     testing.eq(
         held[3].body,
-        expected_head(head, "-", "run", rows) .. "\n1 pass -\n2 pass 8cb600\n3 fail -"
+        table.concat({
+            expected_head(head, "-", "run", rows),
+            "1 pass -",
+            "2 pass 8cb600",
+            "3 fail -",
+        }, "\n")
     )
 end)
 
 testing.test("a rerun at the same commit skips passed rows and names them", function()
+    -- Give a card two ci rows and a row behind a gate
     local root, home, head = git_root()
     local rows = { "echo run 8cb600", "echo run 1f2e3d", "printenv GATE_OPEN" }
     local id = card_with(root, home, rows)
+
+    -- Fail the first run on the closed gate
     local _, code = dev(root, home, { "board", "check", id })
     testing.eq(code, 1)
+
+    -- Rerun with the gate open
     local out
     out, code = dev(root, home, { "board", "check", id }, nil, { GATE_OPEN = "1" })
     testing.eq(code, 0, out)
@@ -478,19 +602,31 @@ testing.test("a rerun at the same commit skips passed rows and names them", func
     testing.ok(not out:find("running 1 of 3", 1, true), out)
     testing.ok(not out:find("running 2 of 3", 1, true), out)
     testing.ok(out:find("running 3 of 3", 1, true), out)
+
+    -- Check the record keeps the earlier run ids
     local held = comments(home)
     testing.eq(
         held[#held].body,
-        expected_head(head, "-", "run", rows) .. "\n1 pass 8cb600\n2 pass 1f2e3d\n3 pass -"
+        table.concat({
+            expected_head(head, "-", "run", rows),
+            "1 pass 8cb600",
+            "2 pass 1f2e3d",
+            "3 pass -",
+        }, "\n")
     )
 end)
 
 testing.test("a rerun at a new commit runs every row", function()
+    -- Give a card two ci rows and a row behind a gate
     local root, home = git_root()
     local rows = { "echo run 8cb600", "echo run 1f2e3d", "printenv GATE_OPEN" }
     local id = card_with(root, home, rows)
+
+    -- Fail the first run on the closed gate
     local _, code = dev(root, home, { "board", "check", id })
     testing.eq(code, 1)
+
+    -- Move the head with an empty commit
     must(dev_os.run({
         "git",
         "-C",
@@ -505,6 +641,8 @@ testing.test("a rerun at a new commit runs every row", function()
         "-m",
         "next",
     }, { stdout = "null" }))
+
+    -- Rerun with the gate open and check every row ran again
     local out
     out, code = dev(root, home, { "board", "check", id }, nil, { GATE_OPEN = "1" })
     testing.eq(code, 0, out)
@@ -515,11 +653,18 @@ testing.test("a rerun at a new commit runs every row", function()
 end)
 
 testing.test("a rerun skips no row once the card's rows changed", function()
+    -- Give a card a passing and a failing row
     local root, home = git_root()
     local id = card_with(root, home, { "true", "false" })
+
+    -- Fail the first run
     local _, code = dev(root, home, { "board", "check", id })
     testing.eq(code, 1)
+
+    -- Replace the rows
     must(dev(root, home, { "board", "checks", id, "echo run 8cb600", "true" }))
+
+    -- Rerun and check no row was skipped
     local out
     out, code = dev(root, home, { "board", "check", id })
     testing.eq(code, 0, out)
@@ -541,6 +686,7 @@ testing.test("resume keeps rows of one shared ci run all or none", function()
 end)
 
 testing.test("resume keeps a passed row after a failed one", function()
+    -- Record a failed row ahead of two passed rows
     local state = { commit = string.rep("a", 40), change = "-" }
     local commands = { "false", "true", "echo run 8cb600" }
     local run = {
@@ -550,13 +696,18 @@ testing.test("resume keeps a passed row after a failed one", function()
             { run = commands[3], run_id = "8cb600", result = "pass" },
         }, check.Mode.RUN),
     }
+
+    -- Resume from that record
     local kept = check.resume({ run }, state.commit, commands, {})
+
+    -- Check only the failed row is dropped
     testing.eq(kept[1], nil)
     testing.eq(kept[2].result, "pass")
     testing.eq(kept[3].run_id, "8cb600")
 end)
 
 testing.test("resume keeps a row past an unrun row", function()
+    -- Record a partial run with an unrun row between two passed rows
     local state = { commit = string.rep("a", 40), change = "-" }
     local commands = { "true", "false", "echo run 8cb600" }
     local partial = {
@@ -566,59 +717,93 @@ testing.test("resume keeps a row past an unrun row", function()
             { run = commands[3], run_id = "8cb600", result = "pass" },
         }, check.Mode.PARTIAL),
     }
+
+    -- Resume from that record
     local kept = check.resume({ partial }, state.commit, commands, {})
+
+    -- Check both passed rows are kept and the unrun row is not
     testing.eq(kept[1].result, "pass")
     testing.eq(kept[2], nil)
     testing.eq(kept[3].run_id, "8cb600")
 end)
 
 testing.test("a partial record marks unrun rows as not run", function()
+    -- Give a card a row that fails between two that pass
     local root, home, head = git_root()
     local rows = { "true", "false", "echo run 8cb600", "false" }
     local id = card_with(root, home, rows)
+
+    -- Check the card
     local _, code = dev(root, home, { "board", "check", id })
     testing.eq(code, 1)
+
+    -- Check the second record marks the failed row as not run
     local held = all_comments(home)
     testing.eq(#held, 3)
     testing.eq(
         held[2].body,
-        expected_head(head, "-", "partial", { rows[1], rows[2], rows[3] })
-            .. "\n1 pass -\n2 not-run -\n3 pass 8cb600"
+        table.concat({
+            expected_head(head, "-", "partial", { rows[1], rows[2], rows[3] }),
+            "1 pass -",
+            "2 not-run -",
+            "3 pass 8cb600",
+        }, "\n")
     )
 end)
 
 testing.test("a cut-off rerun keeps a kept row beyond the leading run", function()
+    -- Give a card a gated row and a failing row among its passing rows
     local root, home, head = git_root()
     local rows = { "true", "printenv GATE_OPEN", "echo run 8cb600", "false", "echo run 1f2e3d" }
     local id = card_with(root, home, rows)
+
+    -- Fail the first run on the closed gate
     local _, code = dev(root, home, { "board", "check", id })
     testing.eq(code, 1)
     local before = #all_comments(home)
+
+    -- Rerun with the gate open and fail on the other row
     _, code = dev(root, home, { "board", "check", id }, nil, { GATE_OPEN = "1" })
     testing.eq(code, 1)
+
+    -- Check the new partial record keeps the row beyond the failure
     local held = all_comments(home)
     testing.eq(
         held[before + 1].body,
-        expected_head(head, "-", "partial", rows)
-            .. "\n1 pass -\n2 pass -\n3 pass 8cb600\n4 not-run -\n5 pass 1f2e3d"
+        table.concat({
+            expected_head(head, "-", "partial", rows),
+            "1 pass -",
+            "2 pass -",
+            "3 pass 8cb600",
+            "4 not-run -",
+            "5 pass 1f2e3d",
+        }, "\n")
     )
 end)
 
 testing.test("a partial is not rewritten when no new row passed", function()
+    -- Give a card five rows with two failures
     local root, home = git_root()
     local rows = { "true", "false", "echo run 8cb600", "false", "echo run 1f2e3d" }
     local id = card_with(root, home, rows)
+
+    -- Fail the first run
     local _, code = dev(root, home, { "board", "check", id })
     testing.eq(code, 1)
     local before = #all_comments(home)
+
+    -- Fail the same run again
     _, code = dev(root, home, { "board", "check", id })
     testing.eq(code, 1)
+
+    -- Check only the run record was added
     local held = all_comments(home)
     testing.eq(#held, before + 1)
     testing.ok(not held[#held].body:find(" mode=partial ", 1, true), held[#held].body)
 end)
 
 testing.test("resume drops shared rows unless all passed", function()
+    -- Build a record from a list of results over two shared rows
     local state = { commit = string.rep("a", 40), change = "-" }
     local commands = { "true", "dev --remote lint", "dev --remote test", "true" }
     local function newest(results)
@@ -628,6 +813,8 @@ testing.test("resume drops shared rows unless all passed", function()
         end
         return { body = check.record(state, rows, check.Mode.RUN) }
     end
+
+    -- Drop both shared rows when one of them failed
     local failed = check.resume(
         { newest({ "pass", "pass", "fail", "pass" }) },
         state.commit,
@@ -638,6 +825,8 @@ testing.test("resume drops shared rows unless all passed", function()
     testing.eq(failed[2], nil)
     testing.eq(failed[3], nil)
     testing.eq(failed[4].result, "pass")
+
+    -- Keep both shared rows when an unshared row failed
     local whole = check.resume(
         { newest({ "fail", "pass", "pass", "pass" }) },
         state.commit,
@@ -650,11 +839,16 @@ testing.test("resume drops shared rows unless all passed", function()
 end)
 
 testing.test("a rerun skips every passed row not only leading ones", function()
+    -- Give a card a gated row ahead of two ci rows
     local root, home, head = git_root()
     local rows = { "printenv GATE_OPEN", "echo run 8cb600", "echo run 1f2e3d" }
     local id = card_with(root, home, rows)
+
+    -- Fail the first run on the closed gate
     local _, code = dev(root, home, { "board", "check", id })
     testing.eq(code, 1)
+
+    -- Rerun with the gate open
     local out
     out, code = dev(root, home, { "board", "check", id }, nil, { GATE_OPEN = "1" })
     testing.eq(code, 0, out)
@@ -663,34 +857,51 @@ testing.test("a rerun skips every passed row not only leading ones", function()
     testing.ok(out:find("running 1 of 3", 1, true), out)
     testing.ok(not out:find("running 2 of 3", 1, true), out)
     testing.ok(not out:find("running 3 of 3", 1, true), out)
+
+    -- Check the record keeps the earlier run ids
     local held = comments(home)
     testing.eq(
         held[#held].body,
-        expected_head(head, "-", "run", rows) .. "\n1 pass -\n2 pass 8cb600\n3 pass 1f2e3d"
+        table.concat({
+            expected_head(head, "-", "run", rows),
+            "1 pass -",
+            "2 pass 8cb600",
+            "3 pass 1f2e3d",
+        }, "\n")
     )
 end)
 
 testing.test("record keeps the suites of a narrowed row", function()
+    -- Record one row that ran a narrowed list of suites
     local state = { commit = string.rep("a", 40), change = "-" }
     local narrowed = { "a_test.lua", "b_test.lua" }
     local body = check.record(state, {
         { run = "dev --remote test", run_id = "8cb600", result = "pass", ran = narrowed },
         { run = "dev --remote lint", run_id = "8cb600", result = "pass" },
     }, check.Mode.RUN)
+
+    -- Check the body names the suites
     testing.ok(body:find("1 pass 8cb600 ran=a_test.lua,b_test.lua", 1, true), body)
+
+    -- Check parsing gives the suites back to that row only
     local record = check.parse(body)
     testing.eq(record.rows[1].ran, narrowed)
     testing.eq(record.rows[2].ran, nil)
 end)
 
 testing.test("a partial record never lets a card land or blocks a carry", function()
+    -- Record a partial run of the first row
     local state = { commit = string.rep("a", 40), change = "chg" }
     local rows = { "true", "false" }
     local first = { run = rows[1], run_id = "-", result = check.Result.PASS }
     local partial = { body = check.record(state, { first }, check.Mode.PARTIAL) }
+
+    -- Check the partial record gives the land check no run to stand on
     testing.ok(land.checks_problem({ partial }, state, rows):find("No run", 1, true))
     local done = { body = check.record(state, { first, first }, check.Mode.RUN) }
     testing.eq(land.checks_problem({ done, partial }, state, { "true", "true" }), nil)
+
+    -- Check the carry runs again for the partial record alone and not once a run follows it
     local opts = { root = "/nonexistent", comments = { partial }, state = state, rows = rows }
     testing.ok(select("#", land.carry(opts)) > 1)
     opts.comments = { partial, done }
@@ -698,6 +909,7 @@ testing.test("a partial record never lets a card land or blocks a carry", functi
 end)
 
 testing.test("a 147 row check record stays under the pomb comment cap", function()
+    -- Name the cap and the short record size
     local COMMENT_CAP_BYTES = 5000
     local SHORT_RECORD_BYTES = 3000
 
@@ -731,14 +943,20 @@ testing.test("a 147 row check record stays under the pomb comment cap", function
 end)
 
 testing.test("show names each check row command", function()
+    -- Give a card a row that prints a ci run id
     local root, home = git_root()
     local id = card_with(root, home, { "true", "echo run 8cb600" })
+
+    -- Check the card
     local out, code = dev(root, home, { "board", "check", id })
     testing.eq(code, 0, out)
+
+    -- Show the card and check the row names its command
     out, code = dev(root, home, { "board", "show", id })
     testing.eq(code, 0, out)
     testing.ok(out:find("2 pass 8cb600 echo run 8cb600", 1, true), out)
 
+    -- Change the second row and check the stale record drops the command
     must(dev(root, home, { "board", "checks", id, "true", "echo run 8cb601" }))
     out, code = dev(root, home, { "board", "show", id })
     testing.eq(code, 0, out)
@@ -747,10 +965,15 @@ testing.test("show names each check row command", function()
 end)
 
 testing.test("show lists a short check record", function()
+    -- Give a card a row that prints a ci run id
     local root, home = git_root()
     local id = card_with(root, home, { "true", "echo run 8cb600" })
+
+    -- Check the card
     local out, code = dev(root, home, { "board", "check", id })
     testing.eq(code, 0, out)
+
+    -- Show the card and check the record is listed in short form
     out, code = dev(root, home, { "board", "show", id })
     testing.eq(code, 0, out)
     testing.ok(out:find("rows=2 sum=", 1, true), out)
@@ -758,21 +981,31 @@ testing.test("show lists a short check record", function()
 end)
 
 testing.test("check prints each row ci run id before the row finishes", function()
+    -- Give a card two rows that print ci run ids
     local root, home = git_root()
     local id = card_with(root, home, { "echo run 8cb600", "echo run 1f2e3d" })
+
+    -- Check the card
     local out, code = dev(root, home, { "board", "check", id })
     testing.eq(code, 0, out)
+
+    -- Find where each run id line sits in the output
     local first = out:find("row 1 run 8cb600", 1, true)
     local second = out:find("row 2 run 1f2e3d", 1, true)
     testing.ok(first and second, out)
+
+    -- Check each run id came before its result line
     testing.ok(first < out:find("1 pass 8cb600", 1, true), out)
     testing.ok(second < out:find("2 pass 1f2e3d", 1, true), out)
 end)
 
 testing.test("check.run hands each ci run id to on_run_id before the row ends", function()
+    -- Make a directory and a list of the run ids seen
     local dir = support.tempdir()
     local seen = {}
     local row
+
+    -- Run a row that waits until its first run id was handed over
     with_passing_ci(function()
         row = check.run({
             root = dir,
@@ -789,12 +1022,15 @@ testing.test("check.run hands each ci run id to on_run_id before the row ends", 
             end,
         })
     end)
+
+    -- Check the row passed with only the first run id seen
     testing.eq(row.result, "pass")
     testing.eq(seen, { "8cb600" })
     testing.eq(row.run_id, "8cb600")
 end)
 
 testing.test("check.reads.the.failing.case.names", function()
+    -- Build a script that prints a failing suite and its cases twice over
     local script = table.concat({
         "echo '> tests/lua/a_test.lua'",
         "echo 'ok - fine'",
@@ -806,21 +1042,30 @@ testing.test("check.reads.the.failing.case.names", function()
         "echo 'FAIL tests/lua/b_test.lua'",
         "exit 1",
     }, "; ")
+
+    -- Run it as a row
     local row = check.run({
         root = support.tempdir(),
         run = "row",
         argv = { "sh", "-c", script },
         seconds = 30,
     })
+
+    -- Check the row reads off the failed suites and case names
     testing.eq(row.failed, { "tests/lua/a_test.lua", "tests/lua/b_test.lua" })
     testing.eq(row.cases, { "first case", "second case", "tests/lua/b_test.lua" })
 end)
 
 testing.test("check records why a row failed without a run", function()
+    -- Give a card a row that cannot start a run
     local root, home, head = git_root()
     local id = card_with(root, home, { "ls dev-board-check-missing-path", "false" })
+
+    -- Check the card
     local out, code = dev(root, home, { "board", "check", id })
     testing.eq(code, 1, out)
+
+    -- Check the record names the reason and no run id
     local record = check.parse(comments(home)[1].body)
     testing.eq(record.commit, head)
     testing.ok(record.rows[1].reason:find("dev-board-check-missing-path", 1, true), out)
@@ -844,57 +1089,87 @@ local REFUSAL =
     "the hub is draining since 1m ago by agent:ops: protocol 67 deploy; running jobs finish and nothing new starts until `ci fleet drain off`"
 
 testing.test("check records no row for a run the hub refused", function()
+    -- Give a card a row that calls a ci stub the hub refuses
     local root, home = git_root({ ["stub-ci.sh"] = REFUSED_STUB })
     local id = card_with(root, home, { "true", "sh stub-ci.sh", "false" })
+
+    -- Check the card
     local out, code = dev(root, home, { "board", "check", id })
     testing.eq(code, 1, out)
+
+    -- Check no record was written
     testing.eq(comments(home)[1], nil)
 end)
 
 testing.test("check prints the refusal reason of a refused run and exits 1", function()
+    -- Give a card a row that calls a ci stub the hub refuses
     local root, home = git_root({ ["stub-ci.sh"] = REFUSED_STUB })
     local id = card_with(root, home, { "sh stub-ci.sh" })
+
+    -- Check the card
     local out, code = dev(root, home, { "board", "check", id })
     testing.eq(code, 1, out)
+
+    -- Check the output carries the hub's reason and no pass
     testing.ok(out:find("The ci hub refused row 1 (sh stub-ci.sh).", 1, true), out)
     testing.ok(out:find("The hub said: " .. REFUSAL, 1, true), out)
     testing.eq(out:find("passed", 1, true), nil, out)
 end)
 
 testing.test("check records no row for a run a draining target refused", function()
+    -- Give a card a row that calls a ci stub whose target is draining
     local root, home = git_root({ ["stub-ci.sh"] = TARGET_STUB })
     local id = card_with(root, home, { "sh stub-ci.sh" })
+
+    -- Check the card
     local out, code = dev(root, home, { "board", "check", id })
     testing.eq(code, 1, out)
+
+    -- Check no record was written
     testing.eq(comments(home)[1], nil)
 end)
 
 testing.test("check records no row for a negated run the hub refused", function()
+    -- Give a card a negated row that calls a ci stub the hub refuses
     local root, home = git_root({ ["stub-ci.sh"] = REFUSED_STUB })
     local id = card_with(root, home, { "! sh stub-ci.sh" })
+
+    -- Check the card
     local out, code = dev(root, home, { "board", "check", id })
     testing.eq(code, 1, out)
+
+    -- Check no record was written
     testing.eq(comments(home)[1], nil)
 end)
 
 testing.test("check run fails a negated row the hub refused", function()
+    -- Make a sandbox holding a ci stub the hub refuses
     local root = setup({ ["stub-ci.sh"] = REFUSED_STUB })
+
+    -- Run a negated row on the stub
     local row = check.run({
         root = root,
         run = "! sh stub-ci.sh",
         argv = { "sh", "stub-ci.sh" },
         seconds = 60,
     })
+
+    -- Check the row failed with the refusal
     testing.eq(row.result, "fail")
     testing.eq(row.refused, REFUSAL)
 end)
 
 testing.test("check tells a refused run from a failed one", function()
+    -- Give a card a row that calls a ci stub which fails
     local root, home = git_root({ ["stub-ci.sh"] = FAILED_STUB })
     local id = card_with(root, home, { "sh stub-ci.sh" })
+
+    -- Check the card and see the hub is not blamed
     local out, code = dev(root, home, { "board", "check", id })
     testing.eq(code, 1, out)
     testing.eq(out:find("The ci hub refused", 1, true), nil, out)
+
+    -- Check the record names the failure
     local record = check.parse(comments(home)[1].body)
     testing.eq(record.rows[1].result, "fail")
     testing.eq(record.rows[1].reason, "error: Failed to run the pipeline")
@@ -902,47 +1177,77 @@ end)
 
 local CAP_LINE =
     "The drain did not lift within 60 minutes. The hub is draining since 1h ago by agent:ops: protocol 67 deploy."
-local CAP_STUB = "echo 'error: " .. CAP_LINE .. "' >&2\nexit 12"
-local EXIT_12_STUB = "echo 'error: something else' >&2\nexit 12"
-local RUN_THEN_12_STUB = "echo 'run 8cb600'\necho 'error: late' >&2\nexit 12"
+local CAP_STUB = table.concat({
+    "echo 'error: " .. CAP_LINE .. "' >&2",
+    "exit 12",
+}, "\n")
+local EXIT_12_STUB = table.concat({
+    "echo 'error: something else' >&2",
+    "exit 12",
+}, "\n")
+local RUN_THEN_12_STUB = table.concat({
+    "echo 'run 8cb600'",
+    "echo 'error: late' >&2",
+    "exit 12",
+}, "\n")
 
 testing.test("a row that exits 12 with no run id is refused", function()
+    -- Give a card a row that calls a ci stub exiting 12 with no run id
     local root, home = git_root({ ["stub-ci.sh"] = EXIT_12_STUB })
     local id = card_with(root, home, { "sh stub-ci.sh" })
+
+    -- Check the card
     local out, code = dev(root, home, { "board", "check", id })
     testing.eq(code, 1, out)
+
+    -- Check the hub's message is printed and no record was written
     testing.ok(out:find("The ci hub refused row 1 (sh stub-ci.sh).", 1, true), out)
     testing.ok(out:find("The hub said: error: something else", 1, true), out)
     testing.eq(comments(home)[1], nil)
 end)
 
 testing.test("a row that exits 12 after its run id is not refused", function()
+    -- Make a sandbox holding a ci stub that exits 12 after its run id
     local root = setup({ ["stub-ci.sh"] = RUN_THEN_12_STUB })
+
+    -- Run a row on the stub
     local row = check.run({
         root = root,
         run = "sh stub-ci.sh",
         argv = { "sh", "stub-ci.sh" },
         seconds = 60,
     })
+
+    -- Check the row failed with its run id and no refusal
     testing.eq(row.result, "fail")
     testing.eq(row.refused, nil)
     testing.eq(row.run_id, "8cb600")
 end)
 
 testing.test("check prints the drain cap message of a refused run", function()
+    -- Give a card a row that calls a ci stub reporting the drain cap
     local root, home = git_root({ ["stub-ci.sh"] = CAP_STUB })
     local id = card_with(root, home, { "sh stub-ci.sh" })
+
+    -- Check the card
     local out, code = dev(root, home, { "board", "check", id })
     testing.eq(code, 1, out)
+
+    -- Check the cap message is printed and no record was written
     testing.ok(out:find("The hub said: " .. CAP_LINE, 1, true), out)
     testing.eq(comments(home)[1], nil)
 end)
 
 testing.test("check records no reason for a row with a run id", function()
+    -- Give a card a row that prints a ci run id
     local root, home = git_root()
     local id = card_with(root, home, { "echo run 8cb600" })
+
+    -- Check the card
     local out, code = dev(root, home, { "board", "check", id })
     testing.eq(code, 0, out)
+
+    -- Check the record has no reason line under the row
     local body = comments(home)[1].body
     testing.ok(body:find("\n1 pass 8cb600", 1, true), body)
     testing.eq(check.parse(body).rows[1].reason, nil)
@@ -950,6 +1255,7 @@ testing.test("check records no reason for a row with a run id", function()
 end)
 
 testing.test("check parse reads the reason of a row", function()
+    -- Record a failed row with a reason ahead of a passed row
     local state = { commit = "abc123", change = "-" }
     local rows = {
         {
@@ -961,11 +1267,21 @@ testing.test("check parse reads the reason of a row", function()
         { result = "pass", run_id = "8cb600", run = "dev --remote lint" },
     }
     local body = check.record(state, rows, false)
-    testing.ok(body:find("\n1 fail -\n  the hub is draining\n2 pass", 1, true), body)
+
+    -- Check the reason sits indented under its row and parses back
+    local reason_lines = table.concat({
+        "",
+        "1 fail -",
+        "  the hub is draining",
+        "2 pass",
+    }, "\n")
+    testing.ok(body:find(reason_lines, 1, true), body)
     testing.eq(check.parse(body).rows, {
         { result = "fail", run_id = "-", reason = "the hub is draining" },
         { result = "pass", run_id = "8cb600" },
     })
+
+    -- Check a second reason line and an orphan reason line are refused
     testing.eq(check.parse((body:gsub("draining\n", "draining\n  again\n"))), nil)
     local head = "dev-check: commit=abc123 change=- mode=run rows=0 sum=ab"
     testing.eq(check.parse(head .. "\n  orphan"), nil)
@@ -979,20 +1295,30 @@ testing.test("check labels the ci run of a row as repo/check/card", function()
 end)
 
 testing.test("check refuses a dirty git tree and records nothing", function()
+    -- Give a card a row and dirty the tree with a stray file
     local root, home = git_root()
     local id = card_with(root, home, { "true" })
     assert(fs.write(root .. "/stray", "x"))
+
+    -- Check the card
     local out, code = dev(root, home, { "board", "check", id })
     testing.eq(code, 1, out)
+
+    -- Check the refusal names the dirty tree and nothing was recorded
     testing.ok(out:find("working copy is dirty", 1, true), out)
     testing.eq(#comments(home), 0)
 end)
 
 testing.test("check refuses a tree that changed while the rows ran", function()
+    -- Give a card a row that dirties the tree
     local root, home = git_root()
     local id = card_with(root, home, { "touch moved" })
+
+    -- Check the card
     local out, code = dev(root, home, { "board", "check", id })
     testing.eq(code, 1, out)
+
+    -- Check the run was not recorded
     testing.ok(
         out:find("NOT recorded", 1, true) and out:find("changed while the checks ran", 1, true),
         out
@@ -1001,50 +1327,77 @@ testing.test("check refuses a tree that changed while the rows ran", function()
 end)
 
 testing.test("check runs a row as a plain command and never through a shell", function()
+    -- Give a card a row only a shell could run, written past the checks command
     local root, home = git_root()
     local id = card_with(root, home, { "true" })
     local path = support.board_file(home, "mine")
     local doc = assert(json.decode(assert(fs.read(path))))
     doc.cards[1].checks = { "touch marker; true" }
     assert(fs.write(path, json.encode(doc)))
+
+    -- Check the card
     local out, code = dev(root, home, { "board", "check", id })
     testing.eq(code, 1, out)
+
+    -- Check the row was refused, never run and not recorded
     testing.ok(out:find("only a shell reads", 1, true), out)
     testing.eq(fs.exists(root .. "/marker"), false)
     testing.eq(#comments(home), 0)
 end)
 
 testing.test("check ends a row at the time limit and records a timeout", function()
+    -- Give a card a row that outlasts the limit
     local root, home = git_root()
     local id = card_with(root, home, { "sleep 30" })
+
+    -- Check the card with a one second limit and see the timeout recorded
     local out, code = dev(root, home, { "board", "check", id, "--timeout", "1" })
     testing.eq(code, 1, out)
     testing.eq(comments(home)[1].body:match("\n(.*)$"), "1 timeout -")
+
+    -- Refuse a limit of zero
     out, code = dev(root, home, { "board", "check", id, "--timeout", "0" })
     testing.eq(code, 2, out)
 end)
 
-local CONFIG = '[board]\nbackend = "local"\nname = "mine"\n\n[board.check]\nseconds = '
+local CONFIG = table.concat({
+    "[board]",
+    'backend = "local"',
+    'name = "mine"',
+    "",
+    "[board.check]",
+    "seconds = ",
+}, "\n")
 
 testing.test("check setting sets the default wait", function()
+    -- Give a card a row that outlasts a one second default wait
     local root, home = git_root({ [".dev/config.toml"] = CONFIG .. "1\n" })
     local id = card_with(root, home, { "sleep 3" })
+
+    -- Check the card and see the default wait recorded as a timeout
     local out, code = dev(root, home, { "board", "check", id })
     testing.eq(code, 1, out)
     testing.eq(comments(home)[1].body:match("\n(.*)$"), "1 timeout -")
+
+    -- Check again with a longer wait of its own
     out, code = dev(root, home, { "board", "check", id, "--timeout", "30" })
     testing.eq(code, 0, out)
 end)
 
 testing.test("check setting refuses a bad value", function()
+    -- Give a card a row under a valid wait setting
     local root, home = git_root({ [".dev/config.toml"] = CONFIG .. "1\n" })
     local id = card_with(root, home, { "true" })
+
+    -- Refuse each bad value of the setting
     for _, value in ipairs({ "0", "86401", '"60"', "true" }) do
         assert(fs.write(root .. "/.dev/config.toml", CONFIG .. value .. "\n"))
         local out, code = dev(root, home, { "board", "check", id })
         testing.eq(code, 1, out)
         testing.ok(out:find("board.check.seconds", 1, true), out)
     end
+
+    -- Commit the bad setting
     must(dev_os.run({
         "git",
         "-C",
@@ -1057,6 +1410,8 @@ testing.test("check setting refuses a bad value", function()
         "-qam",
         "bad setting",
     }, { stdout = "null" }))
+
+    -- Check with the setting committed and a wait of its own
     local out, code = dev(root, home, { "board", "check", id, "--timeout", "30" })
     testing.eq(code, 0, out)
 end)
@@ -1065,37 +1420,63 @@ local MAC_FILE = "tests/lua/mac_test.lua"
 local MAC_ROW = "dev --remote test -- " .. MAC_FILE
 
 local function mac_root(setting)
-    local config = '[board]\nbackend = "local"\nname = "mine"\n\n[board.check]\n' .. setting
+    local config = table.concat({
+        "[board]",
+        'backend = "local"',
+        'name = "mine"',
+        "",
+        "[board.check]",
+        setting,
+    }, "\n")
     return git_root({ [".dev/config.toml"] = config, [MAC_FILE] = "x\n" })
 end
 
 testing.test("NOT_RUN row for a listed mac-only file is recorded and never started", function()
+    -- Give a card a mac-only row under a config that lists its file
     local root, home, head = mac_root('mac_only = ["' .. MAC_FILE .. '"]\n')
     local id = card_with(root, home, { "true", MAC_ROW })
+
+    -- Check the card
     local out, code = dev(root, home, { "board", "check", id })
     testing.eq(code, 0, out)
     testing.ok(out:find("2 not-run - " .. MAC_ROW, 1, true), out)
     testing.ok(not out:find("row 2 run", 1, true), out)
+
+    -- Check the record marks the row as not run
     local body = comments(home)[1].body
     testing.eq(
         body,
-        expected_head(head, "-", "run", { "true", MAC_ROW }) .. "\n1 pass -\n2 not-run -"
+        table.concat({
+            expected_head(head, "-", "run", { "true", MAC_ROW }),
+            "1 pass -",
+            "2 not-run -",
+        }, "\n")
     )
 end)
 
 testing.test("a mac_only setting that is no list of paths is refused", function()
+    -- Give a card a mac-only row under a config that sets a string
     local root, home = mac_root('mac_only = "' .. MAC_FILE .. '"\n')
     local id = card_with(root, home, { MAC_ROW })
+
+    -- Check the card
     local out, code = dev(root, home, { "board", "check", id })
     testing.eq(code, 1, out)
+
+    -- Check the setting was refused
     testing.ok(out:find("board.check.mac_only", 1, true), out)
 end)
 
 testing.test("not.run.parse reads a not-run row back", function()
+    -- Record a passed row and a not-run row
     local commands = { "true", MAC_ROW }
     local state = { commit = "abc123", change = "-" }
     local rows = { { run = "true", result = "pass", run_id = "-" }, check.not_run(MAC_ROW) }
+
+    -- Parse the record
     local record = check.parse(check.record(state, rows, false))
+
+    -- Check the rows, the fingerprint and the printed line
     testing.eq(record.rows, {
         { result = "pass", run_id = "-" },
         { result = "not-run", run_id = "-" },
@@ -1133,13 +1514,23 @@ end)
 local function fake_ci(body)
     local bin = support.tempdir() .. "/bin"
     assert(fs.mkdir(bin, { parents = true }), "mkdir failed")
-    assert(fs.write(bin .. "/ci", "#!/bin/sh\n" .. body .. "\n"), "write failed")
+    local script = table.concat({
+        "#!/bin/sh",
+        body,
+        "",
+    }, "\n")
+    assert(fs.write(bin .. "/ci", script), "write failed")
     must(dev_os.run({ "chmod", "755", bin .. "/ci" }))
     return { PATH = bin .. ":" .. dev_os.getenv("PATH") }
 end
 
 local function slow_row(ci_body)
-    local root, home = git_root({ ["slow.sh"] = "echo run 8cb600\nsleep 30\n" })
+    local slow = table.concat({
+        "echo run 8cb600",
+        "sleep 30",
+        "",
+    }, "\n")
+    local root, home = git_root({ ["slow.sh"] = slow })
     local id = card_with(root, home, { "sh slow.sh" })
     local env = fake_ci(ci_body)
     local out, code = dev(root, home, { "board", "check", id, "--timeout", "2" }, nil, env)
@@ -1204,20 +1595,23 @@ local function group_ci(opts, head)
             opts.source or head:sub(1, 12),
             opts.jobs
         )
+    local script = table.concat({
+        'case "$1" in',
+        "-C)",
+        '    case "$3" in',
+        '    ps) echo "watch $4 $5" >> "$CI_LOG"; %s ;;',
+        "    *)",
+        '        case "$4" in',
+        [[        "--list") echo '{"jobs":[{"name":"lint"},{"name":"test"}]}' ;;]],
+        "        *) %s ;;",
+        "        esac ;;",
+        "    esac ;;",
+        "ps) %s ;;",
+        "logs) %s ;;",
+        "esac",
+    }, "\n")
     return string.format(
-        [[case "$1" in
--C)
-    case "$3" in
-    ps) echo "watch $4 $5" >> "$CI_LOG"; %s ;;
-    *)
-        case "$4" in
-        "--list") echo '{"jobs":[{"name":"lint"},{"name":"test"}]}' ;;
-        *) %s ;;
-        esac ;;
-    esac ;;
-ps) %s ;;
-logs) %s ;;
-esac]],
+        script,
         opts.watch or "exit 0",
         opts.run or "exit 9",
         ps,
@@ -1241,11 +1635,14 @@ end
 ---@field again board_check_test.group_check.Opts? a second check at the same commit, whose result is returned
 
 local function group_check(opts)
+    -- Make a repo holding three suites
     local root, home, head = git_root({
         ["tests/a_test.lua"] = "x\n",
         ["tests/x_test.lua"] = "x\n",
         ["tests/y_test.lua"] = "x\n",
     })
+
+    -- Commit a suite that only the working copy adds
     if opts.touch then
         assert(fs.write(root .. "/" .. opts.touch, "x\n"), "write failed")
         local identity = { "-c", "user.name=t", "-c", "user.email=t@example.com" }
@@ -1258,17 +1655,32 @@ local function group_check(opts)
         end
         head = dev_os.capture({ "git", "-C", root, "rev-parse", "HEAD" }):gsub("\n$", "")
     end
+
+    -- Give a card its rows
     local id = card_with(root, home, opts.rows or { "dev --remote lint", "dev --remote test" })
+
+    -- Define one check against a fake ci and a log of its calls
     local function once(run)
+        -- Put a fake ci on the path, and a fake dev for a row that runs on its own
         local env = fake_ci(group_ci(run, head))
         if run.own then
             local stub = env.PATH:match("^([^:]+)") .. "/dev"
-            assert(fs.write(stub, '#!/bin/sh\necho "dev $*" >> "$CI_LOG"\n' .. run.own .. "\n"))
+            local script = table.concat({
+                "#!/bin/sh",
+                'echo "dev $*" >> "$CI_LOG"',
+                run.own,
+                "",
+            }, "\n")
+            assert(fs.write(stub, script))
             must(dev_os.run({ "chmod", "755", stub }))
         end
+
+        -- Point the fake tools at a fresh log
         local log = support.tempdir() .. "/ci.log"
         env.CI_LOG = log
         env.DEV_AGENT = ""
+
+        -- Build the check arguments from the options
         local args = { "board", "check", id }
         if run.attach then
             args[#args + 1] = "--run"
@@ -1281,13 +1693,19 @@ local function group_check(opts)
             args[#args + 1] = "--timeout"
             args[#args + 1] = run.timeout
         end
+
+        -- Run the check
         local out, status = dev(root, home, args, nil, env)
         return out, status, log
     end
+
+    -- Check once, and again at the same commit when asked
     local out, status, log = once(opts)
     if opts.again then
         out, status, log = once(opts.again)
     end
+
+    -- Read back the record and the card's view of it
     local held = comments(home)
     local first = held[opts.again and #held or 1]
     local shown = opts.show and (dev(root, home, { "board", "show", id })) or nil
@@ -1516,9 +1934,14 @@ testing.test("a narrowed test run also runs the files of the named rows", functi
 end)
 
 testing.test("a zero-exit shared run records error for a row whose job is unfinished", function()
+    -- Report the test job as still running
     local jobs = '{"name":"lint","state":"passed","exit_code":0},'
         .. '{"name":"test","state":"running","exit_code":0}'
+
+    -- Check a card whose shared run exits zero
     local out, code, body = group_check({ jobs = jobs, run = group_run(0) })
+
+    -- Check the test row is an error that says why
     testing.eq(code, 1, out)
     testing.ok(body:find("1 pass 8cb600", 1, true), body)
     testing.ok(body:find("2 error 8cb600", 1, true), body)
@@ -1526,9 +1949,14 @@ testing.test("a zero-exit shared run records error for a row whose job is unfini
 end)
 
 testing.test("a zero-exit shared run records error for a row whose job still waits", function()
+    -- Report the test job as still waiting
     local jobs = '{"name":"lint","state":"passed","exit_code":0},'
         .. '{"name":"test","state":"waiting","exit_code":0}'
+
+    -- Check a card whose shared run exits zero
     local out, code, body = group_check({ jobs = jobs, run = group_run(0) })
+
+    -- Check the test row is an error that says why and shows no output
     testing.eq(code, 1, out)
     testing.ok(body:find("2 error 8cb600", 1, true), body)
     testing.ok(out:find("job test was waiting, not passed.", 1, true), out)
@@ -1536,8 +1964,13 @@ testing.test("a zero-exit shared run records error for a row whose job still wai
 end)
 
 testing.test("a zero-exit shared run names a job ci did not list", function()
+    -- Report the lint job alone
     local jobs = '{"name":"lint","state":"passed","exit_code":0}'
+
+    -- Check a card whose shared run exits zero
     local out, code, body = group_check({ jobs = jobs, run = group_run(0) })
+
+    -- Check the test row is an error that names the missing job
     testing.eq(code, 1, out)
     testing.ok(body:find("2 error 8cb600", 1, true), body)
     testing.ok(out:find("job test is not among the jobs ci read.", 1, true), out)
@@ -1620,14 +2053,21 @@ testing.test("check --run refuses a run of another commit and records nothing", 
 end)
 
 testing.test("check --run refuses a bad run id and a card with no shared run", function()
+    -- Give a card one row with no shared run
     local root, home = git_root()
     local id = card_with(root, home, { "true" })
+
+    -- Refuse a run id that is no hex word
     local _, code = dev(root, home, { "board", "check", id, "--run", "xyz" })
     testing.eq(code, 2)
+
+    -- Refuse a run id when the card has no shared run
     local out
     out, code = dev(root, home, { "board", "check", id, "--run", "8cb600" })
     testing.eq(code, 1, out)
     testing.ok(out:find("--run has nothing to record", 1, true), out)
+
+    -- Refuse it under expect-fail as well
     out, code = dev(root, home, { "board", "check", id, "--run", "8cb600", "--expect-fail" })
     testing.eq(code, 1, out)
     testing.ok(out:find("--run has nothing to record", 1, true), out)
@@ -1664,31 +2104,46 @@ local BASELINE_ROWS = {
 }
 
 local function baseline_check(logs)
+    -- Make a repo holding three suites
     local root, home = git_root({
         ["tests/a_test.lua"] = "x\n",
         ["tests/x_test.lua"] = "x\n",
         ["tests/y_test.lua"] = "x\n",
     })
+
+    -- Give a card the baseline rows
     local id = card_with(root, home, BASELINE_ROWS)
+
+    -- Write a fake ci that reads a failed run and prints the given log
     local bin = support.tempdir() .. "/bin"
     assert(fs.mkdir(bin, { parents = true }), "mkdir failed")
-    assert(
-        fs.write(bin .. "/ci", "#!/bin/sh\n" .. [[case "$1" in
--C) echo '{"jobs":[{"name":"lint"},{"name":"test"}]}' ;;
-ps) echo '{"status":"failed"}' ;;
-logs) echo "logs $*" >> "$CI_LOG"; ]] .. logs .. "\nesac\n"),
-        "write failed"
-    )
-    assert(
-        fs.write(
-            bin .. "/dev",
-            '#!/bin/sh\necho "dev $*" >> "$CI_LOG"\necho "run 8cb600"\nexit 1\n'
-        ),
-        "write failed"
-    )
+    local ci_script = table.concat({
+        "#!/bin/sh",
+        'case "$1" in',
+        [[-C) echo '{"jobs":[{"name":"lint"},{"name":"test"}]}' ;;]],
+        [[ps) echo '{"status":"failed"}' ;;]],
+        'logs) echo "logs $*" >> "$CI_LOG"; ' .. logs,
+        "esac",
+        "",
+    }, "\n")
+    assert(fs.write(bin .. "/ci", ci_script), "write failed")
+
+    -- Write a fake dev that starts a run and fails
+    local dev_script = table.concat({
+        "#!/bin/sh",
+        'echo "dev $*" >> "$CI_LOG"',
+        'echo "run 8cb600"',
+        "exit 1",
+        "",
+    }, "\n")
+    assert(fs.write(bin .. "/dev", dev_script), "write failed")
+
+    -- Make both fakes executable and point them at a fresh log
     must(dev_os.run({ "chmod", "755", bin .. "/ci", bin .. "/dev" }))
     local log = support.tempdir() .. "/ci.log"
     local env = { PATH = bin .. ":" .. dev_os.getenv("PATH"), CI_LOG = log, DEV_AGENT = "" }
+
+    -- Check the card expecting failure and read back its record
     local out, status = dev(root, home, { "board", "check", id, "--expect-fail" }, nil, env)
     local held = comments(home)
     return out, status, held[#held] and held[#held].body, fs.read(log) or ""
@@ -1737,6 +2192,7 @@ testing.test("check --run records a one-row card from a run that has ended", fun
 end)
 
 testing.test("plan shares one run only among rows that cover the whole pipeline", function()
+    -- Define a job lister and a planner over rows
     local function jobs(...)
         local names = { ... }
         return function()
@@ -1750,10 +2206,14 @@ testing.test("plan shares one run only among rows that cover the whole pipeline"
         end
         return check.plan(rows, argvs, list)
     end
+
+    -- Plan a lint row and a test row that cover the whole pipeline
     local both = { "dev --remote lint", "dev --remote test -- a b" }
     local found = plan(both, jobs("lint", "test"))
     testing.eq(found.args, { "a", "b" })
     testing.eq(found.rows[2], { index = 2, job = "test", run = "dev --remote test -- a b" })
+
+    -- Share no run when the jobs or the rows do not fit the pipeline
     testing.eq(plan(both, jobs("lint", "test", "docs")), nil)
     testing.eq(plan(both, jobs("lint", "docs")), nil)
     testing.eq(plan(both, function() end), nil)
@@ -1765,6 +2225,8 @@ testing.test("plan shares one run only among rows that cover the whole pipeline"
         plan({ "dev --remote test -- a", "dev --remote lint -- b" }, jobs("lint", "test")),
         nil
     )
+
+    -- Skip a row that is no job of the pipeline
     local mixed = plan({ "rg x y", "dev --remote lint", "dev --remote test" }, jobs("lint", "test"))
     testing.eq(mixed.rows[1].index, 2)
 end)
@@ -1775,18 +2237,25 @@ testing.test("the default row limit is two hours and within the most --timeout a
 end)
 
 testing.test("--expect-fail records failing rows and reports a passing one", function()
+    -- Give a card one failing row
     local root, home, head = git_root()
     local id = card_with(root, home, { "false" })
+
+    -- Check it expecting failure and see the failure recorded
     local out, code = dev(root, home, { "board", "check", id, "--expect-fail" })
     testing.eq(code, 0, out)
     testing.eq(
         comments(home)[1].body,
         expected_head(head, "-", "expect-fail", { "false" }) .. "\n1 fail -"
     )
+
+    -- Add a passing row and see it reported
     must(dev(root, home, { "board", "checks", id, "true", "false" }))
     out, code = dev(root, home, { "board", "check", id, "--expect-fail" })
     testing.eq(code, 1, out)
     testing.ok(out:find("the passing ones prove nothing", 1, true), out)
+
+    -- Leave only the passing row and see it reported again
     must(dev(root, home, { "board", "checks", id, "true" }))
     out, code = dev(root, home, { "board", "check", id, "--expect-fail" })
     testing.eq(code, 1, out)
@@ -1795,15 +2264,22 @@ testing.test("--expect-fail records failing rows and reports a passing one", fun
 end)
 
 testing.test("an expect-fail row that exits 127 fails the run", function()
+    -- Give a card a row naming a command that does not exist
     local root, home = git_root()
     local id = card_with(root, home, { "/no-such-dir/no-such-command-for-check" })
+
+    -- Check it expecting failure and see the run fail on a row that never started
     local out, code = dev(root, home, { "board", "check", id, "--expect-fail" })
     testing.eq(code, 1, out)
     testing.ok(out:find("The row never started (exit 127).", 1, true), out)
     testing.ok(out:find("a row that never started proves nothing.", 1, true), out)
+
+    -- Check the record holds an error for the row
     local record = check.parse(comments(home)[1].body)
     testing.eq(record.mode, "expect-fail")
     testing.eq(record.rows[1].result, "error")
+
+    -- Check the same row run bare counts as a plain failure
     testing.eq(
         check.run({
             root = root,
@@ -1816,7 +2292,10 @@ testing.test("an expect-fail row that exits 127 fails the run", function()
 end)
 
 testing.test("an expect-fail row that exits 1 still counts as the expected failure", function()
+    -- Make an empty sandbox
     local root = setup()
+
+    -- Run a failing row expecting failure
     local row = check.run({
         root = root,
         run = "false",
@@ -1824,6 +2303,8 @@ testing.test("an expect-fail row that exits 1 still counts as the expected failu
         seconds = 30,
         expect_fail = true,
     })
+
+    -- Check the row failed and the summary counts that as good
     testing.eq(row.result, "fail")
     local summary = check.summarize({ row }, true)
     testing.eq({ summary.passed, summary.good, summary.errors }, { 0, true, 0 })
@@ -1832,18 +2313,25 @@ end)
 testing.test(
     "an expect-fail run passes the plain lint and test rows beside a failing row",
     function()
+        -- List two passing plain rows and a failing named row
         local rows = {
             { result = check.Result.PASS, run = "dev --remote lint" },
             { result = check.Result.PASS, run = "dev --remote test" },
             { result = check.Result.FAIL, run = "dev --remote test -- tests/lua/new_test.lua" },
         }
+
+        -- Check the plain passes prove nothing and the run is good
         local summary = check.summarize(rows, true)
         testing.eq(
             summary,
             { passed = 2, not_run = 0, good = true, errors = 0, proves_nothing = 0 }
         )
+
+        -- Make the named row pass as well
         rows[3] =
             { result = check.Result.PASS, run = "dev --remote test -- tests/lua/new_test.lua" }
+
+        -- Check the run is bad because a named pass proves nothing
         summary = check.summarize(rows, true)
         testing.eq(
             summary,
@@ -1853,11 +2341,16 @@ testing.test(
 )
 
 testing.test("an expect-fail run where no row fails is bad", function()
+    -- List two passing plain rows
     local rows = {
         { result = check.Result.PASS, run = "dev --remote lint" },
         { result = check.Result.PASS, run = "dev --remote test" },
     }
+
+    -- Summarize them expecting failure
     local summary = check.summarize(rows, true)
+
+    -- Check the run is bad
     testing.eq(summary, { passed = 2, not_run = 0, good = false, errors = 0, proves_nothing = 0 })
 end)
 
@@ -1876,8 +2369,11 @@ end)
 testing.test(
     "note refuses the reserved prefix, and the record cannot be edited or deleted",
     function()
+        -- Give a card one row
         local root, home = git_root()
         local id = card_with(root, home, { "true" })
+
+        -- Refuse a note that carries the reserved prefix
         local out, code = dev(root, home, { "board", "note", id, "dev-check:", "commit=x" })
         testing.eq(code, 1, out)
         testing.ok(
@@ -1885,13 +2381,19 @@ testing.test(
             out
         )
         testing.eq(#comments(home), 0)
+
+        -- Check the card to record a result and find its note id
         must(dev(root, home, { "board", "check", id }))
         local listed = "\n" .. dev(root, home, { "board", "notes", id })
         local first = assert(listed:match("\n(%x+)[^\n]*dev%-check:"))
+
+        -- Refuse to edit or delete the record
         out, code = dev(root, home, { "board", "note", id, "--edit", first, "fine" })
         testing.eq(code, 1, out)
         out, code = dev(root, home, { "board", "note", id, "--delete", first })
         testing.eq(code, 1, out)
+
+        -- Refuse to edit a plain note into a forged record
         must(dev(root, home, { "board", "note", id, "plain" }))
         listed = "\n" .. dev(root, home, { "board", "notes", id })
         local second = assert(listed:match("\n(%x+)[^\n]*plain"))
@@ -1902,6 +2404,7 @@ testing.test(
 )
 
 testing.test("a result that cannot be written is never reported as recorded", function()
+    -- Make a repo and a card with one row
     local root = git_root()
     local card = {
         id = "11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -1912,6 +2415,8 @@ testing.test("a result that cannot be written is never reported as recorded", fu
         checks = { "true" },
         outcomes = {},
     }
+
+    -- Fake a backend whose note write fails
     local backend = { root = root }
     function backend:done_columns()
         return { support.COLUMN_NAME.DONE }
@@ -1928,7 +2433,11 @@ testing.test("a result that cannot be written is never reported as recorded", fu
     function backend:note()
         return nil, "curl exit 28"
     end
+
+    -- Check the card through the command
     local result = cmd_board.run("check", { "11111111" }, backend)
+
+    -- Check the result says the record was not written
     testing.eq(result.output, nil)
     testing.eq(result.code, 1)
     testing.ok(result.message:find("was NOT recorded", 1, true), result.message)
@@ -1938,6 +2447,7 @@ testing.test("a result that cannot be written is never reported as recorded", fu
 end)
 
 testing.test("a partial record that cannot be written does not stop the check", function()
+    -- Make a repo and a card with two rows
     local root = git_root()
     local card = {
         id = "11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -1948,6 +2458,8 @@ testing.test("a partial record that cannot be written does not stop the check", 
         checks = { "true", "echo run 8cb600" },
         outcomes = {},
     }
+
+    -- Fake a backend whose note write always fails and counts its tries
     local backend = { root = root }
     local tries = 0
     function backend:done_columns()
@@ -1966,20 +2478,29 @@ testing.test("a partial record that cannot be written does not stop the check", 
         tries = tries + 1
         return nil, "curl exit 28"
     end
+
+    -- Check the card through the command
     local result
     with_passing_ci(function()
         result = cmd_board.run("check", { "11111111" }, backend)
     end)
+
+    -- Check the check went on past every failed note and reported both rows
     testing.eq(tries, 3)
     testing.ok(result.message:find("1 pass - true", 1, true), result.message)
     testing.ok(result.message:find("2 pass 8cb600 echo run 8cb600", 1, true), result.message)
 end)
 
 testing.test("check posts a status note when it starts its rows", function()
+    -- Give a card two rows
     local root, home, head = git_root()
     local id = card_with(root, home, { "true", "echo run 8cb600" })
+
+    -- Check the card as a named agent
     local out, code = dev(root, home, { "board", "check", id }, nil, { DEV_AGENT = "t/runner/a" })
     testing.eq(code, 0, out)
+
+    -- Check one start note names the commit, the row count and the agent
     local started = start_notes(home)
     testing.eq(#started, 1)
     testing.eq(
@@ -1989,6 +2510,7 @@ testing.test("check posts a status note when it starts its rows", function()
 end)
 
 testing.test("a check start note that cannot be written is told and the check goes on", function()
+    -- Make a repo and a card with one row
     local root = git_root()
     local card = {
         id = "11111111-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -1999,6 +2521,8 @@ testing.test("a check start note that cannot be written is told and the check go
         checks = { "true" },
         outcomes = {},
     }
+
+    -- Fake a backend that fails the start note only and keeps every body
     local backend = { root = root }
     local bodies = {}
     function backend:done_columns()
@@ -2020,7 +2544,11 @@ testing.test("a check start note that cannot be written is told and the check go
         end
         return true
     end
+
+    -- Check the card through the command
     local result = cmd_board.run("check", { "11111111" }, backend)
+
+    -- Check the check went on and still wrote its record
     testing.ok(result.code == nil or result.code == 0, result.message)
     testing.eq(#bodies, 2)
     testing.ok(bodies[2]:find("dev-check:", 1, true), bodies[2])
@@ -2051,18 +2579,25 @@ if has_jj then
     end
 
     testing.test("a parent behind the trunk tip is on trunk for the stack note", function()
+        -- Make a repo whose trunk lives in a bare remote
         local root = setup()
         local bare = support.tempdir()
         local quiet = { stdout = "null", stderr = "null", env = IDENT }
         must(dev_os.run({ "git", "init", "--bare", "-q", "-b", "master", bare }, quiet))
         must(dev_os.run({ "jj", "git", "init", root }, quiet))
         jj(root, "git", "remote", "add", "origin", bare)
+
+        -- Land a base and a tip on trunk
         jj(root, "commit", "-m", "base")
         jj(root, "commit", "-m", "tip")
         jj(root, "bookmark", "create", "master", "-r", "@-")
         jj(root, "git", "push", "--remote", "origin", "--bookmark", "master")
+
+        -- Start work behind the tip and see it needs no note
         jj(root, "new", "-m", "work", "@--")
         testing.eq(land.stack_note(root), nil)
+
+        -- Stack work on an unlanded change and see the note says so
         jj(root, "new", "-m", "unlanded", "@")
         jj(root, "new", "-m", "work")
         local note = land.stack_note(root)
@@ -2070,9 +2605,14 @@ if has_jj then
     end)
 
     testing.test("check refuses outside the workspace named for the card", function()
+        -- Give a card a row and a workspace not named for it
         local root, home, ws = workspace()
         local id = card_with(root, home, { "true" })
+
+        -- Check the card from that workspace
         local out, code = dev(root, home, { "board", "check", id }, ws)
+
+        -- Check the refusal names the workspace and the command to make one
         testing.eq(code, 1, out)
         testing.ok(out:find("w2", 1, true), out)
         testing.ok(out:find("dev ws new " .. id, 1, true), out)
@@ -2080,39 +2620,63 @@ if has_jj then
     end)
 
     testing.test("check --expect-fail records in a workspace not named for the card", function()
+        -- Give a failing card a workspace not named for it
         local root, home, ws = workspace()
         local id = card_with(root, home, { "false" })
+
+        -- Check the card expecting failure from that workspace
         local out, code = dev(root, home, { "board", "check", id, "--expect-fail" }, ws)
+
+        -- Check the failure was recorded
         testing.eq(code, 0, out)
         testing.eq(#comments(home), 1)
     end)
 
     testing.test("check refuses an empty jj working-copy commit and names its parent", function()
+        -- Give a card a workspace named for it, with an empty working copy
         local root, home, ws = workspace()
         local id = card_with(root, home, { "true" })
         jj(ws, "workspace", "rename", id)
+
+        -- Read the parent change of the working copy
         local parent = jj(ws, "log", "-r", "@-", "--no-graph", "-T", "change_id"):match("^(%a+)")
+
+        -- Check the card from that workspace
         local out, code = dev(root, home, { "board", "check", id }, ws)
+
+        -- Check the refusal names the parent and nothing was recorded
         testing.eq(code, 1, out)
         testing.ok(out:find("jj edit " .. parent, 1, true), out)
         testing.eq(#comments(home), 0)
     end)
 
     testing.test("check records a no-change card on an empty jj working-copy commit", function()
+        -- Give a card a workspace named for it, with an empty working copy
         local root, home, ws = workspace()
         local id = card_with(root, home, { "true" })
         jj(ws, "workspace", "rename", id)
+
+        -- Label the card as needing no change
         must(dev(root, home, { "board", "label", id, "+" .. board.NO_CHANGE }))
+
+        -- Check the card from that workspace
         local out, code = dev(root, home, { "board", "check", id }, ws)
+
+        -- Check the result was recorded
         testing.eq(code, 0, out)
         testing.eq(#comments(home), 1)
     end)
 
     testing.test("check --expect-fail still runs on an empty jj working-copy commit", function()
+        -- Give a failing card a workspace named for it, with an empty working copy
         local root, home, ws = workspace()
         local id = card_with(root, home, { "false" })
         jj(ws, "workspace", "rename", id)
+
+        -- Check the card expecting failure from that workspace
         local out, code = dev(root, home, { "board", "check", id, "--expect-fail" }, ws)
+
+        -- Check the failure was recorded
         testing.eq(code, 0, out)
         testing.eq(#comments(home), 1)
     end)
@@ -2120,12 +2684,19 @@ if has_jj then
     testing.test(
         "in a jj workspace the working-copy commit is the commit, edits included",
         function()
+            -- Give a card a workspace named for it
             local root, home, ws = workspace()
             local id = card_with(root, home, { "true" })
             jj(ws, "workspace", "rename", id)
+
+            -- Edit a file in the workspace
             assert(fs.write(ws .. "/edited", "x"))
+
+            -- Check the card from that workspace
             local out, code = dev(root, home, { "board", "check", id }, ws)
             testing.eq(code, 0, out)
+
+            -- Check the record names the working-copy commit
             local want =
                 jj(ws, "log", "-r", "@", "--no-graph", "-T", "commit_id ++ ' ' ++ change_id")
             local commit, change = want:match("^(%x+) (%a+)")
@@ -2138,11 +2709,18 @@ if has_jj then
     )
 
     testing.test("in a jj workspace a row that edits files leaves nothing recorded", function()
+        -- Give a card a workspace named for it, with a row that edits files
         local root, home, ws = workspace()
         local id = card_with(root, home, { "touch made" })
         jj(ws, "workspace", "rename", id)
+
+        -- Edit a file in the workspace
         assert(fs.write(ws .. "/edited", "x"))
+
+        -- Check the card from that workspace
         local out, code = dev(root, home, { "board", "check", id }, ws)
+
+        -- Check the run was refused and nothing was recorded
         testing.eq(code, 1, out)
         testing.ok(out:find("changed while the checks ran", 1, true), out)
         testing.eq(#comments(home), 0)
@@ -2161,44 +2739,61 @@ local DETACH_ROWS = { "dev --remote lint", "true", "dev --remote test" }
 ---@field test_start string? the shell the fake `dev --remote --detach test` runs, printing the id when nil
 
 local function detach_check(opts)
+    -- Give a card the rows
     local root, home = git_root({ ["tests/a_test.lua"] = "x\n" })
     local id = card_with(root, home, opts.rows or DETACH_ROWS)
+
+    -- Make a bin directory and decide how the test job ends
     local bin = support.tempdir() .. "/bin"
     assert(fs.mkdir(bin, { parents = true }), "mkdir failed")
     local state = opts.test_state or "passed"
     local code = state == "passed" and "0" or "3"
-    assert(
-        fs.write(bin .. "/ci", "#!/bin/sh\n" .. [[case "$1" in
--C)
-    case "$3" in
-    ps) echo "watch $4" >> "$CI_LOG"; ]] .. (opts.watch or "exit 0") .. [[ ;;
-    run) echo '{"jobs":[{"name":"lint"},{"name":"test"},{"name":"docs"}]}' ;;
-    esac ;;
-ps)
-    case "$2" in
-    8cb600) echo '{"jobs":[{"name":"lint","state":"passed","exit_code":0}]}' ;;
-    1f2e3d) echo '{"jobs":[{"name":"test","state":"]] .. state .. [[","exit_code":]] .. code .. [[}]}' ;;
-    esac ;;
-logs) echo "logs $*" >> "$CI_LOG"; echo "output of $4" ;;
-esac
-]]),
-        "write failed"
-    )
-    assert(
-        fs.write(bin .. "/dev", "#!/bin/sh\n" .. [[echo "dev $*" >> "$CI_LOG"
-case "$2" in
-*detach*)
-    case "$3" in
-    lint) ]] .. (opts.lint_start or "echo 8cb600") .. [[ ;;
-    test) ]] .. (opts.test_start or "echo 1f2e3d") .. [[ ;;
-    esac ;;
-esac
-]]),
-        "write failed"
-    )
+
+    -- Write a fake ci that lists jobs and reads their states
+    local ci_script = table.concat({
+        "#!/bin/sh",
+        'case "$1" in',
+        "-C)",
+        '    case "$3" in',
+        '    ps) echo "watch $4" >> "$CI_LOG"; ' .. (opts.watch or "exit 0") .. " ;;",
+        [[    run) echo '{"jobs":[{"name":"lint"},{"name":"test"},{"name":"docs"}]}' ;;]],
+        "    esac ;;",
+        "ps)",
+        '    case "$2" in',
+        [[    8cb600) echo '{"jobs":[{"name":"lint","state":"passed","exit_code":0}]}' ;;]],
+        [[    1f2e3d) echo '{"jobs":[{"name":"test","state":"]]
+            .. state
+            .. [[","exit_code":]]
+            .. code
+            .. [[}]}' ;;]],
+        "    esac ;;",
+        'logs) echo "logs $*" >> "$CI_LOG"; echo "output of $4" ;;',
+        "esac",
+        "",
+    }, "\n")
+    assert(fs.write(bin .. "/ci", ci_script), "write failed")
+
+    -- Write a fake dev that starts rows detached
+    local dev_script = table.concat({
+        "#!/bin/sh",
+        'echo "dev $*" >> "$CI_LOG"',
+        'case "$2" in',
+        "*detach*)",
+        '    case "$3" in',
+        "    lint) " .. (opts.lint_start or "echo 8cb600") .. " ;;",
+        "    test) " .. (opts.test_start or "echo 1f2e3d") .. " ;;",
+        "    esac ;;",
+        "esac",
+        "",
+    }, "\n")
+    assert(fs.write(bin .. "/dev", dev_script), "write failed")
+
+    -- Make both fakes executable and point them at a fresh log
     must(dev_os.run({ "chmod", "755", bin .. "/ci", bin .. "/dev" }))
     local log = support.tempdir() .. "/ci.log"
     local env = { PATH = bin .. ":" .. dev_os.getenv("PATH"), CI_LOG = log, DEV_AGENT = "" }
+
+    -- Build the check arguments from the options
     local args = { "board", "check", id }
     if opts.expect_fail then
         args[#args + 1] = "--expect-fail"
@@ -2207,21 +2802,30 @@ esac
         args[#args + 1] = "--timeout"
         args[#args + 1] = opts.timeout
     end
+
+    -- Run the check and read back its records
     local out, status = dev(root, home, args, nil, env)
     local held = comments(home)
     return out, status, held[#held] and held[#held].body, fs.read(log) or "", #held
 end
 
 testing.test("check starts every ci row first and waits for them afterwards", function()
+    -- Check a card with the standard rows and a plain one between them
     local out, code, body, log = detach_check({})
     testing.eq(code, 0, out)
+
+    -- Check both ci rows were started before any wait
     local lint = log:find("dev --remote --detach lint", 1, true)
     local test = log:find("dev --remote --detach test", 1, true)
     local watch = log:find("watch ", 1, true)
     testing.ok(lint and test and watch and lint < watch and test < watch, log)
+
+    -- Check the started row was announced before the plain row ran and the waits followed
     local started = out:find("started row 3 of 3 as ci run 1f2e3d", 1, true)
     testing.ok(started and started < out:find("running 2 of 3: true", 1, true), out)
     testing.ok(out:find("running 2 of 3: true", 1, true) < out:find("waiting on row 1", 1, true))
+
+    -- Check the record has a result for every row
     testing.eq(check.parse(body).rows, {
         { result = "pass", run_id = "8cb600" },
         { result = "pass", run_id = "-" },
@@ -2337,30 +2941,46 @@ testing.test("the baseline drops the standard rows and keeps the rows a card add
 end)
 
 testing.test("the baseline keeps the standard test row when a new row is a test", function()
+    -- List the standard rows and a named test row
     local rows = { "dev --remote lint", "dev --remote test", "dev --remote test -- tests/a.lua" }
+
+    -- Build their baseline
     local baseline = baseline_of(rows)
+
+    -- Check the standard test row stays beside the named one
     testing.eq(baseline.commands, { "dev --remote test", "dev --remote test -- tests/a.lua" })
     testing.eq(baseline.skipped, 1)
 end)
 
 testing.test("the baseline keeps every row when the card adds none", function()
+    -- List only the standard rows
     local rows = { "dev --remote lint", "dev --remote test" }
+
+    -- Build their baseline
     local baseline = baseline_of(rows)
+
+    -- Check every row stays and none is skipped
     testing.eq(baseline.commands, rows)
     testing.eq(baseline.skipped, 0)
 end)
 
 testing.test("a record names its trunk proof and parse reads it back", function()
+    -- Record a failed row under a trunk proof
     local state = { commit = "abc123", change = "-", proof = "8af0e001@0123456789ab" }
     local rows = { { result = "fail", run_id = "-", run = "false" } }
+
+    -- Parse the record back
     local record = check.parse(check.record(state, rows, true))
     testing.eq(record.proof, "8af0e001@0123456789ab")
     testing.eq(record.mode, "expect-fail")
     testing.eq(#record.rows, 1)
+
+    -- Check a record without the proof parses to none
     testing.eq(check.parse(check.record(state, rows, true):gsub(" proof=%S+", "")).proof, nil)
 end)
 
 testing.test("expect-fail skips the standard rows when a landed card proves trunk", function()
+    -- Commit a new file on top of the base
     local root, home, base = git_root()
     assert(fs.write(root .. "/next.txt", "x\n"))
     local function git(...)
@@ -2398,14 +3018,19 @@ testing.test("expect-fail skips the standard rows when a landed card proves trun
 end)
 
 testing.test("the claimant's note is found by the token that posted the claim", function()
+    -- Build notes by author, body and kind
     local STATUS, DECISION = board.NoteKind.STATUS, board.NoteKind.DECISION
     local function note(who, body, kind)
         return { who = who, body = body, kind = kind }
     end
+
+    -- Make a claim record and a reader of the notes after it
     local claim = note("agents", board.claim_record("r/one"), STATUS)
     local function noted(...)
         return board.noted_since_claim({ ... }, "r/one")
     end
+
+    -- Check only the claimant's own plain note after the claim counts
     testing.eq(noted(note("agents", "built it")), nil)
     testing.eq(noted(claim), false)
     testing.eq(noted(claim, note("agents", "[runner agent] done")), true)
@@ -2418,14 +3043,19 @@ testing.test("the claimant's note is found by the token that posted the claim", 
 end)
 
 testing.test("board.worked finds a note after a claim record and stops at the next one", function()
+    -- Build notes by author, body and kind
     local STATUS, DECISION = board.NoteKind.STATUS, board.NoteKind.DECISION
     local function note(who, body, kind)
         return { who = who, body = body, kind = kind }
     end
+
+    -- Make a claim record and a reader of the work after it
     local claim = note("agents", board.claim_record("r/one"), STATUS)
     local function worked(...)
         return board.worked({ ... }, "r/one")
     end
+
+    -- Check only a plain note after the claim, before the next claim, counts as work
     testing.eq(worked(note("agents", "built it")), false)
     testing.eq(worked(claim), false)
     testing.eq(worked(claim, note("agents", "built it")), true)
@@ -2469,7 +3099,10 @@ local LIBTEST_LOG = table.concat({
 }, "\n")
 
 testing.test("a named test passes on a PASS or SKIP line", function()
+    -- Name the two outcomes
     local PASS, FAIL = check.Result.PASS, check.Result.FAIL
+
+    -- Check a PASS or SKIP line passes and a FAIL, TIMEOUT or SIGSEGV line fails
     testing.eq((check.named_result(DEV_LOG, { "tests/lua/a_test.lua" })), PASS)
     testing.eq((check.named_result(DEV_LOG, { "tests/lua/b_test.lua" })), PASS)
     testing.eq(
@@ -2479,6 +3112,8 @@ testing.test("a named test passes on a PASS or SKIP line", function()
     testing.eq((check.named_result(DEV_LOG, { "tests/lua/c_test.lua" })), FAIL)
     testing.eq((check.named_result(DEV_LOG, { "tests/lua/d_test.lua" })), FAIL)
     testing.eq((check.named_result(DEV_LOG, { "tests/lua/e_test.lua" })), FAIL)
+
+    -- Check a failing name in a list gives its line as the reason
     local result, reason =
         check.named_result(DEV_LOG, { "tests/lua/a_test.lua", "tests/lua/c_test.lua" })
     testing.eq(result, FAIL)
@@ -2498,10 +3133,15 @@ testing.test("a TAP ok line passes a named row", function()
 end)
 
 testing.test("a TAP not ok line fails a named row", function()
+    -- Build a TAP log with one ok line and one not ok line
     local log = table.concat({ "ok 1 fine", "not ok 2 volume-broken" }, "\n")
+
+    -- Read the not ok name and see its line as the reason
     local result, reason = check.named_result(log, { "volume-broken" })
     testing.eq(result, check.Result.FAIL)
     testing.eq(reason, "not ok 2 volume-broken")
+
+    -- Check a list holding it fails too
     testing.eq((check.named_result(log, { "fine", "volume-broken" })), check.Result.FAIL)
 end)
 
@@ -2527,10 +3167,15 @@ testing.test("a libtest ok line passes the name it holds", function()
 end)
 
 testing.test("a libtest FAILED line fails the name it holds", function()
+    -- Name the failing outcome
     local FAIL = check.Result.FAIL
+
+    -- Read the failing name and see its line as the reason
     local result, reason = check.named_result(LIBTEST_LOG, { "step_title::should_y" })
     testing.eq(result, FAIL)
     testing.eq(reason, "test tests::step_title::should_y ... FAILED")
+
+    -- Check a list holding it fails too
     local both = { "box_vs_box_stacks_should_hold_lua_numbers", "step_title" }
     testing.eq((check.named_result(LIBTEST_LOG, both)), FAIL)
 end)
@@ -2540,38 +3185,61 @@ testing.test("a libtest ignored line passes the name it holds", function()
 end)
 
 testing.test("a libtest summary line names no test", function()
+    -- Take a libtest summary line as the whole log
     local summary = "test result: ok. 3 passed; 0 failed; finished in 0.01s"
+
+    -- Read the name test off it and see no result line names it
     local result, reason = check.named_result(summary, { "test" })
     testing.eq(result, check.Result.ERROR)
     testing.eq(reason, "no result line names test")
+
+    -- Check a word from the summary is no name either
     testing.eq((check.named_result(summary, { "ok." })), check.Result.ERROR)
 end)
 
 testing.test("a named test missing from the log is an error", function()
+    -- List a suite the log names and one it never names
     local missing = { "tests/lua/a_test.lua", "tests/lua/zzz_test.lua" }
+
+    -- Read the list as an error that names the missing suite
     local result, reason = check.named_result(DEV_LOG, missing)
     testing.eq(result, check.Result.ERROR)
     testing.eq(reason:find("tests/lua/zzz_test.lua", 1, true) ~= nil, true)
+
+    -- Read it as a failure when the rows are expected to fail
     result, reason = check.named_result(DEV_LOG, missing, true)
     testing.eq(result, check.Result.FAIL)
     testing.eq(reason:find("tests/lua/zzz_test.lua", 1, true) ~= nil, true)
+
+    -- Read an empty log as an error
     testing.eq((check.named_result("", { "x" })), check.Result.ERROR)
+
+    -- Let a failing suite win over a missing one
     local both = { "tests/lua/c_test.lua", "tests/lua/zzz_test.lua" }
     testing.eq((check.named_result(DEV_LOG, both)), check.Result.FAIL)
+
+    -- Read a log of header lines alone as an error
     local header = table.concat({ "running tests", "> tests/lua/a_test.lua" }, "\n")
     testing.eq((check.named_result(header, { "tests/lua/a_test.lua" })), check.Result.ERROR)
 end)
 
 testing.test("a named directory reads every suite under it", function()
+    -- Build a log of passing suites under two directories
     local PASS, FAIL = check.Result.PASS, check.Result.FAIL
     local lines =
         { "PASS tests/lua/a_test.lua", "SKIP tests/lua/b_test.lua", "PASS tests/bats/x.bats" }
     local passing = table.concat(lines, "\n")
+
+    -- Check a directory passes when every suite under it passes
     testing.eq((check.named_result(passing, { "tests/lua" })), PASS)
     testing.eq((check.named_result(passing, { "tests" })), PASS)
+
+    -- Check it fails when a suite under it fails
     testing.eq((check.named_result(DEV_LOG, { "tests/lua" })), FAIL)
     local failing = table.concat({ passing, "FAIL tests/lua/z_test.lua" }, "\n")
     testing.eq((check.named_result(failing, { "tests/lua" })), FAIL)
+
+    -- Check a partial path is an error and a sibling directory passes
     testing.eq((check.named_result(passing, { "tests/lu" })), check.Result.ERROR)
     testing.eq((check.named_result(passing, { "tests/bats" })), PASS)
 end)

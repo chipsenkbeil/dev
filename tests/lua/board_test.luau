@@ -40,12 +40,57 @@ local BACKLOG_COLUMN = support.column_id(support.Column.BACKLOG)
 local ICEBOX_COLUMN = support.column_id(support.Column.ICEBOX)
 local LIVE_LEASE = "2999-01-01T00:00:00Z"
 local PROGRESS_NAME = support.COLUMN_NAME.PROGRESS
-local V1 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone\n\n## Done when\n- [ ] done"
-local SCAFFOLD = "## Problem\nx\n\n## Change\n\n## Out of scope\n"
-local COMPOSED = "## Problem\nx\n\n## Change\n- x\n\n## Out of scope\ny\n"
-local V2 = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone"
-local LEAD_USER = '[board.pomb]\nurl = "https://pomb.example"\nfield_prefix = "runner"\ntoken = "pass:secrets/worker/token/pomb"\n'
-    .. 'lead_token = "pass:secrets/lead/token/pomb"\n'
+local V1 = table.concat({
+    "## Problem",
+    "why",
+    "",
+    "## Change",
+    "- x",
+    "",
+    "## Out of scope",
+    "none",
+    "",
+    "## Done when",
+    "- [ ] done",
+}, "\n")
+local SCAFFOLD = table.concat({
+    "## Problem",
+    "x",
+    "",
+    "## Change",
+    "",
+    "## Out of scope",
+    "",
+}, "\n")
+local COMPOSED = table.concat({
+    "## Problem",
+    "x",
+    "",
+    "## Change",
+    "- x",
+    "",
+    "## Out of scope",
+    "y",
+    "",
+}, "\n")
+local V2 = table.concat({
+    "## Problem",
+    "why",
+    "",
+    "## Change",
+    "- x",
+    "",
+    "## Out of scope",
+    "none",
+}, "\n")
+local LEAD_USER = table.concat({
+    "[board.pomb]",
+    'url = "https://pomb.example"',
+    'field_prefix = "runner"',
+    'token = "pass:secrets/worker/token/pomb"',
+    'lead_token = "pass:secrets/lead/token/pomb"',
+    "",
+}, "\n")
 
 local function executable(path, body)
     assert(fs.write(path, body))
@@ -436,6 +481,7 @@ end)
 testing.test(
     "ls hides every finished column and discard picks the mapped one, else the first",
     function()
+        -- Hide every finished column from the listing but still accept it as a filter
         local cards = sample()
         cards[2].column = "Archive"
         local backend = fake(cards, nil, { support.COLUMN_NAME.DONE, "Archive" })
@@ -444,12 +490,18 @@ testing.test(
             "11111111  Ready  1 Pomodoro  docs  Write docs"
         )
         testing.eq(cmd_board.run("ls", { "--column", "archive" }, backend).message, nil)
+
+        -- Discard into the first finished column
         cmd_board.run("discard", { "11111111-a" }, backend)
         testing.eq(backend.calls[#backend.calls], { "move", ID_A, support.COLUMN_NAME.DONE })
+
+        -- Discard into the mapped finished column ahead of the first one
         backend = fake(sample(), nil, { "Archive", support.COLUMN_NAME.DONE })
         backend.column_map = { done = support.COLUMN_NAME.DONE }
         cmd_board.run("discard", { "11111111-a" }, backend)
         testing.eq(backend.calls[#backend.calls], { "move", ID_A, support.COLUMN_NAME.DONE })
+
+        -- Fall back to the first finished column when none is mapped
         backend = fake(sample(), nil, { "Archive", support.COLUMN_NAME.DONE })
         cmd_board.run("discard", { "11111111-a" }, backend)
         testing.eq(backend.calls[#backend.calls], { "move", ID_A, "Archive" })
@@ -474,16 +526,23 @@ testing.test("is_card_prefix wants 8 or more hex digits and hyphens", function()
 end)
 
 testing.test("resolve refuses a short, unknown or ambiguous prefix", function()
+    -- Refuse a prefix shorter than eight characters
     local cards = sample()
     local card, message = board.resolve(cards, "1111111")
     testing.eq(card, nil)
     testing.ok(message:find("at least 8", 1, true), message)
+
+    -- Refuse a prefix that several cards share
     card, message = board.resolve(cards, "11111111")
     testing.eq(card, nil)
     testing.eq(message, "More than one card starts with 11111111. Give more characters.")
+
+    -- Refuse a prefix no card starts with
     card, message = board.resolve(cards, "deadbeef")
     testing.eq(card, nil)
     testing.eq(message, "No card starts with deadbeef.")
+
+    -- Refuse a prefix with characters that are not hex
     card, message = board.resolve(cards, "zzzzzzzz")
     testing.eq(card, nil)
     testing.ok(message:find("hex", 1, true), message)
@@ -493,15 +552,23 @@ testing.test("ls hides Done and aligns the columns", function()
     local result = cmd_board.run("ls", {}, fake(sample()))
     testing.eq(
         result.output,
-        "11111111  Ready    1 Pomodoro  docs  Write docs\n11111111  Backlog  unsized     -     Fix lint"
+        table.concat({
+            "11111111  Ready    1 Pomodoro  docs  Write docs",
+            "11111111  Backlog  unsized     -     Fix lint",
+        }, "\n")
     )
 end)
 
 testing.test("ls filters by column and label", function()
+    -- List the cards of one column
     local result = cmd_board.run("ls", { "--column", support.Column.DONE }, fake(sample()))
     testing.eq(result.output, "cccccccc  Done  unsized  -  Old thing")
+
+    -- List the cards that carry a label
     result = cmd_board.run("ls", { "--label", "docs" }, fake(sample()))
     testing.eq(result.output, "11111111  Ready  1 Pomodoro  docs  Write docs")
+
+    -- Say so when no card carries the label
     result = cmd_board.run("ls", { "--label", "none" }, fake(sample()))
     testing.eq(result.output, "No cards.")
 end)
@@ -535,8 +602,11 @@ local function progress_sample()
 end
 
 testing.test("ls on a colour terminal draws the summary, legend, dots and meter", function()
+    -- Render the board on a colour terminal
     local result = coloured(progress_sample())
     testing.ok(result.page, "output goes through the pager")
+
+    -- Read the summary, the legend and each row without the colour codes
     local lines = split(strip(result.output))
     testing.eq(lines[1], "2 cards · 1 ready · 1 blocked")
     testing.eq(lines[2], "size  ● 1  ●● 2  ●●● 3  ●●●● >3  ○○○ unsized")
@@ -547,37 +617,54 @@ testing.test("ls on a colour terminal draws the summary, legend, dots and meter"
         lines[5]
     )
     testing.ok(lines[6]:find("^11111111  Blocked +○○○ +%- +%- +Fix lint$"), lines[6])
+
+    -- Paint the card colour into the output
     testing.ok(result.output:find("\27[33m", 1, true), "yellow is painted")
 end)
 
 testing.test("ls on a colour terminal paints no empty colour code in the meter", function()
+    -- Give one card no finished outcome and the other all of them
     local empty_code = "\27%[[%d;]*m\27%[0m"
     local cards = progress_sample()
     cards[1].outcomes = { { done = false }, { done = false } }
     cards[2].outcomes = { { done = true }, { done = true } }
+
+    -- Render the board and look for an empty colour code
     local result = coloured(cards)
     testing.eq(result.output:find(empty_code), nil, result.output)
+
+    -- Draw the empty and the full meter, painting only the full one
     testing.ok(strip(result.output):find("▱▱▱▱ 0/2", 1, true), result.output)
     testing.ok(strip(result.output):find("▰▰▰▰ 2/2", 1, true), result.output)
     testing.ok(result.output:find("\27[32m▰▰▰▰\27[0m", 1, true), result.output)
 end)
 
 testing.test("ls shows the held by column only when a listed card is claimed", function()
+    -- Claim one of the listed cards
     local cards = progress_sample()
     cards[1].claimant = "dev@host:1"
+
+    -- Render the board on a colour terminal
     local result = coloured(cards)
+
+    -- Show the held by column with the claimant
     testing.ok(strip(result.output):find("HELD BY", 1, true), result.output)
     testing.ok(strip(result.output):find("dev@host:1", 1, true), result.output)
 end)
 
 testing.test("ls --group lists the cards under a heading and count per column", function()
+    -- Render the board grouped by column
     local result = coloured(progress_sample(), { "--group" })
     local lines = split(strip(result.output))
+
+    -- Give each column a heading with its card count
     testing.eq(lines[3], "")
     testing.eq(lines[4], "Ready  1 card")
     testing.ok(lines[5]:find("^  11111111 +● +docs +▰▰▱▱ 2/4 +Write docs$"), lines[5])
     testing.eq(lines[6], "")
     testing.eq(lines[7], "Blocked  1 card")
+
+    -- Note the left-out Done column unless it is the one asked for
     testing.eq(lines[#lines], "Done is left out unless --column done")
     local filtered =
         strip(coloured(progress_sample(), { "--group", "--column", support.Column.BLOCKED }).output)
@@ -613,8 +700,10 @@ end)
 
 testing.test("ls without colour is the plain lines, --group included", function()
     local plain = ui.context({ color = false, interactive = false, width = 100 })
-    local expected =
-        "11111111  Ready    1 Pomodoro  docs  Write docs\n11111111  Backlog  unsized     -     Fix lint"
+    local expected = table.concat({
+        "11111111  Ready    1 Pomodoro  docs  Write docs",
+        "11111111  Backlog  unsized     -     Fix lint",
+    }, "\n")
     for _, args in ipairs({ {}, { "--group" } }) do
         local result = cmd_board.run("ls", args, fake(sample()), nil, plain)
         testing.eq(result.output, expected)
@@ -623,17 +712,23 @@ testing.test("ls without colour is the plain lines, --group included", function(
 end)
 
 testing.test("ls refuses an unknown column and an unknown flag with a usage error", function()
+    -- Refuse a column the board does not have
     local result = cmd_board.run("ls", { "--column", "doing" }, fake(sample()))
     testing.eq(result.code, 2)
     testing.ok(result.message:find("Unknown column doing", 1, true), result.message)
+
+    -- Refuse a flag the command does not know
     result = cmd_board.run("ls", { "--bogus" }, fake(sample()))
     testing.eq(result.code, 2)
     testing.ok(result.message:find("Unknown flag --bogus.", 1, true), result.message)
+
+    -- Refuse a column flag with no value
     result = cmd_board.run("ls", { "--column" }, fake(sample()))
     testing.eq(result.code, 2)
 end)
 
 testing.test("add defaults to Backlog and joins the words of the name", function()
+    -- Add a card with a multi-word name and no column
     local backend = fake(sample())
     local result = cmd_board.run("add", {
         "A",
@@ -655,6 +750,8 @@ testing.test("add defaults to Backlog and joins the words of the name", function
         backend.calls[1],
         { "add", "A new card", support.COLUMN_NAME.BACKLOG, COMPOSED, "yellow" }
     )
+
+    -- Add a card to a named column with a ready-made description
     result = cmd_board.run("add", {
         "X",
         "--column",
@@ -673,6 +770,8 @@ testing.test("add defaults to Backlog and joins the words of the name", function
         "dev test",
     }, backend)
     testing.eq(backend.calls[2], { "add", "X", support.COLUMN_NAME.READY, V2, "green" })
+
+    -- Refuse an add that names nothing
     testing.eq(cmd_board.run("add", {}, backend).code, 2)
 end)
 
@@ -728,9 +827,12 @@ testing.test("add accepts a title that opens with dev board", function()
 end)
 
 testing.test("add --board files on the named board and leaves this one alone", function()
+    -- Give the board a sibling to file on
     local backend = fake(sample())
     local sibling = fake(sample())
     backend.sibling = sibling
+
+    -- Add a card to the sibling by naming it
     local result = cmd_board.run("add", {
         "Far",
         "--board",
@@ -746,6 +848,8 @@ testing.test("add --board files on the named board and leaves this one alone", f
         "--done-when",
         "a",
     }, backend)
+
+    -- Look the sibling up and leave this board alone
     testing.eq(result.output, "added cccccccc Backlog")
     testing.eq(backend.calls[1], { "other_board", "ci" })
     testing.eq(#backend.calls, 1)
@@ -753,6 +857,7 @@ testing.test("add --board files on the named board and leaves this one alone", f
 end)
 
 testing.test("add --board reports a target with no Backlog column and files nothing", function()
+    -- Give the board a sibling that has no Backlog column
     local backend = fake(sample())
     local sibling = fake(sample())
     function sibling:add(name)
@@ -760,6 +865,8 @@ testing.test("add --board reports a target with no Backlog column and files noth
         return nil, "the board has no Backlog column"
     end
     backend.sibling = sibling
+
+    -- Add a card to the sibling by naming it
     local result = cmd_board.run("add", {
         "Far",
         "--board",
@@ -775,6 +882,8 @@ testing.test("add --board reports a target with no Backlog column and files noth
         "--done-when",
         "a",
     }, backend)
+
+    -- Report the refusal and file nothing
     testing.eq(result.code, 1)
     testing.ok(result.message:find("The board has no Backlog column", 1, true), result.message)
     testing.eq(sibling.calls, { { "refused", "Far" } })
@@ -887,9 +996,12 @@ testing.test("add --blocked-by refuses an unknown blocker before it adds", funct
 end)
 
 testing.test("add --board with --blocked-by looks the blocker up on the named board", function()
+    -- Give the board a sibling to file on
     local backend = fake(sample())
     local sibling = fake(sample())
     backend.sibling = sibling
+
+    -- Add a card to the sibling that is blocked by one of the sibling's cards
     cmd_board.run("add", {
         "X",
         "--board",
@@ -907,6 +1019,8 @@ testing.test("add --board with --blocked-by looks the blocker up on the named bo
         "--blocked-by",
         "11111111-a",
     }, backend)
+
+    -- Link on the sibling and leave this board alone
     testing.eq(sibling.calls[2], { "link", ID_C, "blocked_by", ID_A })
     testing.eq(#backend.calls, 1)
 end)
@@ -1013,9 +1127,12 @@ testing.test("add names the card when its from link fails", function()
 end)
 
 testing.test("add --board with --from looks the card up on the named board", function()
+    -- Give the board a sibling to file on
     local backend = fake(sample())
     local sibling = fake(sample())
     backend.sibling = sibling
+
+    -- Add a card to the sibling that came from one of the sibling's cards
     cmd_board.run("add", {
         "X",
         "--board",
@@ -1033,11 +1150,14 @@ testing.test("add --board with --from looks the card up on the named board", fun
         "--from",
         "11111111-a",
     }, backend)
+
+    -- Link on the sibling and leave this board alone
     testing.eq(sibling.calls[2], { "link", ID_C, "related", ID_A })
     testing.eq(#backend.calls, 1)
 end)
 
 testing.test("add --blocked-by drops a repeated blocker and reaches BOARD:CARD", function()
+    -- Give the board a sibling that holds a far card
     local backend = fake(sample())
     local far = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
     local far_card = {
@@ -1055,6 +1175,8 @@ testing.test("add --blocked-by drops a repeated blocker and reaches BOARD:CARD",
             return far_card
         end,
     }
+
+    -- Add a card blocked by a repeated local card and a card on the sibling
     cmd_board.run("add", {
         "X",
         "--problem",
@@ -1074,6 +1196,8 @@ testing.test("add --blocked-by drops a repeated blocker and reaches BOARD:CARD",
         "--blocked-by",
         "ci:dddddddd",
     }, backend)
+
+    -- Link each distinct blocker once
     testing.eq(backend.calls[1], { "other_board", "ci" })
     testing.eq(backend.calls[2], { "add", "X", support.COLUMN_NAME.BACKLOG, COMPOSED, "yellow" })
     testing.eq(backend.calls[3], { "link", ID_C, "blocked_by", ID_A })
@@ -1102,7 +1226,18 @@ testing.test("add --change prefixes each line with a dash", function()
         "add",
         "X",
         support.COLUMN_NAME.BACKLOG,
-        "## Problem\nx\n\n## Change\n- first\n- second\n\n## Out of scope\ny\n",
+        table.concat({
+            "## Problem",
+            "x",
+            "",
+            "## Change",
+            "- first",
+            "- second",
+            "",
+            "## Out of scope",
+            "y",
+            "",
+        }, "\n"),
         "yellow",
     })
 end)
@@ -1128,12 +1263,24 @@ testing.test("add --change keeps a line that already starts with a dash", functi
         "add",
         "X",
         support.COLUMN_NAME.BACKLOG,
-        "## Problem\nx\n\n## Change\n- first\n- second\n\n## Out of scope\ny\n",
+        table.concat({
+            "## Problem",
+            "x",
+            "",
+            "## Change",
+            "- first",
+            "- second",
+            "",
+            "## Out of scope",
+            "y",
+            "",
+        }, "\n"),
         "yellow",
     })
 end)
 
 testing.test("add --size passes the colour its size word names", function()
+    -- Add a card at each size word and read the colour it passes
     local backend = fake(sample())
     for word, color in pairs({ ["1"] = "yellow", ["2"] = "green", ["3"] = "blue", ["3+"] = "red" }) do
         cmd_board.run("add", {
@@ -1154,6 +1301,8 @@ testing.test("add --size passes the colour its size word names", function()
             { "add", "X", support.COLUMN_NAME.BACKLOG, COMPOSED, color }
         )
     end
+
+    -- Refuse an unsized card outside Icebox and add nothing
     local calls = #backend.calls
     local refused = cmd_board.run(
         "add",
@@ -1163,6 +1312,8 @@ testing.test("add --size passes the colour its size word names", function()
     testing.eq(refused.code, 2)
     testing.ok(refused.message:find("a size", 1, true), refused.message)
     testing.eq(#backend.calls, calls)
+
+    -- Allow an unsized card in Icebox
     cmd_board.run(
         "add",
         { "X", "--column", support.Column.ICEBOX, "--size", "UNSIZED", "--description", "loose" },
@@ -1172,6 +1323,8 @@ testing.test("add --size passes the colour its size word names", function()
         backend.calls[#backend.calls],
         { "add", "X", support.COLUMN_NAME.ICEBOX, "loose", "white" }
     )
+
+    -- Refuse an unknown size and a size flag with no value
     local result = cmd_board.run("add", { "X", "--size", "4" }, backend)
     testing.eq(result.code, 2)
     testing.ok(result.message:find("Unknown size 4", 1, true), result.message)
@@ -1203,31 +1356,45 @@ testing.test("size unsized is refused outside Icebox and works inside it", funct
 end)
 
 testing.test("size refuses a bad size, a missing argument and an unknown card", function()
+    -- Refuse a size outside the list
     local backend = fake(sample())
     local result = cmd_board.run("size", { "cccccccc", "4" }, backend)
     testing.eq(result.code, 2)
     testing.ok(result.message:find("The sizes are 1, 2, 3, 3+, unsized", 1, true), result.message)
+
+    -- Refuse a missing or surplus argument
     testing.eq(cmd_board.run("size", { "cccccccc" }, backend).code, 2)
     testing.eq(cmd_board.run("size", { "cccccccc", "2", "3" }, backend).code, 2)
+
+    -- Refuse an unknown card and call nothing
     result = cmd_board.run("size", { "deadbeef", "2" }, backend)
     testing.eq(result.code, 1)
     testing.eq(#backend.calls, 0)
 end)
 
 testing.test("ls --size keeps the cards of one colour and counts no colour as unsized", function()
+    -- Give each card a size colour
     local cards = sample()
     cards[1].color = "yellow"
     cards[2].color = "white"
     cards[3].color = "blue"
+
+    -- Keep the cards of one size
     local result = cmd_board.run("ls", { "--size", "1" }, fake(cards))
     testing.eq(result.output, "11111111  Ready  1 Pomodoro  docs  Write docs")
+
+    -- Count a white card and a card with no colour as unsized
     result = cmd_board.run("ls", { "--size", "unsized" }, fake(cards))
     testing.eq(result.output, "11111111  Backlog  unsized  -  Fix lint")
     cards[2].color = nil
     result = cmd_board.run("ls", { "--size", "unsized" }, fake(cards))
     testing.eq(result.output, "11111111  Backlog  unsized  -  Fix lint")
+
+    -- Combine the size with a column
     result = cmd_board.run("ls", { "--size", "3", "--column", support.Column.DONE }, fake(cards))
     testing.eq(result.output, "cccccccc  Done  unsized  -  Old thing")
+
+    -- Say so when no card has the size
     result = cmd_board.run("ls", { "--size", "2" }, fake(cards))
     testing.eq(result.output, "No cards.")
     testing.eq(cmd_board.run("ls", { "--size", "9" }, fake(cards)).code, 2)
@@ -1278,16 +1445,23 @@ testing.test("add --label may repeat and drops a duplicate", function()
 end)
 
 testing.test("label adds and removes labels and sends the whole list", function()
+    -- Add two labels and send the whole list
     local backend = fake(sample())
     local result = cmd_board.run("label", { "11111111-a", "+needs:lead", "+x" }, backend)
     testing.eq(result.output, "labelled 11111111 docs,needs:lead,x")
     testing.eq(backend.calls[1], { "set_labels", ID_A, { "docs", "needs:lead", "x" }, nil })
+
+    -- Remove the last label and send an empty list
     result = cmd_board.run("label", { "11111111-a", "--remove", "docs" }, backend)
     testing.eq(result.output, "labelled 11111111 -")
     testing.eq(backend.calls[2], { "set_labels", ID_A, {}, nil })
+
+    -- Make no call when the labels end up unchanged
     result = cmd_board.run("label", { "11111111-a", "new", "--remove", "new", "+docs" }, backend)
     testing.eq(result.output, "labelled 11111111 docs")
     testing.eq(#backend.calls, 2)
+
+    -- Mix bare words, additions and removals
     result = cmd_board.run(
         "label",
         { "11111111-a", "x", "--remove", "docs", "--remove", "x", "y" },
@@ -1308,57 +1482,102 @@ testing.test("label replays a queued removal given with --remove", function()
 end)
 
 testing.test("adding a label the card has or removing one it lacks sends nothing", function()
+    -- Add a label the card already has
     local backend = fake(sample())
     testing.eq(
         cmd_board.run("label", { "11111111-a", "+docs" }, backend).output,
         "labelled 11111111 docs"
     )
+
+    -- Remove a label the card lacks
     testing.eq(
         cmd_board.run("label", { "11111111-a", "--remove", "nope" }, backend).output,
         "labelled 11111111 docs"
     )
+
+    -- Send nothing for either
     testing.eq(#backend.calls, 0)
 end)
 
 testing.test("label refuses a bad label, a bad --remove value and a missing card", function()
+    -- Refuse a malformed label word
     local backend = fake(sample())
     for _, word in ipairs({ "+two words", "+--x", "+", "-", "+a\tb", "two words" }) do
         testing.eq(cmd_board.run("label", { "11111111-a", word }, backend).code, 2)
     end
+
+    -- Refuse a missing or malformed --remove value
     testing.eq(cmd_board.run("label", { "11111111-a", "--remove" }, backend).code, 2)
     testing.eq(cmd_board.run("label", { "11111111-a", "--remove", "a b" }, backend).code, 2)
     testing.eq(cmd_board.run("label", { "11111111-a", "--remove", "-a" }, backend).code, 2)
+
+    -- Refuse a call that names no label and a malformed add --label
     testing.eq(cmd_board.run("label", { "11111111-a" }, backend).code, 2)
     testing.eq(cmd_board.run("add", { "X", "--label", "a b" }, backend).code, 2)
     testing.eq(cmd_board.run("add", { "X", "--label", "-a" }, backend).code, 2)
+
+    -- Refuse an unknown card
     testing.eq(cmd_board.run("label", { "deadbeef", "+x" }, backend).code, 1)
     testing.eq(#backend.calls, 0)
 end)
 
 testing.test("edit sends the whole new description and prints one line", function()
+    -- Write a whole new description
     local backend = fake(sample())
-    local text = "## Problem\nnew plan\n\n## Change\n- x\n\n## Out of scope\nnone"
+    local text = table.concat({
+        "## Problem",
+        "new plan",
+        "",
+        "## Change",
+        "- x",
+        "",
+        "## Out of scope",
+        "none",
+    }, "\n")
+
+    -- Edit the card with it
     local result = cmd_board.run("edit", { "11111111-a", text }, backend)
+
+    -- Print one line and send the text whole
     testing.eq(result.output, "edited 11111111")
     testing.eq(backend.calls[1], { "set_description", ID_A, text, nil })
 end)
 
 testing.test("edit --board changes the description on the named board", function()
+    -- Give the board a sibling and write a whole new description
     local backend = fake(sample())
     local sibling = fake(sample())
     backend.sibling = sibling
-    local text = "## Problem\nnew plan\n\n## Change\n- x\n\n## Out of scope\nnone"
+    local text = table.concat({
+        "## Problem",
+        "new plan",
+        "",
+        "## Change",
+        "- x",
+        "",
+        "## Out of scope",
+        "none",
+    }, "\n")
+
+    -- Edit the sibling's card with it
     local result = cmd_board.run("edit", { "11111111-a", "--board", "ci", text }, backend)
+
+    -- Write on the sibling and leave this board alone
     testing.eq(result.output, "edited 11111111")
     testing.eq(backend.calls, { { "other_board", "ci" } })
     testing.eq(sibling.calls[#sibling.calls], { "set_description", ID_A, text, nil })
 end)
 
 testing.test("note BOARD:ID writes the note on the named board's card", function()
+    -- Give the board a sibling to write on
     local backend = fake(sample())
     local sibling = fake(sample())
     backend.sibling = sibling
+
+    -- Note a card by its board-qualified id
     local result = cmd_board.run("note", { "ci:11111111-a", "Seen" }, backend)
+
+    -- Write the note on the sibling and leave this board alone
     testing.eq(result.output, "noted 11111111")
     testing.eq(backend.calls, { { "other_board", "ci" } })
     testing.eq(sibling.calls[#sibling.calls][1], "note")
@@ -1366,19 +1585,29 @@ testing.test("note BOARD:ID writes the note on the named board's card", function
 end)
 
 testing.test("show BOARD:ID prints the named board's card", function()
+    -- Give the board a sibling to read from
     local backend = fake(sample())
     local sibling = fake(sample())
     backend.sibling = sibling
+
+    -- Show a card by its board-qualified id
     local result = cmd_board.run("show", { "ci:11111111-a" }, backend)
+
+    -- Print the sibling's card and leave this board alone
     testing.ok(result.output:find("11111111", 1, true), result.output)
     testing.eq(backend.calls, { { "other_board", "ci" } })
 end)
 
 testing.test("notes BOARD:ID lists the named board's card notes", function()
+    -- Give the board a sibling to read from
     local backend = fake(sample())
     local sibling = fake(sample())
     backend.sibling = sibling
+
+    -- List the notes of a card by its board-qualified id
     local result = cmd_board.run("notes", { "ci:11111111-a" }, backend)
+
+    -- Succeed and leave this board alone
     testing.eq(result.code, nil)
     testing.eq(backend.calls, { { "other_board", "ci" } })
 end)
@@ -1402,6 +1631,7 @@ testing.test("edit --board refuses a board that is not there", function()
 end)
 
 testing.test("edit refuses a text that holds a rendered block", function()
+    -- Write a text that holds a rendered block
     local backend = fake(sample())
     local text = table.concat({
         "## Problem",
@@ -1411,41 +1641,56 @@ testing.test("edit refuses a text that holds a rendered block", function()
         "- [ ] one (check: x)",
         "",
     }, "\n")
+
+    -- Refuse the edit
     local result = cmd_board.run("edit", { "11111111-a", text }, backend)
     testing.eq(result.code, 1)
+
+    -- Name the commands that own the block and write nothing
     testing.ok(result.message:find("`dev board outcome`", 1, true), result.message)
     testing.ok(result.message:find("`dev board checks`", 1, true), result.message)
     testing.eq(#backend.calls, 0)
 end)
 
 testing.test("rendered_blocks finds a whole block line and ignores prose", function()
-    testing.eq(board.rendered_blocks("a\nchecks:\n- x"), "checks:")
+    testing.eq(board.rendered_blocks(table.concat({ "a", "checks:", "- x" }, "\n")), "checks:")
     testing.eq(board.rendered_blocks("see the checks: row and done when: it ends"), nil)
     testing.eq(board.rendered_blocks(nil), nil)
 end)
 
 testing.test("edit outside Icebox refuses a text that drops a v3 section", function()
+    -- Refuse a text that drops sections outside Icebox
     local backend = fake(sample())
-    local result = cmd_board.run("edit", { "11111111-a", "## Problem\nnew plan" }, backend)
+    local text = table.concat({ "## Problem", "new plan" }, "\n")
+    local result = cmd_board.run("edit", { "11111111-a", text }, backend)
     testing.eq(result.code, 1)
     testing.ok(result.message:find("## Change, ## Out of scope", 1, true), result.message)
     testing.eq(#backend.calls, 0)
+
+    -- Move the card into Icebox
     local cards = sample()
     cards[1].column = support.COLUMN_NAME.ICEBOX
     backend = fake(cards)
+
+    -- Accept the loose text there
     testing.eq(cmd_board.run("edit", { "11111111-a", "loose" }, backend).code, nil)
     testing.eq(#backend.calls, 1)
 end)
 
 testing.test("rename sends the new title and prints renamed", function()
+    -- Rename a card with a multi-word title
     local backend = fake(sample())
     local result = cmd_board.run("rename", { "11111111-a", "Better", "title" }, backend)
     testing.eq(result.output, "renamed 11111111")
     testing.eq(backend.calls[1], { "set_name", ID_A, "Better title", nil })
+
+    -- Refuse a missing, blank, flagged or quoted title
     testing.eq(cmd_board.run("rename", { "11111111-a" }, backend).code, 2)
     testing.eq(cmd_board.run("rename", { "11111111-a", "  " }, backend).code, 2)
     testing.eq(cmd_board.run("rename", { "11111111-a", "x", "--force" }, backend).code, 2)
     testing.eq(cmd_board.run("rename", { "11111111-a", 'say "hi"' }, backend).code, 2)
+
+    -- Refuse an unknown card and send nothing more
     testing.eq(cmd_board.run("rename", { "deadbeef", "x" }, backend).code, 2)
     testing.eq(#backend.calls, 1)
 end)
@@ -1458,11 +1703,16 @@ testing.test("rename of a missing card is a usage error", function()
 end)
 
 testing.test("rename of a card on an unreadable board still fails with exit 1", function()
+    -- Make the board unreadable
     local backend = fake(sample())
     backend.cards = function()
         return nil, "Board unavailable"
     end
+
+    -- Rename a card on it
     local result = cmd_board.run("rename", { "11111111-a", "x" }, backend)
+
+    -- Fail with exit 1 and name the problem
     testing.eq(result.code, 1)
     testing.eq(result.message, "Board unavailable.")
 end)
@@ -1491,24 +1741,34 @@ testing.test("discard without a reason only labels and moves, and refuses a blan
 end)
 
 testing.test("discard refuses a needs:human card before anything is written", function()
+    -- Hand a card to the human
     local cards = sample()
     cards[1].labels = { "needs:human" }
     local backend = fake(cards)
+
+    -- Try to discard it
     local result = cmd_board.run("discard", { "11111111-a", "--reason", "Dropped" }, backend)
+
+    -- Refuse and write nothing
     testing.eq(result.code, 1)
     testing.ok(result.message:find("needs:human", 1, true), result.message)
     testing.eq(#backend.calls, 0)
 end)
 
 testing.test("discard --board discards the card on the named board", function()
+    -- Give the board a sibling to discard on
     local backend = fake(sample())
     local sibling = fake(sample())
     backend.sibling = sibling
+
+    -- Discard a card on it with a reason
     local result = cmd_board.run(
         "discard",
         { "11111111-a", "--board", "ci", "--reason", "Duplicate" },
         backend
     )
+
+    -- Write the note, the label and the move on the sibling, in that order
     testing.eq(result.output, "discarded 11111111")
     testing.eq(backend.calls, { { "other_board", "ci" } })
     testing.eq(sibling.calls[#sibling.calls - 1][1], "set_labels")
@@ -1520,13 +1780,18 @@ testing.test("discard --board discards the card on the named board", function()
 end)
 
 testing.test("discard --board queues no step a failed write leaves", function()
+    -- Give the board a sibling whose label write fails
     local backend = fake(sample())
     local sibling = fake(sample())
     backend.sibling = sibling
     function sibling:set_labels()
         return false, "boom"
     end
+
+    -- Discard a card on it
     local result = cmd_board.run("discard", { "11111111-a", "--board", "ci" }, backend)
+
+    -- Fail without queueing the steps the write left undone
     testing.eq(result.code, 1)
     testing.eq(result.unqueued, true)
     testing.eq(result.queue, nil)
@@ -1544,15 +1809,20 @@ testing.test("discard --board refuses a board that is not there", function()
 end)
 
 testing.test("show and move take a board-qualified card id", function()
+    -- Give the board a sibling whose card has a ticked outcome
     local backend = fake(sample())
     local cards = sample()
     cards[1].outcomes = { { id = "s1", name = "A works", done = true } }
     local sibling = fake(cards)
     backend.sibling = sibling
+
+    -- Show the sibling's card by its board-qualified id
     local shown = cmd_board.run("show", { "ci:11111111-a" }, backend)
     testing.eq(shown.code, nil)
     testing.ok(shown.output:find("11111111", 1, true), shown.output)
     testing.eq(backend.calls, { { "other_board", "ci" } })
+
+    -- Move the sibling's card the same way
     local moved = cmd_board.run("move", { "ci:11111111-a", support.Column.DONE }, backend)
     testing.eq(moved.output, "moved 11111111 to Done")
     testing.eq(sibling.calls[#sibling.calls], { "move", ID_A, support.COLUMN_NAME.DONE })
@@ -1576,6 +1846,7 @@ testing.test(
 )
 
 testing.test("move to Done refuses a card with unticked outcomes and names them", function()
+    -- Leave two of a card's three outcomes unticked
     local cards = sample()
     cards[1].outcomes = {
         { id = "s1", name = "A works", done = true },
@@ -1583,7 +1854,11 @@ testing.test("move to Done refuses a card with unticked outcomes and names them"
         { id = "s3", name = "C works", done = false },
     }
     local backend = fake(cards)
+
+    -- Try to move it to Done
     local result = cmd_board.run("move", { "11111111-a", support.Column.DONE }, backend)
+
+    -- Refuse, name the unticked outcomes and write nothing
     testing.eq(result.code, 1)
     testing.eq(result.unqueued, true)
     testing.eq(
@@ -1607,9 +1882,14 @@ testing.test("move to Done takes a planned card whose outcomes are all ticked", 
 end)
 
 testing.test("move refuses a card with an open blocker and names it", function()
+    -- Block a card on an open card
     local backend = fake(sample())
     backend.blockers = { [ID_A] = "bbbbbbbb" }
+
+    -- Try to move it into Progress
     local result = cmd_board.run("move", { "11111111-a", support.Column.PROGRESS }, backend)
+
+    -- Refuse, name the blocker and write nothing
     testing.eq(result.code, 1, result.message)
     testing.ok(result.message:find("blocked by open card bbbbbbbb", 1, true), result.message)
     testing.eq(#backend.calls, 0)
@@ -1636,27 +1916,39 @@ testing.test("move refuses an unsized card into every column but Icebox", functi
 end)
 
 testing.test("an unsized umbrella refusal names the size and not outcomes", function()
+    -- Make an unsized epic with open children
     local card = planned()
     card.color = nil
     card.size = "unsized"
     card.epic = { done = 0, total = 2 }
     local backend = fake({ card })
     backend.kin = { children = card.epic }
+
+    -- Try to move it into Progress
     local result = cmd_board.run("move", { "cccccccc", support.Column.PROGRESS }, backend)
+
+    -- Refuse for the size alone
     testing.eq(result.code, 1)
     testing.ok(result.message:find("It lacks a size.", 1, true), result.message)
     testing.ok(not result.message:find("outcomes", 1, true), result.message)
+
+    -- Send no move
     for _, call in ipairs(backend.calls) do
         testing.ok(call[1] ~= "move", "the refused move was sent")
     end
 end)
 
 testing.test("an unsized card with no children still names size and outcomes", function()
+    -- Make an unsized card with no children
     local card = planned()
     card.color = nil
     card.size = "unsized"
     local backend = fake({ card })
+
+    -- Try to move it into Progress
     local result = cmd_board.run("move", { "cccccccc", support.Column.PROGRESS }, backend)
+
+    -- Refuse for the size and the outcomes
     testing.eq(result.code, 1)
     testing.ok(result.message:find("It lacks a size, Done when outcomes.", 1, true), result.message)
     testing.eq(#backend.calls, 0)
@@ -1688,17 +1980,23 @@ testing.test("move refuses a sized card that lacks a section or outcomes outside
 end)
 
 testing.test("an epic moves to Done once every child is Done and its outcome is ticked", function()
+    -- Make an epic whose children are all Done and whose outcome is ticked
     local card = planned()
     card.epic = { done = 3, total = 3 }
     card.outcomes = { { id = "s1", name = "a", done = true } }
     local backend = fake({ card })
     backend.kin = { children = card.epic }
+
+    -- Move it to Done
     local result = cmd_board.run("move", { "cccccccc", support.Column.DONE }, backend)
+
+    -- Send the move
     testing.eq(result.output, "moved cccccccc to Done")
     testing.eq(backend.calls[#backend.calls], { "move", ID_C, support.COLUMN_NAME.DONE })
 end)
 
 testing.test("an epic with open children is refused a move into Done", function()
+    -- Make an epic with open children and a WIP-limited Review column
     local card = planned()
     card.column = support.COLUMN_NAME.READY
     card.epic = { done = 1, total = 3 }
@@ -1706,6 +2004,8 @@ testing.test("an epic with open children is refused a move into Done", function(
     local backend = fake({ card })
     backend.kin = { children = card.epic }
     backend.limited = { support.COLUMN_NAME.REVIEW }
+
+    -- Refuse a move into Done
     local result = cmd_board.run("move", { "cccccccc", support.Column.DONE }, backend)
     testing.eq(result.code, 1)
     testing.eq(result.unqueued, true)
@@ -1713,6 +2013,8 @@ testing.test("an epic with open children is refused a move into Done", function(
         result.message,
         "Card cccccccc is an epic and cannot enter Done, a done column. 2 of 3 children are open."
     )
+
+    -- Refuse a move into the WIP-limited column
     result = cmd_board.run("move", { "cccccccc", support.Column.REVIEW }, backend)
     testing.eq(result.code, 1)
     testing.eq(
@@ -1720,6 +2022,8 @@ testing.test("an epic with open children is refused a move into Done", function(
         "Card cccccccc is an epic and cannot enter Review, a WIP-limited column. "
             .. "2 of 3 children are open."
     )
+
+    -- Send no refused move and allow a move into Backlog
     for _, call in ipairs(backend.calls) do
         testing.ok(call[1] ~= "move", "the refused move was sent")
     end
@@ -1727,24 +2031,34 @@ testing.test("an epic with open children is refused a move into Done", function(
 end)
 
 testing.test("an epic with every child Done closes without outcomes", function()
+    -- Make an epic whose children are all Done and that has no outcomes
     local card = planned()
     card.epic = { done = 3, total = 3 }
     local backend = fake({ card })
     backend.kin = { children = card.epic }
+
+    -- Move it to Done
     local result = cmd_board.run("move", { "cccccccc", support.Column.DONE }, backend)
+
+    -- Send the move
     testing.eq(result.output, "moved cccccccc to Done")
     testing.eq(backend.calls[#backend.calls], { "move", ID_C, support.COLUMN_NAME.DONE })
 end)
 
 testing.test("an epic with no outcomes and an open child is refused", function()
+    -- Make an epic with an open child and no outcomes
     local card = planned()
     card.column = support.COLUMN_NAME.READY
     card.epic = { done = 1, total = 3 }
     local backend = fake({ card })
     backend.kin = { children = card.epic }
+
+    -- Refuse a move into Done for the open children
     local result = cmd_board.run("move", { "cccccccc", support.Column.DONE }, backend)
     testing.eq(result.code, 1)
     testing.ok(result.message:find("2 of 3 children are open", 1, true), result.message)
+
+    -- Refuse it again once an outcome is ticked
     card.outcomes = { { id = "s1", name = "a", done = true } }
     result = cmd_board.run("move", { "cccccccc", support.Column.DONE }, backend)
     testing.eq(result.code, 1)
@@ -1752,20 +2066,29 @@ testing.test("an epic with no outcomes and an open child is refused", function()
         result.message,
         "Card cccccccc is an epic and cannot enter Done, a done column. 2 of 3 children are open."
     )
+
+    -- Send no move
     for _, call in ipairs(backend.calls) do
         testing.ok(call[1] ~= "move", "the refused move was sent")
     end
 end)
 
 testing.test("an epic with no children needs outcomes to close", function()
+    -- Make an epic with no children and no outcomes
     local card = planned()
     card.column = support.COLUMN_NAME.READY
     card.epic = { done = 0, total = 0 }
     local backend = fake({ card })
     backend.kin = { children = card.epic }
+
+    -- Try to move it to Done
     local result = cmd_board.run("move", { "cccccccc", support.Column.DONE }, backend)
+
+    -- Refuse for the missing outcomes
     testing.eq(result.code, 1)
     testing.ok(result.message:find("Done when outcomes", 1, true), result.message)
+
+    -- Send no move
     for _, call in ipairs(backend.calls) do
         testing.ok(call[1] ~= "move", "the refused move was sent")
     end
@@ -1782,48 +2105,70 @@ do
     end
 
     testing.test("an epic with every child Done and four ticked outcomes closes", function()
+        -- Make an epic whose children are all Done and whose four outcomes are ticked
         local card = planned()
         card.epic = { done = 3, total = 3 }
         card.outcomes = four_outcomes(true)
         local backend = fake({ card })
         backend.kin = { children = card.epic }
+
+        -- Move it to Done
         local result = cmd_board.run("move", { "cccccccc", support.Column.DONE }, backend)
+
+        -- Send the move
         testing.eq(result.output, "moved cccccccc to Done")
     end)
 
     testing.test("an epic with every child Done and four unticked outcomes closes", function()
+        -- Make an epic whose children are all Done and whose four outcomes are unticked
         local card = planned()
         card.epic = { done = 3, total = 3 }
         card.outcomes = four_outcomes(false)
         local backend = fake({ card })
         backend.kin = { children = card.epic }
+
+        -- Move it to Done
         local result = cmd_board.run("move", { "cccccccc", support.Column.DONE }, backend)
+
+        -- Send the move
         testing.eq(result.output, "moved cccccccc to Done")
     end)
 
     testing.test("an epic with four outcomes hears about the children first", function()
+        -- Make an epic with open children and four ticked outcomes
         local card = planned()
         card.epic = { done = 1, total = 3 }
         card.outcomes = four_outcomes(true)
         local backend = fake({ card })
         backend.kin = { children = card.epic }
+
+        -- Try to move it to Done
         local result = cmd_board.run("move", { "cccccccc", support.Column.DONE }, backend)
+
+        -- Refuse for the children and not for the outcome count
         testing.eq(result.code, 1)
         testing.ok(result.message:find("2 of 3 children are open.", 1, true), result.message)
         testing.eq(result.message:find("1 to 3 Done when outcomes", 1, true), nil)
+
+        -- Send no move
         for _, call in ipairs(backend.calls) do
             testing.ok(call[1] ~= "move", "the refused move was sent")
         end
     end)
 
     testing.test("a move to Backlog with four epic outcomes still names the count", function()
+        -- Make an Icebox epic with open children and four ticked outcomes
         local card = planned()
         card.column = support.COLUMN_NAME.ICEBOX
         card.epic = { done = 1, total = 3 }
         card.outcomes = four_outcomes(true)
         local backend = fake({ card })
         backend.kin = { children = card.epic }
+
+        -- Try to move it to Backlog
         local result = cmd_board.run("move", { "cccccccc", support.Column.BACKLOG }, backend)
+
+        -- Refuse and name the outcome count an epic needs
         testing.eq(result.code, 1)
         testing.ok(
             result.message:find("1 to 3 Done when outcomes for an epic, not 4", 1, true),
@@ -1832,9 +2177,14 @@ do
     end)
 
     testing.test("discard closes an epic whose children are open", function()
+        -- Give a card children that are all open
         local backend = fake({ planned() })
         backend.kin = { children = { done = 0, total = 2 } }
+
+        -- Discard it
         local result = cmd_board.run("discard", { "cccccccc", "--reason", "Dropped" }, backend)
+
+        -- Close it without reading its children
         testing.eq(result.output, "discarded cccccccc")
         for _, call in ipairs(backend.calls) do
             testing.ok(call[1] ~= "family", "discard read the children")
@@ -1844,24 +2194,33 @@ do
     testing.test(
         "an epic with children needs no outcome to enter a working column, unlike a card without children",
         function()
+            -- Make an epic with open children and no outcomes
             local card = planned()
             card.epic = { done = 0, total = 2 }
             local backend = fake({ card })
             backend.kin = { children = card.epic }
+
+            -- Move it to Backlog without outcomes
             testing.eq(
                 cmd_board.run("move", { "cccccccc", support.Column.BACKLOG }, backend).code,
                 nil
             )
+
+            -- Move it to Backlog with an unticked outcome
             card.outcomes = { { id = "s1", name = "a", done = false } }
             testing.eq(
                 cmd_board.run("move", { "cccccccc", support.Column.BACKLOG }, backend).code,
                 nil
             )
+
+            -- Move it from Verify to Review
             card.column = support.COLUMN_NAME.VERIFY
             testing.eq(
                 cmd_board.run("move", { "cccccccc", support.Column.REVIEW }, backend).code,
                 nil
             )
+
+            -- Refuse the same move for a card without children
             backend = fake({ planned() })
             testing.eq(
                 cmd_board.run("move", { "cccccccc", support.Column.REVIEW }, backend).code,
@@ -1871,13 +2230,18 @@ do
     )
 
     testing.test("an unsized epic is refused and a red one is allowed", function()
+        -- Make an unsized epic with open children
         local card = planned()
         card.color = nil
         card.epic = { done = 0, total = 2 }
         card.outcomes = { { id = "s1", name = "a", done = false } }
         local backend = fake({ card })
         backend.kin = { children = card.epic }
+
+        -- Refuse a move to Backlog
         testing.eq(cmd_board.run("move", { "cccccccc", support.Column.BACKLOG }, backend).code, 1)
+
+        -- Allow it once the epic is red
         card.color = "red"
         backend = fake({ card })
         backend.kin = { children = card.epic }
@@ -1887,21 +2251,28 @@ do
     testing.test(
         "discard refuses an unsized card or one without sections, and takes one without outcomes",
         function()
+            -- Refuse an unsized card
             local card = planned()
             card.color = nil
             local backend = fake({ card })
             local result = cmd_board.run("discard", { "cccccccc", "--reason", "Dropped" }, backend)
             testing.eq(result.code, 1)
             testing.ok(result.message:find("a size", 1, true), result.message)
+
+            -- Refuse an unsized card in Icebox
             card.column = support.COLUMN_NAME.ICEBOX
             result = cmd_board.run("discard", { "cccccccc" }, fake({ card }))
             testing.eq(result.code, 1)
+
+            -- Refuse a sized card without sections
             card.color = "green"
             card.description = "loose"
             result = cmd_board.run("discard", { "cccccccc" }, backend)
             testing.eq(result.code, 1)
             testing.ok(result.message:find("## Change", 1, true), result.message)
             testing.eq(#backend.calls, 0)
+
+            -- Take a planned card that has no outcomes
             card.description = V2
             testing.eq(
                 cmd_board.run("discard", { "cccccccc" }, backend).output,
@@ -1911,14 +2282,19 @@ do
     )
 
     testing.test("discard with a reason drops an unplanned Icebox card", function()
+        -- Make an unplanned card in Icebox
         local card = planned()
         card.color = nil
         card.description = "loose"
         card.outcomes = {}
         card.column = support.COLUMN_NAME.ICEBOX
         local backend = fake({ card })
+
+        -- Refuse to discard it without a reason
         testing.eq(cmd_board.run("discard", { "cccccccc" }, backend).code, 1)
         testing.eq(#backend.calls, 0)
+
+        -- Discard it with a reason and move it to Done
         local result = cmd_board.run("discard", { "cccccccc", "--reason", "Dropped" }, backend)
         testing.eq(result.output, "discarded cccccccc")
         testing.eq(backend.calls[#backend.calls][1], "move")
@@ -1926,10 +2302,15 @@ do
     end)
 
     testing.test("move to Done refuses outcomes dev cannot read", function()
+        -- Make a card whose outcomes cannot be read
         local cards = sample()
         cards[1].outcomes_unreadable = true
         local backend = fake(cards)
+
+        -- Try to move it to Done
         local result = cmd_board.run("move", { "11111111-a", support.Column.DONE }, backend)
+
+        -- Refuse and write nothing
         testing.eq(result.code, 1)
         testing.eq(result.unqueued, true)
         testing.eq(
@@ -1948,10 +2329,15 @@ do
     end
 
     testing.test("move to Done names a renamed Done column for unreadable outcomes", function()
+        -- Make a card whose outcomes cannot be read on a board that renamed Done
         local card = sample()[1]
         card.outcomes_unreadable = true
         local backend = shipped_backend(card)
+
+        -- Try to move it to the renamed column
         local result = cmd_board.run("move", { "11111111-a", SHIPPED }, backend)
+
+        -- Refuse, name the renamed column and write nothing
         testing.eq(result.code, 1)
         testing.eq(
             result.message,
@@ -1963,10 +2349,15 @@ do
     end)
 
     testing.test("move to Done names a renamed Done column for unticked outcomes", function()
+        -- Make a card with an unticked outcome on a board that renamed Done
         local card = sample()[1]
         card.outcomes = { { id = "s1", name = "A works", done = false } }
         local backend = shipped_backend(card)
+
+        -- Try to move it to the renamed column
         local result = cmd_board.run("move", { "11111111-a", SHIPPED }, backend)
+
+        -- Refuse, name the renamed column and write nothing
         testing.eq(result.code, 1)
         testing.ok(
             result.message:find("cannot move to " .. SHIPPED .. ". 1 of 1 outcomes", 1, true),
@@ -1977,10 +2368,15 @@ do
 end
 
 testing.test("move to Ready refuses outcomes dev cannot read", function()
+    -- Make a Backlog card whose outcomes cannot be read
     local cards = sample()
     cards[1].column = support.COLUMN_NAME.BACKLOG
     cards[1].outcomes_unreadable = true
+
+    -- Try to move it to Ready
     local result = cmd_board.run("move", { "11111111-a", support.Column.READY }, fake(cards))
+
+    -- Refuse and name the unreadable outcomes
     testing.eq(result.code, 1)
     testing.eq(
         result.message,
@@ -1989,51 +2385,76 @@ testing.test("move to Ready refuses outcomes dev cannot read", function()
 end)
 
 testing.test("move to Ready with unreadable outcomes sends no move", function()
+    -- Make a Backlog card whose outcomes cannot be read
     local cards = sample()
     cards[1].column = support.COLUMN_NAME.BACKLOG
     cards[1].outcomes_unreadable = true
     local backend = fake(cards)
+
+    -- Try to move it to Ready
     cmd_board.run("move", { "11111111-a", support.Column.READY }, backend)
+
+    -- Send no move
     testing.eq(#backend.calls, 0)
 end)
 
 testing.test("move to Ready still counts outcomes dev can read", function()
+    -- Make a Backlog card with one readable outcome
     local cards = sample()
     cards[1].column = support.COLUMN_NAME.BACKLOG
     cards[1].outcomes = { { id = "s1", name = "a", done = false } }
+
+    -- Try to move it to Ready
     local result = cmd_board.run("move", { "11111111-a", support.Column.READY }, fake(cards))
+
+    -- Refuse and count the outcomes
     testing.eq(result.code, 1)
     testing.ok(result.message:find("3 to 7 Done when outcomes, not 1", 1, true), result.message)
 end)
 
 testing.test("move to a working column does not demand outcomes dev cannot read", function()
+    -- Make a Verify card whose outcomes cannot be read
     local cards = sample()
     cards[1].outcomes_unreadable = true
     cards[1].column = support.COLUMN_NAME.VERIFY
     local backend = fake(cards)
+
+    -- Move it to Review
     local result = cmd_board.run("move", { "11111111-a", support.Column.REVIEW }, backend)
+
+    -- Allow the move
     testing.eq(result.code, nil)
 end)
 
 testing.test("move to Done is never queued when the card cannot be read", function()
+    -- Make the board unreachable
     local backend = fake(sample())
     local message = "Board unavailable: cannot reach pomb.example (curl exit 7)"
     backend.cards = function()
         return nil, message
     end
+
+    -- Report the failure of a move to Done and keep it out of the queue
     local result = cmd_board.run("move", { "11111111-a", support.Column.DONE }, backend)
     testing.eq(result.message, "Board unavailable: cannot reach pomb.example (curl exit 7).")
     testing.eq(result.unqueued, true)
+
+    -- Report the failure of a move to Review and let it queue
     result = cmd_board.run("move", { "11111111-a", support.Column.REVIEW }, backend)
     testing.eq(result.message, "Board unavailable: cannot reach pomb.example (curl exit 7).")
     testing.eq(result.unqueued, nil)
 end)
 
 testing.test("discard closes a card with unticked outcomes", function()
+    -- Leave a card's only outcome unticked
     local cards = sample()
     cards[1].outcomes = { { id = "s1", name = "A works", done = false } }
     local backend = fake(cards)
+
+    -- Discard it
     local result = cmd_board.run("discard", { "11111111-a", "--reason", "Dropped" }, backend)
+
+    -- Close it into Done
     testing.eq(result.output, "discarded 11111111")
     testing.eq(backend.calls[#backend.calls], { "move", ID_A, support.COLUMN_NAME.DONE })
 end)
@@ -2065,16 +2486,21 @@ end)
 testing.test(
     "checks refuses no command, a blank command, an unknown card and a board without the field",
     function()
+        -- Refuse no command, a blank command and an unknown card
         local backend = fake(sample())
         testing.eq(cmd_board.run("checks", { "11111111-a" }, backend).code, 2)
         testing.eq(cmd_board.run("checks", {}, backend).code, 2)
         testing.eq(cmd_board.run("checks", { "11111111-a", "dev lint", " " }, backend).code, 2)
         testing.eq(cmd_board.run("checks", { "deadbeef", "dev lint" }, backend).code, 1)
+
+        -- Refuse a board without the checks field and point at the init
         backend.nofield = true
         local result = cmd_board.run("checks", { "11111111-a", "dev lint" }, backend)
         testing.eq(result.code, 1)
         testing.ok(result.message:find("no checks field", 1, true), result.message)
         testing.ok(result.message:find("dev board init", 1, true), result.message)
+
+        -- Write nothing
         testing.eq(#backend.calls, 0)
     end
 )
@@ -2093,22 +2519,34 @@ end)
 testing.test(
     "allow refuses no word, another word, none beside a word, an unknown card and a board without the field",
     function()
+        -- Refuse no word, another word, none beside a word and an unknown card
         local backend = fake(sample())
         testing.eq(cmd_board.run("allow", { "11111111-a" }, backend).code, 2)
         testing.eq(cmd_board.run("allow", {}, backend).code, 2)
         testing.eq(cmd_board.run("allow", { "11111111-a", "everything" }, backend).code, 2)
         testing.eq(cmd_board.run("allow", { "11111111-a", "test-edits", "none" }, backend).code, 2)
         testing.eq(cmd_board.run("allow", { "deadbeef", "none" }, backend).code, 1)
+
+        -- Name the prefixed field on a board without it
         backend.nofield = true
-        support.with_user_config('[board.pomb]\nfield_prefix = "runner"\n', function()
+        local prefixed = table.concat({
+            "[board.pomb]",
+            'field_prefix = "runner"',
+            "",
+        }, "\n")
+        support.with_user_config(prefixed, function()
             local result = cmd_board.run("allow", { "11111111-a", "test-edits" }, backend)
             testing.eq(result.code, 1)
             testing.ok(result.message:find("no runner.allow field", 1, true), result.message)
         end)
+
+        -- Name the default field when no prefix is configured
         support.with_user_config("", function()
             local result = cmd_board.run("allow", { "11111111-a", "test-edits" }, backend)
             testing.ok(result.message:find("no dev.allow field", 1, true), result.message)
         end)
+
+        -- Write nothing
         testing.eq(#backend.calls, 0)
     end
 )
@@ -2130,6 +2568,7 @@ end)
 testing.test(
     "tests and files refuse no name, a blank name, a line break, an unknown card and a board without the field",
     function()
+        -- Refuse no name, a blank name, a line break and an unknown card
         local backend = fake(sample())
         for _, sub in ipairs({ "tests", "files" }) do
             testing.eq(cmd_board.run(sub, { "11111111-a" }, backend).code, 2)
@@ -2138,6 +2577,8 @@ testing.test(
             testing.eq(cmd_board.run(sub, { "11111111-a", "a\nb" }, backend).code, 2)
             testing.eq(cmd_board.run(sub, { "deadbeef", "a" }, backend).code, 1)
         end
+
+        -- Name the missing field on a board without it
         backend.nofield = true
         support.with_user_config("", function()
             local result = cmd_board.run("files", { "11111111-a", "a" }, backend)
@@ -2146,6 +2587,8 @@ testing.test(
             result = cmd_board.run("tests", { "11111111-a", "a" }, backend)
             testing.ok(result.message:find("no dev.tests field", 1, true), result.message)
         end)
+
+        -- Write nothing
         testing.eq(#backend.calls, 0)
     end
 )
@@ -2159,18 +2602,24 @@ testing.test("edit refuses a missing text, an extra word and an unknown card", f
 end)
 
 testing.test("link sends the full ids of the card and the other card", function()
+    -- Link a card as blocked by another
     local backend = fake(sample())
     local result = cmd_board.run("link", { "11111111-a", "blocked_by", "cccccccc" }, backend)
     testing.eq(result.output, "linked 11111111 blocked_by cccccccc")
     testing.eq(backend.calls[1], { "link", ID_A, "blocked_by", ID_C })
+
+    -- Link a card as blocking another
     result = cmd_board.run("link", { "cccccccc", "blocks", "11111111-b" }, backend)
     testing.eq(result.output, "linked cccccccc blocks 11111111")
     testing.eq(backend.calls[2], { "link", ID_C, "blocks", ID_B })
+
+    -- Link two cards as related
     result = cmd_board.run("link", { "cccccccc", "related", "11111111-a" }, backend)
     testing.eq(backend.calls[3], { "link", ID_C, "related", ID_A })
 end)
 
 testing.test("link to BOARD:CARD resolves the card on the other board", function()
+    -- Give the board a sibling that holds a far card
     local backend = fake(sample())
     local far_card = {
         id = "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
@@ -2192,6 +2641,8 @@ testing.test("link to BOARD:CARD resolves the card on the other board", function
         end,
     }
     backend.sibling = elsewhere
+
+    -- Link to a card on the sibling
     local result = cmd_board.run("link", { "11111111-a", "blocked_by", "ci:dddddddd" }, backend)
     testing.eq(result.output, "linked 11111111 blocked_by ci:dddddddd")
     testing.eq(backend.calls[1], { "other_board", "ci" })
@@ -2199,15 +2650,21 @@ testing.test("link to BOARD:CARD resolves the card on the other board", function
         backend.calls[2],
         { "link", ID_A, "blocked_by", "dddddddd-dddd-4ddd-8ddd-dddddddddddd" }
     )
+
+    -- Refuse a parent link to a card that is not an epic
     result = cmd_board.run("link", { "11111111-a", "parent", "ci:dddddddd" }, backend)
     testing.eq(result.code, 1)
     testing.eq(
         result.message,
         "Card ci:dddddddd is not an epic. Make it one with `dev board epic dddddddd` from the project that owns that board."
     )
+
+    -- Refuse a board that is not there
     result = cmd_board.run("link", { "11111111-a", "related", "nope:dddddddd" }, backend)
     testing.eq(result.code, 1)
     testing.ok(result.message:find("no board named nope", 1, true), result.message)
+
+    -- Refuse a card the sibling lacks and send no further call
     result = cmd_board.run("link", { "11111111-a", "related", "ci:eeeeeeee" }, backend)
     testing.eq(result.code, 1)
     testing.eq(result.message, "No card starts with eeeeeeee.")
@@ -2225,19 +2682,30 @@ testing.test("link names the BOARD:PREFIX form when a bare prefix matches no car
 end)
 
 testing.test("links lists each link with the kind, the id prefix and the board", function()
+    -- Hold three links, one of them on another board
     local backend = fake(sample())
     backend.held = {
         { kind = "blocked_by", id = ID_C },
         { kind = "blocks", id = "dddddddd-dddd-4ddd-8ddd-dddddddddddd", board = "ci" },
         { kind = "related", id = ID_B },
     }
+
+    -- List each link with its kind, id prefix, board and column
     local result = cmd_board.run("links", { "11111111-a" }, backend)
     testing.eq(
         result.output,
-        "blocked_by  cccccccc  -   Done\nblocks      dddddddd  ci  -\nrelated     11111111  -   Backlog"
+        table.concat({
+            "blocked_by  cccccccc  -   Done",
+            "blocks      dddddddd  ci  -",
+            "related     11111111  -   Backlog",
+        }, "\n")
     )
     testing.eq(backend.calls[1], { "links", ID_A })
+
+    -- Say so when a card holds no links
     testing.eq(cmd_board.run("links", { "11111111-b" }, fake(sample())).output, "No links.")
+
+    -- Refuse a missing card and an unknown card
     testing.eq(cmd_board.run("links", {}, backend).code, 2)
     testing.eq(cmd_board.run("links", { "deadbeef" }, backend).code, 1)
 end)
@@ -2245,6 +2713,7 @@ end)
 testing.test(
     "links prints the column on another board and a dash for an unreadable card",
     function()
+        -- Give the board a sibling that holds one of the linked cards
         local backend = fake(sample())
         local sibling = fake({
             { id = ID_D, name = "Ci card", column = "Release", size = "unsized", labels = {} },
@@ -2256,22 +2725,30 @@ testing.test(
             { kind = "related", id = ID_B },
             { kind = "related", id = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee" },
         }
+
+        -- Print the column of a card on the sibling and a dash for an unreadable card
         local result = cmd_board.run("links", { "11111111-a" }, backend)
         testing.eq(
             result.output,
-            "blocked_by  dddddddd  ci  Release\n"
-                .. "blocked_by  cccccccc  ci  -\n"
-                .. "related     11111111  -   Backlog\n"
-                .. "related     eeeeeeee  -   -"
+            table.concat({
+                "blocked_by  dddddddd  ci  Release",
+                "blocked_by  cccccccc  ci  -",
+                "related     11111111  -   Backlog",
+                "related     eeeeeeee  -   -",
+            }, "\n")
         )
+
+        -- Print a dash for the sibling's card once the sibling is gone
         backend.sibling = nil
         result = cmd_board.run("links", { "11111111-a" }, backend)
         testing.eq(
             result.output,
-            "blocked_by  dddddddd  ci  -\n"
-                .. "blocked_by  cccccccc  ci  -\n"
-                .. "related     11111111  -   Backlog\n"
-                .. "related     eeeeeeee  -   -"
+            table.concat({
+                "blocked_by  dddddddd  ci  -",
+                "blocked_by  cccccccc  ci  -",
+                "related     11111111  -   Backlog",
+                "related     eeeeeeee  -   -",
+            }, "\n")
         )
     end
 )
@@ -2279,22 +2756,34 @@ testing.test(
 testing.test(
     "unlink removes the held link of that kind and target, and refuses one it lacks",
     function()
+        -- Hold two links
         local backend = fake(sample())
         backend.held = { { kind = "blocked_by", id = ID_C }, { kind = "related", id = ID_B } }
+
+        -- Remove a held link
         local result = cmd_board.run("unlink", { "11111111-a", "blocked_by", "cccccccc" }, backend)
         testing.eq(result.output, "unlinked 11111111 blocked_by cccccccc")
         testing.eq(backend.calls[2], { "unlink", ID_A, "blocked_by", ID_C })
+
+        -- Refuse a link of a kind the card lacks and list the links it holds
         result = cmd_board.run("unlink", { "11111111-a", "blocks", "cccccccc" }, backend)
         testing.eq(result.code, 1)
         testing.eq(
             result.message,
-            "The card holds no blocks link to cccccccc. Its links are listed below.\n"
-                .. "blocked_by  cccccccc  -\nrelated     11111111  -"
+            table.concat({
+                "The card holds no blocks link to cccccccc. Its links are listed below.",
+                "blocked_by  cccccccc  -",
+                "related     11111111  -",
+            }, "\n")
         )
         testing.eq(backend.calls[3], { "links", ID_A })
+
+        -- Say that the card holds no links when it holds none
         backend.held = {}
         result = cmd_board.run("unlink", { "11111111-a", "related", "cccccccc" }, backend)
         testing.eq(result.message, "The card holds no related link to cccccccc. It holds no links.")
+
+        -- Refuse a missing target, an unknown kind and an unknown card
         testing.eq(cmd_board.run("unlink", { "11111111-a", "blocked_by" }, backend).code, 2)
         testing.eq(
             cmd_board.run("unlink", { "11111111-a", "depends", "cccccccc" }, backend).code,
@@ -2312,22 +2801,33 @@ testing.test(
 )
 
 testing.test("responsible shows, sets and clears the session and refuses a bad call", function()
+    -- Give one card a responsible session
     local cards = sample()
     cards[2].responsible = "dotfiles/lead"
     local backend = fake(cards)
+
+    -- Show the session of each card
     testing.eq(
         cmd_board.run("responsible", { "11111111-b" }, backend).output,
         "11111111 dotfiles/lead"
     )
     testing.eq(cmd_board.run("responsible", { "11111111-a" }, backend).output, "11111111 none")
+
+    -- Set the session
     local result = cmd_board.run("responsible", { "11111111-a", "dotfiles/lead" }, backend)
     testing.eq(result.output, "set 11111111 responsible dotfiles/lead")
     testing.eq(backend.calls[#backend.calls], { "set_responsible", ID_A, "dotfiles/lead", nil })
+
+    -- Clear the session
     result = cmd_board.run("responsible", { "11111111-a", "--clear" }, backend)
     testing.eq(result.output, "cleared 11111111 responsible")
     testing.eq(backend.calls[#backend.calls], { "set_responsible", ID_A, nil, nil })
+
+    -- Refuse a missing card and a session given with --clear
     testing.eq(cmd_board.run("responsible", {}, backend).code, 2)
     testing.eq(cmd_board.run("responsible", { "11111111-a", "x", "--clear" }, backend).code, 2)
+
+    -- Report a refusal from the board
     backend.refusal = "pomb answered 403: no"
     result = cmd_board.run("responsible", { "11111111-a", "x" }, backend)
     testing.eq(result.code, 1)
@@ -2354,14 +2854,19 @@ testing.test("link refuses a parent that is not an epic before any request", fun
 end)
 
 testing.test("epic turns a card into an epic and prints the refusal as given", function()
+    -- Make a card an epic
     local backend = fake(sample())
     local result = cmd_board.run("epic", { "11111111-b" }, backend)
     testing.eq(result.output, "made 11111111 an epic")
     testing.eq(backend.calls[1], { "make_epic", ID_B, nil })
+
+    -- Print the board's refusal as given
     backend.refusal = "pomb answered 409: the card holds a live claim"
     result = cmd_board.run("epic", { "11111111-b" }, backend)
     testing.eq(result.code, 1)
     testing.eq(result.message, "Pomb answered 409: the card holds a live claim.")
+
+    -- Refuse a missing card and an unknown card
     testing.eq(cmd_board.run("epic", {}, backend).code, 2)
     testing.eq(cmd_board.run("epic", { "deadbeef" }, backend).code, 1)
 end)
@@ -2401,47 +2906,78 @@ testing.test("add --epic creates an epic through the backend", function()
 end)
 
 testing.test("link takes parent, and show prints the epic and the children", function()
+    -- Link a card to an epic as its parent
     local backend = with_epic()
     local result = cmd_board.run("link", { "cccccccc", "parent", "11111111-a" }, backend)
     testing.eq(result.output, "linked cccccccc parent 11111111")
     testing.eq(backend.calls[1], { "link", ID_C, "parent", ID_A })
+
+    -- Show a child with its parent epic
     backend.kin = { parent = { id = ID_A, name = "Epic" } }
     result = cmd_board.run("show", { "11111111-b" }, backend)
     testing.eq(
         result.output,
-        "11111111  Backlog  unsized  -  Fix lint\nparent: 11111111 Epic\n\nno description\n\nno comments"
+        table.concat({
+            "11111111  Backlog  unsized  -  Fix lint",
+            "parent: 11111111 Epic",
+            "",
+            "no description",
+            "",
+            "no comments",
+        }, "\n")
     )
+
+    -- Show an epic with the progress of its children
     backend.kin = { children = { done = 1, total = 3 } }
     result = cmd_board.run("show", { "11111111-b" }, backend)
     testing.eq(
         result.output,
-        "11111111  Backlog  unsized  -  Fix lint\nchildren: 1 of 3 done\n\nno description\n\nno comments"
+        table.concat({
+            "11111111  Backlog  unsized  -  Fix lint",
+            "children: 1 of 3 done",
+            "",
+            "no description",
+            "",
+            "no comments",
+        }, "\n")
     )
 end)
 
 testing.test("link refuses a bad kind, a missing word and an unknown card", function()
+    -- Refuse a kind the board does not know
     local backend = fake(sample())
     testing.eq(cmd_board.run("link", { "11111111-a", "depends", "cccccccc" }, backend).code, 2)
+
+    -- Refuse a missing or surplus word
     testing.eq(cmd_board.run("link", { "11111111-a", "blocks" }, backend).code, 2)
     testing.eq(cmd_board.run("link", { "11111111-a", "blocks", "cccccccc", "x" }, backend).code, 2)
+
+    -- Refuse an unknown card on either side and send nothing
     testing.eq(cmd_board.run("link", { "deadbeef", "blocks", "cccccccc" }, backend).code, 1)
     testing.eq(cmd_board.run("link", { "11111111-a", "blocks", "deadbeef" }, backend).code, 1)
     testing.eq(#backend.calls, 0)
 end)
 
 testing.test("note and move resolve the card by prefix", function()
+    -- Plan a Verify card with an unticked outcome
     local cards = sample()
     cards[3].color = "green"
     cards[3].description = V2
     cards[3].outcomes = { { id = "s1", name = "a", done = false } }
     cards[3].column = support.COLUMN_NAME.VERIFY
     local backend = fake(cards)
+
+    -- Note the card by its prefix
     local result = cmd_board.run("note", { "cccccccc", "landed", "as", "abc" }, backend)
     testing.eq(result.output, "noted cccccccc")
     testing.eq(backend.calls[1], { "note", ID_C, "landed as abc", {} })
+
+    -- Move the card to Blocked by its prefix
     result = cmd_board.run("move", { "cccccccc", support.Column.BLOCKED }, backend)
     testing.eq(result.output, "moved cccccccc to Blocked")
     testing.eq(backend.calls[2], { "move", ID_C, support.COLUMN_NAME.BLOCKED })
+
+    -- Move the card to Review by its prefix
     result = cmd_board.run("move", { "cccccccc", support.Column.REVIEW }, backend)
     testing.eq(backend.calls[3], { "move", ID_C, support.COLUMN_NAME.REVIEW })
 end)
@@ -2459,13 +2995,18 @@ testing.test("note refuses a body that is mostly ids and paths", function()
 end)
 
 testing.test("note refuses a stray flag as the first body word", function()
+    -- Refuse a stray flag in place of the body
     local backend = fake(sample())
     local result = cmd_board.run("note", { "cccccccc", "--text", "body" }, backend)
     testing.eq(result.code, 2)
     testing.ok(result.message:find("Unknown flag --text.", 1, true), result.message)
+
+    -- Refuse a stray flag after a kind
     result = cmd_board.run("note", { "cccccccc", "--kind", "decision", "--text", "x" }, backend)
     testing.eq(result.code, 2)
     testing.ok(result.message:find("Unknown flag --text.", 1, true), result.message)
+
+    -- Send nothing
     testing.eq(#backend.calls, 0)
 end)
 
@@ -2513,14 +3054,21 @@ local function with_comments()
 end
 
 testing.test("notes lists each comment with its id prefix, writer, time and first line", function()
+    -- List the comments with the first line of each body
     local backend = with_comments()
     local result = cmd_board.run("notes", { "cccccccc" }, backend)
     testing.eq(
         result.output,
-        "aaaaaaaa  worker  decision  reviewer  2026-10-27 09:30  first line\n"
-            .. "bbbbbbbb  human   -         -         2026-10-27 10:00  ok"
+        table.concat({
+            "aaaaaaaa  worker  decision  reviewer  2026-10-27 09:30  first line",
+            "bbbbbbbb  human   -         -         2026-10-27 10:00  ok",
+        }, "\n")
     )
+
+    -- Say so when a card has no comments
     testing.eq(cmd_board.run("notes", { "cccccccc" }, fake(sample())).output, "no comments")
+
+    -- Refuse a missing card and an unknown card
     testing.eq(cmd_board.run("notes", {}, backend).code, 2)
     testing.eq(cmd_board.run("notes", { "deadbeef" }, backend).code, 1)
 end)
@@ -2528,6 +3076,7 @@ end)
 testing.test(
     "show indents the rest of a multi-line body under its body, notes keeps one line",
     function()
+        -- Give a card two comments with multi-line bodies
         local backend = fake(sample())
         backend.listed = {
             {
@@ -2540,46 +3089,66 @@ testing.test(
             },
             { id = COMMENT_2, who = "human", at = "2026-10-27T10:00:00Z", body = "ok\nmore" },
         }
+
+        -- Indent the rest of each body under its first line
         local result = cmd_board.run("show", { "cccccccc" }, backend)
         testing.eq(
             result.output,
-            "cccccccc  Done  unsized  -  Old thing\n\nno description\n\n"
-                .. "aaaaaaaa  worker  decision  reviewer  2026-10-27 09:30  1. first\n\n"
-                .. (" "):rep(BODY_COLUMN)
-                .. "2. second\n"
-                .. "bbbbbbbb  human   -         -         2026-10-27 10:00  ok\n"
-                .. (" "):rep(BODY_COLUMN)
-                .. "more"
+            table.concat({
+                "cccccccc  Done  unsized  -  Old thing",
+                "",
+                "no description",
+                "",
+                "aaaaaaaa  worker  decision  reviewer  2026-10-27 09:30  1. first",
+                "",
+                (" "):rep(BODY_COLUMN) .. "2. second",
+                "bbbbbbbb  human   -         -         2026-10-27 10:00  ok",
+                (" "):rep(BODY_COLUMN) .. "more",
+            }, "\n")
         )
+
+        -- Keep one line per comment in the notes listing
         testing.eq(
             cmd_board.run("notes", { "cccccccc" }, backend).output,
-            "aaaaaaaa  worker  decision  reviewer  2026-10-27 09:30  1. first\n"
-                .. "bbbbbbbb  human   -         -         2026-10-27 10:00  ok"
+            table.concat({
+                "aaaaaaaa  worker  decision  reviewer  2026-10-27 09:30  1. first",
+                "bbbbbbbb  human   -         -         2026-10-27 10:00  ok",
+            }, "\n")
         )
     end
 )
 
 testing.test("note --board files the note on the crossboard card's board", function()
+    -- Give the board a sibling to write on
     local backend = fake(sample())
     local sibling = fake(sample())
     backend.sibling = sibling
+
+    -- Note the sibling's card by naming its board
     local result = cmd_board.run(
         "note",
         { "11111111-a", "--board", "ci", "--kind", "decision", "ok" },
         backend
     )
+
+    -- Write the note on the sibling and leave this board alone
     testing.eq(result.output, "noted 11111111")
     testing.eq(backend.calls, { { "other_board", "ci" } })
     testing.eq(sibling.calls[1], { "note", ID_A, "ok", { kind = "decision" } })
 end)
 
 testing.test("show --board prints the crossboard card from the named board", function()
+    -- Give the board a sibling whose card has another name
     local backend = fake(sample())
     local far = sample()
     far[1].name = "Far card"
     local sibling = fake(far)
     backend.sibling = sibling
+
+    -- Show the sibling's card by naming its board
     local result = cmd_board.run("show", { "11111111-a", "--board", "ci" }, backend)
+
+    -- Print the sibling's card and leave this board alone
     testing.eq(result.code, nil)
     testing.ok(result.output:find("Far card", 1, true), result.output)
     testing.eq(backend.calls, { { "other_board", "ci" } })
@@ -2587,13 +3156,18 @@ testing.test("show --board prints the crossboard card from the named board", fun
 end)
 
 testing.test("note and show --board refuse a crossboard board that is not there", function()
+    -- Refuse a note on a board that is not there
     local backend = fake(sample())
     local result = cmd_board.run("note", { "11111111-a", "--board", "nope", "ok" }, backend)
     testing.eq(result.code, 1)
     testing.ok(result.message:find("no board named nope", 1, true), result.message)
+
+    -- Refuse a show on a board that is not there
     result = cmd_board.run("show", { "11111111-a", "--board", "nope" }, backend)
     testing.eq(result.code, 1)
     testing.ok(result.message:find("no board named nope", 1, true), result.message)
+
+    -- Refuse a board flag with no value and look nothing more up
     result = cmd_board.run("show", { "11111111-a", "--board" }, backend)
     testing.eq(result.code, 2)
     testing.eq(#backend.calls, 2)
@@ -2615,8 +3189,11 @@ testing.test(
 )
 
 testing.test("note --kind question names dev board ask", function()
+    -- Count the calls before any note
     local backend = fake(sample())
     local count = #backend.calls
+
+    -- Refuse a question note in either case and name the ask command
     for _, args in ipairs({
         { "cccccccc", "--kind", "question", "Which way?" },
         { "cccccccc", "--kind", "Question", "Which way?" },
@@ -2632,10 +3209,13 @@ testing.test("note --kind question names dev board ask", function()
             result.message
         )
     end
+
+    -- Send nothing
     testing.eq(#backend.calls, count)
 end)
 
 testing.test("note sends a lowercase kind and a trimmed role, and refuses a bad one", function()
+    -- Send a lowercase kind and a trimmed role
     local backend = fake(sample())
     local args = { "cccccccc", "--kind", "Decision", "--as", " reviewer ", "go", "ahead" }
     local result = cmd_board.run("note", args, backend)
@@ -2644,8 +3224,12 @@ testing.test("note sends a lowercase kind and a trimmed role, and refuses a bad 
         backend.calls[1],
         { "note", ID_C, "go ahead", { kind = "decision", author = "reviewer" } }
     )
+
+    -- Send a role without a kind
     result = cmd_board.run("note", { "cccccccc", "--as", "planner", "text" }, backend)
     testing.eq(backend.calls[2], { "note", ID_C, "text", { author = "planner" } })
+
+    -- Refuse a bad kind or role and send nothing
     local count = #backend.calls
     for _, bad in ipairs({
         { "cccccccc", "--kind", "chatter", "text" },
@@ -2657,12 +3241,18 @@ testing.test("note sends a lowercase kind and a trimmed role, and refuses a bad 
         testing.eq(cmd_board.run("note", bad, backend).code, 2)
     end
     testing.eq(#backend.calls, count)
+
+    -- Keep a flag-like word inside the body
     result = cmd_board.run("note", { "cccccccc", "see", "the", "--as", "flag" }, backend)
     testing.eq(backend.calls[count + 1], { "note", ID_C, "see the --as flag", {} })
+
+    -- Refuse a kind beside --edit
     testing.eq(
         cmd_board.run("note", { "cccccccc", "--kind", "done", "--edit", "bbbbbbbb", "x" }, backend).code,
         2
     )
+
+    -- Accept a role at the length limit
     testing.eq(
         #cmd_board.run("note", { "cccccccc", "--as", string.rep("x", 80), "t" }, backend).output > 0,
         true
@@ -2670,8 +3260,9 @@ testing.test("note sends a lowercase kind and a trimmed role, and refuses a bad 
 end)
 
 testing.test("show prints the card line, its description and its comments", function()
+    -- Give a card a two-line description and two comments
     local cards = sample()
-    cards[1].description = "Why it matters.\nSecond line."
+    cards[1].description = table.concat({ "Why it matters.", "Second line." }, "\n")
     local backend = with_comments()
     backend.cards = function()
         return cards
@@ -2684,28 +3275,48 @@ testing.test("show prints the card line, its description and its comments", func
         end
         return nil, "no card " .. id
     end
+
+    -- Show the card line, the description and the comments
     local result = cmd_board.run("show", { "11111111-a" }, backend)
     testing.eq(
         result.output,
-        "11111111  Ready  1 Pomodoro  docs  Write docs\n\nWhy it matters.\nSecond line.\n\n"
-            .. "aaaaaaaa  worker  decision  reviewer  2026-10-27 09:30  first line\n"
-            .. (" "):rep(BODY_COLUMN)
-            .. "second\n"
-            .. "bbbbbbbb  human   -         -         2026-10-27 10:00  ok"
+        table.concat({
+            "11111111  Ready  1 Pomodoro  docs  Write docs",
+            "",
+            "Why it matters.",
+            "Second line.",
+            "",
+            "aaaaaaaa  worker  decision  reviewer  2026-10-27 09:30  first line",
+            (" "):rep(BODY_COLUMN) .. "second",
+            "bbbbbbbb  human   -         -         2026-10-27 10:00  ok",
+        }, "\n")
     )
     testing.eq(backend.calls[#backend.calls], { "family", ID_A })
+
+    -- Refuse a card that is not there
     result = cmd_board.run("show", { "bbbbbbbb-b" }, fake(sample()))
     testing.eq(result.code, 1)
+
+    -- Show a card with no description and no comments
     result = cmd_board.run("show", { "11111111-b" }, fake(sample()))
     testing.eq(
         result.output,
-        "11111111  Backlog  unsized  -  Fix lint\n\nno description\n\nno comments"
+        table.concat({
+            "11111111  Backlog  unsized  -  Fix lint",
+            "",
+            "no description",
+            "",
+            "no comments",
+        }, "\n")
     )
+
+    -- Refuse a missing card and an unknown card
     testing.eq(cmd_board.run("show", {}, backend).code, 2)
     testing.eq(cmd_board.run("show", { "deadbeef" }, backend).code, 1)
 end)
 
 testing.test("show lists an open ask's choices and marks the recommended one", function()
+    -- Give a card an open ask and an answered one
     local backend = fake(sample())
     backend.listed = {
         {
@@ -2735,11 +3346,15 @@ testing.test("show lists an open ask's choices and marks the recommended one", f
             },
         },
     }
+
+    -- Show the card and trim the indent off each line
     local result = cmd_board.run("show", { "11111111-a" }, backend)
     local lines = {}
     for line in result.output:gmatch("[^\n]+") do
         lines[#lines + 1] = line:match("^%s*(.-)$")
     end
+
+    -- Find the open ask's choices and mark the recommended one
     local want = {
         "1. left (" .. support.COLUMN_NAME.READY .. ")",
         "2. right (" .. support.COLUMN_NAME.BACKLOG .. ") [recommended]",
@@ -2750,6 +3365,8 @@ testing.test("show lists an open ask's choices and marks the recommended one", f
             at = index
         end
     end
+
+    -- Check the open ask's choices and leave out the answered one's
     testing.ok(at > 0, result.output)
     testing.eq({ lines[at], lines[at + 1] }, want)
     testing.ok(not result.output:find("1. yes", 1, true), result.output)
@@ -2767,6 +3384,7 @@ testing.test("note --edit and --delete resolve the comment by prefix", function(
 end)
 
 testing.test("note --edit and --delete refuse a bad comment prefix or a bad shape", function()
+    -- Refuse a short, unknown or mistaken comment id
     local backend = with_comments()
     for _, args in ipairs({
         { "cccccccc", "--edit", "bbbb", "x" },
@@ -2776,14 +3394,20 @@ testing.test("note --edit and --delete refuse a bad comment prefix or a bad shap
         local result = cmd_board.run("note", args, backend)
         testing.eq(result.code, 1)
     end
+
+    -- Name the length a comment id needs
     testing.eq(
         cmd_board.run("note", { "cccccccc", "--delete", "bbbb" }, backend).message,
         "A comment id needs at least 8 hex characters: bbbb."
     )
+
+    -- Name the id no comment starts with
     testing.eq(
         cmd_board.run("note", { "cccccccc", "--delete", "cccccccc" }, backend).message,
         "No comment starts with cccccccc."
     )
+
+    -- Refuse a missing id, a missing body and a stray word
     for _, args in ipairs({
         { "cccccccc", "--edit", "bbbbbbbb" },
         { "cccccccc", "--edit" },
@@ -2792,25 +3416,35 @@ testing.test("note --edit and --delete refuse a bad comment prefix or a bad shap
     }) do
         testing.eq(cmd_board.run("note", args, backend).code, 2)
     end
+
+    -- Change nothing on the board
     for _, call in ipairs(backend.calls) do
         testing.ok(call[1] == "comments", call[1])
     end
 end)
 
 testing.test("move and note refuse before the backend is called", function()
+    -- Refuse a column the board does not have
     local backend = fake(sample())
     local result = cmd_board.run("move", { "cccccccc", "doing" }, backend)
     testing.eq(result.code, 2)
+
+    -- Refuse an unknown card
     result = cmd_board.run("move", { "deadbeef", support.Column.READY }, backend)
     testing.eq(result.code, 1)
+
+    -- Refuse a note with no body
     result = cmd_board.run("note", { "cccccccc" }, backend)
     testing.eq(result.code, 2)
+
+    -- Send nothing
     testing.eq(#backend.calls, 0)
 end)
 
 testing.test(
     "add to Ready refuses a card with no size or a red one before the backend is called",
     function()
+        -- Refuse a Ready card with no size, an unsized one or a red one
         local backend = fake(sample())
         for _, args in ipairs({
             { "X", "--column", support.Column.READY },
@@ -2820,6 +3454,8 @@ testing.test(
             testing.eq(cmd_board.run("add", args, backend).code, 2)
         end
         testing.eq(#backend.calls, 0)
+
+        -- Accept a sized Backlog card
         testing.eq(
             cmd_board.run("add", {
                 "X",
@@ -2838,6 +3474,8 @@ testing.test(
             }, backend).code,
             nil
         )
+
+        -- Accept a full Ready card
         local full = {
             "X",
             "--column",
@@ -2881,6 +3519,7 @@ end
 testing.test(
     "move to Ready refuses a white, uncoloured or red card and names dev board size",
     function()
+        -- Refuse a white or red card and name dev board size
         for _, color in ipairs({ "white", "red" }) do
             local backend = fake({ colored(color) })
             local result = cmd_board.run("move", { "cccccccc", support.Column.READY }, backend)
@@ -2888,6 +3527,8 @@ testing.test(
             testing.ok(result.message:find("dev board size", 1, true), result.message)
             testing.eq(#backend.calls, 0)
         end
+
+        -- Refuse an uncoloured card
         local backend = fake({ colored(nil) })
         local result = cmd_board.run("move", { "cccccccc", support.COLUMN_NAME.READY }, backend)
         testing.eq(result.code, 1)
@@ -2899,6 +3540,7 @@ testing.test(
 testing.test(
     "add scaffolds the v3 headings, fills Problem and keeps a text that has them",
     function()
+        -- Refuse a bare description that lacks the other sections
         local backend = fake(sample())
         local result = cmd_board.run(
             "add",
@@ -2908,18 +3550,24 @@ testing.test(
         testing.eq(result.code, 2)
         testing.ok(result.message:find(board.TEXT_UNDER .. "Change", 1, true), result.message)
         testing.eq(#backend.calls, 0)
+
+        -- Keep a text that already has the headings
         cmd_board.run(
             "add",
             { "X", "--description", V2, "--size", "1", "--done-when", "a" },
             backend
         )
         testing.eq(backend.calls[1][4], V2)
+
+        -- Keep an Icebox description as typed
         cmd_board.run(
             "add",
             { "X", "--column", support.Column.ICEBOX, "--description", "loose" },
             backend
         )
         testing.eq(backend.calls[2], { "add", "X", support.COLUMN_NAME.ICEBOX, "loose", nil })
+
+        -- Add an Icebox card with no description
         cmd_board.run("add", { "X", "--column", support.Column.ICEBOX }, backend)
         testing.eq(backend.calls[3], { "add", "X", support.COLUMN_NAME.ICEBOX, nil, nil })
     end
@@ -2928,6 +3576,7 @@ testing.test(
 testing.test(
     "add composes the three sections from --problem, --change and --out-of-scope",
     function()
+        -- Compose the three sections from their flags
         local backend = fake(sample())
         local result = cmd_board.run("add", {
             "X",
@@ -2945,8 +3594,20 @@ testing.test(
         testing.eq(result.output, "added cccccccc Backlog")
         testing.eq(
             backend.calls[1][4],
-            "## Problem\nIt breaks.\n\n## Change\n- fix it\n\n## Out of scope\nnothing\n"
+            table.concat({
+                "## Problem",
+                "It breaks.",
+                "",
+                "## Change",
+                "- fix it",
+                "",
+                "## Out of scope",
+                "nothing",
+                "",
+            }, "\n")
         )
+
+        -- Trim the space around each section
         cmd_board.run("add", {
             "X",
             "--problem",
@@ -2962,22 +3623,36 @@ testing.test(
         }, backend)
         testing.eq(
             backend.calls[2][4],
-            "## Problem\nonly\n\n## Change\n- x\n\n## Out of scope\ny\n"
+            table.concat({
+                "## Problem",
+                "only",
+                "",
+                "## Change",
+                "- x",
+                "",
+                "## Out of scope",
+                "y",
+                "",
+            }, "\n")
         )
     end
 )
 
 testing.test("add refuses --description together with a section flag", function()
+    -- Refuse a description beside each section flag
     local backend = fake(sample())
     for _, flag in ipairs({ "--problem", "--change", "--out-of-scope", "--source" }) do
         local result = cmd_board.run("add", { "X", "--description", "text", flag, "y" }, backend)
         testing.eq(result.code, 2)
         testing.ok(result.message:find("--description", 1, true), result.message)
     end
+
+    -- Send nothing
     testing.eq(#backend.calls, 0)
 end)
 
 testing.test("add writes a Source section after Out of scope from --source", function()
+    -- Add a card with a padded source
     local backend = fake(sample())
     local result = cmd_board.run("add", {
         "X",
@@ -2995,13 +3670,29 @@ testing.test("add writes a Source section after Out of scope from --source", fun
         "a",
     }, backend)
     testing.eq(result.output, "added cccccccc Backlog")
+
+    -- Write the trimmed source after Out of scope
     testing.eq(
         backend.calls[1][4],
-        '## Problem\np\n\n## Change\n- c\n\n## Out of scope\nn\n\n## Source\n"Ship it." 2026-11-17 https://example.com/c/1\n'
+        table.concat({
+            "## Problem",
+            "p",
+            "",
+            "## Change",
+            "- c",
+            "",
+            "## Out of scope",
+            "n",
+            "",
+            "## Source",
+            '"Ship it." 2026-11-17 https://example.com/c/1',
+            "",
+        }, "\n")
     )
 end)
 
 testing.test("add leaves the Source section out when --source is blank", function()
+    -- Add a card with a blank source
     local backend = fake(sample())
     local result = cmd_board.run("add", {
         "X",
@@ -3019,42 +3710,102 @@ testing.test("add leaves the Source section out when --source is blank", functio
         "a",
     }, backend)
     testing.eq(result.output, "added cccccccc Backlog")
-    testing.eq(backend.calls[1][4], "## Problem\np\n\n## Change\n- c\n\n## Out of scope\nn\n")
+
+    -- Leave the Source section out
+    testing.eq(
+        backend.calls[1][4],
+        table.concat({
+            "## Problem",
+            "p",
+            "",
+            "## Change",
+            "- c",
+            "",
+            "## Out of scope",
+            "n",
+            "",
+        }, "\n")
+    )
 end)
 
 testing.test("add refuses a repeated --source by name", function()
+    -- Add a card with --source twice
     local backend = fake(sample())
     local result = cmd_board.run("add", { "X", "--source", "a", "--source", "b" }, backend)
+
+    -- Refuse it and name the flag
     testing.eq(result.code, 2)
     testing.ok(result.message:find("--source", 1, true), result.message)
+
+    -- Send nothing
     testing.eq(#backend.calls, 0)
 end)
 
 testing.test("a Source section is optional and never required", function()
-    local with = "## Problem\nx\n\n## Change\ny\n\n## Out of scope\nn\n\n## Source\nq 2026-11-17\n"
+    -- Accept a text that carries a Source section
+    local with = table.concat({
+        "## Problem",
+        "x",
+        "",
+        "## Change",
+        "y",
+        "",
+        "## Out of scope",
+        "n",
+        "",
+        "## Source",
+        "q 2026-11-17",
+        "",
+    }, "\n")
     testing.eq(board.missing(with, 3, 0), {})
     testing.eq(board.backlog_missing(with), {})
     testing.eq(board.shapes(with), {})
-    testing.eq(board.backlog_missing("## Problem\nx\n\n## Change\ny\n"), { "## Out of scope" })
-    testing.eq(board.missing("## Problem\nx\n\n## Source\nq\n", 3, 0), {
+
+    -- Miss only the sections that are required
+    local without = table.concat({ "## Problem", "x", "", "## Change", "y", "" }, "\n")
+    testing.eq(board.backlog_missing(without), { "## Out of scope" })
+    local only_source = table.concat({ "## Problem", "x", "", "## Source", "q", "" }, "\n")
+    testing.eq(board.missing(only_source, 3, 0), {
         "## Change",
         "## Out of scope",
     })
-    testing.eq(board.shapes("## Problem\nx\n\n## Change\ny\n\n## Out of scope\nn\n\n## Source\n"), {
+
+    -- Flag an empty Source section
+    local empty = table.concat({
+        "## Problem",
+        "x",
+        "",
+        "## Change",
+        "y",
+        "",
+        "## Out of scope",
+        "n",
+        "",
+        "## Source",
+        "",
+    }, "\n")
+    testing.eq(board.shapes(empty), {
         board.TEXT_UNDER .. "Source",
     })
 end)
 
 testing.test("prose_warnings leaves the text under Source alone", function()
-    testing.eq(
-        board.prose_warnings(
-            '## Problem\nok\n\n## Source\n"see a/b.lua and 2af0e003" 2026-11-17\n\n## Out of scope\nsrc/a.lua\n'
-        ),
-        { "Card prose holds a path: src/a.lua." }
-    )
+    local text = table.concat({
+        "## Problem",
+        "ok",
+        "",
+        "## Source",
+        '"see a/b.lua and 2af0e003" 2026-11-17',
+        "",
+        "## Out of scope",
+        "src/a.lua",
+        "",
+    }, "\n")
+    testing.eq(board.prose_warnings(text), { "Card prose holds a path: src/a.lua." })
 end)
 
 testing.test("add keeps each repeated --change as its own line, in order", function()
+    -- Add a card with three --change flags
     local backend = fake(sample())
     local result = cmd_board.run("add", {
         "X",
@@ -3074,32 +3825,54 @@ testing.test("add keeps each repeated --change as its own line, in order", funct
         "a",
     }, backend)
     testing.eq(result.output, "added cccccccc Backlog")
+
+    -- Keep each one as its own line, in order
     testing.eq(
         backend.calls[1][4],
-        "## Problem\np\n\n## Change\n- one\n- two\n- three\n\n## Out of scope\ny\n"
+        table.concat({
+            "## Problem",
+            "p",
+            "",
+            "## Change",
+            "- one",
+            "- two",
+            "- three",
+            "",
+            "## Out of scope",
+            "y",
+            "",
+        }, "\n")
     )
 end)
 
 testing.test("add refuses a repeated --problem or --out-of-scope by name", function()
+    -- Refuse each flag given twice and name it
     local backend = fake(sample())
     for _, flag in ipairs({ "--problem", "--out-of-scope" }) do
         local result = cmd_board.run("add", { "X", flag, "a", flag, "b" }, backend)
         testing.eq(result.code, 2)
         testing.ok(result.message:find(flag, 1, true), result.message)
     end
+
+    -- Send nothing
     testing.eq(#backend.calls, 0)
 end)
 
 testing.test(
     "add into Backlog without a Problem is refused before the backend is called",
     function()
+        -- Refuse a bare name
         local backend = fake(sample())
         local result = cmd_board.run("add", { "X" }, backend)
         testing.eq(result.code, 2)
         testing.ok(result.message:find("text under ## Problem", 1, true), result.message)
+
+        -- Refuse a Change with no Problem
         result = cmd_board.run("add", { "X", "--change", "- do" }, backend)
         testing.eq(result.code, 2)
         testing.ok(result.message:find("text under ## Problem", 1, true), result.message)
+
+        -- Refuse an Out of scope with no Problem and send nothing
         result = cmd_board.run(
             "add",
             { "X", "--column", support.Column.BACKLOG, "--out-of-scope", "n" },
@@ -3113,6 +3886,7 @@ testing.test(
 testing.test(
     "add outside Icebox refuses a missing size, section or outcome in every column",
     function()
+        -- Walk every column outside Icebox
         local backend = fake(sample())
         for _, column in ipairs({
             support.Column.BACKLOG,
@@ -3121,12 +3895,15 @@ testing.test(
             support.Column.BLOCKED,
             support.Column.DONE,
         }) do
+            -- Leave out the size, the Problem, the outcome or the real size in turn
             local cases = {
                 { { "--problem", "x", "--done-when", "a" }, "a size" },
                 { { "--size", "1", "--done-when", "a" }, "text under ## Problem" },
                 { { "--size", "1", "--problem", "x" }, "Done when outcomes" },
                 { { "--size", "unsized", "--problem", "x", "--done-when", "a" }, "a size" },
             }
+
+            -- Refuse each case and name what is missing
             for _, case in ipairs(cases) do
                 local args = { "X", "--column", column }
                 for _, word in ipairs(case[1]) do
@@ -3137,14 +3914,19 @@ testing.test(
                 testing.ok(result.message:find(case[2], 1, true), result.message)
             end
         end
+
+        -- Send nothing
         testing.eq(#backend.calls, 0)
     end
 )
 
 testing.test("add into Icebox stays free-form", function()
+    -- Add a bare Icebox card
     local backend = fake(sample())
     testing.eq(cmd_board.run("add", { "X", "--column", support.Column.ICEBOX }, backend).code, nil)
     testing.eq(backend.calls[1], { "add", "X", support.COLUMN_NAME.ICEBOX, nil, nil })
+
+    -- Add an Icebox card with a loose description
     testing.eq(
         cmd_board.run(
             "add",
@@ -3157,19 +3939,56 @@ testing.test("add into Icebox stays free-form", function()
 end)
 
 testing.test("missing and backlog_missing count a heading with text, not an empty one", function()
+    -- Accept a full text and a scaffold
     testing.eq(board.backlog_missing(V2), {})
     testing.eq(board.backlog_missing(SCAFFOLD), {})
-    testing.eq(board.backlog_missing("## Problem\n\n## Change\nc\n## Out of scope\no"), {
+
+    -- Count a Problem heading with no text as missing
+    local empty_problem = table.concat({
+        "## Problem",
+        "",
+        "## Change",
+        "c",
+        "## Out of scope",
+        "o",
+    }, "\n")
+    testing.eq(board.backlog_missing(empty_problem), {
         "text under ## Problem",
     })
-    testing.eq(board.backlog_missing("## Problem\nx"), { "## Change", "## Out of scope" })
+
+    -- Name the sections a short text lacks
+    testing.eq(
+        board.backlog_missing(table.concat({ "## Problem", "x" }, "\n")),
+        { "## Change", "## Out of scope" }
+    )
     testing.eq(board.backlog_missing(nil), { "## Problem", "## Change", "## Out of scope" })
+
+    -- Count outcomes and name an empty Change or Out of scope
     testing.eq(board.missing(V2, 3, 0), {})
     testing.eq(board.missing(V1, 0, 0), { "3 to 7 Done when outcomes" })
-    testing.eq(board.missing("## Problem\nx\n\n## Change\n\n## Out of scope\nn", 3, 0), {
+    local empty_change = table.concat({
+        "## Problem",
+        "x",
+        "",
+        "## Change",
+        "",
+        "## Out of scope",
+        "n",
+    }, "\n")
+    testing.eq(board.missing(empty_change, 3, 0), {
         board.TEXT_UNDER .. "Change",
     })
-    testing.eq(board.missing("## Problem\nx\n\n## Change\ny\n\n## Out of scope\n", 3, 0), {
+    local empty_scope = table.concat({
+        "## Problem",
+        "x",
+        "",
+        "## Change",
+        "y",
+        "",
+        "## Out of scope",
+        "",
+    }, "\n")
+    testing.eq(board.missing(empty_scope, 3, 0), {
         board.TEXT_UNDER .. "Out of scope",
     })
     testing.eq(board.missing(V2, 3, 0), {})
@@ -3178,36 +3997,111 @@ end)
 testing.test(
     "shapes flags an empty Change or Out of scope and a Change: or Out of scope: line",
     function()
+        -- Accept a full text
         testing.eq(board.shapes(V2), {})
-        testing.eq(board.shapes("## Problem\nx\n\n## Change\n\n## Out of scope\n"), {
+
+        -- Flag an empty Change and an empty Out of scope
+        local both_empty = table.concat({
+            "## Problem",
+            "x",
+            "",
+            "## Change",
+            "",
+            "## Out of scope",
+            "",
+        }, "\n")
+        testing.eq(board.shapes(both_empty), {
             board.TEXT_UNDER .. "Change",
             board.TEXT_UNDER .. "Out of scope",
         })
-        testing.eq(board.shapes("## Problem\nx\nChange: y\n\n## Change\nc\n\n## Out of scope\nn"), {
+
+        -- Flag a Change: line in the Problem
+        local misplaced = table.concat({
+            "## Problem",
+            "x",
+            "Change: y",
+            "",
+            "## Change",
+            "c",
+            "",
+            "## Out of scope",
+            "n",
+        }, "\n")
+        testing.eq(board.shapes(misplaced), {
             board.MISPLACED,
         })
-        testing.eq(board.shapes("## Problem\nChanged: y\n\n## Change\nc\n\n## Out of scope\nn"), {})
+
+        -- Leave a word that only starts like Change alone
+        local lookalike = table.concat({
+            "## Problem",
+            "Changed: y",
+            "",
+            "## Change",
+            "c",
+            "",
+            "## Out of scope",
+            "n",
+        }, "\n")
+        testing.eq(board.shapes(lookalike), {})
     end
 )
 
 testing.test(
     "move to Ready refuses an empty Change or Out of scope and accepts all three",
     function()
+        -- Refuse a text with an empty or misplaced section
         for _, case in ipairs({
             {
-                "## Problem\nx\n\n## Change\n\n## Out of scope\nn",
+                table.concat({
+                    "## Problem",
+                    "x",
+                    "",
+                    "## Change",
+                    "",
+                    "## Out of scope",
+                    "n",
+                }, "\n"),
                 board.TEXT_UNDER .. "Change",
             },
             {
-                "## Problem\nx\n\n## Change\ny\n\n## Out of scope\n",
+                table.concat({
+                    "## Problem",
+                    "x",
+                    "",
+                    "## Change",
+                    "y",
+                    "",
+                    "## Out of scope",
+                    "",
+                }, "\n"),
                 board.TEXT_UNDER .. "Out of scope",
             },
             {
-                "## Problem\nx\nChange: y\n\n## Change\nc\n\n## Out of scope\nn",
+                table.concat({
+                    "## Problem",
+                    "x",
+                    "Change: y",
+                    "",
+                    "## Change",
+                    "c",
+                    "",
+                    "## Out of scope",
+                    "n",
+                }, "\n"),
                 board.MISPLACED,
             },
             {
-                "## Problem\nx\nOut of scope: y\n\n## Change\nc\n\n## Out of scope\nn",
+                table.concat({
+                    "## Problem",
+                    "x",
+                    "Out of scope: y",
+                    "",
+                    "## Change",
+                    "c",
+                    "",
+                    "## Out of scope",
+                    "n",
+                }, "\n"),
                 board.MISPLACED,
             },
         }) do
@@ -3221,6 +4115,8 @@ testing.test(
             testing.ok(result.message:find(case[2], 1, true), result.message)
             testing.eq(#backend.calls, 0)
         end
+
+        -- Accept all three sections
         local card = colored("green")
         card.description = V2
         card.outcomes = {
@@ -3237,9 +4133,46 @@ testing.test(
 
 ---Card descriptions with an empty section or a misplaced line, each with the refusal text it draws
 local SHAPE_CASES = {
-    { "## Problem\nx\n\n## Change\n\n## Out of scope\nn", board.TEXT_UNDER .. "Change" },
-    { "## Problem\nx\nChange: y\n\n## Change\nc\n\n## Out of scope\nn", board.MISPLACED },
-    { "## Problem\nx\nOut of scope: y\n\n## Change\nc\n\n## Out of scope\nn", board.MISPLACED },
+    {
+        table.concat({
+            "## Problem",
+            "x",
+            "",
+            "## Change",
+            "",
+            "## Out of scope",
+            "n",
+        }, "\n"),
+        board.TEXT_UNDER .. "Change",
+    },
+    {
+        table.concat({
+            "## Problem",
+            "x",
+            "Change: y",
+            "",
+            "## Change",
+            "c",
+            "",
+            "## Out of scope",
+            "n",
+        }, "\n"),
+        board.MISPLACED,
+    },
+    {
+        table.concat({
+            "## Problem",
+            "x",
+            "Out of scope: y",
+            "",
+            "## Change",
+            "c",
+            "",
+            "## Out of scope",
+            "n",
+        }, "\n"),
+        board.MISPLACED,
+    },
 }
 
 testing.test("move into In Progress refuses an empty section or a misplaced line", function()
@@ -3288,6 +4221,7 @@ end)
 testing.test(
     "move to Backlog refuses a card without a Problem and names what is missing",
     function()
+        -- Refuse a loose idea and name the missing Problem
         local card = colored("green")
         card.description = "loose idea"
         local backend = fake({ card })
@@ -3296,10 +4230,14 @@ testing.test(
         testing.ok(result.message:find("cannot enter Backlog", 1, true), result.message)
         testing.ok(result.message:find("## Problem", 1, true), result.message)
         testing.eq(#backend.calls, 0)
+
+        -- Refuse a scaffold whose Problem is empty
         card.description = SCAFFOLD:gsub("x\n", "")
         result = cmd_board.run("move", { "cccccccc", support.Column.BACKLOG }, fake({ card }))
         testing.eq(result.code, 1)
         testing.ok(result.message:find("text under ## Problem", 1, true), result.message)
+
+        -- Accept a composed description
         card.description = COMPOSED
         card.outcomes = { { id = "s1", name = "a", done = false } }
         testing.eq(
@@ -3312,6 +4250,7 @@ testing.test(
 testing.test(
     "add to Ready refuses a description without the headings or a Done when item",
     function()
+        -- Refuse a Ready description without the headings
         local backend = fake(sample())
         local result = cmd_board.run(
             "add",
@@ -3320,6 +4259,8 @@ testing.test(
         )
         testing.eq(result.code, 2)
         testing.ok(result.message:find("3 to 7 Done when outcomes", 1, true), result.message)
+
+        -- Refuse a Ready card with no description and send nothing
         result =
             cmd_board.run("add", { "X", "--column", support.Column.READY, "--size", "1" }, backend)
         testing.eq(result.code, 2)
@@ -3353,6 +4294,7 @@ testing.test("add places a bare epic in Ready", function()
 end)
 
 testing.test("add --checks gives the card one row per command", function()
+    -- Add a card with two checks flags
     local backend = fake(sample())
     local result = cmd_board.run("add", {
         "X",
@@ -3372,7 +4314,11 @@ testing.test("add --checks gives the card one row per command", function()
         "dev test",
     }, backend)
     testing.eq(result.output, "added cccccccc Backlog")
+
+    -- Give the card one row per command
     testing.eq(backend.opts.checks, { "dev lint", "dev test" })
+
+    -- Refuse a blank command and a missing one
     result = cmd_board.run("add", { "X", "--problem", "x", "--checks", "  " }, backend)
     testing.eq(result.code, 2)
     testing.eq(cmd_board.run("add", { "X", "--checks" }, backend).code, 2)
@@ -3381,21 +4327,28 @@ end)
 testing.test(
     "add to Ready without a checks row names the missing row, or the missing field",
     function()
+        -- Build a Ready card with three outcomes and no checks
         local backend = fake(sample())
         local args = { "X", "--column", support.Column.READY, "--size", "1", "--description", V2 }
         for _, name in ipairs({ "a", "b", "c" }) do
             args[#args + 1] = "--done-when"
             args[#args + 1] = name .. " " .. board.JUDGEMENT
         end
+
+        -- Name the missing row
         local result = cmd_board.run("add", args, backend)
         testing.eq(result.code, 2)
         testing.ok(result.message:find("checks row", 1, true), result.message)
         testing.ok(result.message:find("--checks", 1, true), result.message)
+
+        -- Name the missing field on a board without one
         backend.nofield = true
         result = cmd_board.run("add", args, backend)
         testing.eq(result.code, 2)
         testing.ok(result.message:find("no checks field", 1, true), result.message)
         testing.ok(result.message:find("dev board init", 1, true), result.message)
+
+        -- Refuse a Backlog card with checks on that board
         result = cmd_board.run("add", {
             "X",
             "--problem",
@@ -3414,6 +4367,8 @@ testing.test(
         testing.eq(result.code, 2)
         testing.ok(result.message:find("no checks field", 1, true), result.message)
         testing.eq(#backend.calls, 0)
+
+        -- Still add an Icebox card
         testing.eq(
             cmd_board.run("add", { "X", "--column", support.Column.ICEBOX }, backend).code,
             nil
@@ -3422,22 +4377,33 @@ testing.test(
 )
 
 testing.test("move to Ready counts a card with no checks row as missing them", function()
+    -- Refuse a card with an empty checks list
     local card = colored("green")
     card.checks = {}
     local backend = fake({ card })
     local result = cmd_board.run("move", { "cccccccc", support.Column.READY }, backend)
     testing.eq(result.code, 1)
     testing.ok(result.message:find("has no checks row", 1, true), result.message)
+
+    -- Name the missing field on a board without one
     backend.nofield = true
     result = cmd_board.run("move", { "cccccccc", support.Column.READY }, backend)
     testing.eq(result.code, 1)
     testing.ok(result.message:find("no checks field", 1, true), result.message)
     testing.ok(result.message:find("dev board init", 1, true), result.message)
     testing.eq(#backend.calls, 0)
+
+    -- Still move the card to Icebox
     testing.eq(cmd_board.run("move", { "cccccccc", support.Column.ICEBOX }, backend).code, nil)
 end)
 
-local REQUIRED_CONFIG = '[board.lint]\nrequired = ["dev --remote lint", "dev --remote test"]\n'
+local REQUIRED_CONFIG = table.concat({
+    "[board.lint]",
+    'required = ["dev --remote lint", "dev --remote test"]',
+    "",
+}, "\n")
+
+local STRICT_CONFIG = table.concat({ "[board.lint]", "strict = true", "" }, "\n")
 
 local function ready_with(config, checks)
     local card = colored("green")
@@ -3451,6 +4417,7 @@ local function ready_with(config, checks)
 end
 
 testing.test("move to Ready refuses a card missing a required row", function()
+    -- Refuse a card that lacks a required row
     local result, backend = ready_with(REQUIRED_CONFIG, { "dev --remote lint" })
     testing.eq(result.code, 1)
     testing.ok(
@@ -3462,6 +4429,8 @@ testing.test("move to Ready refuses a card missing a required row", function()
         result.message
     )
     testing.eq(#backend.calls, 0)
+
+    -- Accept a card with every required row, bare or scoped to a file
     result = ready_with(REQUIRED_CONFIG, { "dev --remote lint", "dev --remote test" })
     testing.eq(result.code, nil)
     result = ready_with(
@@ -3469,11 +4438,14 @@ testing.test("move to Ready refuses a card missing a required row", function()
         { "dev --remote lint", "dev --remote test -- tests/lua/board_test.lua" }
     )
     testing.eq(result.code, nil)
+
+    -- Refuse a row that only starts like the required one
     result = ready_with(REQUIRED_CONFIG, { "dev --remote lint", "dev --remote tests" })
     testing.eq(result.code, 1)
 end)
 
 testing.test("move to Ready accepts a no-change card without a required row", function()
+    -- Move a card with the given labels to Ready under the required config
     local function ready_with_labels(labels)
         local card = colored("green")
         card.checks = { "dev --remote lint" }
@@ -3482,7 +4454,11 @@ testing.test("move to Ready accepts a no-change card without a required row", fu
         backend.root = support.sandbox({ [".dev/config.toml"] = REQUIRED_CONFIG }, {})
         return cmd_board.run("move", { "cccccccc", support.Column.READY }, backend)
     end
+
+    -- Accept a no-change card
     testing.eq(ready_with_labels({ board.NO_CHANGE }).code, nil)
+
+    -- Refuse a card without the label
     local result = ready_with_labels({})
     testing.eq(result.code, 1)
     testing.ok(
@@ -3492,28 +4468,41 @@ testing.test("move to Ready accepts a no-change card without a required row", fu
 end)
 
 testing.test("a repo with no required list keeps today's behaviour", function()
-    local result = ready_with("[board.lint]\nstrict = true\n", support.READY_CHECKS)
+    local result = ready_with(STRICT_CONFIG, support.READY_CHECKS)
     testing.eq(result.code, nil)
     result = ready_with("", support.READY_CHECKS)
     testing.eq(result.code, nil)
 end)
 
 testing.test("a required setting that is not a list of commands is refused", function()
-    local result = ready_with('[board.lint]\nrequired = "dev --remote test"\n', { "dev test" })
+    -- Refuse a string and name the setting
+    local as_string = table.concat({ "[board.lint]", 'required = "dev --remote test"', "" }, "\n")
+    local result = ready_with(as_string, { "dev test" })
     testing.eq(result.code, 1)
     testing.eq(
         result.message,
         "The `required` setting of `[board.lint]` must be a list of commands."
     )
-    result = ready_with("[board.lint]\nrequired = [1]\n", { "dev test" })
+
+    -- Refuse a list of numbers
+    local as_numbers = table.concat({ "[board.lint]", "required = [1]", "" }, "\n")
+    result = ready_with(as_numbers, { "dev test" })
     testing.eq(result.code, 1)
-    result = ready_with("[board.lint.required]\nlint = true\n", { "dev test" })
+
+    -- Refuse a table
+    local as_table = table.concat({ "[board.lint.required]", "lint = true", "" }, "\n")
+    result = ready_with(as_table, { "dev test" })
     testing.eq(result.code, 1)
 end)
 
-local BARE_CONFIG = '[board.lint]\nbare_rows = ["dev --remote test"]\n'
+local BARE_CONFIG = table.concat({
+    "[board.lint]",
+    'bare_rows = ["dev --remote test"]',
+    "",
+}, "\n")
 
 testing.test("move to Ready refuses a card with no bare row", function()
+    -- Refuse a card with no bare row
     local result, backend = ready_with(BARE_CONFIG, { "dev --remote lint" })
     testing.eq(result.code, 1)
     testing.ok(
@@ -3522,22 +4511,33 @@ testing.test("move to Ready refuses a card with no bare row", function()
     )
     testing.ok(result.message:find("cannot enter Ready.", 1, true), result.message)
     testing.eq(#backend.calls, 0)
+
+    -- Refuse a scoped row where a bare one is required
     result = ready_with(
         BARE_CONFIG,
         { "dev --remote lint", "dev --remote test -- tests/lua/board_test.lua" }
     )
     testing.eq(result.code, 1)
     testing.ok(result.message:find("does not count", 1, true), result.message)
-    result = ready_with(
-        '[board.lint]\nrequired = ["dev --remote test"]\nbare_rows = ["dev --remote lint"]\n',
-        { "dev --remote lint", "dev --remote test -- tests/lua/board_test.lua" }
-    )
+
+    -- Accept a scoped row for a command that is only required
+    local mixed = table.concat({
+        "[board.lint]",
+        'required = ["dev --remote test"]',
+        'bare_rows = ["dev --remote lint"]',
+        "",
+    }, "\n")
+    result =
+        ready_with(mixed, { "dev --remote lint", "dev --remote test -- tests/lua/board_test.lua" })
     testing.eq(result.code, nil)
+
+    -- Accept a card with the bare row
     result = ready_with(BARE_CONFIG, { "dev --remote lint", "dev --remote test" })
     testing.eq(result.code, nil)
 end)
 
 testing.test("an epic with open children is refused a move into Ready", function()
+    -- Move an epic with the given children to Ready
     local function epic_to_ready(kids)
         local card = colored("green")
         card.epic = kids
@@ -3545,6 +4545,8 @@ testing.test("an epic with open children is refused a move into Ready", function
         backend.kin = { children = kids }
         return cmd_board.run("move", { "cccccccc", support.Column.READY }, backend), backend
     end
+
+    -- Refuse an epic with open children and name how many
     local result, backend = epic_to_ready({ done = 1, total = 3 })
     testing.eq(result.code, 1)
     testing.eq(result.unqueued, true)
@@ -3552,16 +4554,23 @@ testing.test("an epic with open children is refused a move into Ready", function
         result.message,
         "Card cccccccc is an epic and cannot enter Ready. 2 of 3 children are open."
     )
+
+    -- Send no move
     for _, call in ipairs(backend.calls) do
         testing.ok(call[1] ~= "move", "the refused move was sent")
     end
+
+    -- Accept an epic with no open children
     testing.eq(epic_to_ready({ done = 0, total = 0 }).code, nil)
     testing.eq(epic_to_ready({ done = 3, total = 3 }).code, nil)
 end)
 
 testing.test("unchanged without bare rows, for an epic and for a card with children", function()
-    local result = ready_with("[board.lint]\nstrict = true\n", support.READY_CHECKS)
+    -- Accept a card under a config with no bare rows
+    local result = ready_with(STRICT_CONFIG, support.READY_CHECKS)
     testing.eq(result.code, nil)
+
+    -- Plan an epic whose children are all done
     local card = planned()
     card.checks = { "dev --remote lint" }
     card.epic = { done = 2, total = 2 }
@@ -3569,22 +4578,33 @@ testing.test("unchanged without bare rows, for an epic and for a card with child
     local backend = fake({ card })
     backend.kin = { children = card.epic }
     backend.root = support.sandbox({ [".dev/config.toml"] = BARE_CONFIG }, {})
+
+    -- Accept the move without a bare row
     result = cmd_board.run("move", { "cccccccc", support.Column.READY }, backend)
     testing.eq(result.code, nil)
 end)
 
 testing.test("a bare_rows that is not a list is refused", function()
+    -- Refuse a string and name the setting
     local want = "The `bare_rows` setting of `[board.lint]` must be a list of commands."
-    local result = ready_with('[board.lint]\nbare_rows = "dev --remote test"\n', { "dev test" })
+    local as_string = table.concat({ "[board.lint]", 'bare_rows = "dev --remote test"', "" }, "\n")
+    local result = ready_with(as_string, { "dev test" })
     testing.eq(result.code, 1)
     testing.eq(result.message, want)
-    result = ready_with("[board.lint]\nbare_rows = [1]\n", { "dev test" })
+
+    -- Refuse a list of numbers
+    local as_numbers = table.concat({ "[board.lint]", "bare_rows = [1]", "" }, "\n")
+    result = ready_with(as_numbers, { "dev test" })
     testing.eq(result.code, 1)
-    result = ready_with("[board.lint.bare_rows]\nlint = true\n", { "dev test" })
+
+    -- Refuse a table
+    local as_table = table.concat({ "[board.lint.bare_rows]", "lint = true", "" }, "\n")
+    result = ready_with(as_table, { "dev test" })
     testing.eq(result.code, 1)
 end)
 
 testing.test("move to Ready refuses an outcome that names no deciding check", function()
+    -- Plan a card whose outcomes name their checks in different ways
     local card = planned()
     card.checks = { "dev --remote test", "dev x y" }
     card.outcomes = {
@@ -3599,6 +4619,8 @@ testing.test("move to Ready refuses an outcome that names no deciding check", fu
             done = false,
         },
     }
+
+    -- Refuse the move and list the outcomes that name no deciding check
     local result = cmd_board.run("move", { "cccccccc", support.Column.READY }, fake({ card }))
     testing.eq(result.code, 1)
     testing.ok(result.message:find("names no deciding check", 1, true), result.message)
@@ -3609,51 +4631,77 @@ testing.test("move to Ready refuses an outcome that names no deciding check", fu
     )
     testing.eq(result.message:find("A is refused", 1, true), nil)
     testing.eq(result.message:find("F parens", 1, true), nil)
+
+    -- Accept the move once only the deciding outcomes remain
     card.outcomes = { card.outcomes[1], card.outcomes[2], card.outcomes[6] }
     result = cmd_board.run("move", { "cccccccc", support.Column.READY }, fake({ card }))
     testing.eq(result.code, nil)
 end)
 
 testing.test("move to Ready lets a card with children in without a checks row", function()
+    -- Plan a card with finished children and no checks row
     local card = planned()
     card.checks = {}
     card.epic = { done = 2, total = 2 }
     card.outcomes = { { id = "s1", name = "a", done = false } }
     local backend = fake({ card })
     backend.kin = { children = card.epic }
+
+    -- Move the card to Ready
     local result = cmd_board.run("move", { "cccccccc", support.Column.READY }, backend)
     testing.eq(result.output, "moved cccccccc to Ready")
+
+    -- Send the move
     testing.eq(backend.calls[#backend.calls], { "move", ID_C, support.COLUMN_NAME.READY })
 end)
 
 testing.test("show prints the checks rows under the description", function()
+    -- Show a card with two checks rows
     local card = colored("green")
     card.checks = { "dev lint", "dev test" }
     local result = cmd_board.run("show", { "cccccccc" }, fake({ card }))
-    testing.ok(
-        result.output:find("\n\nchecks:\n- dev lint\n- dev test\n\n", 1, true),
-        result.output
-    )
+
+    -- Print the rows as a block under the description
+    local block = table.concat({ "", "", "checks:", "- dev lint", "- dev test", "", "" }, "\n")
+    testing.ok(result.output:find(block, 1, true), result.output)
+
+    -- Leave the block out when there are no rows
     card.checks = {}
     result = cmd_board.run("show", { "cccccccc" }, fake({ card }))
     testing.eq(result.output:find("checks:", 1, true), nil)
 end)
 
 testing.test("show prints the allow, tests and files blocks when set", function()
+    -- Show a card with checks, allow, tests and files set
     local card = colored("green")
     card.checks = { "dev lint" }
     card.allow = { "test-edits" }
     card.tests = { "one", "two" }
     card.files = { "src/a.rs" }
     local result = cmd_board.run("show", { "cccccccc" }, fake({ card }))
-    testing.ok(
-        result.output:find(
-            "\n\nchecks:\n- dev lint\n\nallow:\n- test-edits\n\ntests:\n- one\n- two\n\nfiles:\n- src/a.rs\n\n",
-            1,
-            true
-        ),
-        result.output
-    )
+
+    -- Print the four blocks in order under the description
+    local blocks = table.concat({
+        "",
+        "",
+        "checks:",
+        "- dev lint",
+        "",
+        "allow:",
+        "- test-edits",
+        "",
+        "tests:",
+        "- one",
+        "- two",
+        "",
+        "files:",
+        "- src/a.rs",
+        "",
+        "",
+    }, "\n")
+    testing.ok(result.output:find(blocks, 1, true), result.output)
+
+    -- Leave each block out when it is empty
     card.allow, card.tests, card.files = {}, {}, {}
     result = cmd_board.run("show", { "cccccccc" }, fake({ card }))
     testing.eq(result.output:find("allow:", 1, true), nil)
@@ -3662,18 +4710,57 @@ testing.test("show prints the allow, tests and files blocks when set", function(
 end)
 
 testing.test("move to Ready refuses a card missing a heading or a Done when item", function()
+    -- List descriptions that lack a heading or a Done when item
     local cases = {
         { nil, "## Problem, ## Change, ## Out of scope, 3 to 7 Done when outcomes" },
-        { "## Problem\nx\n\n## Change\ny\n\n## Done when\n- [ ] z", "## Out of scope" },
         {
-            "## Problem\nx\n\n## Change\ny\n\n## Out of scope\nn\n\n## Done when\nsoon",
+            table.concat({
+                "## Problem",
+                "x",
+                "",
+                "## Change",
+                "y",
+                "",
+                "## Done when",
+                "- [ ] z",
+            }, "\n"),
+            "## Out of scope",
+        },
+        {
+            table.concat({
+                "## Problem",
+                "x",
+                "",
+                "## Change",
+                "y",
+                "",
+                "## Out of scope",
+                "n",
+                "",
+                "## Done when",
+                "soon",
+            }, "\n"),
             "3 to 7 Done when outcomes",
         },
         {
-            "## Problem\n- [ ] a\n\n## Change\ny\n\n## Out of scope\nn\n\n## Done when\n",
+            table.concat({
+                "## Problem",
+                "- [ ] a",
+                "",
+                "## Change",
+                "y",
+                "",
+                "## Out of scope",
+                "n",
+                "",
+                "## Done when",
+                "",
+            }, "\n"),
             "3 to 7 Done when outcomes",
         },
     }
+
+    -- Refuse each one and name what is missing
     for _, case in ipairs(cases) do
         local card = colored("green")
         card.description = case[1]
@@ -3684,6 +4771,8 @@ testing.test("move to Ready refuses a card missing a heading or a Done when item
         testing.ok(result.message:find(case[2], 1, true), result.message)
         testing.eq(#backend.calls, 0)
     end
+
+    -- Refuse a text whose only outcomes are ticked boxes in the description
     local card = colored("green")
     card.description = V1:gsub("%[ %]", "[x]")
     card.outcomes = {}
@@ -3782,6 +4871,7 @@ testing.test("a card without children is still held to 3 to 7 outcomes at Ready"
 end)
 
 testing.test("add --done-when hands the outcomes to the backend and checks them", function()
+    -- Hand two outcomes to the backend
     local backend = fake(sample())
     local result = cmd_board.run("add", {
         "X",
@@ -3800,6 +4890,8 @@ testing.test("add --done-when hands the outcomes to the backend and checks them"
     }, backend)
     testing.eq(result.output, "added cccccccc Backlog")
     testing.eq(backend.opts.outcomes, { "A works", "B works" })
+
+    -- Refuse a blank outcome, a missing one and eight of them
     testing.eq(cmd_board.run("add", { "X", "--problem", "x", "--done-when", " " }, backend).code, 2)
     testing.eq(cmd_board.run("add", { "X", "--done-when" }, backend).code, 2)
     local many = { "X", "--problem", "x" }
@@ -3808,6 +4900,8 @@ testing.test("add --done-when hands the outcomes to the backend and checks them"
         many[#many + 1] = "o" .. i
     end
     testing.eq(cmd_board.run("add", many, backend).code, 2)
+
+    -- Check a Ready card's outcomes for count and a deciding check
     local ready = {
         "X",
         "--column",
@@ -3833,6 +4927,8 @@ testing.test("add --done-when hands the outcomes to the backend and checks them"
     testing.ok(result.message:find("These outcomes lack one: c", 1, true), result.message)
     ready[#ready] = "c " .. board.CHECK_OPEN .. "dev test)"
     testing.eq(cmd_board.run("add", ready, backend).code, nil)
+
+    -- Warn about a path in an outcome and still write
     result = cmd_board.run("add", {
         "X",
         "--problem",
@@ -3853,25 +4949,34 @@ testing.test("add --done-when hands the outcomes to the backend and checks them"
 end)
 
 testing.test("show lists the outcomes with their ticks, and ls adds a done column", function()
+    -- Show a card with one of three outcomes ticked
     local card = colored("green")
     card.outcomes = outcomes(3, 1)
     local result = cmd_board.run("show", { "cccccccc" }, fake({ card }))
-    testing.ok(
-        result.output:find(
-            "\n\ndone when:\n- [x] Outcome 1\n- [ ] Outcome 2\n- [ ] Outcome 3\n\n",
-            1,
-            true
-        ),
-        result.output
-    )
+    local block = table.concat({
+        "",
+        "",
+        "done when:",
+        "- [x] Outcome 1",
+        "- [ ] Outcome 2",
+        "- [ ] Outcome 3",
+        "",
+        "",
+    }, "\n")
+    testing.ok(result.output:find(block, 1, true), result.output)
+
+    -- Add a done column to the listing
     result = cmd_board.run("ls", {}, fake({ card }))
     testing.eq(result.output, "cccccccc  Backlog  x  -  1/3  Card")
+
+    -- Leave the column out for a card with no outcomes
     local plain = colored("green")
     plain.outcomes = {}
     testing.eq(cmd_board.run("ls", {}, fake({ plain })).output, "cccccccc  Backlog  x  -  Card")
 end)
 
 testing.test("show prints the done when block once and only when a card has outcomes", function()
+    -- Count the matches of a pattern in a text
     local function count(text, needle)
         local n = 0
         for _ in text:gmatch(needle) do
@@ -3879,22 +4984,41 @@ testing.test("show prints the done when block once and only when a card has outc
         end
         return n
     end
-    local checklist =
-        "## Problem\nwhy\n\n## Done when\n- [ ] Outcome 1\n- [ ] Outcome 2\n- [ ] Outcome 3"
+
+    -- Show a card whose description already holds a checklist
+    local checklist = table.concat({
+        "## Problem",
+        "why",
+        "",
+        "## Done when",
+        "- [ ] Outcome 1",
+        "- [ ] Outcome 2",
+        "- [ ] Outcome 3",
+    }, "\n")
     local card = colored("green")
     card.description = checklist
     card.outcomes = outcomes(3, 1)
     local result = cmd_board.run("show", { "cccccccc" }, fake({ card }))
+
+    -- Print the done when block once, ahead of the ticks
+    local ticked = table.concat({ "## Problem", "why", "", "done when:", "- [x] Outcome 1" }, "\n")
     testing.eq(count(result.output, "Outcome 1"), 1, result.output)
     testing.eq(count(result.output, "[Dd]one when"), 1, result.output)
-    testing.ok(
-        result.output:find("## Problem\nwhy\n\ndone when:\n- [x] Outcome 1", 1, true),
-        result.output
-    )
-    card.description = "## Done when\n- [ ] Outcome 1\n- [ ] Outcome 2\n- [ ] Outcome 3"
+    testing.ok(result.output:find(ticked, 1, true), result.output)
+
+    -- Print it once for a description that is only a checklist
+    card.description = table.concat({
+        "## Done when",
+        "- [ ] Outcome 1",
+        "- [ ] Outcome 2",
+        "- [ ] Outcome 3",
+    }, "\n")
     result = cmd_board.run("show", { "cccccccc" }, fake({ card }))
+    local bare = table.concat({ "", "", "no description", "", "done when:", "" }, "\n")
     testing.eq(count(result.output, "Outcome 1"), 1, result.output)
-    testing.ok(result.output:find("\n\nno description\n\ndone when:\n", 1, true), result.output)
+    testing.ok(result.output:find(bare, 1, true), result.output)
+
+    -- Leave the block out for a card with no outcomes
     card.description = checklist
     card.outcomes = {}
     result = cmd_board.run("show", { "cccccccc" }, fake({ card }))
@@ -3904,12 +5028,17 @@ testing.test("show prints the done when block once and only when a card has outc
 end)
 
 testing.test("outcome appends, rewords, ticks and unticks by number", function()
+    -- Give a card three outcomes with one ticked
     local card = colored("green")
     card.outcomes = outcomes(3, 1)
     local backend = fake({ card })
+
+    -- Append a fourth outcome
     local result = cmd_board.run("outcome", { "cccccccc", "Fourth works" }, backend)
     testing.eq(result.output, "outcome cccccccc 4 added")
     testing.eq(backend.calls[1], { "add_outcome", ID_C, "Fourth works", nil })
+
+    -- Reword the second outcome with a reason
     result = cmd_board.run(
         "outcome",
         { "cccccccc", "--rename", "2", "New words", "--reason", "it was vague" },
@@ -3917,18 +5046,25 @@ testing.test("outcome appends, rewords, ticks and unticks by number", function()
     )
     testing.eq(result.output, "outcome cccccccc 2 reworded")
     testing.eq(backend.calls[2], { "set_outcome", ID_C, "s2", { name = "New words" }, nil })
+
+    -- Tick the second outcome
     result = cmd_board.run("outcome", { "cccccccc", "--tick", "2" }, backend)
     testing.eq(result.output, "outcome cccccccc 2 ticked")
     testing.eq(backend.calls[4], { "set_outcome", ID_C, "s2", { done = true }, nil })
+
+    -- Untick the first outcome
     result = cmd_board.run("outcome", { "cccccccc", "--untick", "1" }, backend)
     testing.eq(result.output, "outcome cccccccc 1 unticked")
     testing.eq(backend.calls[5], { "set_outcome", ID_C, "s1", { done = false }, nil })
 end)
 
 testing.test("outcome rename clears its tick", function()
+    -- Give a card three outcomes with the first ticked
     local card = colored("green")
     card.outcomes = outcomes(3, 1)
     local backend = fake({ card })
+
+    -- Reword the ticked outcome
     local result = cmd_board.run(
         "outcome",
         { "cccccccc", "--rename", "1", "New words", "--reason", "it was vague" },
@@ -3948,6 +5084,8 @@ testing.test("outcome rename clears its tick", function()
             .. " Reason: it was vague The tick was cleared.",
         { kind = "decision" },
     })
+
+    -- Reword an unticked outcome and leave its tick alone
     result = cmd_board.run(
         "outcome",
         { "cccccccc", "--rename", "2", "Other words", "--reason", "it was vague" },
@@ -3958,12 +5096,17 @@ testing.test("outcome rename clears its tick", function()
 end)
 
 testing.test("outcome refuses more than one text argument", function()
+    -- Give a card three outcomes with one ticked
     local card = colored("green")
     card.outcomes = outcomes(3, 1)
     local backend = fake({ card })
+
+    -- Refuse an append of two words
     local result = cmd_board.run("outcome", { "cccccccc", "Fourth", "works" }, backend)
     testing.eq(result.code, 2)
     testing.ok(result.message:find("run outcome once per outcome", 1, true), result.message)
+
+    -- Refuse a rename of two words
     result = cmd_board.run(
         "outcome",
         { "cccccccc", "--rename", "2", "New", "words", "--reason", "it was vague" },
@@ -3971,15 +5114,22 @@ testing.test("outcome refuses more than one text argument", function()
     )
     testing.eq(result.code, 2)
     testing.ok(result.message:find("run outcome once per outcome", 1, true), result.message)
+
+    -- Send nothing
     testing.eq(#backend.calls, 0)
 end)
 
 testing.test("a plain move from Review to Verify is refused", function()
+    -- Give a Review card an open outcome
     local card = colored("green")
     card.column = support.COLUMN_NAME.REVIEW
     card.outcomes = outcomes(2, 1)
     local backend = fake({ card })
+
+    -- Move it to Verify
     local result = cmd_board.run("move", { "cccccccc", support.Column.VERIFY }, backend)
+
+    -- Refuse the move and name the verifier's tick
     testing.eq(result.code, 1)
     testing.ok(result.message:find("cannot move to Verify from Review", 1, true), result.message)
     testing.ok(
@@ -3990,37 +5140,56 @@ testing.test("a plain move from Review to Verify is refused", function()
 end)
 
 testing.test("move from Review to Verify is allowed when every outcome is ticked", function()
+    -- Give a Review card every outcome ticked
     local card = colored("green")
     card.column = support.COLUMN_NAME.REVIEW
     card.outcomes = outcomes(2, 2)
     local backend = fake({ card })
+
+    -- Move it to Verify
     local result = cmd_board.run("move", { "cccccccc", support.Column.VERIFY }, backend)
+
+    -- Send the move
     testing.eq(result.message, nil)
     testing.eq(backend.calls[#backend.calls], { "move", ID_C, support.COLUMN_NAME.VERIFY, nil })
 end)
 
 testing.test("move to Verify is refused when a card has no outcomes", function()
+    -- Give a Review card no outcomes
     local card = colored("green")
     card.column = support.COLUMN_NAME.REVIEW
     card.outcomes = {}
     local backend = fake({ card })
+
+    -- Move it to Verify
     local result = cmd_board.run("move", { "cccccccc", support.Column.VERIFY }, backend)
+
+    -- Refuse the move
     testing.eq(result.code, 1)
     testing.ok(result.message:find("lacks Done when outcomes", 1, true), result.message)
 end)
 
 testing.test("ticking the last open outcome moves the card to Verify", function()
+    -- Give a Review card one open outcome
     local card = colored("green")
     card.column = support.COLUMN_NAME.REVIEW
     card.outcomes = outcomes(2, 1)
     local backend = fake({ card })
+
+    -- Tick the open outcome
     local result = cmd_board.run("outcome", { "cccccccc", "--tick", "2" }, backend)
-    testing.eq(result.output, "outcome cccccccc 2 ticked\nmoved cccccccc to Verify")
+    testing.eq(
+        result.output,
+        table.concat({ "outcome cccccccc 2 ticked", "moved cccccccc to Verify" }, "\n")
+    )
+
+    -- Send the tick and then the move
     testing.eq(backend.calls[1], { "set_outcome", ID_C, "s2", { done = true }, nil })
     testing.eq(backend.calls[2], { "move", ID_C, support.COLUMN_NAME.VERIFY, nil })
 end)
 
 testing.test("a refused move to Verify writes the missing column from its reason", function()
+    -- Give a Review card one open outcome and a board with no Verify column
     local card = colored("green")
     card.column = support.COLUMN_NAME.REVIEW
     card.outcomes = outcomes(2, 1)
@@ -4028,7 +5197,11 @@ testing.test("a refused move to Verify writes the missing column from its reason
     function backend:move()
         return nil, nil, board.MoveReason.NO_COLUMN
     end
+
+    -- Tick the open outcome
     local result = cmd_board.run("outcome", { "cccccccc", "--tick", "2" }, backend)
+
+    -- Name the missing column in the message
     testing.eq(
         result.message,
         "Outcome cccccccc 2 ticked, but the move to Verify failed. "
@@ -4037,30 +5210,42 @@ testing.test("a refused move to Verify writes the missing column from its reason
 end)
 
 testing.test("a tick that leaves an outcome open keeps the card in Review", function()
+    -- Give a Review card two open outcomes
     local card = colored("green")
     card.column = support.COLUMN_NAME.REVIEW
     card.outcomes = outcomes(3, 1)
     local backend = fake({ card })
+
+    -- Tick one of them
     local result = cmd_board.run("outcome", { "cccccccc", "--tick", "2" }, backend)
     testing.eq(result.output, "outcome cccccccc 2 ticked")
+
+    -- Send only the tick
     testing.eq(#backend.calls, 1)
 end)
 
 testing.test(
     "outcome refuses text that holds a flag or is only a number, and accepts a sentence",
     function()
+        -- Give a card three open outcomes
         local card = colored("green")
         card.outcomes = outcomes(3)
         local backend = fake({ card })
+
+        -- Refuse text that holds a flag
         local result = cmd_board.run("outcome", { "cccccccc", "1", "--tick" }, backend)
         testing.eq(result.code, 2)
         testing.ok(result.message:find("--tick", 1, true), result.message)
         testing.eq(cmd_board.run("outcome", { "cccccccc", "2", "--untick" }, backend).code, 2)
         testing.eq(cmd_board.run("outcome", { "cccccccc", "Fix", "--convert" }, backend).code, 2)
+
+        -- Refuse text that is only a number and name the tick flag
         result = cmd_board.run("outcome", { "cccccccc", "2" }, backend)
         testing.eq(result.code, 2)
         testing.ok(result.message:find("--tick 2", 1, true), result.message)
         testing.eq(#backend.calls, 0)
+
+        -- Append a sentence that mentions a flag
         result =
             cmd_board.run("outcome", { "cccccccc", "Use --tick 2 to mark an outcome." }, backend)
         testing.eq(result.output, "outcome cccccccc 4 added")
@@ -4088,27 +5273,40 @@ testing.test("the outcome hints are full sentences", function()
 end)
 
 testing.test("outcome refuses an append whose first word starts with --", function()
+    -- Give a card three open outcomes
     local card = colored("green")
     card.outcomes = outcomes(3)
     local backend = fake({ card })
+
+    -- Append text that starts with a flag
     local result = cmd_board.run("outcome", { "cccccccc", "--as", "dotfiles/verifier/x" }, backend)
+
+    -- Refuse it and send nothing
     testing.eq(result.code, 2)
     testing.eq(#backend.calls, 0)
 end)
 
 testing.test("outcome appends text that holds -- after its first word", function()
+    -- Give a card three open outcomes
     local card = colored("green")
     card.outcomes = outcomes(3)
     local backend = fake({ card })
+
+    -- Append text with -- after its first word
     local result = cmd_board.run("outcome", { "cccccccc", "Pass -- as a word" }, backend)
+
+    -- Keep the whole text
     testing.eq(result.output, "outcome cccccccc 4 added")
     testing.eq(backend.calls[1], { "add_outcome", ID_C, "Pass -- as a word", nil })
 end)
 
 testing.test("outcome refuses an N past the last outcome and a bad N", function()
+    -- Give a card two outcomes
     local card = colored("green")
     card.outcomes = outcomes(2)
     local backend = fake({ card })
+
+    -- Refuse an N past the last outcome
     local result = cmd_board.run("outcome", { "cccccccc", "--tick", "3" }, backend)
     testing.eq(result.code, 1)
     testing.ok(result.message:find("The card has 2 outcomes. There is no outcome 3.", 1, true))
@@ -4116,22 +5314,31 @@ testing.test("outcome refuses an N past the last outcome and a bad N", function(
         cmd_board.run("outcome", { "cccccccc", "--rename", "9", "x", "--reason", "y" }, backend).code,
         1
     )
+
+    -- Refuse an N that is not a positive whole number
     for _, word in ipairs({ "0", "-1", "x", "1.5" }) do
         testing.eq(cmd_board.run("outcome", { "cccccccc", "--tick", word }, backend).code, 2)
     end
+
+    -- Send nothing
     testing.eq(#backend.calls, 0)
 end)
 
 testing.test("outcome --rename without --reason is refused and changes nothing", function()
+    -- Give a card two outcomes
     local card = colored("green")
     card.outcomes = outcomes(2)
     local backend = fake({ card })
+
+    -- Refuse a rename with no reason and name the flag
     local result = cmd_board.run("outcome", { "cccccccc", "--rename", "1", "New" }, backend)
     testing.eq(result.code, 2)
     testing.ok(
         result.message:find("The --rename flag needs --reason TEXT.", 1, true),
         result.message
     )
+
+    -- Refuse a reason with no text and a rename with no new words
     testing.eq(
         cmd_board.run("outcome", { "cccccccc", "--rename", "1", "New", "--reason" }, backend).code,
         2
@@ -4140,18 +5347,25 @@ testing.test("outcome --rename without --reason is refused and changes nothing",
         cmd_board.run("outcome", { "cccccccc", "--rename", "1", "--reason", "why" }, backend).code,
         2
     )
+
+    -- Send nothing
     testing.eq(#backend.calls, 0)
 end)
 
 testing.test("outcome --rename names --reason when its reason is not quoted", function()
+    -- Give a card two outcomes
     local card = colored("green")
     card.outcomes = outcomes(2)
     local backend = fake({ card })
+
+    -- Rename one with a reason of two unquoted words
     local result = cmd_board.run(
         "outcome",
         { "cccccccc", "--rename", "1", "New", "--reason", "too", "vague" },
         backend
     )
+
+    -- Refuse it, name the flag and send nothing
     testing.eq(result.code, 2)
     testing.ok(result.message:find("--reason flag takes one argument", 1, true), result.message)
     testing.ok(result.message:find("Quote a reason", 1, true), result.message)
@@ -4159,28 +5373,38 @@ testing.test("outcome --rename names --reason when its reason is not quoted", fu
 end)
 
 testing.test("outcome --rename ends the new text at the first --reason", function()
+    -- Give a green card two outcomes
     local card = colored("green")
     card.outcomes = outcomes(2)
     local backend = fake({ card })
+
+    -- Rename one with a reason that quotes the flag
     local result = cmd_board.run(
         "outcome",
         { "cccccccc", "--rename", "1", "New", "--reason", "use --reason flag" },
         backend
     )
+
+    -- Expect the new text to stop at the flag and the reason to keep it
     testing.eq(result.output, "outcome cccccccc 1 reworded")
     testing.eq(backend.calls[1], { "set_outcome", ID_C, "s1", { name = "New" }, nil })
     testing.ok(backend.calls[2][3]:find("Reason: use --reason flag", 1, true), backend.calls[2][3])
 end)
 
 testing.test("outcome --tick with a name writes the dev-tick record as a status note", function()
+    -- Give a green card two outcomes
     local card = colored("green")
     card.outcomes = outcomes(2)
     local backend = fake({ card })
+
+    -- Tick the second outcome as a named verifier
     local result = cmd_board.run(
         "outcome",
         { "cccccccc", "--tick", "2", "--as", "dotfiles/verifier" },
         backend
     )
+
+    -- Expect a status note that names the verifier and the outcome
     testing.eq(result.code, nil)
     testing.eq(backend.calls[2], {
         "note",
@@ -4191,12 +5415,15 @@ testing.test("outcome --tick with a name writes the dev-tick record as a status 
 end)
 
 testing.test("outcome --tick says the outcome was ticked when its record fails", function()
+    -- Give a green card a backend that cannot write notes
     local card = colored("green")
     card.outcomes = outcomes(2)
     local backend = fake({ card })
     function backend:note()
         return nil, "Board unavailable: cannot reach pomb."
     end
+
+    -- Tick an outcome and expect the failure to say it was ticked
     local result = cmd_board.run(
         "outcome",
         { "cccccccc", "--tick", "2", "--as", "dotfiles/verifier" },
@@ -4208,6 +5435,8 @@ testing.test("outcome --tick says the outcome was ticked when its record fails",
         result.message:find("was ticked, but its tick record failed", 1, true),
         result.message
     )
+
+    -- Fail the note with a different error and expect the same refusal
     function backend:note()
         return nil, "Pomb answered 500."
     end
@@ -4221,17 +5450,22 @@ testing.test("outcome --tick says the outcome was ticked when its record fails",
 end)
 
 testing.test("a failed tick record prints the board message once", function()
+    -- Give a green card a backend that cannot write notes
     local card = colored("green")
     card.outcomes = outcomes(2)
     local backend = fake({ card })
     function backend:note()
         return nil, "Board unavailable: cannot reach pomb."
     end
+
+    -- Tick an outcome so its record fails
     local result = cmd_board.run(
         "outcome",
         { "cccccccc", "--tick", "2", "--as", "dotfiles/verifier" },
         backend
     )
+
+    -- Expect the board message to appear once in the refusal
     testing.eq(
         result.message,
         "Outcome "
@@ -4241,6 +5475,7 @@ testing.test("a failed tick record prints the board message once", function()
 end)
 
 testing.test("outcome --convert writes a dev-tick record for each outcome it ticks", function()
+    -- Give a green card a ticked description and a backend that records added outcomes
     local card = colored("green")
     card.description = V1:gsub("%[ %]", "[x]")
     card.outcomes = {}
@@ -4250,9 +5485,13 @@ testing.test("outcome --convert writes a dev-tick record for each outcome it tic
         card.outcomes[#card.outcomes + 1] = { id = "s" .. (#card.outcomes + 1), name = text }
         return add(self, id, text, fence)
     end
+
+    -- Convert the description into outcomes as a named verifier
     local result =
         cmd_board.run("outcome", { "cccccccc", "--convert", "--as", "dotfiles/verifier" }, backend)
     testing.eq(result.code, nil, result.message)
+
+    -- Collect the notes the conversion wrote and expect one tick record
     local notes = {}
     for _, call in ipairs(backend.calls) do
         if call[1] == "note" then
@@ -4263,6 +5502,7 @@ testing.test("outcome --convert writes a dev-tick record for each outcome it tic
 end)
 
 testing.test("outcome --rename names the old text and the reason when the note fails", function()
+    -- Give a green card a backend that cannot write notes
     local card = colored("green")
     card.outcomes = outcomes(2)
     local old = card.outcomes[2].name
@@ -4270,6 +5510,8 @@ testing.test("outcome --rename names the old text and the reason when the note f
     function backend:note()
         return nil, "Board unavailable: cannot reach pomb."
     end
+
+    -- Rename an outcome and expect the failure to name the old text and the reason
     local result =
         cmd_board.run("outcome", { "cccccccc", "--rename", "2", "New", "--reason", "why" }, backend)
     testing.eq(result.code, 1)
@@ -4279,6 +5521,8 @@ testing.test("outcome --rename names the old text and the reason when the note f
         result.message:find(old, 1, true) and result.message:find("why", 1, true),
         result.message
     )
+
+    -- Refuse a rename whose reason is blank
     result =
         cmd_board.run("outcome", { "cccccccc", "--rename", "1", "New", "--reason", " " }, backend)
     testing.eq(result.code, 2)
@@ -4287,15 +5531,20 @@ end)
 testing.test(
     "outcome --rename posts one decision note with the old text, the new text and the reason",
     function()
+        -- Give a green card two outcomes
         local card = colored("green")
         card.outcomes = outcomes(2)
         local old = card.outcomes[2].name
         local backend = fake({ card })
+
+        -- Rename one with a reason
         local result = cmd_board.run(
             "outcome",
             { "cccccccc", "--rename", "2", "New words", "--reason", "it was vague" },
             backend
         )
+
+        -- Expect one decision note that carries the old text, the new text and the reason
         testing.eq(result.output, "outcome cccccccc 2 reworded")
         testing.eq(#backend.calls, 2)
         testing.eq(backend.calls[2], {
@@ -4323,10 +5572,13 @@ end)
 testing.test(
     "a claimant cannot tick its card's outcome, another name can, and untick stays open",
     function()
+        -- Give a green card two outcomes and a claimant
         local card = colored("green")
         card.outcomes = outcomes(2)
         card.claimant = "project-run/a"
         local backend = fake({ card })
+
+        -- Refuse a tick by the claimant
         local result = cmd_board.run(
             "outcome",
             { "cccccccc", "--tick", "1", "--as", "project-run/a" },
@@ -4335,6 +5587,8 @@ testing.test(
         testing.eq(result.code, 1)
         testing.ok(result.message:find("claimed by project-run/a", 1, true), result.message)
         testing.eq(#backend.calls, 0)
+
+        -- Accept a tick by another name
         result = cmd_board.run(
             "outcome",
             { "cccccccc", "--tick", "1", "--as", "project-run/b" },
@@ -4342,6 +5596,8 @@ testing.test(
         )
         testing.eq(result.output, "outcome cccccccc 1 ticked by project-run/b")
         testing.eq(backend.calls[1], { "set_outcome", ID_C, "s1", { done = true }, nil })
+
+        -- Leave untick open to anyone
         result = cmd_board.run("outcome", { "cccccccc", "--untick", "1" }, backend)
         testing.eq(result.output, "outcome cccccccc 1 unticked")
     end
@@ -4393,9 +5649,12 @@ testing.test("size 2 succeeds on a needs:human card in Blocked and Icebox", func
 end)
 
 testing.test("outcome delete refuses a name that is not a lead", function()
+    -- Give a green card two outcomes
     local card = colored("green")
     card.outcomes = outcomes(2)
     local backend = fake({ card })
+
+    -- Try the delete as names that are not leads
     for _, name in ipairs({ "dotfiles/implementer/95f0e009/1", "project-run/a" }) do
         as_agent(name, function()
             local result =
@@ -4408,6 +5667,8 @@ testing.test("outcome delete refuses a name that is not a lead", function()
             testing.ok(result.message:find(name, 1, true), result.message)
         end)
     end
+
+    -- Expect no write to reach the board
     testing.eq(#backend.calls, 0)
 end)
 
@@ -4417,10 +5678,13 @@ testing.test("outcome delete by a lead notes the reason and the text", function(
         support.COLUMN_NAME.BLOCKED,
         support.COLUMN_NAME.ICEBOX,
     }) do
+        -- Give a card in an open column three outcomes
         local card = colored("green")
         card.column = column
         card.outcomes = outcomes(3)
         local backend = fake({ card })
+
+        -- Delete the middle outcome as a lead
         as_agent(LEAD, function()
             local result = cmd_board.run(
                 "outcome",
@@ -4429,6 +5693,8 @@ testing.test("outcome delete by a lead notes the reason and the text", function(
             )
             testing.eq(result.output, "outcome cccccccc 2 deleted")
         end)
+
+        -- Expect the delete and a decision note with the reason and the old text
         local calls = writes(backend)
         testing.eq(calls[1], { "delete_outcome", ID_C, "s2", nil })
         testing.eq(
@@ -4531,11 +5797,16 @@ do
 
     testing.test("outcome rename and delete in a locked column are refused", function()
         for _, column in ipairs(LOCKED_COLUMNS) do
+            -- Lock the column
             local backend = locked_fake(column)
+
+            -- Refuse a rename
             local renamed =
                 outcome_run(backend, { "cccccccc", "--rename", "1", "New", "--reason", "why" })
             refused_in_locked(renamed, column)
             testing.ok(renamed.message:find("rename is refused", 1, true), renamed.message)
+
+            -- Refuse a delete and expect no write
             refused_in_locked(delete_in(backend, "cccccccc"), column)
             testing.eq(#writes(backend), 0)
         end
@@ -4548,15 +5819,22 @@ do
             support.COLUMN_NAME.BLOCKED,
             "QA",
         }) do
+            -- Put the card in an unlocked column
             local backend = locked_fake(column)
+
+            -- Add an outcome
             testing.eq(
                 outcome_run(backend, { "cccccccc", "A new outcome" }).output,
                 "outcome cccccccc 3 added"
             )
+
+            -- Rename an outcome
             testing.eq(
                 outcome_run(backend, { "cccccccc", "--rename", "1", "New", "--reason", "why" }).output,
                 "outcome cccccccc 1 reworded"
             )
+
+            -- Delete an outcome
             testing.eq(delete_in(backend, "cccccccc").output, "outcome cccccccc 1 deleted")
         end
     end)
@@ -4571,34 +5849,49 @@ do
             support.COLUMN_NAME.VERIFY,
             support.COLUMN_NAME.RELEASE,
         }) do
+            -- Put the card in the column
             local backend = locked_fake(column)
+
+            -- Tick an outcome
             local ticked = cmd_board.run("outcome", { "cccccccc", "--tick", "1" }, backend)
             testing.eq(ticked.output, "outcome cccccccc 1 ticked", column)
+
+            -- Untick it again
             local unticked = cmd_board.run("outcome", { "cccccccc", "--untick", "1" }, backend)
             testing.eq(unticked.output, "outcome cccccccc 1 unticked", column)
         end
     end)
 
     testing.test("outcome change reads the board's lock on its own column names", function()
+        -- Name the columns the board locks
         local custom = "Next"
         local cased = "Parked"
+
+        -- Refuse a delete in each locked column, whatever its case
         for _, column in ipairs({ custom, cased:lower(), "QA" }) do
             local backend = locked_fake(column, { custom, cased, "QA" })
             refused_in_locked(delete_in(backend, "cccccccc"), column)
             testing.eq(#writes(backend), 0)
         end
+
+        -- Allow a delete in a column the board does not lock
         local backend = locked_fake(support.COLUMN_NAME.READY, { custom })
         testing.eq(delete_in(backend, "cccccccc").output, "outcome cccccccc 1 deleted")
     end)
 
     testing.test("outcome change refuses when the board's columns cannot be read", function()
+        -- Give a Backlog card a board whose columns cannot be read
         local backend = locked_fake(support.COLUMN_NAME.BACKLOG)
         function backend:columns()
             return nil, "pomb is down"
         end
+
+        -- Add an outcome and expect the refusal to carry the board's message
         local result = outcome_run(backend, { "cccccccc", "A new outcome" })
         testing.eq(result.code, 1)
         testing.ok(result.message:find("pomb is down", 1, true), result.message)
+
+        -- Expect no write
         testing.eq(#writes(backend), 0)
     end)
 
@@ -4618,9 +5911,12 @@ do
 end
 
 testing.test("outcome delete by a lead needs a reason", function()
+    -- Give a green card two outcomes
     local card = colored("green")
     card.outcomes = outcomes(2)
     local backend = fake({ card })
+
+    -- Refuse a lead's delete that has no usable reason
     as_agent(LEAD, function()
         testing.eq(cmd_board.run("outcome", { "cccccccc", "--delete", "1" }, backend).code, 2)
         testing.eq(
@@ -4632,18 +5928,25 @@ testing.test("outcome delete by a lead needs a reason", function()
             2
         )
     end)
+
+    -- Refuse the same delete from a name that is not a lead
     as_agent("dotfiles/implementer/95f0e009/1", function()
         testing.eq(cmd_board.run("outcome", { "cccccccc", "--delete", "1" }, backend).code, 2)
     end)
+
+    -- Expect no write
     testing.eq(#backend.calls, 0)
 end)
 
 testing.test(
     "outcome --delete by a lead needs a number, and a bad number deletes nothing",
     function()
+        -- Give a green card two outcomes
         local card = colored("green")
         card.outcomes = outcomes(2)
         local backend = fake({ card })
+
+        -- Refuse a delete with no number, a stray word or a number past the last outcome
         as_agent(LEAD, function()
             testing.eq(cmd_board.run("outcome", { "cccccccc", "--delete" }, backend).code, 2)
             testing.eq(
@@ -4655,15 +5958,20 @@ testing.test(
                 1
             )
         end)
+
+        -- Expect nothing deleted
         testing.eq(#writes(backend), 0)
     end
 )
 
 testing.test("the claimant cannot delete an outcome under any name it is given", function()
+    -- Give a green card two outcomes and a claimant
     local card = colored("green")
     card.outcomes = outcomes(2)
     card.claimant = "project-run/a"
     local backend = fake({ card })
+
+    -- Refuse a delete under the claimant's name and accept it under another
     as_agent(LEAD, function()
         local result = cmd_board.run(
             "outcome",
@@ -4674,6 +5982,7 @@ testing.test("the claimant cannot delete an outcome under any name it is given",
         testing.ok(result.message:find("claimed by project-run/a", 1, true), result.message)
         testing.ok(result.message:find("Pass the change back", 1, true), result.message)
         only_comment_reads(backend)
+
         result = cmd_board.run(
             "outcome",
             { "cccccccc", "--delete", "1", "--reason", "x", "--as", "project-run/b" },
@@ -4819,8 +6128,11 @@ do
     end)
 
     testing.test("a name that released the card cannot reclaim the finish line", function()
+        -- Release a card's claim after work was done
         local released = "project-run/a"
         local backend = backend_with_released_claim(released)
+
+        -- Try every finish-line edit as the name that released it
         as_agent(released, function()
             local runs = {
                 { "outcome", { "cccccccc", "A new outcome" } },
@@ -4837,6 +6149,8 @@ do
                 )
             end
         end)
+
+        -- Expect no write
         only_comment_reads(backend)
     end)
 
@@ -4857,48 +6171,66 @@ do
     end)
 
     testing.test("an --as name of a former claimant cannot reclaim the finish line", function()
+        -- Release a card's claim after work was done
         local released = "project-run/a"
         local backend = backend_with_released_claim(released)
+
+        -- Convert under the released name from another caller
         as_agent("project-run/b", function()
             local result =
                 cmd_board.run("outcome", { "cccccccc", "--convert", "--as", released }, backend)
             testing.eq(result.code, 1)
             testing.ok(result.message:find("was claimed by " .. released, 1, true), result.message)
         end)
+
+        -- Expect no write
         only_comment_reads(backend)
     end)
 
     testing.test("a failed comments read refuses the reclaim check with its message", function()
+        -- Give a released card a board whose comments cannot be read
         local backend = backend_with_released_claim("project-run/a")
         backend.listed_error = "comments are unavailable"
+
+        -- Set checks and expect the refusal to carry the board's message
         as_agent("project-run/b", function()
             local result = cmd_board.run("checks", { "cccccccc", "dev test" }, backend)
             testing.eq(result.code, 1)
             testing.eq(result.message, "Comments are unavailable.")
         end)
+
+        -- Expect no write
         only_comment_reads(backend)
     end)
 
     testing.test("a failed comments read refuses a move out of Blocked with its message", function()
+        -- Give a Blocked card a board whose comments cannot be read
         local card = colored("green")
         card.column = support.COLUMN_NAME.BLOCKED
         local backend = fake({ card })
         backend.listed_error = "comments are unavailable"
+
+        -- Move it out of Blocked and expect the refusal to carry the board's message
         as_agent("project-run/b", function()
             local result = cmd_board.run("move", { "cccccccc", support.Column.PROGRESS }, backend)
             testing.eq(result.code, 1)
             testing.eq(result.message, "Comments are unavailable.")
         end)
+
+        -- Expect no write and the card unmoved and unclaimed
         only_comment_reads(backend)
         testing.eq(card.column, support.COLUMN_NAME.BLOCKED)
         testing.eq(card.claimant, nil)
     end)
 
     testing.test("a name that never claimed the card and the lead can still change it", function()
+        -- Let a name that never claimed the card set checks
         local backend = backend_with_released_claim("project-run/a")
         as_agent("project-run/b", function()
             testing.eq(cmd_board.run("checks", { "cccccccc", "dev test" }, backend).code, nil)
         end)
+
+        -- Let the lead name rename an outcome
         as_agent("lead", function()
             local result = cmd_board.run(
                 "outcome",
@@ -4907,6 +6239,8 @@ do
             )
             testing.eq(result.code, nil)
         end)
+
+        -- Let the lead rename an outcome on a card it had claimed
         backend = backend_with_released_claim("lead", "lead")
         as_agent(LEAD, function()
             local result = cmd_board.run(
@@ -4922,9 +6256,12 @@ end
 testing.test(
     "review refuses the claimant for every kind and says a reviewer must record it",
     function()
+        -- Give a green card a claimant
         local card = colored("green")
         card.claimant = "project-run/a"
         local backend = fake({ card })
+
+        -- Review it as the claimant for every kind and expect the refusal to name a reviewer
         as_agent("", function()
             for _, kind in ipairs({ "code", "style", "recheck" }) do
                 local result = cmd_board.run(
@@ -4961,6 +6298,8 @@ testing.test(
                 )
             end
         end)
+
+        -- Expect no write
         only_comment_reads(backend)
     end
 )
@@ -4991,11 +6330,16 @@ do
     end)
 
     testing.test("review records under the caller's own name, or any name with none set", function()
+        -- Give a green card a plain backend
         local backend = fake({ colored("green") })
+
+        -- Record a review under the caller's own name
         as_agent("dotfiles/reviewer", function()
             local result = review_by(backend, "dotfiles/reviewer")
             testing.ok(not result.message:find("cannot record a review", 1, true), result.message)
         end)
+
+        -- Record a review under another name when the caller sets none
         as_agent("", function()
             local result = review_by(backend, "dotfiles/other")
             testing.ok(not result.message:find("cannot record a review", 1, true), result.message)
@@ -5004,16 +6348,23 @@ do
 end
 
 testing.test("--as in any position leaves the text and the reason alone", function()
+    -- Give a green card two outcomes and a claimant
     local card = colored("green")
     card.outcomes = outcomes(2, 1)
     card.claimant = "project-run/a"
     local backend = fake({ card })
+
+    -- Tick with the flag ahead of the verb
     local result =
         cmd_board.run("outcome", { "cccccccc", "--as", "project-run/b", "--tick", "2" }, backend)
     testing.eq(result.output, "outcome cccccccc 2 ticked by project-run/b")
+
+    -- Untick with the flag at the end
     result =
         cmd_board.run("outcome", { "cccccccc", "--untick", "1", "--as", "project-run/b" }, backend)
     testing.eq(result.output, "outcome cccccccc 1 unticked")
+
+    -- Rename with the flag between the text and the reason
     card.claimant = nil
     result = cmd_board.run(
         "outcome",
@@ -5022,53 +6373,72 @@ testing.test("--as in any position leaves the text and the reason alone", functi
     )
     testing.eq(result.output, "outcome cccccccc 2 reworded")
     testing.eq(backend.calls[#backend.calls - 1][4], { name = "New words" })
+
+    -- Refuse a flag with no name after it
     testing.eq(cmd_board.run("outcome", { "cccccccc", "--tick", "1", "--as" }, backend).code, 2)
 end)
 
 testing.test("a reason that starts with --as stays text", function()
+    -- Give a green card two outcomes
     local card = colored("green")
     card.outcomes = outcomes(2, 1)
     local backend = fake({ card })
+
+    -- Rename one with a reason that starts with the flag
     local result = cmd_board.run(
         "outcome",
         { "cccccccc", "--rename", "2", "New words", "--reason", "--as is a flag" },
         backend
     )
+
+    -- Expect the reason to stay in the note
     testing.eq(result.output, "outcome cccccccc 2 reworded")
     testing.eq(backend.calls[#backend.calls - 1][4], { name = "New words" })
     testing.ok(backend.calls[#backend.calls][3]:find("Reason: --as is a flag", 1, true))
 end)
 
 testing.test("--as names one word and is text in an added outcome", function()
+    -- Give a green card two outcomes
     local card = colored("green")
     card.outcomes = outcomes(2)
     local backend = fake({ card })
+
+    -- Refuse a flag that names two words
     testing.eq(
         cmd_board.run("outcome", { "cccccccc", "--tick", "1", "--as", "two words" }, backend).code,
         2
     )
     testing.eq(#backend.calls, 0)
+
+    -- Add an outcome whose text holds the flag
     local result = cmd_board.run("outcome", { "cccccccc", "Text --as x" }, backend)
     testing.eq(result.output, "outcome cccccccc 3 added")
     testing.eq(backend.calls[1], { "add_outcome", ID_C, "Text --as x", nil })
 end)
 
 testing.test("convert refuses a claimant's ticks but moves an unticked checklist", function()
+    -- Give a claimed card a ticked checklist
     local card = colored("green")
     card.description = V1:gsub("%[ %]", "[x]")
     card.outcomes = {}
     card.claimant = "project-run/a"
     local backend = fake({ card })
+
+    -- Refuse the claimant's convert
     local result =
         cmd_board.run("outcome", { "cccccccc", "--convert", "--as", "project-run/a" }, backend)
     testing.eq(result.code, 1)
     only_comment_reads(backend)
+
+    -- Swap in an unticked checklist and a backend that records added outcomes
     card.description = V1
     local add = backend.add_outcome
     function backend:add_outcome(id, text, fence)
         card.outcomes[#card.outcomes + 1] = { id = "s" .. (#card.outcomes + 1), name = text }
         return add(self, id, text, fence)
     end
+
+    -- Convert it as the lead and expect the description to move
     as_agent(LEAD, function()
         result = cmd_board.run("outcome", { "cccccccc", "--convert" }, backend)
     end)
@@ -5077,9 +6447,14 @@ testing.test("convert refuses a claimant's ticks but moves an unticked checklist
 end)
 
 testing.test("outcome warns about a path in the text and still writes", function()
+    -- Give a green card a plain backend
     local card = colored("green")
     local backend = fake({ card })
+
+    -- Add an outcome that names a path
     local result = cmd_board.run("outcome", { "cccccccc", "see src/a.lua" }, backend)
+
+    -- Expect a warning and the write
     testing.eq(
         result.warnings,
         { "Card prose holds a path: src/a.lua. The write still went through." }
@@ -5088,9 +6463,14 @@ testing.test("outcome warns about a path in the text and still writes", function
 end)
 
 testing.test("outcome warns about a step after the land and still writes", function()
+    -- Give a green card a plain backend
     local card = colored("green")
     local backend = fake({ card })
+
+    -- Add an outcome that names a step after the land
     local result = cmd_board.run("outcome", { "cccccccc", "Holds Once The Lead rolls it" }, backend)
+
+    -- Expect a warning and the write
     testing.eq(result.warnings, {
         "Outcome names a step after the land: once the lead."
             .. " A verifier ticks before the land, so describe the change itself."
@@ -5101,9 +6481,14 @@ testing.test("outcome warns about a step after the land and still writes", funct
 end)
 
 testing.test("outcome prints no after-the-land warning for a plain outcome", function()
+    -- Give a green card a plain backend
     local card = colored("green")
     local backend = fake({ card })
+
+    -- Add a plain outcome
     local result = cmd_board.run("outcome", { "cccccccc", "The command prints its help." }, backend)
+
+    -- Expect no warning
     testing.eq(result.warnings, {})
     testing.eq(board.outcome_warning("The command lands cleanly."), nil)
 end)
@@ -5125,6 +6510,7 @@ testing.test("move into Icebox never checks the description", function()
 end)
 
 testing.test("move to Ready takes a sized card, and other columns take a planned one", function()
+    -- Move a sized card of each color to Ready
     for _, color in ipairs({ "yellow", "green", "blue" }) do
         local backend = fake({ colored(color) })
         testing.eq(
@@ -5132,6 +6518,8 @@ testing.test("move to Ready takes a sized card, and other columns take a planned
             "moved cccccccc to Ready"
         )
     end
+
+    -- Move a planned card with every outcome ticked to the other columns
     for _, column in ipairs({
         support.Column.BACKLOG,
         support.Column.REVIEW,
@@ -5149,6 +6537,8 @@ testing.test("move to Ready takes a sized card, and other columns take a planned
         testing.eq(cmd_board.run("move", { "cccccccc", column }, backend).code, nil)
         testing.eq(#backend.calls, column == support.Column.DONE and 2 or 1)
     end
+
+    -- Move an unsized card to Icebox
     local backend = fake({ colored("white") })
     testing.eq(cmd_board.run("move", { "cccccccc", support.Column.ICEBOX }, backend).code, nil)
     testing.eq(#backend.calls, 1)
@@ -5157,9 +6547,12 @@ end)
 testing.test(
     "move and edit refuse a needs:human card, and label --remove still frees it",
     function()
+        -- Label the first card needs:human
         local cards = sample()
         cards[1].labels = { "needs:human" }
         local backend = fake(cards)
+
+        -- Refuse a move, an edit and a rename
         local result = cmd_board.run("move", { "11111111-a", support.Column.BACKLOG }, backend)
         testing.eq(result.code, 1)
         testing.ok(result.message:find("needs:human", 1, true), result.message)
@@ -5168,18 +6561,25 @@ testing.test(
         result = cmd_board.run("rename", { "11111111-a", "text" }, backend)
         testing.eq(result.code, 1)
         testing.eq(#backend.calls, 0)
+
+        -- Still take a note
         testing.eq(
             cmd_board.run("note", { "11111111-a", "hello" }, backend).output,
             "noted 11111111"
         )
+
+        -- Free the card with label --remove
         result = cmd_board.run("label", { "11111111-a", "--remove", "needs:human" }, backend)
         testing.eq(result.output, "labelled 11111111 -")
     end
 )
 
 testing.test("label refuses to add standalone-ok for an agent and still removes it", function()
+    -- Label the first card standalone-ok
     local held = sample()
     held[1].labels = { "standalone-ok" }
+
+    -- Remove the label as an agent but refuse to add it
     as_agent("dotfiles/implementer/x", function()
         local result =
             cmd_board.run("label", { "11111111-a", "--remove", "standalone-ok" }, fake(held))
@@ -5188,6 +6588,8 @@ testing.test("label refuses to add standalone-ok for an agent and still removes 
         testing.eq(result.code, 1)
         testing.ok(result.message:find("only by the owner", 1, true), result.message)
     end)
+
+    -- Add the label as the owner
     as_agent("", function()
         local result = cmd_board.run("label", { "11111111-a", "+standalone-ok" }, fake(sample()))
         testing.eq(result.output, "labelled 11111111 docs,standalone-ok")
@@ -5228,22 +6630,32 @@ end
 testing.test(
     "answer sends the choice and the quote to the backend and touches nothing else",
     function()
+        -- Give a blocked card a plain backend
         local backend = fake(blocked_cards())
+
+        -- Answer with a choice and a quote
         local result = cmd_board.run(
             "answer",
             { "11111111-a", "--choice", "2", "--quote", "go", "with", "two" },
             backend
         )
+
+        -- Expect one answer call and nothing else
         testing.eq(result.output, "answered 11111111 with choice 2")
         testing.eq(backend.calls, { { "answer", ID_A, 2, "go with two", nil } })
     end
 )
 
 testing.test("answer prints the backend's refusal and exits 1", function()
+    -- Give a blocked card a backend that refuses the answer
     local backend = fake(blocked_cards())
     backend.refusal = "pomb answered 409: the question is answered already."
+
+    -- Answer it
     local result =
         cmd_board.run("answer", { "11111111-a", "--choice", "1", "--quote", "yes" }, backend)
+
+    -- Expect the refusal to come back with exit 1
     testing.eq(result.code, 1)
     testing.eq(result.message, "Pomb answered 409: the question is answered already.")
 end)
@@ -5258,9 +6670,12 @@ end
 testing.test(
     "ask sends the parts it was given and lets the backend refuse a missing one",
     function()
+        -- Give the first card a judgement outcome
         local cards = sample()
         cards[1].outcomes = { { id = "o1", name = "a " .. board.JUDGEMENT, done = false } }
         local backend = fake(cards)
+
+        -- Ask a question with two choices and a recommendation
         local result = cmd_board.run(
             "ask",
             with_taste({
@@ -5276,6 +6691,8 @@ testing.test(
             }),
             backend
         )
+
+        -- Expect the parts the backend was sent
         testing.eq(result.output, "asked 11111111")
         testing.eq(backend.calls[1], {
             "ask",
@@ -5296,9 +6713,12 @@ testing.test(
 testing.test(
     "ask refuses a question with neither --list nor --searched, or an unknown key",
     function()
+        -- Give the first card a judgement outcome
         local cards = sample()
         cards[1].outcomes = { { id = "o1", name = "a " .. board.JUDGEMENT, done = false } }
         local backend = fake(cards)
+
+        -- Ask with each bad taste flag
         for _, extra in ipairs({
             {},
             { "--list", "mood" },
@@ -5311,6 +6731,8 @@ testing.test(
             end
             testing.eq(cmd_board.run("ask", args, backend).code, 2, table.concat(extra, " "))
         end
+
+        -- Expect no write
         testing.eq(#backend.calls, 0)
     end
 )
@@ -5326,14 +6748,19 @@ testing.test(
             ASK_TASTE,
             { "--searched", "the decision notes and the transcripts" },
         }) do
+            -- Give the first card a judgement outcome
             local cards = sample()
             cards[1].outcomes = { { id = "o1", name = "a " .. board.JUDGEMENT, done = false } }
             local backend = fake(cards)
+
+            -- Ask with the taste flag
             local args = { "11111111-a", "--question", "Which?", "--choice", "Ready=Ship it" }
             for _, word in ipairs(extra) do
                 args[#args + 1] = word
             end
             local result = cmd_board.run("ask", args, backend)
+
+            -- Expect the question sent without the flag
             testing.eq(result.output, "asked 11111111", table.concat(extra, " "))
             testing.eq(backend.calls[1][3].text, "Which?")
             testing.eq(backend.calls[1][3].list, nil)
@@ -5345,7 +6772,10 @@ testing.test(
 testing.test(
     "ask refuses a bad choice, a bad recommendation, an unknown flag and no card",
     function()
+        -- Give a plain backend
         local backend = fake(sample())
+
+        -- Ask with each malformed argument list
         for _, args in ipairs({
             { "11111111-a", "--choice", "no equals sign" },
             { "11111111-a", "--choice", "=label" },
@@ -5355,6 +6785,8 @@ testing.test(
         }) do
             testing.eq(cmd_board.run("ask", args, backend).code, 2, table.concat(args, " "))
         end
+
+        -- Ask with no card and expect no write
         testing.eq(cmd_board.run("ask", {}, backend).code, 2)
         testing.eq(#backend.calls, 0)
     end
@@ -5394,8 +6826,11 @@ do
                     { actor = "agent" },
                 },
             }) do
+                -- Give a blocked card a comment thread that ends in a non-owner comment
                 local backend = fake(blocked_cards())
                 backend.listed = listed
+
+                -- Ask and expect a refusal that names the label removal
                 local result = cmd_board.run("ask", ASK_ARGS, backend)
                 testing.eq(result.code, 1)
                 testing.ok(
@@ -5408,6 +6843,7 @@ do
     )
 
     testing.test("ask posts on a needs:human card after the owners comment", function()
+        -- Plan a blocked card and end its thread with an owner comment
         local cards = blocked_cards()
         cards[1].size = "2 Pomodori"
         cards[1].color = "green"
@@ -5418,6 +6854,8 @@ do
             { actor = "agent", at = "2026-11-02T09:00:00Z", body = "q" },
             { actor = "human", at = "2026-11-02T10:00:00Z", body = "more please" },
         }
+
+        -- Ask and expect the question to be sent
         local result = cmd_board.run("ask", ASK_ARGS, backend)
         testing.eq(result.output, "asked 11111111")
         testing.eq(ask_was_sent(backend), true)
@@ -5425,12 +6863,15 @@ do
 end
 
 testing.test("ask posts the question on a planned Backlog card", function()
+    -- Plan the Backlog card
     local cards = sample()
     cards[2].size = "2 Pomodori"
     cards[2].color = "green"
     cards[2].description = V2
     cards[2].outcomes = { { id = "o1", name = "a " .. board.JUDGEMENT, done = false } }
     local backend = fake(cards)
+
+    -- Ask a question on it
     local result = cmd_board.run(
         "ask",
         with_taste({
@@ -5446,6 +6887,8 @@ testing.test("ask posts the question on a planned Backlog card", function()
         }),
         backend
     )
+
+    -- Expect one ask call for that card
     testing.eq(result.output, "asked 11111111")
     testing.eq(backend.calls[1][1], "ask")
     testing.eq(backend.calls[1][2], ID_B)
@@ -5456,7 +6899,10 @@ testing.test("ask refuses an unplanned card, naming what it lacks, and posts not
         { id = "11111111-b", lacks = { "a size", "## Problem" } },
         { id = "11111111-a", lacks = { "Done when outcomes" } },
     }) do
+        -- Give a plain backend
         local backend = fake(sample())
+
+        -- Ask on a card that is not planned
         local result = cmd_board.run(
             "ask",
             with_taste({
@@ -5472,6 +6918,8 @@ testing.test("ask refuses an unplanned card, naming what it lacks, and posts not
             }),
             backend
         )
+
+        -- Expect a refusal that names what the card lacks and no write
         testing.eq(result.code, 1, case.id)
         testing.ok(result.message:find("is not planned", 1, true), result.message)
         for _, item in ipairs(case.lacks) do
@@ -5482,17 +6930,25 @@ testing.test("ask refuses an unplanned card, naming what it lacks, and posts not
 end)
 
 testing.test("answer refuses a card without needs:human and writes nothing", function()
+    -- Give a plain backend with no needs:human card
     local cards = sample()
     local backend = fake(cards)
+
+    -- Answer a card
     local result =
         cmd_board.run("answer", { "11111111-a", "--choice", "1", "--quote", "yes" }, backend)
+
+    -- Expect a refusal and no write
     testing.eq(result.code, 1)
     testing.ok(result.message:find("is not needs:human", 1, true), result.message)
     testing.eq(#backend.calls, 0)
 end)
 
 testing.test("answer refuses an empty quote, a bad choice and missing flags", function()
+    -- Give a blocked card a plain backend
     local backend = fake(blocked_cards())
+
+    -- Answer with each malformed argument list
     for _, args in ipairs({
         { "11111111-a", "--choice", "1", "--quote" },
         { "11111111-a", "--choice", "1", "--quote", "  " },
@@ -5503,17 +6959,24 @@ testing.test("answer refuses an empty quote, a bad choice and missing flags", fu
     }) do
         testing.eq(cmd_board.run("answer", args, backend).code, 2, table.concat(args, " "))
     end
+
+    -- Expect no write
     testing.eq(#backend.calls, 0)
 end)
 
 testing.test("a needs:human card moves within its own column and not out of it", function()
+    -- Label an Icebox card needs:human
     local cards = sample()
     cards[1].labels = { "needs:human" }
     cards[1].column = support.COLUMN_NAME.ICEBOX
     local backend = fake(cards)
+
+    -- Move it within its own column
     local result = cmd_board.run("move", { "11111111-a", support.Column.ICEBOX }, backend)
     testing.eq(result.output, "moved 11111111 to Icebox")
     testing.eq(backend.calls, { { "move", ID_A, support.COLUMN_NAME.ICEBOX } })
+
+    -- Refuse a move out of it
     result = cmd_board.run("move", { "11111111-a", support.Column.BACKLOG }, backend)
     testing.eq(result.code, 1)
     testing.ok(result.message:find("needs:human", 1, true), result.message)
@@ -5529,8 +6992,13 @@ local function column_of_three()
 end
 
 testing.test("order moves the named cards to positions 0, 1, 2 and prints the column", function()
+    -- Give a Ready column of three cards
     local backend = fake(column_of_three())
+
+    -- Order two of them
     local result = cmd_board.run("order", { "cccccccc", "11111111-a" }, backend)
+
+    -- Expect the moves and the column as printed
     testing.eq(result.code, nil)
     testing.eq(backend.calls, {
         { "move", ID_C, support.COLUMN_NAME.READY, 0 },
@@ -5549,9 +7017,14 @@ end)
 testing.test(
     "order repeats the moves once when the first pass leaves an unnamed card on top",
     function()
+        -- Give a board that drops the first two moves
         local backend = fake(column_of_three())
         backend.ignore_moves = 2
+
+        -- Order two cards
         local result = cmd_board.run("order", { "cccccccc", "11111111-b" }, backend)
+
+        -- Expect a second pass and the column as printed
         testing.eq(result.code, nil)
         testing.eq(#backend.calls, 4)
         testing.eq(
@@ -5566,9 +7039,14 @@ testing.test(
 )
 
 testing.test("order fails when an unnamed card stays on top after the repeat", function()
+    -- Give a board that drops the moves of both passes
     local backend = fake(column_of_three())
     backend.ignore_moves = 4
+
+    -- Order two cards
     local result = cmd_board.run("order", { "cccccccc", "11111111-b" }, backend)
+
+    -- Expect a refusal that names the card and the column
     testing.eq(result.code, 1)
     testing.ok(result.message:find("11111111", 1, true), result.message)
     testing.ok(result.message:find("Ready", 1, true), result.message)
@@ -5576,13 +7054,18 @@ testing.test("order fails when an unnamed card stays on top after the repeat", f
 end)
 
 testing.test("order checks the top of the named cards' lane and not of the column", function()
+    -- Put the named cards in a lane of their own and drop the first two moves
     local cards = column_of_three()
     cards[1].lane = "lane-one"
     cards[2].lane = "lane-two"
     cards[3].lane = "lane-two"
     local backend = fake(cards)
     backend.ignore_moves = 2
+
+    -- Order the two cards
     local result = cmd_board.run("order", { "11111111-b", "cccccccc" }, backend)
+
+    -- Expect no second pass
     testing.eq(result.code, nil)
     testing.eq(#backend.calls, 2)
 end)
@@ -5597,18 +7080,25 @@ end)
 testing.test(
     "order refuses cards of two columns, an unknown card and a card named twice",
     function()
+        -- Refuse cards of two columns
         local cards = sample()
         local backend = fake(cards)
         local result = cmd_board.run("order", { "11111111-a", "11111111-b", "cccccccc" }, backend)
         testing.eq(result.code, 1)
         testing.ok(result.message:find("one column", 1, true), result.message)
+
+        -- Refuse an unknown card
         result = cmd_board.run("order", { "11111111-a", "deadbeef" }, backend)
         testing.eq(result.code, 1)
+
+        -- Refuse a card named twice
         cards = column_of_three()
         backend = fake(cards)
         result = cmd_board.run("order", { "11111111-a", "11111111-a" }, backend)
         testing.eq(result.code, 1)
         testing.ok(result.message:find("twice", 1, true), result.message)
+
+        -- Refuse a missing card list and an unknown flag, and expect no write
         testing.eq(cmd_board.run("order", {}, backend).code, 2)
         testing.eq(cmd_board.run("order", { "--bogus" }, backend).code, 2)
         testing.eq(#backend.calls, 0)
@@ -5616,14 +7106,19 @@ testing.test(
 )
 
 testing.test("label refuses to add needs:human in every column and names dev board ask", function()
+    -- Refuse the label on a card and point at dev board ask
     local backend = fake(sample())
     local result = cmd_board.run("label", { "11111111-a", "+needs:human" }, backend)
     testing.eq(result.code, 1)
     testing.ok(result.message:find("dev board ask", 1, true), result.message)
     testing.eq(#backend.calls, 0)
+
+    -- Refuse the label on a new card
     local added = cmd_board.run("add", { "Idea", "--label", "needs:human" }, backend)
     testing.eq(added.code, 2)
     testing.eq(#backend.calls, 0)
+
+    -- Refuse the label in the columns that hold needs:human cards
     for _, column in ipairs({ support.COLUMN_NAME.BLOCKED, support.COLUMN_NAME.ICEBOX }) do
         local cards = sample()
         cards[1].column = column
@@ -5636,9 +7131,12 @@ testing.test("label refuses to add needs:human in every column and names dev boa
 end)
 
 testing.test("ask sends one ask call and no label call", function()
+    -- Give the first card a judgement outcome
     local cards = sample()
     cards[1].outcomes = { { id = "o1", name = "a " .. board.JUDGEMENT, done = false } }
     local backend = fake(cards)
+
+    -- Ask a question with two choices
     local result = cmd_board.run(
         "ask",
         with_taste({
@@ -5654,16 +7152,23 @@ testing.test("ask sends one ask call and no label call", function()
         }),
         backend
     )
+
+    -- Expect one ask call and no label call
     testing.eq(result.output, "asked 11111111")
     testing.eq(#backend.calls, 1)
     testing.eq(backend.calls[1][1], "ask")
 end)
 
 testing.test("move to Ready allows an epic and a card without children", function()
+    -- Give a green card two open children
     local backend = fake({ colored("green") })
     backend.kin = { children = { done = 0, total = 2 } }
+
+    -- Move it to Ready
     local result = cmd_board.run("move", { "cccccccc", support.Column.READY }, backend)
     testing.eq(result.output, "moved cccccccc to Ready")
+
+    -- Move it back to Backlog
     result = cmd_board.run("move", { "cccccccc", support.Column.BACKLOG }, backend)
     testing.eq(result.output, "moved cccccccc to Backlog")
 end)
@@ -5705,11 +7210,12 @@ testing.test("next prints the card link on a board with a host", function()
     local result = cmd_board.run("next", {}, hosted(fake(sample())))
     testing.eq(
         result.output,
-        "11111111  "
-            .. support.COLUMN_NAME.READY
-            .. "  1 Pomodoro  docs  Write docs  0 comments, 0 the owner's\n"
-            .. "link: https://pomb.example/t/"
-            .. ID_A
+        table.concat({
+            "11111111  "
+                .. support.COLUMN_NAME.READY
+                .. "  1 Pomodoro  docs  Write docs  0 comments, 0 the owner's",
+            "link: https://pomb.example/t/" .. ID_A,
+        }, "\n")
     )
 end)
 
@@ -5748,6 +7254,7 @@ testing.test("a board with no host prints no link", function()
 end)
 
 testing.test("pomb blocked skips the excepted blocker and counts every other open one", function()
+    -- Stub the board's detail, its tasks and its links
     local backend = assert(pomb.new({
         url = "https://pomb.example/",
         token = "pass:secrets/worker/token/pomb",
@@ -5779,9 +7286,13 @@ testing.test("pomb blocked skips the excepted blocker and counts every other ope
             },
         }
     end
+
+    -- Skip the excepted blocker when it is the only one
     links = { { kind = "blocked_by", target_id = ID_A } }
     testing.eq({ backend:blocked(ID_C) }, { true, ID_A })
     testing.eq({ backend:blocked(ID_C, ID_A) }, { false })
+
+    -- Count every other open blocker
     links = { { kind = "blocked_by", target_id = ID_A }, { kind = "blocked_by", target_id = ID_B } }
     testing.eq({ backend:blocked(ID_C, ID_A) }, { true, ID_B })
     testing.eq({ backend:blocked(ID_C, ID_D) }, { true, ID_A })
@@ -5804,6 +7315,7 @@ testing.test("pomb new refuses a url that is not http or https with a reason", f
 end)
 
 testing.test("next counts the comments of the card and how many are the owner's", function()
+    -- Give the top card one agent comment and one owner comment
     local backend = fake(sample())
     backend.listed = {
         {
@@ -5815,17 +7327,23 @@ testing.test("next counts the comments of the card and how many are the owner's"
         },
         { id = COMMENT_2, who = "me", actor = "human", at = "2026-10-27T10:00:00Z", body = "b" },
     }
+
+    -- Count both comments and the owner's
     local result = cmd_board.run("next", {}, backend)
     testing.eq(
         result.output,
         "11111111  Ready  1 Pomodoro  docs  Write docs  2 comments, 1 the owner's"
     )
+
+    -- Count a single comment in the singular
     backend.listed = { backend.listed[2] }
     result = cmd_board.run("next", {}, backend)
     testing.eq(
         result.output,
         "11111111  Ready  1 Pomodoro  docs  Write docs  1 comment, 1 the owner's"
     )
+
+    -- Refuse when the comments cannot be read
     function backend:comments()
         return nil, "no comments for you"
     end
@@ -5884,12 +7402,17 @@ local function aged(columns, days, labels)
 end
 
 testing.test("stale counts whole days, so 6 days is fresh and 7 is stale", function()
+    -- Age three Ready cards to 6, 7 and 30 days
     local cards, times = aged(
         { support.COLUMN_NAME.READY, support.COLUMN_NAME.READY, support.COLUMN_NAME.READY },
         { 6, 7, 30 }
     )
     cards[2].size = "2 Pomodori"
+
+    -- List the stale cards
     local result = cmd_board.run("stale", {}, fake(cards, times), NOW)
+
+    -- Expect only the cards of 7 days and more, oldest first
     testing.eq(
         result.output,
         "00000003  Ready  30d  unsized     Card 3\n00000002  Ready  7d   2 Pomodori  Card 2"
@@ -5903,6 +7426,7 @@ testing.test("stale counts a card entered just under the limit as fresh", functi
 end)
 
 testing.test("stale covers Backlog, Ready, In Progress, Review and Verify only", function()
+    -- Age one card in every column past the limit
     local columns = {
         support.COLUMN_NAME.ICEBOX,
         support.COLUMN_NAME.BACKLOG,
@@ -5915,12 +7439,16 @@ testing.test("stale covers Backlog, Ready, In Progress, Review and Verify only",
         support.COLUMN_NAME.DONE,
     }
     local cards, times = aged(columns, { 5, 40, 40, 40, 40, 40, 40, 40, 40 })
+
+    -- Read the column of each stale line
     local result = cmd_board.run("stale", {}, fake(cards, times), NOW)
     local lines = {}
     local first = result.output:match("^(.-)\n\n") or result.output
     for line in first:gmatch("[^\n]+") do
         lines[#lines + 1] = line:match("^%d+%s+(%a+[ %a]-)%s%s")
     end
+
+    -- Expect only the columns stale covers
     testing.eq(lines, {
         support.COLUMN_NAME.BACKLOG,
         support.COLUMN_NAME.READY,
@@ -5950,11 +7478,14 @@ testing.test("stale still lists a Release card the owner labelled needs:human", 
 end)
 
 testing.test("stale lists a Release card when the owner commented last", function()
+    -- Age two Release cards past the limit
     local cards, times = aged(
         { support.COLUMN_NAME.RELEASE, support.COLUMN_NAME.RELEASE },
         { 40, 40 }
     )
     local backend = fake(cards, times)
+
+    -- Give the first an owner comment and the second an agent comment
     local replies = {
         [cards[1].id] = { { actor = "human", at = "2026-01-01T00:00:00Z", body = "yes" } },
         [cards[2].id] = { { actor = "agent", at = "2026-01-01T00:00:00Z", body = "wait" } },
@@ -5962,15 +7493,22 @@ testing.test("stale lists a Release card when the owner commented last", functio
     function backend:comments(id)
         return replies[id] or {}
     end
+
+    -- Expect only the first card listed
     local output = cmd_board.run("stale", {}, backend, NOW).output
     testing.eq(
         output,
-        "No stale cards.\n\nnewest comment is the owner's:\n"
-            .. "00000001  Release  40d  unsized  Card 1"
+        table.concat({
+            "No stale cards.",
+            "",
+            "newest comment is the owner's:",
+            "00000001  Release  40d  unsized  Card 1",
+        }, "\n")
     )
 end)
 
 testing.test("stale marks a needs:human card whose newest comment is the owner's", function()
+    -- Label two Blocked cards needs:human
     local human = { "needs:human" }
     local cards, times = aged(
         { support.COLUMN_NAME.READY, support.COLUMN_NAME.BLOCKED, support.COLUMN_NAME.BLOCKED },
@@ -5978,6 +7516,8 @@ testing.test("stale marks a needs:human card whose newest comment is the owner's
         { {}, human, human }
     )
     local backend = fake(cards, times)
+
+    -- Give one an owner comment and the other an agent comment
     local replies = {
         [cards[2].id] = { { actor = "human", at = "2026-01-01T00:00:00Z", body = "yes" } },
         [cards[3].id] = { { actor = "agent", at = "2026-01-01T00:00:00Z", body = "wait" } },
@@ -5985,9 +7525,13 @@ testing.test("stale marks a needs:human card whose newest comment is the owner's
     function backend:comments(id)
         return replies[id] or {}
     end
+
+    -- Expect only the answered one marked
     local output = cmd_board.run("stale", {}, backend, NOW).output
     testing.ok(output:find(cards[2].name .. " (answered, waiting for your move)", 1, true), output)
     testing.ok(not output:find(cards[3].name .. " (answered", 1, true), output)
+
+    -- Warn when the comments cannot be read
     function backend:comments()
         return nil, "pomb is down"
     end
@@ -6003,17 +7547,22 @@ testing.test("stale marks a needs:human card whose newest comment is the owner's
 end)
 
 testing.test("stale reads no comments of a card it already lists or of a Done card", function()
+    -- Age a stale Ready card, a fresh one and a fresh Done card
     local cards, times = aged({
         support.COLUMN_NAME.READY,
         support.COLUMN_NAME.READY,
         support.COLUMN_NAME.DONE,
     }, { 9, 1, 1 })
     local backend = fake(cards, times)
+
+    -- Record every comment read
     local reads = {}
     function backend:comments(id)
         reads[#reads + 1] = id
         return {}
     end
+
+    -- Expect a read only for the fresh Ready card
     testing.eq(
         cmd_board.run("stale", {}, backend, NOW).output,
         "00000001  Ready  9d  unsized  Card 1"
@@ -6136,8 +7685,11 @@ do
 end
 
 testing.test("stale warns when the other board cannot be read and still finishes", function()
+    -- Point the blocker at a board that is gone
     local backend, cards = across(support.COLUMN_NAME.BACKLOG, support.COLUMN_NAME.PROGRESS)
     backend.held = { { kind = "blocked_by", id = cards[1].id, board = "gone" } }
+
+    -- Expect a warning and the normal finish
     local result = cmd_board.run("stale", {}, backend, NOW)
     testing.eq(result.code, nil)
     testing.ok(
@@ -6145,6 +7697,8 @@ testing.test("stale warns when the other board cannot be read and still finishes
         result.output
     )
     testing.ok(result.output:find("No stale cards.", 1, true), result.output)
+
+    -- Warn the same way for a blocker the other board does not hold
     backend.held =
         { { kind = "blocked_by", id = "ffffffff-aaaa-4aaa-8aaa-aaaaaaaaaaaa", board = "ci" } }
     result = cmd_board.run("stale", {}, backend, NOW)
@@ -6153,6 +7707,7 @@ testing.test("stale warns when the other board cannot be read and still finishes
 end)
 
 testing.test("stale lists every needs:human card apart at any age, and never as stale", function()
+    -- Label four cards of every age needs:human
     local human = { "needs:human" }
     local cards, times = aged({
         support.COLUMN_NAME.READY,
@@ -6162,17 +7717,28 @@ testing.test("stale lists every needs:human card apart at any age, and never as 
         support.COLUMN_NAME.READY,
     }, { 9, 20, 50, 60, 1 }, { {}, human, human, human, human })
     cards[2].color = nil
+
+    -- Expect them listed apart from the stale card
     local result = cmd_board.run("stale", {}, fake(cards, times), NOW)
     testing.eq(
         result.output,
-        "00000001  Ready  9d  unsized  Card 1\n\nfor the owner (needs:human):\n"
-            .. "00000003  Blocked  50d  unsized  Card 3\n\n"
-            .. "moved by the owner, remove needs:human:\n"
-            .. "00000004  Done     60d  unsized  Card 4\n"
-            .. "00000002  Backlog  20d  unsized  Card 2\n"
-            .. "00000005  Ready    1d   unsized  Card 5\n\nunsized outside Icebox:\n"
-            .. "00000002  Backlog  Card 2"
+        table.concat({
+            "00000001  Ready  9d  unsized  Card 1",
+            "",
+            "for the owner (needs:human):",
+            "00000003  Blocked  50d  unsized  Card 3",
+            "",
+            "moved by the owner, remove needs:human:",
+            "00000004  Done     60d  unsized  Card 4",
+            "00000002  Backlog  20d  unsized  Card 2",
+            "00000005  Ready    1d   unsized  Card 5",
+            "",
+            "unsized outside Icebox:",
+            "00000002  Backlog  Card 2",
+        }, "\n")
     )
+
+    -- Expect a stale needs:human card listed apart and not as stale
     cards, times = aged({ support.COLUMN_NAME.READY }, { 9 }, { human })
     result = cmd_board.run("stale", {}, fake(cards, times), NOW)
     testing.eq(
@@ -6198,6 +7764,7 @@ testing.test("stale keeps a needs:human card in Blocked out of moved by the owne
 end)
 
 testing.test("stale lists an unlabelled open card whose newest comment is the owner's", function()
+    -- Age five cards across the columns
     local cards, times = aged({
         support.COLUMN_NAME.READY,
         support.COLUMN_NAME.PROGRESS,
@@ -6206,6 +7773,8 @@ testing.test("stale lists an unlabelled open card whose newest comment is the ow
         support.COLUMN_NAME.READY,
     }, { 1, 0.5, 3, 4, 10 })
     local backend = fake(cards, times)
+
+    -- Give each card a comment thread that ends in the owner or an agent
     local replies = {
         [cards[1].id] = { { actor = "human", at = "2026-01-01T00:00:00Z", body = "1" } },
         [cards[2].id] = {
@@ -6219,19 +7788,28 @@ testing.test("stale lists an unlabelled open card whose newest comment is the ow
     function backend:comments(id)
         return replies[id] or {}
     end
+
+    -- Expect the open cards the owner answered last listed apart
     local output = cmd_board.run("stale", {}, backend, NOW).output
     testing.eq(
         output,
-        "00000005  Ready  10d  unsized  Card 5\n\nasks nobody, add a needs label:\n"
-            .. "00000003  Blocked  3d  unsized  Card 3\n\nnewest comment is the owner's:\n"
-            .. "00000003  Blocked  3d  unsized  Card 3\n"
-            .. "00000001  Ready    1d  unsized  Card 1"
+        table.concat({
+            "00000005  Ready  10d  unsized  Card 5",
+            "",
+            "asks nobody, add a needs label:",
+            "00000003  Blocked  3d  unsized  Card 3",
+            "",
+            "newest comment is the owner's:",
+            "00000003  Blocked  3d  unsized  Card 3",
+            "00000001  Ready    1d  unsized  Card 1",
+        }, "\n")
     )
 end)
 
 testing.test(
     "stale lists the unsized cards outside Icebox at any age and leaves sized ones out",
     function()
+        -- Leave four fresh cards unsized and one white
         local cards, times = aged({
             support.COLUMN_NAME.BACKLOG,
             support.COLUMN_NAME.BACKLOG,
@@ -6245,11 +7823,22 @@ testing.test(
         cards[4].color = nil
         cards[5].color = nil
         cards[6].color = nil
+
+        -- Expect the unsized cards outside Icebox listed
         testing.eq(
             cmd_board.run("stale", {}, fake(cards, times), NOW).output,
-            "No stale cards.\n\nunsized outside Icebox:\n00000001  Backlog  Card 1\n00000003  Backlog  Card 3\n"
-                .. "00000004  Ready    Card 4\n00000006  Done     Card 6"
+            table.concat({
+                "No stale cards.",
+                "",
+                "unsized outside Icebox:",
+                "00000001  Backlog  Card 1",
+                "00000003  Backlog  Card 3",
+                "00000004  Ready    Card 4",
+                "00000006  Done     Card 6",
+            }, "\n")
         )
+
+        -- Size them and expect none listed
         cards[1].color = "red"
         cards[3].color = "blue"
         cards[4].color = "green"
@@ -6277,6 +7866,7 @@ testing.test("stale prints no todo heading without a TODO file", function()
 end)
 
 testing.test("stale names a card it could not date instead of skipping it", function()
+    -- Build five cards and drop the entry time of three
     local human = { "needs:human" }
     local cards, times = aged({
         support.COLUMN_NAME.READY,
@@ -6288,6 +7878,8 @@ testing.test("stale names a card it could not date instead of skipping it", func
     times[cards[1].id] = nil
     times[cards[2].id] = nil
     times[cards[3].id] = nil
+
+    -- Expect each undated card named
     local result = cmd_board.run("stale", {}, fake(cards, times), NOW)
     testing.eq(
         result.output,
@@ -6302,9 +7894,14 @@ testing.test("stale names a card it could not date instead of skipping it", func
 end)
 
 testing.test("stale --days moves the limit", function()
+    -- Age two Ready cards to 2 and 3 days
     local cards, times = aged({ support.COLUMN_NAME.READY, support.COLUMN_NAME.READY }, { 2, 3 })
+
+    -- Raise the limit to 3 days
     local result = cmd_board.run("stale", { "--days", "3" }, fake(cards, times), NOW)
     testing.eq(result.output, "00000002  Ready  3d  unsized  Card 2")
+
+    -- Lower it to 1 day
     result = cmd_board.run("stale", { "--days", "1" }, fake(cards, times), NOW)
     testing.eq(
         result.output,
@@ -6335,15 +7932,27 @@ do
         local result = cmd_board.run("stale", {}, fake(cards, times), NOW)
         testing.eq(
             result.output,
-            "No stale cards.\n\nfor the owner (needs:human):\n00000003  Blocked  0d  unsized  Card 3\n\n"
-                .. "for a lead (needs:lead):\n00000005  Blocked  7h  unsized  Card 5\n"
-                .. "00000001  Blocked  3h  unsized  Card 1\n\n"
-                .. "asks nobody, add a needs label:\n00000006  Blocked  0d  unsized  Card 6"
+            table.concat({
+                "No stale cards.",
+                "",
+                "for the owner (needs:human):",
+                "00000003  Blocked  0d  unsized  Card 3",
+                "",
+                "for a lead (needs:lead):",
+                "00000005  Blocked  7h  unsized  Card 5",
+                "00000001  Blocked  3h  unsized  Card 1",
+                "",
+                "asks nobody, add a needs label:",
+                "00000006  Blocked  0d  unsized  Card 6",
+            }, "\n")
         )
     end)
 
     testing.test("stale --lead-hours moves the bound and refuses a bad value", function()
+        -- Age several Blocked needs:lead cards
         local cards, times = lead_cards()
+
+        -- Raise the bound to 4 hours and expect only the older cards
         local result = cmd_board.run("stale", { "--lead-hours", "4" }, fake(cards, times), NOW)
         testing.ok(
             result.output:find(
@@ -6353,6 +7962,8 @@ do
             )
         )
         testing.ok(not result.output:find("Card 1", 1, true), result.output)
+
+        -- Refuse a bad or missing value
         for _, word in ipairs({ "0", "x", "1.5", "" }) do
             testing.eq(
                 cmd_board.run("stale", { "--lead-hours", word }, fake({}), NOW).code,
@@ -6380,11 +7991,13 @@ do
         local result = cmd_board.run("stale", {}, fake(cards, times), NOW)
         testing.eq(
             result.output,
-            "No stale cards.\n\n"
-                .. FLIGHT_HEAD
-                .. "24 hours:\n"
-                .. "00000003  Verify       72h  unsized  Card 3\n"
-                .. "00000001  In Progress  48h  unsized  Card 1"
+            table.concat({
+                "No stale cards.",
+                "",
+                FLIGHT_HEAD .. "24 hours:",
+                "00000003  Verify       72h  unsized  Card 3",
+                "00000001  In Progress  48h  unsized  Card 1",
+            }, "\n")
         )
     end)
 
@@ -6413,11 +8026,16 @@ do
     end)
 
     testing.test("stale --flight-hours moves the bound and refuses a bad value", function()
+        -- Age the in-flight cards
         local cards, times = flight_cards()
+
+        -- Raise the bound to 60 hours and expect only the older cards
         local result = cmd_board.run("stale", { "--flight-hours", "60" }, fake(cards, times), NOW)
         testing.ok(result.output:find(FLIGHT_HEAD .. "60 hours:", 1, true), result.output)
         testing.ok(result.output:find("Card 3", 1, true), result.output)
         testing.ok(not result.output:find("Card 1", 1, true), result.output)
+
+        -- Refuse a bad or missing value
         for _, word in ipairs({ "0", "x", "1.5", "" }) do
             testing.eq(
                 cmd_board.run("stale", { "--flight-hours", word }, fake({}), NOW).code,
@@ -6429,6 +8047,7 @@ do
     end)
 
     local function held_leads()
+        -- Build four Blocked lead cards, one of them a run card
         local lead = { board.NEEDS_LEAD }
         local cards, times = aged({
             support.COLUMN_NAME.BLOCKED,
@@ -6436,9 +8055,13 @@ do
             support.COLUMN_NAME.BLOCKED,
             support.COLUMN_NAME.BLOCKED,
         }, { 0, 0, 0, 0 }, { lead, { board.NEEDS_LEAD, board.RUN }, lead, lead })
+
+        -- Date every card five hours back
         for _, card in ipairs(cards) do
             times[card.id] = os.date("!%Y-%m-%dT%H:%M:%S+00:00", NOW - 5 * box.SECONDS_PER_HOUR)
         end
+
+        -- Claim one card and let open cards block two
         cards[4].claimant = "someone"
         local backend = fake(cards, times)
         backend.blockers = { [cards[3].id] = true, [cards[4].id] = true }
@@ -6470,13 +8093,18 @@ do
     end)
 
     testing.test("stale planner rows leave out a run card and keep a free one", function()
+        -- Build a free planner card and a run planner card
         local cards, times = aged({
             support.COLUMN_NAME.BLOCKED,
             support.COLUMN_NAME.BLOCKED,
         }, { 0, 0 }, { { board.NEEDS_PLANNER }, { board.NEEDS_PLANNER, board.RUN } })
+
+        -- Date both five hours back
         for _, card in ipairs(cards) do
             times[card.id] = os.date("!%Y-%m-%dT%H:%M:%S+00:00", NOW - 5 * box.SECONDS_PER_HOUR)
         end
+
+        -- Expect only the free card listed
         local result = cmd_board.run("stale", {}, fake(cards, times), NOW)
         testing.ok(result.output:find("Card 1", 1, true), result.output)
         testing.ok(not result.output:find("Card 2", 1, true), result.output)
@@ -6491,16 +8119,22 @@ do
 end
 
 testing.test("next --column blocked asks the backend for a needs:lead card", function()
+    -- Ask for the Blocked column
     local backend = fake(sample())
     cmd_board.run("next", { "--column", support.Column.BLOCKED }, backend)
     testing.eq(backend.calls[1], { "next", support.COLUMN_NAME.BLOCKED, "needs:lead" })
+
+    -- Ask with no column
     backend = fake(sample())
     cmd_board.run("next", {}, backend)
     testing.eq(backend.calls[1], { "next", support.COLUMN_NAME.READY, nil })
+
+    -- Refuse the Done column
     testing.eq(cmd_board.run("next", { "--column", support.Column.DONE }, fake(sample())).code, 2)
 end)
 
 testing.test("next --column blocked skips a needs:human card and a claimed one", function()
+    -- Build Blocked lead cards, one of them needs:human and one claimed
     local lead = { "needs:lead" }
     local cards = aged({
         support.COLUMN_NAME.BLOCKED,
@@ -6510,8 +8144,12 @@ testing.test("next --column blocked skips a needs:human card and a claimed one",
         support.COLUMN_NAME.BLOCKED,
     }, { 0, 0, 0, 0, 0 }, { { "needs:lead", "needs:human" }, lead, lead, lead, lead })
     cards[2].claimant = "someone"
+
+    -- Expect the first free lead card
     local result = cmd_board.run("next", { "--column", support.Column.BLOCKED }, fake(cards))
     testing.ok(result.output:find("00000003", 1, true), result.output)
+
+    -- Claim it and strip the label of the last and expect none
     cards[3].claimant = "someone"
     cards[5].labels = {}
     testing.eq(
@@ -6537,6 +8175,7 @@ testing.test("stale lists a needs:lead card with an owner comment once", functio
 end)
 
 testing.test("stale lists a Blocked needs:planner card apart from the lead ones", function()
+    -- Build planner, lead and needs:human cards
     local planner = { "needs:planner" }
     local cards, times = aged({
         support.COLUMN_NAME.BLOCKED,
@@ -6549,10 +8188,14 @@ testing.test("stale lists a Blocked needs:planner card apart from the lead ones"
         { "needs:planner", "needs:human" },
         planner,
     })
+
+    -- Date them several hours back
     for index, hours in ipairs({ 5, 3, 9, 9 }) do
         local at = NOW - hours * box.SECONDS_PER_HOUR
         times[cards[index].id] = os.date("!%Y-%m-%dT%H:%M:%S+00:00", at)
     end
+
+    -- Expect a lead list and a planner list apart
     local result = cmd_board.run("stale", {}, fake(cards, times), NOW)
     testing.ok(
         result.output:find(
@@ -6571,6 +8214,8 @@ testing.test("stale lists a Blocked needs:planner card apart from the lead ones"
         result.output
     )
     testing.ok(not result.output:find("Card 4", 1, true), result.output)
+
+    -- Raise the bound past the planner card's age
     result = cmd_board.run("stale", { "--lead-hours", "6" }, fake(cards, times), NOW)
     testing.ok(not result.output:find("for a planner", 1, true), result.output)
 end)
@@ -6584,9 +8229,13 @@ testing.test("stale lists a Blocked card that asks nobody", function()
     local result = cmd_board.run("stale", {}, fake(cards, times), NOW)
     testing.eq(
         result.output,
-        "No stale cards.\n\nasks nobody, add a needs label:\n"
-            .. "00000002  Blocked  5d  unsized  Card 2\n"
-            .. "00000001  Blocked  2d  unsized  Card 1"
+        table.concat({
+            "No stale cards.",
+            "",
+            "asks nobody, add a needs label:",
+            "00000002  Blocked  5d  unsized  Card 2",
+            "00000001  Blocked  2d  unsized  Card 1",
+        }, "\n")
     )
 end)
 
@@ -6602,12 +8251,17 @@ testing.test("stale leaves a labelled Blocked card off the asks nobody list", fu
 end)
 
 testing.test("next --column blocked --for planner asks for a needs:planner card", function()
+    -- Ask for a planner card
     local backend = fake(sample())
     cmd_board.run("next", { "--column", support.Column.BLOCKED, "--for", "planner" }, backend)
     testing.eq(backend.calls[1], { "next", support.COLUMN_NAME.BLOCKED, "needs:planner" })
+
+    -- Ask for a lead card
     backend = fake(sample())
     cmd_board.run("next", { "--column", support.Column.BLOCKED, "--for", "lead" }, backend)
     testing.eq(backend.calls[1], { "next", support.COLUMN_NAME.BLOCKED, "needs:lead" })
+
+    -- Refuse the flag without the Blocked column and an unknown role
     testing.eq(cmd_board.run("next", { "--for", "planner" }, fake(sample())).code, 2)
     testing.eq(
         cmd_board.run("next", { "--column", support.Column.BLOCKED, "--for", "x" }, fake(sample())).code,
@@ -6646,11 +8300,14 @@ testing.test("time refuses bad minutes and a missing role with a usage error", f
 end)
 
 testing.test("time start refuses a needs:human card and a second clock on one card", function()
+    -- Point the clock state at a fresh directory and label the second card needs:human
     local previous = dev_os.getenv("XDG_STATE_HOME") or ""
     dev_os.setenv("XDG_STATE_HOME", support.tempdir())
     local cards = sample()
     cards[2].labels = { "needs:human" }
     local backend = fake(cards)
+
+    -- Start clocks, then stop one twice
     local first = cmd_board.run("time", { "start", "11111111-a", "--as", "planner" }, backend)
     local second = cmd_board.run("time", { "start", "11111111-a", "--as", "reviewer" }, backend)
     local human = cmd_board.run("time", { "start", "11111111-b", "--as", "planner" }, backend)
@@ -6658,6 +8315,8 @@ testing.test("time start refuses a needs:human card and a second clock on one ca
     local stopped = cmd_board.run("time", { "stop", "11111111-a" }, backend)
     local again = cmd_board.run("time", { "stop", "11111111-a" }, backend)
     dev_os.setenv("XDG_STATE_HOME", previous)
+
+    -- Expect one clock per card, none on a needs:human card and a refusal to stop twice
     testing.eq(first.output, "started the planner clock on 11111111")
     testing.eq(second.code, 1)
     testing.eq(human.code, 1)
@@ -6669,6 +8328,7 @@ end)
 testing.test(
     "a move from In Progress to Review logs the implementer and starts a reviewer",
     function()
+        -- Point the clock state at a fresh directory and claim an In Progress card
         local previous = dev_os.getenv("XDG_STATE_HOME") or ""
         dev_os.setenv("XDG_STATE_HOME", support.tempdir())
         local name = "dotfiles/implementer/11111111"
@@ -6677,7 +8337,11 @@ testing.test(
         card.column = PROGRESS_NAME
         card.claimant = name
         local backend = fake({ card })
+
+        -- Age the implementer clock to 40 minutes
         local restore, started = support.start_aged(card, support.ROLE.IMPLEMENTER, 40 * 60)
+
+        -- Move the card to Review as its claimant and read the clock that runs after
         local result
         as_agent(name, function()
             result = cmd_board.run("move", { "cccccccc", support.Column.REVIEW }, backend)
@@ -6685,6 +8349,8 @@ testing.test(
         local ticking = role_clock.read(ID_C)
         restore()
         dev_os.setenv("XDG_STATE_HOME", previous)
+
+        -- Expect the implementer's time logged and a reviewer clock started
         testing.eq(started.code, nil, started.message)
         testing.eq(result.message, nil)
         testing.eq(backend.calls[#backend.calls], { "log_time", ID_C, 40, "implementer", nil })
@@ -6779,6 +8445,7 @@ testing.test("stale refuses a bad --days with a usage error", function()
 end)
 
 testing.test("stale lists untouched Icebox cards", function()
+    -- Age five Icebox cards, one of them needs:human
     local human = { "needs:human" }
     local cards, times = aged({
         support.COLUMN_NAME.ICEBOX,
@@ -6789,6 +8456,8 @@ testing.test("stale lists untouched Icebox cards", function()
         support.COLUMN_NAME.READY,
     }, { 45, 31, 29, 90, 60, 1 }, { {}, {}, {}, {}, human, {} })
     local backend = fake(cards, times)
+
+    -- Touch two of them with a recent comment and an old one
     function backend:comments(id)
         if id == cards[2].id then
             return { { at = os.date("!%Y-%m-%dT%H:%M:%SZ", NOW - 2 * box.SECONDS_PER_DAY) } }
@@ -6798,26 +8467,43 @@ testing.test("stale lists untouched Icebox cards", function()
         end
         return {}
     end
+
+    -- Expect the untouched cards past the default window
     testing.eq(
         cmd_board.run("stale", {}, backend, NOW).output,
-        "No stale cards.\n\nfor the owner (needs:human):\n"
-            .. "00000005  Icebox  60d  unsized  Card 5\n\nicebox, untouched for 30 days:\n"
-            .. "00000001  Icebox  45d  unsized  Card 1\n"
-            .. "00000004  Icebox  40d  unsized  Card 4"
+        table.concat({
+            "No stale cards.",
+            "",
+            "for the owner (needs:human):",
+            "00000005  Icebox  60d  unsized  Card 5",
+            "",
+            "icebox, untouched for 30 days:",
+            "00000001  Icebox  45d  unsized  Card 1",
+            "00000004  Icebox  40d  unsized  Card 4",
+        }, "\n")
     )
+
+    -- Expect a narrower window to list more
     testing.eq(
         cmd_board.run("stale", { "--icebox-days", "10" }, backend, NOW).output,
-        "No stale cards.\n\nfor the owner (needs:human):\n"
-            .. "00000005  Icebox  60d  unsized  Card 5\n\nicebox, untouched for 10 days:\n"
-            .. "00000001  Icebox  45d  unsized  Card 1\n"
-            .. "00000004  Icebox  40d  unsized  Card 4\n"
-            .. "00000003  Icebox  29d  unsized  Card 3"
+        table.concat({
+            "No stale cards.",
+            "",
+            "for the owner (needs:human):",
+            "00000005  Icebox  60d  unsized  Card 5",
+            "",
+            "icebox, untouched for 10 days:",
+            "00000001  Icebox  45d  unsized  Card 1",
+            "00000004  Icebox  40d  unsized  Card 4",
+            "00000003  Icebox  29d  unsized  Card 3",
+        }, "\n")
     )
 end)
 
 testing.test(
     "stale keeps its output when an Icebox card cannot be dated or its comments read",
     function()
+        -- Leave one Icebox card undated
         local cards, times = aged({
             support.COLUMN_NAME.READY,
             support.COLUMN_NAME.ICEBOX,
@@ -6826,12 +8512,16 @@ testing.test(
         }, { 9, 50, 50, 50 })
         times[cards[2].id] = nil
         local backend = fake(cards, times)
+
+        -- Fail the comment read of the next one and give the last an undated comment
         function backend:comments(id)
             if id == cards[3].id then
                 return nil, "boom"
             end
             return { { at = "later" } }
         end
+
+        -- Expect the stale card listed and the other three named
         testing.eq(
             cmd_board.run("stale", {}, backend, NOW).output,
             "00000001  Ready  9d  unsized  Card 1\n\nCould not date "
@@ -7072,21 +8762,37 @@ local function queue_file(home)
 end
 
 local function sandbox(opts)
+    -- Write the project config in a fresh sandbox
     opts = opts or {}
     local root = support.sandbox({
-        [".dev/config.toml"] = opts.project or '[board]\nbackend = "pomb"\nname = "dotfiles"\n',
+        [".dev/config.toml"] = opts.project or table.concat({
+            "[board]",
+            'backend = "pomb"',
+            'name = "dotfiles"',
+            "",
+        }, "\n"),
     }, {})
+
+    -- Start a fake server and point the user config at it
     local home = support.tempdir()
     SERVERS[root] = support.fake_http({})
     assert(fs.mkdir(home .. "/.config/dev", { parents = true }))
     local user = opts.user
-        or '[board.pomb]\nurl = "https://pomb.example"\nfield_prefix = "runner"\ntoken = "pass:secrets/worker/token/pomb"\n'
+        or table.concat({
+            "[board.pomb]",
+            'url = "https://pomb.example"',
+            'field_prefix = "runner"',
+            'token = "pass:secrets/worker/token/pomb"',
+            "",
+        }, "\n")
     assert(
         fs.write(
             home .. "/.config/dev/config.toml",
             (user:gsub("https://pomb%.example", SERVERS[root].url))
         )
     )
+
+    -- Write the files the fake server answers from
     local export = opts.export or EXPORT
     for name, body in pairs({
         ["boards.json"] = BOARDS,
@@ -7101,20 +8807,35 @@ local function sandbox(opts)
     }) do
         assert(fs.write(root .. "/" .. name, body))
     end
-    executable(root .. "/bin/security", "#!/bin/sh\nexit 1\n")
+
+    -- Stub the security, sleep and pass commands
+    executable(
+        root .. "/bin/security",
+        table.concat({
+            "#!/bin/sh",
+            "exit 1",
+            "",
+        }, "\n")
+    )
     executable(
         root .. "/bin/sleep",
-        '#!/bin/sh\nnap=0.2\n[ -e "$ROOT/freeze" ] && nap='
-            .. FROZEN_NAP_SECS
-            .. "\nexec "
-            .. dev_os.which("sleep")
-            .. ' "$nap"\n'
+        table.concat({
+            "#!/bin/sh",
+            "nap=0.2",
+            '[ -e "$ROOT/freeze" ] && nap=' .. FROZEN_NAP_SECS,
+            "exec " .. dev_os.which("sleep") .. ' "$nap"',
+            "",
+        }, "\n")
     )
     executable(
         root .. "/bin/pass",
-        '#!/bin/sh\nprintf "pass %s opts=%s\\n" "$*" "$PASSWORD_STORE_GPG_OPTS" >>"$ROOT/calls"\n'
-            .. 'env >"$ROOT/env"\n'
-            .. (opts.locked and "exit 1\n" or ('echo "' .. TOKEN .. '"\n'))
+        table.concat({
+            "#!/bin/sh",
+            'printf "pass %s opts=%s\\n" "$*" "$PASSWORD_STORE_GPG_OPTS" >>"$ROOT/calls"',
+            'env >"$ROOT/env"',
+            opts.locked and "exit 1" or ('echo "' .. TOKEN .. '"'),
+            "",
+        }, "\n")
     )
     return root, home
 end
@@ -7137,6 +8858,7 @@ local function follow_owner(root)
 end
 
 local function dev(root, home, args, opts)
+    -- Build the environment of the child
     opts = opts or {}
     local env = {
         HOME = home,
@@ -7149,6 +8871,8 @@ local function dev(root, home, args, opts)
     for name, value in pairs(opts.env or {}) do
         env[name] = value
     end
+
+    -- Sync the fake server and run dev
     sync(root)
     local out, code, errors = support.dev(root, args, {
         env = env,
@@ -7156,6 +8880,8 @@ local function dev(root, home, args, opts)
         input = opts.input,
         cwd = opts.cwd,
     })
+
+    -- Record the owner changes the run made
     follow_owner(root)
     return out, code, errors
 end
@@ -7165,12 +8891,17 @@ local function read(root, name)
 end
 
 testing.test("every subcommand without a [board] section says so and exits 1", function()
+    -- Give a project with no board section
     local root, home = sandbox({ project = "" })
+
+    -- Run each subcommand and expect the refusal
     for _, args in ipairs({ { "board", "status" }, { "board", "ls" }, { "board", "next" } }) do
         local out, code = dev(root, home, args)
         testing.eq(out, "This project has no board.\n")
         testing.eq(code, 1)
     end
+
+    -- Expect no call to pass and no request
     testing.eq(read(root, "calls"), "")
     testing.eq(requests(root), "")
 end)
@@ -7185,6 +8916,7 @@ testing.test("status prints the backend and the board without reaching out", fun
 end)
 
 testing.test("boards lists every board the token sees and columns reads one by name", function()
+    -- Give the token two boards
     local boards = '[{"id":"board-1","name":"dotfiles","archived":false},'
         .. '{"id":"board-2","name":"General","archived":false}]'
     local root, home = sandbox()
@@ -7197,19 +8929,34 @@ testing.test("boards lists every board the token sees and columns reads one by n
                 .. '{"id":"c3","name":"Finished","is_done":true}]}'
         )
     )
+
+    -- List the boards
     local out, code = dev(root, home, { "board", "boards" })
     testing.eq(code, 0, out)
     testing.eq(out, "dotfiles\nGeneral\n")
-    local columns = "Icebox\nBacklog\nReady\nIn Progress\nReview\nBlocked\nDone (done)\n"
+
+    -- Read the columns of the default board and of the other board by name
+    local columns = table.concat({
+        "Icebox",
+        "Backlog",
+        "Ready",
+        "In Progress",
+        "Review",
+        "Blocked",
+        "Done (done)",
+        "",
+    }, "\n")
     out, code = dev(root, home, { "board", "columns" })
     testing.eq(code, 0, out)
     testing.eq(out, columns)
     out, code = dev(root, home, { "board", "columns", "General" })
     testing.eq(code, 0, out)
-    testing.eq(out, "Todo\nDoing\nFinished (done)\n")
+    testing.eq(out, table.concat({ "Todo", "Doing", "Finished (done)", "" }, "\n"))
     out, code = dev(root, home, { "board", "columns", "dotfiles" })
     testing.eq(code, 0, out)
     testing.eq(out, columns)
+
+    -- Refuse an unknown board and a stray argument
     out, code = dev(root, home, { "board", "columns", "nosuch" })
     testing.eq(code, 1, out)
     testing.ok(out:find("no board named nosuch", 1, true), out)
@@ -7218,6 +8965,7 @@ testing.test("boards lists every board the token sees and columns reads one by n
 end)
 
 testing.test("columns marks a column that clears blockers or is blocked", function()
+    -- Give a second board with a clearing, a blocked and a done column
     local root, home = sandbox()
     assert(
         fs.write(
@@ -7236,22 +8984,42 @@ testing.test("columns marks a column that clears blockers or is blocked", functi
                 .. '{"id":"c4","name":"Finished","is_done":true,"clears_blockers":true}]}'
         )
     )
+
+    -- Read its columns
     local out, code = dev(root, home, { "board", "columns", "General" })
     testing.eq(code, 0, out)
     testing.eq(
         out,
-        "Todo\nReleased (clears blockers)\nStuck (blocked)\nFinished (done) (clears blockers)\n"
+        table.concat({
+            "Todo",
+            "Released (clears blockers)",
+            "Stuck (blocked)",
+            "Finished (done) (clears blockers)",
+            "",
+        }, "\n")
     )
 end)
 
 testing.test("the board name defaults to the project directory", function()
-    local root, home = sandbox({ project = '[board]\nbackend = "pomb"\n' })
+    local root, home = sandbox({
+        project = table.concat({
+            "[board]",
+            'backend = "pomb"',
+            "",
+        }, "\n"),
+    })
     local out = dev(root, home, { "board", "status" })
     testing.eq(out, "backend: pomb\nboard: " .. fs.basename(root) .. "\n")
 end)
 
 testing.test("a local board that was never laid out says to run init", function()
-    local root, home = sandbox({ project = '[board]\nbackend = "local"\n' })
+    local root, home = sandbox({
+        project = table.concat({
+            "[board]",
+            'backend = "local"',
+            "",
+        }, "\n"),
+    })
     local out, code = dev(root, home, { "board", "ls" })
     testing.ok(out:find("Run `dev board init`.\n", 1, true), out)
     testing.eq(code, 1)
@@ -7260,22 +9028,36 @@ testing.test("a local board that was never laid out says to run init", function(
 end)
 
 testing.test("an unknown backend is refused", function()
-    local root, home = sandbox({ project = '[board]\nbackend = "jira"\n' })
+    local root, home = sandbox({
+        project = table.concat({
+            "[board]",
+            'backend = "jira"',
+            "",
+        }, "\n"),
+    })
     local out, code = dev(root, home, { "board", "status" })
     testing.ok(out:find('must be "pomb" or "local"', 1, true), out)
     testing.eq(code, 1)
 end)
 
 testing.test("ls lists the cards in column order through pass and http", function()
+    -- Run ls against the fake server
     local root, home = sandbox()
     local out, code = dev(root, home, { "board", "ls" })
+
+    -- Expect the cards in column order
     testing.eq(code, 0)
     testing.eq(
         out,
-        "cccccccc  Backlog  Unsized     -     Early\n"
-            .. "11111111  Ready    1 Pomodoro  docs  First\n"
-            .. "11111111  Ready    unsized     -     Second\n"
+        table.concat({
+            "cccccccc  Backlog  Unsized     -     Early",
+            "11111111  Ready    1 Pomodoro  docs  First",
+            "11111111  Ready    unsized     -     Second",
+            "",
+        }, "\n")
     )
+
+    -- Expect the token read through pass and the export fetched over http
     local calls = read(root, "calls")
     testing.ok(
         calls:find(
@@ -7292,6 +9074,7 @@ end)
 ---@param extra integer how many cards to add to the export
 ---@return integer requests the requests the list made
 local function ls_cost(extra)
+    -- Build the extra cards
     local tasks = {}
     for index = 1, extra do
         tasks[#tasks + 1] = support.pomb_export_task({
@@ -7303,10 +9086,14 @@ local function ls_cost(extra)
             fields = FIRST_CARD.fields,
         })
     end
+
+    -- Run ls on an export that holds them
     local more = #tasks > 0 and (table.concat(tasks, ",") .. ",") or ""
     local root, home = sandbox({ export = (EXPORT:gsub('^{"tasks":%[', '{"tasks":[' .. more, 1)) })
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 0, out)
+
+    -- Count the requests it made
     return request_count(requests(root))
 end
 
@@ -7316,14 +9103,19 @@ testing.test("ls makes the same requests for 3 cards as for 60", function()
 end)
 
 testing.test("the token reaches the server in a header and nowhere else", function()
+    -- Run ls with the most verbose output
     local root, home = sandbox()
     local out = dev(root, home, { "-vv", "board", "ls" })
+
+    -- Expect the token in the request header and nowhere else
     testing.ok(
         requests(root):find("  Authorization: Bearer " .. TOKEN .. "\n", 1, true),
         requests(root)
     )
     testing.eq(out:find(TOKEN, 1, true), nil)
     testing.eq(read(root, "calls"):find(TOKEN, 1, true), nil)
+
+    -- Expect no token in the output of a move either
     out = dev(root, home, { "-v", "board", "move", "11111111-a", support.Column.DONE })
     testing.eq(out:find(TOKEN, 1, true), nil)
 end)
@@ -7351,15 +9143,16 @@ end
 local function pass_stub(root, lock)
     executable(
         root .. "/bin/pass",
-        "#!/bin/sh\n"
-            .. 'echo "start $$ held=$(flock -n "'
-            .. lock
-            .. '" true && echo 0 || echo 1)" >>"$ROOT/events"\n'
-            .. "sleep 1\n"
-            .. 'echo "end $$" >>"$ROOT/events"\n'
-            .. 'echo "'
-            .. TOKEN
-            .. '"\n'
+        table.concat({
+            "#!/bin/sh",
+            'echo "start $$ held=$(flock -n "'
+                .. lock
+                .. '" true && echo 0 || echo 1)" >>"$ROOT/events"',
+            "sleep 1",
+            'echo "end $$" >>"$ROOT/events"',
+            'echo "' .. TOKEN .. '"',
+            "",
+        }, "\n")
     )
 end
 
@@ -7376,17 +9169,24 @@ local function shell(root, lock, script, secs)
 end
 
 testing.test("concurrent pass reads queue on one lock and none times out", function()
+    -- Stub a slow pass that logs when it starts and ends
     local root = sandbox()
     local lock = root .. "/pass.lock"
     pass_stub(root, lock)
+
+    -- Start three readers at once
     local cmd = BOARD .. "passlock Agents/x"
     local out = shell(root, lock, "(" .. cmd .. ") & (" .. cmd .. ") & (" .. cmd .. ") & wait")
     testing.eq(select(2, out:gsub(TOKEN, "")), 3, out)
+
+    -- Expect the reads one after the other
     local order = {}
     for kind in read(root, "events"):gmatch("(%a+) %d+") do
         order[#order + 1] = kind
     end
     testing.eq(order, { "start", "end", "start", "end", "start", "end" })
+
+    -- Expect each read to have held the lock
     testing.eq(occurrences(read(root, "events"), "held=1"), 3)
 end)
 
@@ -7394,9 +9194,12 @@ local HOLD_THEN_KILL = "( flock 9; exec /bin/sleep 20 ) 9>%s & holder=$!; /bin/s
     .. "kill $holder; wait $holder 2>/dev/null; "
 
 testing.test("readers queued after a killed holder never overlap", function()
+    -- Stub a slow pass that logs when it starts and ends
     local root = sandbox()
     local lock = root .. "/pass.lock"
     pass_stub(root, lock)
+
+    -- Kill a holder of the lock, then start three readers at once
     local cmd = BOARD .. "passlock Agents/x"
     local out = shell(
         root,
@@ -7405,18 +9208,25 @@ testing.test("readers queued after a killed holder never overlap", function()
         "30"
     )
     testing.eq(occurrences(out, TOKEN), 3, out)
+
+    -- Expect the reads one after the other
     local order = {}
     for kind in read(root, "events"):gmatch("(%a+) %d+") do
         order[#order + 1] = kind
     end
     testing.eq(order, { "start", "end", "start", "end", "start", "end" })
+
+    -- Expect each read to have held the lock
     testing.eq(occurrences(read(root, "events"), "held=1"), 3)
 end)
 
 testing.test("a lock held by a live process times out with 124", function()
+    -- Stub a slow pass
     local root = sandbox()
     local lock = root .. "/pass.lock"
     pass_stub(root, lock)
+
+    -- Hold the lock from a live process and read with a one second limit
     local out = shell(
         root,
         lock,
@@ -7427,11 +9237,14 @@ testing.test("a lock held by a live process times out with 124", function()
             .. "passlock Agents/x; echo code=$?; kill $holder",
         "1"
     )
+
+    -- Expect the timeout code and no token
     testing.ok(out:find("code=124", 1, true), out)
     testing.eq(out:find(TOKEN, 1, true), nil)
 end)
 
 testing.test("a process reads each pass entry once", function()
+    -- Write a script that reads the same token twice
     local root, home = sandbox()
     local script = string.format(
         "local pomb = require('@dev/board/pomb'); "
@@ -7439,6 +9252,8 @@ testing.test("a process reads each pass entry once", function()
             .. "local b = pomb.token('pass:secrets/worker/token/pomb'); "
             .. "print(a == b and a ~= nil)"
     )
+
+    -- Run it against the sandbox's stubs
     local out, code = dev_os.capture(support.eval(pomb_script(root, script)), {
         env = {
             PATH = root .. "/bin:" .. dev_os.getenv("PATH"),
@@ -7448,30 +9263,34 @@ testing.test("a process reads each pass entry once", function()
         },
         stderr = "stdout",
     })
+
+    -- Expect one pass call
     testing.eq(code, 0, out)
     testing.eq(out, "true\n")
     testing.eq(select(2, read(root, "calls"):gsub("pass show", "")), 1)
 end)
 
-local SECURITY = [[#!/bin/sh
-printf 'security %s\n' "$*" >>"$ROOT/seccalls"
-case "$1" in
-find-generic-password)
-    [ -f "$ROOT/kc" ] || exit 44
-    cat "$ROOT/kc"
-    ;;
--i)
-    read -r line
-    service=${line#*-s \"}
-    printf 'put %s\n' "${service%%\"*}" >>"$ROOT/seccalls"
-    token=${line##*-w \"}
-    printf '%s\n' "${token%\"}" >"$ROOT/kc"
-    ;;
-delete-generic-password)
-    rm -f "$ROOT/kc"
-    ;;
-esac
-]]
+local SECURITY = table.concat({
+    "#!/bin/sh",
+    [[printf 'security %s\n' "$*" >>"$ROOT/seccalls"]],
+    [[case "$1" in]],
+    "find-generic-password)",
+    [[    [ -f "$ROOT/kc" ] || exit 44]],
+    [[    cat "$ROOT/kc"]],
+    "    ;;",
+    "-i)",
+    "    read -r line",
+    [[    service=${line#*-s \"}]],
+    [[    printf 'put %s\n' "${service%%\"*}" >>"$ROOT/seccalls"]],
+    [[    token=${line##*-w \"}]],
+    [[    printf '%s\n' "${token%\"}" >"$ROOT/kc"]],
+    "    ;;",
+    "delete-generic-password)",
+    [[    rm -f "$ROOT/kc"]],
+    "    ;;",
+    "esac",
+    "",
+}, "\n")
 
 local function with_security(root, body)
     executable(root .. "/bin/security", body or SECURITY)
@@ -7486,32 +9305,47 @@ local function passlock_once(root, entry)
 end
 
 testing.test("a pass read is stored in the Keychain and the next read skips pass", function()
+    -- Stub the Keychain
     local root = sandbox()
     with_security(root)
+
+    -- Read once and expect the token stored
     local out = passlock_once(root)
     testing.eq(out, TOKEN .. "\ncode=0\n")
     testing.eq(read(root, "kc"), TOKEN .. "\n")
+
+    -- Read again and expect the Keychain to answer without pass
     out = passlock_once(root)
     testing.eq(out, TOKEN .. "\nkeychain\ncode=0\n")
     testing.eq(occurrences(read(root, "calls"), "pass show"), 1)
 end)
 
 testing.test("the token is in no argument list handed to security", function()
+    -- Stub the Keychain
     local root = sandbox()
     with_security(root)
+
+    -- Read the token twice
     passlock_once(root)
     passlock_once(root)
+
+    -- Expect the calls to security to hold no token
     local seen = read(root, "seccalls")
     testing.ok(seen:find("security -i", 1, true), seen)
     testing.eq(seen:find(TOKEN, 1, true), nil)
 end)
 
 testing.test("each pass entry has its own Keychain item", function()
+    -- Stub the Keychain
     local root = sandbox()
     with_security(root)
+
+    -- Read one entry, empty the Keychain and read another
     passlock_once(root, "Agents/x")
     assert(fs.remove(root .. "/kc"))
     passlock_once(root, "Agents/y")
+
+    -- Expect an item put under each entry's own name
     local seen = read(root, "seccalls")
     testing.ok(seen:find("put dev-pomb-token:Agents/x\n", 1, true), seen)
     testing.ok(seen:find("put dev-pomb-token:Agents/y\n", 1, true), seen)
@@ -7520,7 +9354,14 @@ end)
 
 testing.test("a failing Keychain falls back to pass and never fails the read", function()
     local root = sandbox()
-    with_security(root, "#!/bin/sh\nexit 1\n")
+    with_security(
+        root,
+        table.concat({
+            "#!/bin/sh",
+            "exit 1",
+            "",
+        }, "\n")
+    )
     testing.eq(passlock_once(root), TOKEN .. "\ncode=0\n")
     testing.eq(passlock_once(root), TOKEN .. "\ncode=0\n")
     testing.eq(occurrences(read(root, "calls"), "pass show"), 2)
@@ -7535,19 +9376,25 @@ testing.test("a Keychain item that is not plain text is ignored", function()
 end)
 
 testing.test("a read that finds the Keychain filled after the lock releases the lock", function()
+    -- Stub a Keychain that is empty at the first look and filled at the second
     local root = sandbox()
     with_security(
         root,
-        "#!/bin/sh\n"
-            .. 'if [ "$1" = find-generic-password ]; then\n'
-            .. '    if [ -f "$ROOT/seen" ]; then echo "'
-            .. TOKEN
-            .. '"; exit 0; fi\n'
-            .. '    : >"$ROOT/seen"; exit 44\n'
-            .. "fi\n"
+        table.concat({
+            "#!/bin/sh",
+            'if [ "$1" = find-generic-password ]; then',
+            '    if [ -f "$ROOT/seen" ]; then echo "' .. TOKEN .. '"; exit 0; fi',
+            '    : >"$ROOT/seen"; exit 44',
+            "fi",
+            "",
+        }, "\n")
     )
+
+    -- Read and expect the Keychain to answer without pass
     testing.eq(passlock_once(root), TOKEN .. "\nkeychain\ncode=0\n")
     testing.eq(occurrences(read(root, "calls"), "pass show"), 0)
+
+    -- Expect the lock released
     testing.eq(
         shell(root, root .. "/pass.lock", "flock -n $DEV_PASS_LOCK true; echo code=$?"),
         "code=0\n"
@@ -7557,11 +9404,28 @@ end)
 testing.test(
     "dropping an item that is already gone succeeds and a failing delete does not",
     function()
+        -- Drop an item that is already gone
         local root = sandbox()
         local drop = BOARD .. "keychain drop Agents/x; echo code=$?"
-        with_security(root, "#!/bin/sh\nexit 44\n")
+        with_security(
+            root,
+            table.concat({
+                "#!/bin/sh",
+                "exit 44",
+                "",
+            }, "\n")
+        )
         testing.eq(shell(root, root .. "/pass.lock", drop), "code=0\n")
-        with_security(root, "#!/bin/sh\nexit 1\n")
+
+        -- Drop with a delete that fails
+        with_security(
+            root,
+            table.concat({
+                "#!/bin/sh",
+                "exit 1",
+                "",
+            }, "\n")
+        )
         testing.eq(shell(root, root .. "/pass.lock", drop), "code=1\n")
     end
 )
@@ -7574,6 +9438,7 @@ testing.test("a refused pass read stores nothing", function()
 end)
 
 testing.test("a cached token Pomb refuses is dropped and read again from pass once", function()
+    -- Cache an old token that the server refuses
     local root, home = sandbox()
     with_security(root)
     assert(fs.write(root .. "/kc", OLD_TOKEN .. "\n"))
@@ -7581,7 +9446,11 @@ testing.test("a cached token Pomb refuses is dropped and read again from pass on
         root,
         { { path = "*", status = 401, body = '{"message":"bad"}', contains = OLD_TOKEN } }
     )
+
+    -- Run ls
     local out, code = dev(root, home, { "board", "ls" })
+
+    -- Expect one fresh pass read and the new token cached
     testing.eq(code, 0, out)
     testing.eq(occurrences(read(root, "calls"), "pass show"), 1)
     testing.ok(
@@ -7592,21 +9461,31 @@ testing.test("a cached token Pomb refuses is dropped and read again from pass on
 end)
 
 testing.test("a cached token Pomb refuses stays reported when the delete fails", function()
+    -- Cache an old token that the server refuses and make the delete fail
     local root, home = sandbox()
     with_security(root, SECURITY:gsub('rm %-f "%$ROOT/kc"', "exit 1", 1))
     assert(fs.write(root .. "/kc", OLD_TOKEN .. "\n"))
     override(root, { { path = "*", status = 401, body = '{"message":"bad"}' } })
+
+    -- Run ls
     local out, code = dev(root, home, { "board", "ls" })
+
+    -- Expect the refusal reported and no pass read
     testing.eq(code, 1)
     testing.ok(out:find("Pomb answered 401", 1, true), out)
     testing.eq(occurrences(read(root, "calls"), "pass show"), 0)
 end)
 
 testing.test("a token read fresh from pass that Pomb refuses is not retried", function()
+    -- Make the server refuse every token
     local root, home = sandbox()
     with_security(root)
     override(root, { { path = "*", status = 401, body = '{"message":"bad"}' } })
+
+    -- Run ls
     local out, code = dev(root, home, { "board", "ls" })
+
+    -- Expect the refusal reported and one pass read
     testing.eq(code, 1)
     testing.ok(out:find("Pomb answered 401", 1, true), out)
     testing.eq(occurrences(read(root, "calls"), "pass show"), 1)
@@ -7628,12 +9507,17 @@ local function keepalive(root, ticks, tick_time, tokenfile)
 end
 
 testing.test("the keep-alive loop drops a refused cached token", function()
+    -- Cache an old token that the server refuses
     local root = sandbox()
     with_security(root)
     assert(fs.write(root .. "/kc", OLD_TOKEN .. "\n"))
     assert(fs.write(root .. "/state", "fence=7\n"))
     override(root, { { path = "*", status = 401, body = '{"message":"bad"}' } })
+
+    -- Run the loop for three ticks
     shell(root, root .. "/pass.lock", keepalive(root, 3, 0), "600")
+
+    -- Expect the cached token dropped and one fresh pass read
     testing.ok(
         read(root, "seccalls"):find("delete-generic-password", 1, true),
         read(root, "seccalls")
@@ -7642,12 +9526,20 @@ testing.test("the keep-alive loop drops a refused cached token", function()
 end)
 
 testing.test("the keep-alive loop leaves no sleep running after a TERM", function()
+    -- Stub a sleep that records its pid and runs long
     local root = sandbox()
     executable(
         root .. "/bin/sleep",
-        '#!/bin/sh\necho $$ >"$ROOT/sleeper"\nexec ' .. dev_os.which("sleep") .. " 30\n"
+        table.concat({
+            "#!/bin/sh",
+            'echo $$ >"$ROOT/sleeper"',
+            "exec " .. dev_os.which("sleep") .. " 30",
+            "",
+        }, "\n")
     )
     assert(fs.write(root .. "/state", "fence=7\n"))
+
+    -- Start the loop, wait for its sleep, then send TERM
     local out = shell(
         root,
         root .. "/pass.lock",
@@ -7663,44 +9555,80 @@ testing.test("the keep-alive loop leaves no sleep running after a TERM", functio
             .. ' 0.5; sleeper=$(cat "$ROOT/sleeper"); '
             .. 'if kill -0 "$sleeper" 2>/dev/null; then echo SLEEP_ALIVE; kill "$sleeper"; fi'
     )
+
+    -- Expect the sleep gone
     testing.ok(not out:find("SLEEP_ALIVE", 1, true), out)
     testing.ok(fs.exists(root .. "/sleeper"), "the loop never started its sleep")
 end)
 
 testing.test("the keep-alive loop reads the token under the same lock", function()
+    -- Stub a slow pass and leave a fenced state file
     local root = sandbox()
     local lock = root .. "/pass.lock"
     pass_stub(root, lock)
     assert(fs.write(root .. "/state", "fence=7\n"))
+
+    -- Run the loop for one tick
     local out = shell(root, lock, keepalive(root, 1, 0), "600")
+
+    -- Expect the read to hold the lock
     testing.ok(read(root, "events"):find("held=1", 1, true), out .. read(root, "events"))
 end)
 
 testing.test("the keep-alive loop ends after its ticks and removes its state", function()
+    -- Stub a slow pass and leave a fenced state file
     local root = sandbox()
     local lock = root .. "/pass.lock"
     pass_stub(root, lock)
     assert(fs.write(root .. "/state", "fence=7\n"))
+
+    -- Run the loop for three ticks
     shell(root, lock, keepalive(root, 3, 0), "600")
+
+    -- Expect the state removed and three renewals
     testing.eq(fs.exists(root .. "/state"), false)
     testing.eq(occurrences(requests(root), "/owner/renew"), 3)
 end)
 
 testing.test("a token that is not plain text is refused without echoing it", function()
+    -- Stub a pass that prints a token with a quote and a semicolon
     local root, home = sandbox()
-    executable(root .. "/bin/pass", "#!/bin/sh\necho 'bad token\"; evil'\n")
+    executable(
+        root .. "/bin/pass",
+        table.concat({
+            "#!/bin/sh",
+            [[echo 'bad token"; evil']],
+            "",
+        }, "\n")
+    )
+
+    -- Run ls
     local out, code = dev(root, home, { "board", "ls" })
+
+    -- Expect a refusal that does not echo the token
     testing.eq(code, 1)
     testing.ok(out:find("empty or not plain text", 1, true), out)
     testing.eq(out:find("evil", 1, true), nil)
 end)
 
 testing.test("a project config cannot choose the server or the token", function()
+    -- Let the project config name its own server and token
     local root, home = sandbox({
-        project = '[board]\nbackend = "pomb"\nname = "dotfiles"\n'
-            .. '[board.pomb]\nurl = "https://evil.example"\ntoken = "pass:Other/entry"\n',
+        project = table.concat({
+            "[board]",
+            'backend = "pomb"',
+            'name = "dotfiles"',
+            "[board.pomb]",
+            'url = "https://evil.example"',
+            'token = "pass:Other/entry"',
+            "",
+        }, "\n"),
     })
+
+    -- Run ls
     dev(root, home, { "board", "ls" })
+
+    -- Expect the user's server and token used instead
     local calls = requests(root)
     testing.eq(calls:find("evil", 1, true), nil)
     testing.eq(calls:find("Other/entry", 1, true), nil)
@@ -7708,15 +9636,26 @@ testing.test("a project config cannot choose the server or the token", function(
 end)
 
 testing.test("a missing user url or token reference is a plain error", function()
+    -- Refuse an empty user config
     local root, home = sandbox({ user = "" })
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
     testing.ok(out:find("`[board.pomb]`", 1, true), out)
-    root, home =
-        sandbox({ user = '[board.pomb]\nurl = "https://pomb.example"\ntoken = "$(pass x)"\n' })
+
+    -- Refuse a token that is not a pass reference
+    root, home = sandbox({
+        user = table.concat({
+            "[board.pomb]",
+            'url = "https://pomb.example"',
+            'token = "$(pass x)"',
+            "",
+        }, "\n"),
+    })
     out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
     testing.ok(out:find("pass:<entry>", 1, true), out)
+
+    -- Expect no pass call and no request
     testing.eq(read(root, "calls"), "")
     testing.eq(requests(root), "")
 end)
@@ -7741,14 +9680,19 @@ testing.test("an unreachable server reports the curl exit", function()
 end)
 
 testing.test("pomb refusals are full sentences", function()
+    -- Refuse connections to the fake server
     local root, home = sandbox()
     refuse_connections(root)
+
+    -- Write a script that prints the message of a failed whoami
     local script = string.format(
         "local pomb = require('@dev/board/pomb'); "
             .. "local b = assert(pomb.new({url = '%s', token = 'pass:secrets/worker/token/pomb', name = 'dotfiles'})); "
             .. "local _, message = b:whoami(); print(message)",
         base_url(root)
     )
+
+    -- Run it against the sandbox's stubs
     local out, code = dev_os.capture(support.eval(pomb_script(root, script)), {
         env = {
             PATH = root .. "/bin:" .. dev_os.getenv("PATH"),
@@ -7758,6 +9702,8 @@ testing.test("pomb refusals are full sentences", function()
         },
         stderr = "stdout",
     })
+
+    -- Expect a full sentence that names the curl exit
     testing.eq(code, 0, out)
     testing.eq(out, "Board unavailable: Cannot reach " .. base_url(root) .. " (curl exit 7).\n")
 end)
@@ -7810,12 +9756,15 @@ end)
 testing.test("a pomb backend records why its latest request failed", function()
     local Reason = board.TransportReason
     local function failed(mode, call, asked, after)
+        -- Make the server fail the way the mode says
         local root, home = sandbox()
         if mode == "refuse" then
             refuse_connections(root)
         elseif mode then
             override(root, { { path = "*", status = mode, body = '{"message":"down"}' } })
         end
+
+        -- Write a script that prints the failure the backend recorded
         local script = string.format(
             "local pomb = require('@dev/board/pomb'); local json = require('@dev/json'); "
                 .. "local b = assert(pomb.new({url = '%s', token = 'pass:secrets/worker/token/pomb', name = 'dotfiles'})); "
@@ -7826,6 +9775,8 @@ testing.test("a pomb backend records why its latest request failed", function()
             after or "local unused = 0",
             asked or "m"
         )
+
+        -- Run it against the sandbox's stubs
         local out, code = dev_os.capture(support.eval(pomb_script(root, script)), {
             env = {
                 PATH = root .. "/bin:" .. dev_os.getenv("PATH"),
@@ -7836,6 +9787,8 @@ testing.test("a pomb backend records why its latest request failed", function()
             stderr = "stdout",
         })
         testing.eq(code, 0, out)
+
+        -- Return what it printed
         return assert(json.decode(out), out)
     end
     testing.eq(failed(502, "b:whoami()"), { reason = Reason.REFUSED, status = 502 })
@@ -7871,20 +9824,29 @@ local SUBTASKS_EXPORT = export_with_subtasks_card()
 local BACKLOG_EXPORT = export_with_subtasks_card({ column_id = BACKLOG_COLUMN })
 
 testing.test("outcome posts a subtask and patches the Nth by its id", function()
+    -- Add an outcome to a card with two
     local root, home = sandbox({ export = SUBTASKS_EXPORT })
     local out, code = dev(root, home, { "board", "outcome", "11111111", "C works" })
     testing.eq(code, 0, out)
     testing.eq(out, "outcome 11111111 3 added\n")
+
+    -- Tick the first
     out, code = dev(root, home, { "board", "outcome", "11111111", "--tick", "1" })
     testing.eq(out, "outcome 11111111 1 ticked by dotfiles/one\n")
+
+    -- Reword the second
     out = dev(
         root,
         home,
         { "board", "outcome", "11111111", "--rename", "2", "B holds", "--reason", "clearer" }
     )
     testing.eq(out, "outcome 11111111 2 reworded, tick cleared\n")
+
+    -- Untick it
     out = dev(root, home, { "board", "outcome", "11111111", "--untick", "2" })
     testing.eq(out, "outcome 11111111 2 unticked\n")
+
+    -- Expect one POST and a PATCH of the matching subtask for each change
     local calls = requests(root)
     testing.ok(
         calls:find("POST /", 1, true) and calls:find("/api/tasks/" .. ID_A .. "/subtasks", 1, true),
@@ -7900,9 +9862,12 @@ testing.test("outcome posts a subtask and patches the Nth by its id", function()
 end)
 
 testing.test("a claimed card's tick needs a name other than the claimant's", function()
+    -- Give a card a live claim
     local claimed =
         export_with_subtasks_card({ holder = "project-run/a", lease_expires_at = LIVE_LEASE })
     local root, home = sandbox({ export = claimed })
+
+    -- Refuse a tick that names no ticker
     local out, code = dev(
         root,
         home,
@@ -7911,6 +9876,8 @@ testing.test("a claimed card's tick needs a name other than the claimant's", fun
     )
     testing.eq(code, 2, out)
     testing.ok(out:find("needs the ticker's name", 1, true), out)
+
+    -- Refuse a tick by the claimant
     out, code = dev(
         root,
         home,
@@ -7920,9 +9887,13 @@ testing.test("a claimed card's tick needs a name other than the claimant's", fun
     testing.eq(code, 1, out)
     testing.ok(out:find("claimed by project-run/a", 1, true), out)
     testing.eq(requests(root):find('body={"done":true}', 1, true), nil)
+
+    -- Allow an untick without a name
     out, code = dev(root, home, { "board", "outcome", "11111111", "--untick", "2" })
     testing.eq(out, "outcome 11111111 2 unticked\n", out)
     testing.ok(requests(root):find('body={"done":false}', 1, true), out)
+
+    -- Allow a tick by another name
     out, code = dev(
         root,
         home,
@@ -7935,6 +9906,7 @@ testing.test("a claimed card's tick needs a name other than the claimant's", fun
 end)
 
 testing.test("the claimant named by DEV_AGENT cannot delete or reword its outcome", function()
+    -- Give a Backlog card a live claim
     local claimed = export_with_subtasks_card({
         column_id = BACKLOG_COLUMN,
         holder = "project-run/a",
@@ -7942,6 +9914,8 @@ testing.test("the claimant named by DEV_AGENT cannot delete or reword its outcom
     })
     local root, home = sandbox({ export = claimed, user = LEAD_USER })
     local own = { agent = "project-run/a" }
+
+    -- Refuse a lead's delete that passes the claimant's name
     local out, code = dev(root, home, {
         "board",
         "outcome",
@@ -7955,6 +9929,8 @@ testing.test("the claimant named by DEV_AGENT cannot delete or reword its outcom
     }, { agent = LEAD })
     testing.eq(code, 1, out)
     testing.ok(out:find("claimed by project-run/a", 1, true), out)
+
+    -- Refuse the claimant's own reword and expect no write
     out, code = dev(
         root,
         home,
@@ -7965,6 +9941,8 @@ testing.test("the claimant named by DEV_AGENT cannot delete or reword its outcom
     testing.ok(out:find("claimed by project-run/a", 1, true), out)
     testing.eq(requests(root):find("DELETE /", 1, true), nil)
     testing.eq(requests(root):find("PATCH /", 1, true), nil)
+
+    -- Allow the lead's delete under its own name
     out, code = dev(
         root,
         home,
@@ -8024,17 +10002,24 @@ local ISSUED_SECRET = "pomb_ISSUEDtoken0123456789"
 local function two_tokens(root)
     executable(
         root .. "/bin/pass",
-        '#!/bin/sh\nprintf "pass %s\\n" "$*" >>"$ROOT/calls"\ncase "$*" in\n*lead*) echo '
-            .. LEAD_SECRET
-            .. " ;;\n*) echo "
-            .. WORK_SECRET
-            .. " ;;\nesac\n"
+        table.concat({
+            "#!/bin/sh",
+            'printf "pass %s\\n" "$*" >>"$ROOT/calls"',
+            'case "$*" in',
+            "*lead*) echo " .. LEAD_SECRET .. " ;;",
+            "*) echo " .. WORK_SECRET .. " ;;",
+            "esac",
+            "",
+        }, "\n")
     )
 end
 
 testing.test("outcome delete on a pomb board sends the DELETE with the lead token", function()
+    -- Give the board a work token and a lead token
     local root, home = sandbox({ export = BACKLOG_EXPORT, user = LEAD_USER })
     two_tokens(root)
+
+    -- Delete an outcome as the lead with an issued token in the environment
     local out, code = dev(
         root,
         home,
@@ -8043,6 +10028,8 @@ testing.test("outcome delete on a pomb board sends the DELETE with the lead toke
     )
     testing.eq(code, 0, out)
     testing.eq(out, "outcome 11111111 2 deleted\n")
+
+    -- Expect the DELETE to carry the lead token alone
     local sent = block_with(requests(root), "DELETE ") or ""
     testing.ok(
         sent:find("Bearer " .. LEAD_SECRET, 1, true),
@@ -8108,8 +10095,11 @@ end)
 testing.test(
     "outcome delete refuses a non-lead name before any request and a locked column before the DELETE",
     function()
+        -- Lock the outcomes of the Ready column
         local locked = DETAIL:gsub('"name":"Ready"', '"name":"Ready","outcomes_locked":true')
         local root, home = sandbox({ export = SUBTASKS_EXPORT, user = LEAD_USER, detail = locked })
+
+        -- Refuse a delete by a name that is not a lead before any request
         local out, code = dev(
             root,
             home,
@@ -8120,6 +10110,8 @@ testing.test(
         testing.ok(out:find("Only the lead deletes an outcome", 1, true), out)
         testing.eq(read(root, "calls"), "")
         testing.eq(requests(root), "")
+
+        -- Refuse the lead's delete in the locked column before the DELETE
         out, code = dev(
             root,
             home,
@@ -8132,8 +10124,11 @@ testing.test(
 )
 
 local function epic_sandbox(children_done, ticked)
+    -- Turn the card into an epic with every subtask ticked or none
     local export = SUBTASKS_EXPORT:gsub('"done":%a+', '"done":' .. tostring(ticked))
         :gsub('"labels":%["docs"%]', '"kind":"epic","labels":["docs"]')
+
+    -- Describe its children
     local task = '{"id":"'
         .. ID_A
         .. '","name":"First","column_id":"'
@@ -8142,6 +10137,8 @@ local function epic_sandbox(children_done, ticked)
         .. '"children_total":2,"children_done":'
         .. children_done
         .. ',"labels":[]}'
+
+    -- Give the board a work token and a lead token
     local root, home = sandbox({ export = export, task = task, user = LEAD_USER })
     two_tokens(root)
     return root, home
@@ -8180,7 +10177,10 @@ testing.test("a worker's move of an epic into Done is refused before the move", 
 end)
 
 local function epic_on_other_board()
+    -- Start from an epic that two tickets close
     local root, home = epic_sandbox(2, true)
+
+    -- Add a second board
     assert(
         fs.write(
             root .. "/boards.json",
@@ -8188,6 +10188,8 @@ local function epic_on_other_board()
                 .. '{"id":"board-2","name":"General","archived":false}]'
         )
     )
+
+    -- Give it the columns of the first
     assert(
         fs.write(
             root .. "/general.json",
@@ -8232,11 +10234,14 @@ testing.test(
 )
 
 local function across_sandbox(opts)
+    -- Derive the second board's columns from the first's
     opts = opts or {}
     local root, home = sandbox({ export = opts.export })
     local general = DETAIL
         :gsub('"id":"board%-1","name":"dotfiles"', '"id":"board-2","name":"General"')
         :gsub('"id":"col%-', '"id":"g-col-')
+
+    -- Write the files the second board answers from
     for name, body in pairs({
         ["boards.json"] = '[{"id":"board-1","name":"dotfiles","archived":false},'
             .. '{"id":"board-2","name":"General","archived":false}]',
@@ -8246,6 +10251,8 @@ local function across_sandbox(opts)
     }) do
         assert(fs.write(root .. "/" .. name, body))
     end
+
+    -- Route the palette and field requests of the second board
     override(root, {
         { path = "*/board-2/colors", body = opts.colors or COLORS },
         { path = "*/board-2/fields", body = opts.fields or support.FIELDS },
@@ -8258,10 +10265,15 @@ local function move_across(root, home, column)
 end
 
 testing.test("move to board moves a card to the named column of the other board", function()
+    -- Give two boards with the same palette and fields
     local root, home = across_sandbox()
+
+    -- Move a card to Backlog on the other board
     local out, code = move_across(root, home, "Backlog")
     testing.eq(code, 0, out)
     testing.eq(out, "moved 11111111 to Backlog on board General\n")
+
+    -- Expect the move request to name the other board's column
     local calls = requests(root)
     testing.ok(calls:find("/api/tasks/" .. ID_A .. "/move", 1, true), calls)
     testing.ok(calls:find('"column_id":"g-col-backlog"', 1, true), calls)
@@ -8291,10 +10303,15 @@ testing.test("move to board refuses a target missing a field key", function()
 end)
 
 testing.test("move to board refuses a missing column and a Done column", function()
+    -- Give two boards with the same palette and fields
     local root, home = across_sandbox()
+
+    -- Refuse a column the other board lacks
     local out, code = move_across(root, home, "Nowhere")
     testing.eq(code, 1, out)
     testing.eq(out, "Board General has no Nowhere column.\n")
+
+    -- Refuse a Done column and expect no move request
     out, code = move_across(root, home, "Done")
     testing.eq(code, 1, out)
     testing.ok(out:find("is a Done column", 1, true), out)
@@ -8302,23 +10319,33 @@ testing.test("move to board refuses a missing column and a Done column", functio
 end)
 
 testing.test("move to board moves a Done card to the Done column of the other board", function()
+    -- Seed a Done card on the home board
     local root, home = across_sandbox({
         export = export_with_first_card({ column_id = support.column_id(support.Column.DONE) }),
     })
+
+    -- Move the card to the Done column of the other board
     local out, code = move_across(root, home, "Done")
     testing.eq(code, 0, out)
     testing.eq(out, "moved 11111111 to Done on board General\n")
+
+    -- Check the move request named the other board's Done column
     local calls = requests(root)
     testing.ok(calls:find("/api/tasks/" .. ID_A .. "/move", 1, true), calls)
     testing.ok(calls:find('"column_id":"g-col-done"', 1, true), calls)
 end)
 
 testing.test("move to board reads no list of either board", function()
+    -- Seed a Done card on the home board
     local root, home = across_sandbox({
         export = export_with_first_card({ column_id = support.column_id(support.Column.DONE) }),
     })
+
+    -- Move the card to the other board
     local out, code = move_across(root, home, "Done")
     testing.eq(code, 0, out)
+
+    -- Check no list or export was fetched
     local log = requests(root)
     testing.eq(log:find("export-data", 1, true), nil, log)
     testing.eq(log:find("/tasks?", 1, true), nil, log)
@@ -8326,17 +10353,25 @@ testing.test("move to board reads no list of either board", function()
 end)
 
 testing.test("move to board refuses an open card a move into the Done column", function()
+    -- Seed an open card on the home board
     local root, home = across_sandbox({
         export = export_with_first_card({ column_id = PROGRESS_COLUMN }),
     })
+
+    -- Try to move the card into the other board's Done column
     local out, code = move_across(root, home, "Done")
     testing.eq(code, 1, out)
     testing.ok(out:find("is a Done column", 1, true), out)
+
+    -- Check nothing moved
     testing.eq(requests(root):find("/move", 1, true), nil)
 end)
 
 testing.test("move to board refuses the flags that only apply to one board", function()
+    -- Set up two boards
     local root, home = across_sandbox()
+
+    -- Move across boards with a lane flag
     local out, code = dev(root, home, {
         "board",
         "move",
@@ -8347,18 +10382,25 @@ testing.test("move to board refuses the flags that only apply to one board", fun
         "--lane",
         "x",
     })
+
+    -- Check the flags were refused before any move
     testing.eq(code, 2, out)
     testing.eq(requests(root):find("/move", 1, true), nil)
 end)
 
 testing.test("the lead's close of an epic names the open children", function()
+    -- Seed an epic with an open child
     local root, home = epic_sandbox(1, true)
+
+    -- Close the epic as the lead
     local out, code = dev(
         root,
         home,
         { "board", "move", "11111111", support.Column.DONE },
         { agent = LEAD }
     )
+
+    -- Check the close was refused and sent no move
     testing.eq(code, 1, out)
     testing.ok(out:find("1 of 2 children are open", 1, true), out)
     testing.eq(block_with(requests(root), "/move"), nil)
@@ -8367,79 +10409,112 @@ end)
 testing.test(
     "a full id resolves an epic whose children are closed with its outcomes unticked",
     function()
+        -- Seed an epic whose children are closed
         local root, home = epic_sandbox(2, false)
+
+        -- Close the epic by its full id as the lead
         local out, code = dev(
             root,
             home,
             { "board", "move", ID_A, support.Column.DONE },
             { agent = LEAD }
         )
+
+        -- Check the close went through
         testing.eq(code, 0, out)
         testing.eq(out, "moved 11111111 to Done\n")
     end
 )
 
 testing.test("closed epic moves to Done with its outcomes unticked on Pomb", function()
+    -- Seed an epic whose children are closed
     local root, home = epic_sandbox(2, false)
+
+    -- Close the epic as the lead
     local out, code = dev(
         root,
         home,
         { "board", "move", "11111111", support.Column.DONE },
         { agent = LEAD }
     )
+
+    -- Check the move reached Pomb
     testing.eq(code, 0, out)
     testing.ok(block_with(requests(root), "/move") ~= nil, "the move was not sent")
 end)
 
 testing.test("the lead's close of an epic with no lead token set names epics.manage", function()
+    -- Seed an epic with open children
     local root, home = epic_sandbox(2, true)
-    assert(
-        fs.write(
-            home .. "/.config/dev/config.toml",
-            '[board.pomb]\nurl = "'
-                .. SERVERS[root].url
-                .. '"\ntoken = "pass:secrets/worker/token/pomb"\n'
-        )
-    )
+
+    -- Configure the board with the worker token only
+    assert(fs.write(
+        home .. "/.config/dev/config.toml",
+        table.concat({
+            "[board.pomb]",
+            'url = "' .. SERVERS[root].url .. '"',
+            'token = "pass:secrets/worker/token/pomb"',
+            "",
+        }, "\n")
+    ))
+
+    -- Close the epic as the lead
     local out, code = dev(
         root,
         home,
         { "board", "move", "11111111", support.Column.DONE },
         { agent = LEAD }
     )
+
+    -- Check the refusal names the permission and sent no move
     testing.eq(code, 1, out)
     testing.ok(out:find("epics.manage", 1, true), out)
     testing.eq(block_with(requests(root), "/move"), nil)
 end)
 
 testing.test("the lead's close of an epic is not queued when Pomb is unreachable", function()
+    -- Make every move fail to connect
     local root, home = epic_sandbox(2, true)
     override(root, { { path = "*/move", status = 0 } })
+
+    -- Close the epic as the lead
     local out, code = dev(
         root,
         home,
         { "board", "move", "11111111", support.Column.DONE },
         { agent = LEAD }
     )
+
+    -- Check the failure left no queued write
     testing.eq(code, 1, out)
     testing.eq(fs.exists(queue_file(home)), false)
 end)
 
 testing.test("outcome past the last subtask exits 1 and changes nothing", function()
+    -- Seed a card with two outcomes
     local root, home = sandbox({ export = SUBTASKS_EXPORT })
+
+    -- Tick an outcome past the last one
     local out, code = dev(root, home, { "board", "outcome", "11111111", "--tick", "3" })
     testing.eq(code, 1)
     testing.ok(out:find("The card has 2 outcomes. There is no outcome 3.", 1, true), out)
+
+    -- Check no write was sent
     testing.eq(requests(root):find("PATCH /", 1, true), nil)
 end)
 
 testing.test("outcome queues a tick but not an append when the write cannot reach Pomb", function()
+    -- Make every subtask write fail
     local root, home = sandbox({ export = BACKLOG_EXPORT, user = LEAD_USER })
     override(root, { { path = "*/subtasks*", status = 502 } })
+
+    -- Append an outcome and check it was not queued
     local out, code = dev(root, home, { "board", "outcome", "11111111", "C works" })
     testing.eq(code, 1)
     testing.ok(out:find("Board unavailable", 1, true), out)
     testing.eq(fs.exists(queue_file(home)), false)
+
+    -- Delete an outcome as the lead and check it was not queued
     out, code = dev(
         root,
         home,
@@ -8449,6 +10524,8 @@ testing.test("outcome queues a tick but not an append when the write cannot reac
     testing.eq(code, 1)
     testing.ok(out:find("Board unavailable", 1, true), out)
     testing.eq(fs.exists(queue_file(home)), false)
+
+    -- Tick an outcome as a worker and check the tick was queued
     out, code = dev(
         root,
         home,
@@ -8463,40 +10540,56 @@ testing.test("outcome queues a tick but not an append when the write cannot reac
 end)
 
 testing.test("outcome --rename is never queued when the write cannot reach Pomb", function()
+    -- Make every subtask write fail to connect
     local root, home = sandbox({ export = SUBTASKS_EXPORT })
     override(root, { { path = "*/subtasks*", status = 0 } })
+
+    -- Rename an outcome
     local out, code =
         dev(root, home, { "board", "outcome", "11111111", "--rename", "1", "New", "--reason", "r" })
+
+    -- Check the rename was refused and not queued
     testing.eq(code, 1, out)
     testing.ok(out:find("Board unavailable", 1, true), out)
     testing.eq(fs.exists(queue_file(home)), false)
 end)
 
 testing.test("an unclaimed card's tick ignores an invalid DEV_AGENT", function()
+    -- Seed an unclaimed card with outcomes
     local root, home = sandbox({ export = SUBTASKS_EXPORT })
+
+    -- Tick an outcome under an invalid agent name
     local out, code = dev(
         root,
         home,
         { "board", "outcome", "11111111", "--tick", "1" },
         { agent = "bad name" }
     )
+
+    -- Check the tick went through
     testing.eq(code, 0, out)
     testing.eq(out, "outcome 11111111 1 ticked\n", out)
     testing.ok(requests(root):find('body={"done":true}', 1, true), out)
 end)
 
 testing.test("rename is queued while Pomb is unreachable", function()
+    -- Make every task write fail
     local root, home = sandbox({ export = SUBTASKS_EXPORT })
     override(root, { { path = "*/api/tasks/*", status = 502 } })
+
+    -- Rename the card
     local out, code = dev(root, home, { "board", "rename", "11111111", "Better", "title" })
     testing.eq(code, 0)
     testing.eq(out, "queued: Pomb unreachable, will sync\n")
+
+    -- Check the rename was queued
     local queued = assert(fs.read(queue_file(home)))
     testing.ok(queued:find('"rename"', 1, true) and queued:find('"Better"', 1, true), queued)
 end)
 
 testing.test("a request the fake resets and stops on reads as a refused connect", function()
     for _ = 1, 20 do
+        -- Reset the connection on the task read once the colors are read
         local root, home = sandbox({ export = SUBTASKS_EXPORT })
         override(root, {
             steps = {
@@ -8508,13 +10601,18 @@ testing.test("a request the fake resets and stops on reads as a refused connect"
                 { prepend = { { path = "*/api/tasks/*", status = -1 } } },
             },
         })
+
+        -- Show the card
         local out, code = dev(root, home, { "board", "show", "11111111" })
+
+        -- Check the reset read as a refused connect
         testing.eq(code, 1, out)
         testing.ok(out:find("(curl exit 7)", 1, true), out)
     end
 end)
 
 testing.test("discard queues each step it could not take, in order, once", function()
+    -- Let the comment through and fail every later task write
     local root, home = sandbox({ export = SUBTASKS_EXPORT })
     override(root, {
         steps = {
@@ -8526,9 +10624,13 @@ testing.test("discard queues each step it could not take, in order, once", funct
             { prepend = { { path = "*/api/tasks/*", status = -1 } } },
         },
     })
+
+    -- Discard the card
     local out, code = dev(root, home, { "board", "discard", "11111111", "--reason", "Dropped" })
     testing.eq(code, 0, out)
     testing.eq(out, "queued: Pomb unreachable, will sync\n")
+
+    -- Check each step that failed was queued in order
     local queued = assert(fs.read(queue_file(home)))
     local note = assert(queued:find('"note"', 1, true), queued)
     local label = assert(queued:find('"label"', note, true), queued)
@@ -8537,6 +10639,7 @@ testing.test("discard queues each step it could not take, in order, once", funct
 end)
 
 testing.test("discard does not queue the note again once it has been posted", function()
+    -- Let the comment through and fail every later task write
     local root, home = sandbox({ export = SUBTASKS_EXPORT })
     override(root, {
         steps = {
@@ -8555,9 +10658,13 @@ testing.test("discard does not queue the note again once it has been posted", fu
             },
         },
     })
+
+    -- Discard the card
     local out, code = dev(root, home, { "board", "discard", "11111111", "--reason", "Dropped" })
     testing.eq(code, 0)
     testing.eq(out, "queued: Pomb unreachable, will sync\n")
+
+    -- Check the posted note was not queued again
     local queued = assert(fs.read(queue_file(home)))
     testing.ok(not queued:find('"note"', 1, true), queued)
     testing.ok(queued:find('"label"', 1, true) < queued:find('"discard_move"', 1, true), queued)
@@ -8566,11 +10673,16 @@ end)
 testing.test(
     "move to Done on a Pomb board names the open outcomes, and discard still closes it",
     function()
+        -- Seed a card with an unticked outcome
         local root, home = sandbox({ export = SUBTASKS_EXPORT })
+
+        -- Move the card to Done and check the open outcomes are named
         local out, code = dev(root, home, { "board", "move", "11111111", support.Column.DONE })
         testing.eq(code, 1, out)
         testing.ok(out:find("1 of 2 outcomes are unticked (1. A works)", 1, true), out)
         testing.ok(not requests(root):find("/move", 1, true), requests(root))
+
+        -- Discard the card and check it closed
         out, code = dev(root, home, { "board", "discard", "11111111" })
         testing.eq(code, 0, out)
         testing.eq(out, "discarded 11111111\n")
@@ -8578,6 +10690,7 @@ testing.test(
 )
 
 testing.test("move to Done on a Pomb board refuses subtasks dev cannot read", function()
+    -- Seed a card whose subtasks are not a list
     local export = '{"tasks":['
         .. support.pomb_export_task({
             id = ID_A,
@@ -8590,46 +10703,72 @@ testing.test("move to Done on a Pomb board refuses subtasks dev cannot read", fu
         })
         .. "]}"
     local root, home = sandbox({ export = export })
+
+    -- Move the card to Done
     local out, code = dev(root, home, { "board", "move", "11111111", support.Column.DONE })
+
+    -- Check the move was refused and sent nothing
     testing.eq(code, 1, out)
     testing.ok(out:find("cannot be read from Pomb", 1, true), out)
     testing.ok(not requests(root):find("/move", 1, true), requests(root))
 end)
 
 testing.test("outcome sends the claim's fence on the subtask call", function()
+    -- Claim the card
     local root, home = sandbox({ export = PLANNED_EXPORT })
     local out, code = dev(root, home, { "board", "take", "11111111-a" })
     testing.eq(code, 0, out)
+
+    -- Tick an outcome as the reviewer
     out, code =
         dev(root, home, { "board", "outcome", "11111111-a", "--tick", "1", "--as", "reviewer" })
     testing.eq(code, 0, out)
+
+    -- Check the subtask call carried the claim's fence
     local patch = block_with(
         requests(root),
         "PATCH /api/tasks/" .. ID_A .. "/subtasks/" .. support.READY_OUTCOMES[1].id
     )
     testing.ok(patch and patch:find("If-Owner-Fence: 7", 1, true), requests(root))
     testing.ok(patch:find('body={"done":true}', 1, true), patch)
+
+    -- Release the claim
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
 testing.test("a renamed Pomb board is read through the column map and is_done", function()
+    -- Rename the Ready column and add an old Done column
     local detail = DETAIL:gsub('"Ready"', '"Next"'):gsub(
         '"Done","is_done":true}',
         '"Shipped","is_done":true},{"id":"col-old","name":"Old","is_done":true}'
     )
     local root, home = sandbox({
         detail = detail,
-        project = '[board]\nbackend = "pomb"\nname = "dotfiles"\n\n[board.columns]\nready = "Next"\n',
+        project = table.concat({
+            "[board]",
+            'backend = "pomb"',
+            'name = "dotfiles"',
+            "",
+            "[board.columns]",
+            'ready = "Next"',
+            "",
+        }, "\n"),
     })
+
+    -- Ask for the next card through the renamed column
     local out, code = dev(root, home, { "board", "next" })
     testing.eq(code, 0, out)
     testing.eq(
         out,
-        "11111111  Next  1 Pomodoro  docs  First  2 comments, 1 the owner's\n"
-            .. link_a(root)
-            .. "\n"
+        table.concat({
+            "11111111  Next  1 Pomodoro  docs  First  2 comments, 1 the owner's",
+            link_a(root),
+            "",
+        }, "\n")
     )
     testing.ok(requests(root):find("ready=true&column_id=col-ready", 1, true), requests(root))
+
+    -- List each column by its name or its is_done flag
     out, code = dev(root, home, { "board", "ls", "--column", support.Column.READY })
     testing.eq(code, 0, out)
     testing.ok(out:find("Next", 1, true), out)
@@ -8642,25 +10781,56 @@ end)
 testing.test(
     "board-columns-collision refuses two stages on one column and loads the rest",
     function()
+        -- Refuse Ready mapped onto the Review column
         local root, home = sandbox({
-            project = '[board]\nbackend = "pomb"\nname = "dotfiles"\n\n[board.columns]\nready = "Review"\n',
+            project = table.concat({
+                "[board]",
+                'backend = "pomb"',
+                'name = "dotfiles"',
+                "",
+                "[board.columns]",
+                'ready = "Review"',
+                "",
+            }, "\n"),
         })
         local out, code = dev(root, home, { "board", "next" })
         testing.ok(code ~= 0, out)
         testing.ok(out:find("`ready`", 1, true), out)
         testing.ok(out:find("`review`", 1, true), out)
         testing.ok(out:find("`Review`", 1, true), out)
+
+        -- Refuse the same collision when the case differs
         root, home = sandbox({
-            project = '[board]\nbackend = "pomb"\nname = "dotfiles"\n\n[board.columns]\nready = "review"\n',
+            project = table.concat({
+                "[board]",
+                'backend = "pomb"',
+                'name = "dotfiles"',
+                "",
+                "[board.columns]",
+                'ready = "review"',
+                "",
+            }, "\n"),
         })
         out, code = dev(root, home, { "board", "next" })
         testing.ok(code ~= 0, out)
         testing.ok(out:find("both map", 1, true), out)
+
+        -- Load the rest of the board when Ready is mapped to a free column
         root, home = sandbox({
-            project = '[board]\nbackend = "pomb"\nname = "dotfiles"\n\n[board.columns]\nready = "Next"\n',
+            project = table.concat({
+                "[board]",
+                'backend = "pomb"',
+                'name = "dotfiles"',
+                "",
+                "[board.columns]",
+                'ready = "Next"',
+                "",
+            }, "\n"),
         })
         out, code = dev(root, home, { "board", "ls" })
         testing.ok(not out:find("both map", 1, true), out)
+
+        -- Load a board with no column map
         root, home = sandbox()
         out, code = dev(root, home, { "board", "ls" })
         testing.eq(code, 0, out)
@@ -8668,24 +10838,36 @@ testing.test(
 )
 
 testing.test("next never offers the landing turn card on a pomb board", function()
+    -- Seed a board whose only card is the landing turn
     local root, home = sandbox({ task = TASK:gsub('"First"', '"landing turn"') })
+
+    -- Ask for the next card
     local out, code = dev(root, home, { "board", "next" })
+
+    -- Check no card is offered
     testing.eq(code, 0, out)
     testing.eq(out, "No ready cards.\n")
 end)
 
 testing.test("next asks for the unclaimed unblocked top of Ready", function()
+    -- Set up a board with a ready card
     local root, home = sandbox()
+
+    -- Ask for the next card
     local out, code = dev(root, home, { "board", "next" })
     testing.eq(code, 0)
     testing.eq(
         out,
-        "11111111  "
-            .. support.COLUMN_NAME.READY
-            .. "  1 Pomodoro  docs  First  2 comments, 1 the owner's\n"
-            .. link_a(root)
-            .. "\n"
+        table.concat({
+            "11111111  "
+                .. support.COLUMN_NAME.READY
+                .. "  1 Pomodoro  docs  First  2 comments, 1 the owner's",
+            link_a(root),
+            "",
+        }, "\n")
     )
+
+    -- Check the request asked for an unclaimed ready card
     testing.ok(
         requests(root):find(
             "/api/boards/board-1/tasks?limit=50&claimed=false&ready=true&column_id=col-ready",
@@ -8699,7 +10881,10 @@ end)
 local EPIC_TASK = '{"id":"' .. ID_A .. '","kind":"epic","children_total":3,"children_done":%d}'
 
 testing.test("next skips an epic that has an open child", function()
+    -- Seed an epic with an open child
     local root, home = sandbox({ task = EPIC_TASK:format(1) })
+
+    -- Ask for the next card in each column and check the epic is skipped
     for _, args in ipairs({
         { "board", "next" },
         { "board", "next", "--column", support.Column.REVIEW },
@@ -8708,6 +10893,8 @@ testing.test("next skips an epic that has an open child", function()
         testing.eq(code, 0, out)
         testing.ok(out:find("^No ", 1), out)
     end
+
+    -- Reseed the epic with every child Done and check it is offered
     root, home = sandbox({ task = EPIC_TASK:format(3) })
     local out, code = dev(root, home, { "board", "next" })
     testing.eq(code, 0, out)
@@ -8715,16 +10902,21 @@ testing.test("next skips an epic that has an open child", function()
 end)
 
 testing.test("ls marks an epic and its children", function()
+    -- Seed an epic with one done child
     local export = EXPORT:gsub(
         '"name":"First"',
         '"name":"First","kind":"epic","children_total":3,"children_done":1',
         1
     )
     local root, home = sandbox({ export = export, task = EPIC_TASK:format(1) })
+
+    -- List the board and check only the epic is marked
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 0, out)
     testing.ok(out:find("[epic 2 of 3 open] First", 1, true), out)
     testing.eq(out:find("[epic", out:find("Second", 1, true), true), nil)
+
+    -- Show the epic and check its kind and children
     out, code = dev(root, home, { "board", "show", "11111111-a" })
     testing.eq(code, 0, out)
     testing.ok(out:find("kind: epic, 2 open\n", 1, true), out)
@@ -8732,6 +10924,7 @@ testing.test("ls marks an epic and its children", function()
 end)
 
 testing.test("an epic move is refused by the board settings", function()
+    -- Seed an epic on a board with a WIP-limited Backlog
     local detail = DETAIL:gsub('"name":"Backlog"', '"name":"Backlog","wip_limit":2', 1)
     local export = WORKING_EXPORT:gsub('"done":false', '"done":true'):gsub(
         '"name":"First"',
@@ -8741,6 +10934,8 @@ testing.test("an epic move is refused by the board settings", function()
     local root, home =
         sandbox({ export = export, task = EPIC_TASK:format(1), detail = detail, user = LEAD_USER })
     two_tokens(root)
+
+    -- Move the epic into the limited and the Done columns
     for _, column in ipairs({ support.Column.BACKLOG, support.Column.DONE }) do
         local out, code = dev(
             root,
@@ -8752,13 +10947,18 @@ testing.test("an epic move is refused by the board settings", function()
         testing.ok(out:find("is an epic and cannot enter", 1, true), out)
         testing.ok(out:find("2 of 3 children are open.", 1, true), out)
     end
+
+    -- Check no move was sent
     testing.eq(requests(root):find("/move", 1, true), nil)
+
+    -- Move the epic into Review and check it went through
     local out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.REVIEW })
     testing.eq(code, 0, out)
     testing.ok(requests(root):find("/move", 1, true), requests(root))
 end)
 
 testing.test("an epic move reports the refusal Pomb answers", function()
+    -- Seed an epic whose task read shows every child done
     local text =
         "the epic still has open children (2), so it cannot enter a WIP-limited or Done column"
     local export = WORKING_EXPORT:gsub(
@@ -8767,41 +10967,60 @@ testing.test("an epic move reports the refusal Pomb answers", function()
         1
     )
     local root, home = sandbox({ export = export, task = EPIC_TASK:format(3) })
+
+    -- Make Pomb refuse the move with an epic error
     curl_with(
         root,
-        '*/move) body=\'{"code":"epic_has_open_children","message":"'
-            .. text
-            .. "\"}'; status=409 ;;\n*/owner/release) body= ;;"
+        table.concat({
+            '*/move) body=\'{"code":"epic_has_open_children","message":"'
+                .. text
+                .. "\"}'; status=409 ;;",
+            "*/owner/release) body= ;;",
+        }, "\n")
     )
+
+    -- Move the epic into Review
     local out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.REVIEW })
+
+    -- Check dev reports the refusal Pomb gave
     testing.eq(code, 1, out)
     testing.ok(out:find(text, 1, true), out)
 end)
 
 testing.test("an epic closes when the task read shows every child Done", function()
+    -- Seed an epic whose children are all done
     local export = PLANNED_DONE_EXPORT:gsub('"name":"First"', '"name":"First","kind":"epic"', 1)
     local root, home = sandbox({ export = export, task = EPIC_TASK:format(3), user = LEAD_USER })
     two_tokens(root)
+
+    -- Close the epic as the lead
     local out, code = dev(
         root,
         home,
         { "board", "move", "11111111-a", support.Column.DONE },
         { agent = LEAD }
     )
+
+    -- Check the move was sent
     testing.eq(code, 0, out)
     testing.ok(requests(root):find("/api/tasks/" .. ID_A .. "/move", 1, true), requests(root))
 end)
 
 testing.test("an epic with an open child in the task read is refused", function()
+    -- Seed an epic with an open child
     local export = PLANNED_DONE_EXPORT:gsub('"name":"First"', '"name":"First","kind":"epic"', 1)
     local root, home = sandbox({ export = export, task = EPIC_TASK:format(1), user = LEAD_USER })
     two_tokens(root)
+
+    -- Close the epic as the lead
     local out, code = dev(
         root,
         home,
         { "board", "move", "11111111-a", support.Column.DONE },
         { agent = LEAD }
     )
+
+    -- Check the close was refused and sent no move
     testing.eq(code, 1, out)
     testing.ok(out:find("is an epic and cannot enter", 1, true), out)
     testing.ok(out:find("2 of 3 children are open.", 1, true), out)
@@ -8809,6 +11028,7 @@ testing.test("an epic with an open child in the task read is refused", function(
 end)
 
 testing.test("an epic with open children can be reopened out of Done", function()
+    -- Seed an epic with an open child in the Done column
     local export = PLANNED_EXPORT:gsub(
         '"name":"First","column_id":"col%-ready"',
         '"name":"First","kind":"epic","children_total":3,"children_done":1,"column_id":"col-done"',
@@ -8816,29 +11036,41 @@ testing.test("an epic with open children can be reopened out of Done", function(
     )
     local task = EPIC_TASK:format(1):gsub("col%-ready", "col-done", 1)
     local root, home = sandbox({ export = export, task = task })
+
+    -- Move the epic back to Backlog
     local out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.BACKLOG })
     testing.eq(code, 0, out)
+
+    -- Check the move request named the Backlog column
     local calls = requests(root)
     testing.ok(calls:find("/api/tasks/" .. ID_A .. "/move", 1, true), calls)
     testing.ok(calls:find('"column_id":"col-backlog"', 1, true), calls)
 end)
 
 testing.test("next skips a card held by a blocker that is not in Done", function()
+    -- Seed a card blocked by a card that is not done
     local root, home = sandbox({
         links = '[{"kind":"blocked_by","target_id":"22222222-0000-0000-0000-000000000000"}]',
     })
+
+    -- Ask for the next Backlog card
     local out, code = dev(root, home, { "board", "next", "--column", support.Column.BACKLOG })
     testing.ok(code == 0, out)
     testing.eq(out, "No cards in Backlog.\n")
+
+    -- Ask for the next ready card
     out, code = dev(root, home, { "board", "next" })
     testing.ok(code == 0, out)
     testing.eq(out, "No ready cards.\n")
 end)
 
 local function far_sandbox(column, links)
+    -- Default to a blocker on the other board
     local link = links
         or '[{"kind":"blocked_by",'
             .. '"target_id":"dddddddd-dddd-4ddd-8ddd-dddddddddddd","board_id":"board-2"}]'
+
+    -- Write the other board's files and the blocker card
     local root, home = sandbox({ links = link })
     assert(
         fs.write(
@@ -8862,45 +11094,70 @@ local function far_sandbox(column, links)
                 .. '","labels":[]}'
         )
     )
+
+    -- Hand back the sandbox
     return root, home
 end
 
 testing.test("next offers a Ready card whose blocker on another board is Done", function()
+    -- Seed a card blocked by a Done card on another board
     local root, home = far_sandbox("far-done")
+
+    -- Ask for the next ready card
     local out, code = dev(root, home, { "board", "next" })
     testing.ok(code == 0, out)
     testing.ok(out:find("First", 1, true), out)
     testing.ok(requests(root):find("&ready=true", 1, true), requests(root))
+
+    -- Ask for the next Backlog card
     out, code = dev(root, home, { "board", "next", "--column", support.Column.BACKLOG })
     testing.ok(code == 0, out)
     testing.ok(out:find("First", 1, true), out)
 end)
 
 testing.test("next skips a backlog card whose blocker on another board cannot be read", function()
+    -- Seed a blocker on another board that fails to read
     local root, home = far_sandbox("far-done")
     assert(fs.write(root .. "/far.json", '{"message":"gone"}'))
     assert(fs.write(root .. "/far_gone", ""))
+
+    -- Ask for the next Backlog card
     local out, code = dev(root, home, { "board", "next", "--column", support.Column.BACKLOG })
+
+    -- Check the card is skipped
     testing.ok(code == 0, out)
     testing.eq(out, "No cards in Backlog.\n")
 end)
 
 testing.test("next skips a Ready card whose blocker on another board is open", function()
+    -- Seed a card blocked by an open card on another board
     local root, home = far_sandbox("far-ready")
+
+    -- Ask for the next ready card
     local out, code = dev(root, home, { "board", "next" })
+
+    -- Check the card is skipped
     testing.ok(code == 0, out)
     testing.eq(out, "No ready cards.\n")
 end)
 
 testing.test("next skips a backlog card whose blocker on another board is open", function()
+    -- Seed a card blocked by an open card on another board
     local root, home = far_sandbox("far-ready")
+
+    -- Ask for the next Backlog card
     local out, code = dev(root, home, { "board", "next", "--column", support.Column.BACKLOG })
+
+    -- Check the card is skipped
     testing.ok(code == 0, out)
     testing.eq(out, "No cards in Backlog.\n")
 end)
 
 testing.test("add posts the card to the named column", function()
+    -- Set up an empty board
     local root, home = sandbox()
+
+    -- Add a card to Ready with its outcomes
     local out, code = dev(root, home, {
         "board",
         "add",
@@ -8921,7 +11178,12 @@ testing.test("add posts the card to the named column", function()
         "dev test",
     })
     testing.eq(code, 0)
-    testing.eq(out, "added 11111111 " .. support.COLUMN_NAME.READY .. "\n" .. link_a(root) .. "\n")
+    testing.eq(
+        out,
+        table.concat({ "added 11111111 " .. support.COLUMN_NAME.READY, link_a(root), "" }, "\n")
+    )
+
+    -- Check the create request carried the checks and the column
     local calls = requests(root)
     testing.ok(calls:find('"fields":{"runner.checks":[{"run":"dev test"}]}', 1, true), calls)
     testing.ok(calls:find("POST /", 1, true), calls)
@@ -8933,7 +11195,10 @@ testing.test("add posts the card to the named column", function()
 end)
 
 testing.test("add --done-when posts one subtask per outcome after the card", function()
+    -- Set up an empty board
     local root, home = sandbox()
+
+    -- Add a card with two outcomes
     local out, code = dev(root, home, {
         "board",
         "add",
@@ -8952,7 +11217,12 @@ testing.test("add --done-when posts one subtask per outcome after the card", fun
         "B works",
     })
     testing.eq(code, 0)
-    testing.eq(out, "added 11111111 " .. support.COLUMN_NAME.READY .. "\n" .. link_a(root) .. "\n")
+    testing.eq(
+        out,
+        table.concat({ "added 11111111 " .. support.COLUMN_NAME.READY, link_a(root), "" }, "\n")
+    )
+
+    -- Count the subtask posts that followed the card
     local calls = requests(root)
     local first = calls:find("/api/tasks --", 1, true) or calls:find("POST /", 1, true)
     testing.ok(first, calls)
@@ -8965,6 +11235,8 @@ testing.test("add --done-when posts one subtask per outcome after the card", fun
         count, at = count + 1, stop + 1
     end
     testing.eq(count, 2)
+
+    -- Check each outcome's name was sent
     testing.ok(calls:find('body={"name":"A works"}', 1, true), calls)
     testing.ok(calls:find('body={"name":"B works"}', 1, true), calls)
 end)
@@ -8972,8 +11244,11 @@ end)
 testing.test(
     "a failed subtask names the card and what was not added, and is never queued",
     function()
+        -- Make the second subtask fail
         local root, home = sandbox()
         assert(fs.write(root .. "/sub_fail", "2"))
+
+        -- Add a card with three outcomes
         local out, code = dev(root, home, {
             "board",
             "add",
@@ -8993,6 +11268,8 @@ testing.test(
             "--done-when",
             "C",
         })
+
+        -- Check the failure names the card and was not queued
         testing.eq(code, 1)
         testing.ok(
             out:find("11111111 was added to Backlog but outcome 2 of 3 was not:", 1, true),
@@ -9005,7 +11282,10 @@ testing.test(
 testing.test(
     "add to Ready with outcomes creates in Backlog and moves after the subtasks",
     function()
+        -- Set up an empty board
         local root, home = sandbox()
+
+        -- Add a card to Ready with outcomes
         local out, code = dev(root, home, {
             "board",
             "add",
@@ -9026,6 +11306,8 @@ testing.test(
             "c " .. board.JUDGEMENT,
         })
         testing.eq(code, 0, out)
+
+        -- Check the card was created in Backlog and moved after its subtasks
         local calls = requests(root)
         testing.ok(calls:find('"column_id":"col-backlog"', 1, true), calls)
         local sub = calls:find("/subtasks", 1, true)
@@ -9035,20 +11317,35 @@ testing.test(
 )
 
 testing.test("show and ls read the subtasks from the export", function()
+    -- Serve an export whose card holds two subtasks
     local export = EXPORT:gsub(
         '"description":"Why it matters.",',
         '"description":"Why it matters.","subtasks":[{"id":"s1","name":"Docs written","done":true},'
             .. '{"id":"s2","name":"Lint clean","done":false}],'
     )
     local root, home = sandbox({ export = export })
+
+    -- Show the card and check its outcomes
     local out = dev(root, home, { "board", "show", "11111111-a" })
-    testing.ok(out:find("done when:\n- [x] Docs written\n- [ ] Lint clean\n", 1, true), out)
+    testing.ok(
+        out:find(
+            table.concat({ "done when:", "- [x] Docs written", "- [ ] Lint clean", "" }, "\n"),
+            1,
+            true
+        ),
+        out
+    )
+
+    -- List the board and check the outcome count
     out = dev(root, home, { "board", "ls" })
     testing.ok(out:find("1/2", 1, true), out)
 end)
 
 testing.test("add --label needs:human reaches pomb after the card and its outcomes", function()
+    -- Set up an empty board
     local root, home = sandbox()
+
+    -- Add a locked card with an outcome
     local out, code = dev(root, home, {
         "board",
         "add",
@@ -9070,19 +11367,26 @@ testing.test("add --label needs:human reaches pomb after the card and its outcom
     })
     testing.eq(code, 0)
     testing.ok(out:find("added 11111111", 1, true), out)
+
+    -- Check the label was sent after the card and its outcome
     local calls = requests(root)
     local created = calls:find("/api/tasks body=", 1, true)
     local outcome = calls:find("/subtasks", 1, true)
     local labelled = calls:find('body={"labels":["needs:human"]}', 1, true)
     testing.ok(created and outcome and labelled, calls)
     testing.ok(created < outcome and outcome < labelled, calls)
+
+    -- Check the label was sent once
     local _, hits = calls:gsub("needs:human", "")
     testing.eq(hits, 1)
 end)
 
 testing.test("a failed subtask on add --label needs:human still labels the card", function()
+    -- Make the only subtask fail
     local root, home = sandbox()
     assert(fs.write(root .. "/sub_fail", "1"))
+
+    -- Add a locked card with an outcome
     local out, code = dev(root, home, {
         "board",
         "add",
@@ -9102,6 +11406,8 @@ testing.test("a failed subtask on add --label needs:human still labels the card"
         "--label",
         "needs:human",
     })
+
+    -- Check the failure is reported and the label was still sent
     testing.eq(code, 1)
     testing.ok(out:find("outcome 1 of 1 was not", 1, true), out)
     testing.ok(requests(root):find('body={"labels":["needs:human"]}', 1, true))
@@ -9130,25 +11436,38 @@ local function add_locked(root, home)
 end
 
 testing.test("add --label needs:human names the card when its label is refused", function()
+    -- Make the label write fail
     local root, home = sandbox()
     assert(fs.write(root .. "/label_fail", ""))
+
+    -- Add a locked card
     local out, code = add_locked(root, home)
+
+    -- Check the card is named in the failure
     testing.eq(code, 1)
     testing.ok(out:find("but its labels were not set. Run `dev board label` on it.", 1, true), out)
 end)
 
 testing.test("a failed subtask and a refused label on add --label needs:human say both", function()
+    -- Make the subtask and the label write fail
     local root, home = sandbox()
     assert(fs.write(root .. "/sub_fail", "1"))
     assert(fs.write(root .. "/label_fail", ""))
+
+    -- Add a locked card
     local out, code = add_locked(root, home)
+
+    -- Check both failures are reported
     testing.eq(code, 1)
     testing.ok(out:find("outcome 1 of 1 was not", 1, true), out)
     testing.ok(out:find("Its labels were not set either.", 1, true), out)
 end)
 
 testing.test("add --size and size reach pomb with the id of the colour, not its label", function()
+    -- Set up an empty board
     local root, home = sandbox()
+
+    -- Add a card sized 3+ and check it carries the red colour id
     local out, code = dev(root, home, {
         "board",
         "add",
@@ -9165,9 +11484,14 @@ testing.test("add --size and size reach pomb with the id of the colour, not its 
         "a",
     })
     testing.eq(code, 0)
-    testing.eq(out, "added 11111111 " .. support.COLUMN_NAME.READY .. "\n" .. link_a(root) .. "\n")
+    testing.eq(
+        out,
+        table.concat({ "added 11111111 " .. support.COLUMN_NAME.READY, link_a(root), "" }, "\n")
+    )
     local calls = requests(root)
     testing.ok(calls:find('"color_id":"red-id"', 1, true), calls)
+
+    -- Resize the card to 2 and check it carries the green colour id
     out, code = dev(root, home, { "board", "size", "11111111-a", "2" })
     testing.eq(code, 0)
     testing.eq(out, "sized 11111111 2\n")
@@ -9175,10 +11499,14 @@ testing.test("add --size and size reach pomb with the id of the colour, not its 
     testing.ok(calls:find("PATCH /", 1, true), calls)
     testing.ok(calls:find("/api/tasks/" .. ID_A, 1, true), calls)
     testing.ok(calls:find('body={"color_id":"green-id"}', 1, true), calls)
+
+    -- Refuse to unsize a card outside the icebox
     out, code = dev(root, home, { "board", "size", "11111111-a", "unsized" })
     testing.eq(code, 1)
     testing.ok(out:find("keeps a size", 1, true), out)
     testing.eq(requests(root):find('{"color_id":"white-id"}', 1, true), nil)
+
+    -- Unsize a card in the icebox
     local iced = EXPORT:gsub('"column_id":"col%-backlog"', '"column_id":"col-icebox"')
     root, home = sandbox({ export = iced })
     out, code = dev(root, home, { "board", "size", "cccccccc", "unsized" })
@@ -9187,28 +11515,48 @@ testing.test("add --size and size reach pomb with the id of the colour, not its 
 end)
 
 testing.test("a board with no colour of the size asked for is reported", function()
+    -- Give the board a palette with no yellow
     local root, home = sandbox()
     assert(
         fs.write(root .. "/colors.json", '[{"id":"white-id","value":"white","label":"Unsized"}]')
     )
+
+    -- Size a card with the missing colour
     local out, code = dev(root, home, { "board", "size", "11111111-a", "1" })
     testing.eq(code, 1)
     testing.ok(out:find("Board unavailable: The board has no yellow colour", 1, true), out)
+
+    -- Size a card with a size that does not exist
     out, code = dev(root, home, { "board", "size", "11111111-a", "7" })
     testing.eq(code, 2)
 end)
 
 testing.test("ls --size reads the colour value from the palette whatever its label", function()
+    -- Set up a board with sized and unsized cards
     local root, home = sandbox()
+
+    -- List the cards sized 1
     local out, code = dev(root, home, { "board", "ls", "--size", "1" })
     testing.eq(code, 0)
     testing.eq(out, "11111111  Ready  1 Pomodoro  docs  First\n")
+
+    -- List the unsized cards
     out = dev(root, home, { "board", "ls", "--size", "unsized" })
-    testing.eq(out, "cccccccc  Backlog  Unsized  -  Early\n11111111  Ready    unsized  -  Second\n")
+    testing.eq(
+        out,
+        table.concat({
+            "cccccccc  Backlog  Unsized  -  Early",
+            "11111111  Ready    unsized  -  Second",
+            "",
+        }, "\n")
+    )
 end)
 
 testing.test("add --label and label reach pomb as the whole list", function()
+    -- Set up an empty board
     local root, home = sandbox()
+
+    -- Add a card with two labels
     local out, code = dev(root, home, {
         "board",
         "add",
@@ -9229,24 +11577,36 @@ testing.test("add --label and label reach pomb as the whole list", function()
         "b",
     })
     testing.eq(code, 0)
-    testing.eq(out, "added 11111111 " .. support.COLUMN_NAME.READY .. "\n" .. link_a(root) .. "\n")
+    testing.eq(
+        out,
+        table.concat({ "added 11111111 " .. support.COLUMN_NAME.READY, link_a(root), "" }, "\n")
+    )
     testing.ok(requests(root):find('"labels":["a","b"]', 1, true), requests(root))
+
+    -- Add a label and check the whole list was sent
     out, code = dev(root, home, { "board", "label", "11111111-a", "+needs:lead" })
     testing.eq(code, 0)
     testing.eq(out, "labelled 11111111 docs,needs:lead\n")
     local calls = requests(root)
     testing.ok(calls:find("PATCH /", 1, true), calls)
     testing.ok(calls:find('body={"labels":["docs","needs:lead"]}', 1, true), calls)
+
+    -- Remove a label and check the list emptied
     out, code = dev(root, home, { "board", "label", "11111111-a", "--remove", "docs" })
     testing.eq(code, 0)
     testing.eq(out, "labelled 11111111 -\n")
     testing.ok(requests(root):find('body={"labels":[]}', 1, true))
+
+    -- Refuse a label with a space in it
     out, code = dev(root, home, { "board", "label", "11111111-a", "+two words" })
     testing.eq(code, 2)
 end)
 
 testing.test("pomb responsible sends the session object and null to clear", function()
+    -- Set up an empty board
     local root, home = sandbox()
+
+    -- Set the responsible session
     local out, code = dev(root, home, { "board", "responsible", "11111111-a", "dotfiles/lead" })
     testing.eq(code, 0, out)
     testing.eq(out, "set 11111111 responsible dotfiles/lead\n")
@@ -9258,23 +11618,35 @@ testing.test("pomb responsible sends the session object and null to clear", func
         ),
         requests(root)
     )
+
+    -- Clear the responsible session
     out, code = dev(root, home, { "board", "responsible", "11111111-a", "--clear" })
     testing.eq(code, 0, out)
     testing.ok(requests(root):find('body={"responsible":null}', 1, true), requests(root))
 end)
 
 testing.test("label sends the fence of a claim this machine holds", function()
+    -- Claim the card
     local root, home = sandbox({ export = PLANNED_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
+
+    -- Label the card
     local _, code = dev(root, home, { "board", "label", "11111111-a", "+x" })
     testing.eq(code, 0)
+
+    -- Check the patch carried the claim's fence
     local patched = block(requests(root), "PATCH /")
     testing.ok(patched and patched:find("If-Owner-Fence: 7", 1, true), patched)
+
+    -- Release the claim
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
 testing.test("pomb time posts the minutes, role and note to the time route", function()
+    -- Set up an empty board
     local root, home = sandbox()
+
+    -- Log time as the implementer
     local out, code = dev(
         root,
         home,
@@ -9282,6 +11654,8 @@ testing.test("pomb time posts the minutes, role and note to the time route", fun
     )
     testing.eq(out, "logged 25 minutes as implementer on 11111111\n")
     testing.eq(code, 0)
+
+    -- Check the post to the time route
     local calls = requests(root)
     local posted = block_with(calls, "/api/tasks/" .. ID_A .. "/time")
     testing.ok(posted, calls)
@@ -9291,27 +11665,37 @@ testing.test("pomb time posts the minutes, role and note to the time route", fun
 end)
 
 testing.test("pomb escalate posts the tier and reason with the fence", function()
+    -- Claim a blocked card that needs a planner
     local export = export_with_first_card({
         labels = { "needs:planner" },
         column_id = support.column_id(support.Column.BLOCKED),
     })
     local root, home = sandbox({ export = export })
     dev(root, home, { "board", "take", "11111111-a" })
+
+    -- Escalate the card
     local out, code = dev(root, home, { "board", "escalate", "11111111-a", "pick", "one" })
     testing.eq(out, "escalated 11111111 to needs:lead\n")
     testing.eq(code, 0)
+
+    -- Check the escalate post carried the tier, reason and fence
     local calls = requests(root)
     local posted = block_with(calls, "/api/tasks/" .. ID_A .. "/escalate")
     testing.ok(posted and posted:find("If-Owner-Fence: 7", 1, true), calls)
     testing.ok(posted:find('"tier":"lead"', 1, true), calls)
     testing.ok(posted:find('"reason":"pick one"', 1, true), calls)
     testing.ok(not calls:find("PATCH /", 1, true), calls)
+
+    -- Release the claim
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
 testing.test("checks patches the task's checks field whole, with the claim's fence", function()
+    -- Claim the card
     local root, home = sandbox({ export = PLANNED_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
+
+    -- Set two check rows as the lead
     local out, code = dev(
         root,
         home,
@@ -9320,6 +11704,8 @@ testing.test("checks patches the task's checks field whole, with the claim's fen
     )
     testing.eq(code, 0, out)
     testing.eq(out, "set checks 11111111, 2 rows\n")
+
+    -- Check the patch sent the whole field with the claim's fence
     local calls = requests(root)
     testing.ok(
         calls:find(
@@ -9331,17 +11717,27 @@ testing.test("checks patches the task's checks field whole, with the claim's fen
     )
     local patched = block(calls, "PATCH /")
     testing.ok(patched and patched:find("If-Owner-Fence: 7", 1, true), patched)
+
+    -- Release the claim
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
 testing.test("with no field_prefix the checks field key is dev.checks", function()
+    -- Claim a card on a board with no field prefix
     local root, home = sandbox({
         export = PLANNED_EXPORT,
-        user = '[board.pomb]\nurl = "https://pomb.example"\ntoken = "pass:secrets/worker/token/pomb"\n',
+        user = table.concat({
+            "[board.pomb]",
+            'url = "https://pomb.example"',
+            'token = "pass:secrets/worker/token/pomb"',
+            "",
+        }, "\n"),
         fields = '[{"id":"f1","key":"dev.checks","label":"Checks","kind":"table",'
             .. '"options":[],"columns":[],"required":true}]',
     })
     dev(root, home, { "board", "take", "11111111-a" })
+
+    -- Set a check row as the lead
     local out, code = dev(
         root,
         home,
@@ -9349,16 +11745,25 @@ testing.test("with no field_prefix the checks field key is dev.checks", function
         { agent = LEAD }
     )
     testing.eq(code, 0, out)
+
+    -- Check the patch used the dev.checks key
     local calls = requests(root)
     testing.ok(calls:find('body={"fields":{"dev.checks":[{"run":"dev lint"}]}}', 1, true), calls)
+
+    -- Release the claim
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
 testing.test(
     "checks on a Pomb board without the checks field is refused before any write",
     function()
+        -- Set up a board with no checks field
         local root, home = sandbox({ fields = "[]" })
+
+        -- Set a check row
         local out, code = dev(root, home, { "board", "checks", "11111111-a", "dev lint" })
+
+        -- Check the refusal sent no write
         testing.eq(code, 1)
         testing.ok(out:find("no checks field", 1, true), out)
         testing.eq(requests(root):find("PATCH /", 1, true), nil)
@@ -9368,8 +11773,11 @@ testing.test(
 testing.test(
     "allow, tests and files patch the task's fields whole, with the claim's fence",
     function()
+        -- Claim the card
         local root, home = sandbox({ export = PLANNED_EXPORT })
         dev(root, home, { "board", "take", "11111111-a" })
+
+        -- Set the allow list, the tests and the files as the lead
         local out, code = dev(
             root,
             home,
@@ -9392,9 +11800,13 @@ testing.test(
             { agent = LEAD }
         )
         testing.eq(code, 0, out)
+
+        -- Clear the allow list
         out, code = dev(root, home, { "board", "allow", "11111111-a", "none" }, { agent = LEAD })
         testing.eq(code, 0, out)
         testing.eq(out, "cleared allow 11111111\n")
+
+        -- Check each patch sent the whole field
         local calls = requests(root)
         for _, body in ipairs({
             'body={"fields":{"runner.allow":["test-edits","ci-edits"]}}',
@@ -9404,8 +11816,12 @@ testing.test(
         }) do
             testing.ok(calls:find(body, 1, true), calls)
         end
+
+        -- Check the patches carried the claim's fence
         local patched = block(calls, "PATCH /")
         testing.ok(patched and patched:find("If-Owner-Fence: 7", 1, true), patched)
+
+        -- Release the claim
         dev(root, home, { "board", "release", "11111111-a" })
     end
 )
@@ -9413,7 +11829,10 @@ testing.test(
 testing.test(
     "allow, tests and files on a Pomb board without the field are refused before any write",
     function()
+        -- Set up a board with none of the fields
         local root, home = sandbox({ fields = "[]" })
+
+        -- Set each field and check the refusal names it
         for _, case in ipairs({
             { "allow", "test-edits", "runner.allow" },
             { "tests", "one", "runner.tests" },
@@ -9423,11 +11842,14 @@ testing.test(
             testing.eq(code, 1)
             testing.ok(out:find("no " .. case[3] .. " field", 1, true), out)
         end
+
+        -- Check no write was sent
         testing.eq(requests(root):find("PATCH /", 1, true), nil)
     end
 )
 
 testing.test("show prints the allow, tests and files fields a Pomb card holds", function()
+    -- Seed a card with the three fields set
     local root, home = sandbox({
         export = '{"tasks":[' .. support.pomb_export_task({
             id = ID_A,
@@ -9438,22 +11860,46 @@ testing.test("show prints the allow, tests and files fields a Pomb card holds", 
                 .. '"runner.tests":"one\\ntwo","runner.files":"src/a.rs"}',
         }) .. "]}",
     })
+
+    -- Show the card
     local out, code = dev(root, home, { "board", "show", "11111111-a" })
+
+    -- Check each field is printed as a list
     testing.eq(code, 0, out)
     testing.ok(
-        out:find("allow:\n- ci-edits\n\ntests:\n- one\n- two\n\nfiles:\n- src/a.rs\n", 1, true),
+        out:find(
+            table.concat({
+                "allow:",
+                "- ci-edits",
+                "",
+                "tests:",
+                "- one",
+                "- two",
+                "",
+                "files:",
+                "- src/a.rs",
+                "",
+            }, "\n"),
+            1,
+            true
+        ),
         out
     )
 end)
 
 testing.test("note posts a comment of kind agent and move goes to the top of the column", function()
+    -- Seed a working card
     local root, home = sandbox({ export = WORKING_EXPORT })
+
+    -- Post a note and check its kind
     local out = dev(root, home, { "board", "note", "11111111-a", "landed", "it" })
     testing.eq(out, "noted 11111111\n")
     local calls = requests(root)
     testing.ok(calls:find("/api/tasks/" .. ID_A .. "/comments", 1, true), calls)
     testing.ok(calls:find('"kind":"agent"', 1, true), calls)
     testing.ok(not calls:find('"author"', 1, true), calls)
+
+    -- Post a decision as the reviewer and check its author
     out = dev(
         root,
         home,
@@ -9463,6 +11909,8 @@ testing.test("note posts a comment of kind agent and move goes to the top of the
     calls = requests(root)
     testing.ok(calls:find('"kind":"decision"', 1, true), calls)
     testing.ok(calls:find('"author":"reviewer"', 1, true), calls)
+
+    -- Move the card to Review and check it went to the top
     out = dev(root, home, { "board", "move", "11111111-a", support.Column.REVIEW })
     testing.eq(out, "moved 11111111 to Review\n")
     calls = requests(root)
@@ -9481,7 +11929,10 @@ local function owner_card_sandbox()
 end
 
 testing.test("ask posts a structured question", function()
+    -- Seed a planned card
     local root, home = sandbox({ export = PLANNED_EXPORT })
+
+    -- Ask a question with two choices and a recommendation
     local out, code = dev(
         root,
         home,
@@ -9503,6 +11954,8 @@ testing.test("ask posts a structured question", function()
     )
     testing.eq(out, "asked 11111111\n")
     testing.eq(code, 0)
+
+    -- Check the comment post carried the question, the choices and the recommendation
     local calls = requests(root)
     testing.ok(calls:find("POST /", 1, true), calls)
     testing.ok(calls:find("/api/tasks/" .. ID_A .. "/comments", 1, true), calls)
@@ -9516,8 +11969,11 @@ testing.test("ask posts a structured question", function()
 end)
 
 testing.test("ask prints the refusal as worded", function()
+    -- Make Pomb refuse the question
     local root, home = sandbox({ export = PLANNED_EXPORT })
     assert(fs.write(root .. "/ask_refusal", '{"message":"question.why is required"}'))
+
+    -- Ask a question with no why
     local out, code = dev(
         root,
         home,
@@ -9535,12 +11991,17 @@ testing.test("ask prints the refusal as worded", function()
             "1",
         })
     )
+
+    -- Check the refusal is printed as worded
     testing.eq(code, 1)
     testing.ok(out:find("question.why is required", 1, true), out)
 end)
 
 testing.test("ask names a choice whose column the board lacks and posts nothing", function()
+    -- Seed a planned card
     local root, home = sandbox({ export = PLANNED_EXPORT })
+
+    -- Ask a question whose choice names a missing column
     local out, code = dev(
         root,
         home,
@@ -9552,6 +12013,8 @@ testing.test("ask names a choice whose column the board lacks and posts nothing"
             "Nowhere=Lost",
         })
     )
+
+    -- Check the refusal names the choice and nothing was posted
     testing.eq(code, 1)
     testing.ok(out:find("Choice 1 names Nowhere, which is no column.", 1, true), out)
     testing.ok(not requests(root):find("POST /", 1, true), requests(root))
@@ -9564,11 +12027,14 @@ local QUESTION_COMMENT = '[{"id":"qqqqqqqq-1111-4111-8111-111111111111","author"
     .. '"recommended":1,"why":"w","answer":%s}}]'
 
 testing.test("answer records the choice through Pomb", function()
+    -- Seed an open question followed by a plain comment
     local root, home = owner_card_sandbox()
     local plain = '{"id":"pppppppp-2222-4222-8222-222222222222","author":"x","actor_kind":"user",'
         .. '"token_name":null,"created_at":"2026-10-27T10:00:00Z","body":"later","question":null}'
     local listed = QUESTION_COMMENT:format("null")
     assert(fs.write(root .. "/comments.json", listed:sub(1, -2) .. "," .. plain .. "]"))
+
+    -- Answer the question with choice 2
     local out, code = dev(
         root,
         home,
@@ -9576,6 +12042,8 @@ testing.test("answer records the choice through Pomb", function()
     )
     testing.eq(out, "answered 11111111 with choice 2\n")
     testing.eq(code, 0)
+
+    -- Check the answer was posted to the question's comment
     local calls = requests(root)
     testing.ok(
         calls:find(
@@ -9610,11 +12078,14 @@ do
     end
 
     testing.test("answer settles every open question on Pomb", function()
+        -- Seed two open questions
         local root, home = owner_card_sandbox()
         local second =
             open_question("rrrrrrrr-1111-4111-8111-111111111111", "Which order?", SHIP_OR_PARK)
         local first = QUESTION_COMMENT:format("null"):sub(2, -2)
         assert(fs.write(root .. "/comments.json", "[" .. first .. "," .. second .. "]"))
+
+        -- Answer with choice 2
         local out, code = dev(
             root,
             home,
@@ -9622,6 +12093,8 @@ do
         )
         testing.eq(code, 0, out)
         testing.eq(out, "answered 11111111 with choice 2\n")
+
+        -- Check both questions were answered in order
         local calls = requests(root)
         local first_answer = calls:find(
             "/api/tasks/" .. ID_A .. "/comments/qqqqqqqq-1111-4111-8111-111111111111/answer",
@@ -9638,6 +12111,7 @@ do
     end)
 
     testing.test("answer refuses open questions with different menus on Pomb", function()
+        -- Seed two open questions whose menus differ
         local root, home = owner_card_sandbox()
         local other = open_question(
             "rrrrrrrr-1111-4111-8111-111111111111",
@@ -9650,11 +12124,15 @@ do
         )
         local first = QUESTION_COMMENT:format("null"):sub(2, -2)
         assert(fs.write(root .. "/comments.json", "[" .. first .. "," .. other .. "]"))
+
+        -- Answer with choice 2
         local out, code = dev(
             root,
             home,
             { "board", "answer", "11111111-a", "--choice", "2", "--quote", "go with two" }
         )
+
+        -- Check the answer was refused and sent nothing
         testing.eq(code, 1, out)
         testing.ok(out:find('"Which way?", "Which order?"', 1, true), out)
         testing.ok(not requests(root):find("/answer", 1, true), requests(root))
@@ -9662,8 +12140,11 @@ do
 end
 
 testing.test("show on Pomb names each open choice's column and marks the recommended", function()
+    -- Seed an open question
     local root, home = owner_card_sandbox()
     assert(fs.write(root .. "/comments.json", QUESTION_COMMENT:format("null")))
+
+    -- Show the card and check each choice's column and the recommended mark
     local out, code = dev(root, home, { "board", "show", "11111111-a" })
     testing.eq(code, 0)
     testing.ok(
@@ -9671,6 +12152,8 @@ testing.test("show on Pomb names each open choice's column and marks the recomme
         out
     )
     testing.ok(out:find("2. Park it (" .. support.COLUMN_NAME.ICEBOX .. ")", 1, true), out)
+
+    -- Answer the question and check its choices are no longer shown
     assert(
         fs.write(
             root .. "/comments.json",
@@ -9684,6 +12167,7 @@ end)
 testing.test(
     "answer refuses a card whose question is answered already before calling Pomb",
     function()
+        -- Seed a question that is answered already
         local root, home = owner_card_sandbox()
         assert(
             fs.write(
@@ -9691,8 +12175,12 @@ testing.test(
                 QUESTION_COMMENT:format('{"choice":1,"answered_by":"o","answered_at":"x"}')
             )
         )
+
+        -- Answer the card
         local out, code =
             dev(root, home, { "board", "answer", "11111111-a", "--choice", "1", "--quote", "yes" })
+
+        -- Check the answer was refused before calling Pomb
         testing.eq(code, 1)
         testing.ok(out:find("no open question", 1, true), out)
         testing.ok(not requests(root):find("/answer", 1, true), requests(root))
@@ -9700,23 +12188,35 @@ testing.test(
 )
 
 testing.test("answer refuses an empty quote before calling Pomb", function()
+    -- Seed an open question
     local root, home = owner_card_sandbox()
+
+    -- Answer with a blank quote
     local _, code =
         dev(root, home, { "board", "answer", "11111111-a", "--choice", "1", "--quote", " " })
+
+    -- Check the answer was refused before calling Pomb
     testing.eq(code, 2)
     testing.ok(not requests(root):find("POST /", 1, true), requests(root))
 end)
 
 testing.test("order sends each position to Pomb and refuses two columns first", function()
+    -- Seed two cards in one column
     local root, home = sandbox({ export = export_with_first_card({ position = 3 }) })
+
+    -- Order the second card ahead of the first
     local out, code = dev(root, home, { "board", "order", "11111111-b", "11111111-a" })
     testing.eq(code, 0, out)
+
+    -- Check each position was sent in order
     local calls = requests(root)
     local first = calls:find("/api/tasks/" .. ID_B .. "/move", 1, true)
     local second = calls:find("/api/tasks/" .. ID_A .. "/move", 1, true)
     testing.ok(first and second and first < second, calls)
     testing.ok(calls:find('"position":0', 1, true), calls)
     testing.ok(calls:find('"position":1', 1, true), calls)
+
+    -- Refuse to order cards from two columns
     root, home = sandbox()
     out, code = dev(root, home, { "board", "order", "11111111-a", "cccccccc" })
     testing.eq(code, 1, out)
@@ -9727,6 +12227,7 @@ end)
 testing.test(
     "links reads the task's links and names the board of a link to another board",
     function()
+        -- Seed a card with a link on each board
         local links = '[{"id":"l1","kind":"blocked_by","target_id":"'
             .. ID_C
             .. '","board_id":"board-1"},'
@@ -9735,13 +12236,22 @@ testing.test(
             .. ID_B
             .. '","board_id":null}]'
         local root, home = far_sandbox("far-done", links)
+
+        -- Read the links and check each names its kind and board
         local out, code = dev(root, home, { "board", "links", "11111111-a" })
         testing.eq(code, 0, out)
         testing.eq(
             out,
-            "blocked_by  cccccccc  -   Backlog\nblocks      dddddddd  ci  Done\nrelated     11111111  -   Ready\n"
+            table.concat({
+                "blocked_by  cccccccc  -   Backlog",
+                "blocks      dddddddd  ci  Done",
+                "related     11111111  -   Ready",
+                "",
+            }, "\n")
         )
         testing.ok(requests(root):find("/api/tasks/" .. ID_A .. "/links", 1, true), requests(root))
+
+        -- Read the links of a card that has none
         root, home = sandbox()
         out, code = dev(root, home, { "board", "links", "11111111-a" })
         testing.eq(code, 0, out)
@@ -9752,10 +12262,13 @@ testing.test(
 testing.test(
     "unlink deletes the link the token holds and reports a refused delete plainly",
     function()
+        -- Seed a card with one link
         local links = '[{"id":"l1","kind":"blocked_by","target_id":"'
             .. ID_C
             .. '","board_id":"board-1"}]'
         local root, home = sandbox({ links = links })
+
+        -- Unlink the link and check the delete was sent
         local out, code =
             dev(root, home, { "board", "unlink", "11111111-a", "blocked_by", "cccccccc" })
         testing.eq(code, 0, out)
@@ -9764,6 +12277,8 @@ testing.test(
         testing.ok(calls:find("DELETE /", 1, true), calls)
         testing.ok(calls:find("/api/tasks/" .. ID_A .. "/links/l1", 1, true), calls)
         local _, deletes_before = requests(root):gsub("DELETE /", "")
+
+        -- Unlink a link the card does not hold and check no delete was sent
         out, code = dev(root, home, { "board", "unlink", "11111111-a", "related", "cccccccc" })
         testing.eq(code, 1, out)
         testing.ok(
@@ -9776,11 +12291,15 @@ testing.test(
         )
         local _, deletes_after = requests(root):gsub("DELETE /", "")
         testing.eq(deletes_after, deletes_before)
+
+        -- Make Pomb refuse the delete of a link another token made
         root, home = sandbox({ links = links })
         curl_with(
             root,
-            [[*/links/l1) body='{"code":"permission_denied","permission":"links.delete","message":"m","board_id":null}'; status=403 ;;
-*/owner/release) body= ;;]]
+            table.concat({
+                [[*/links/l1) body='{"code":"permission_denied","permission":"links.delete","message":"m","board_id":null}'; status=403 ;;]],
+                "*/owner/release) body= ;;",
+            }, "\n")
         )
         out, code = dev(root, home, { "board", "unlink", "11111111-a", "blocked_by", "cccccccc" })
         testing.eq(code, 1, out)
@@ -9793,11 +12312,15 @@ testing.test(
             requests(root):find("/api/tasks/" .. ID_A .. "/links/l1", 1, true),
             requests(root)
         )
+
+        -- Make Pomb refuse the delete for another permission
         root, home = sandbox({ links = links })
         curl_with(
             root,
-            [[*/links/l1) body='{"code":"permission_denied","permission":"tasks.edit","message":"no write","board_id":"board-9"}'; status=403 ;;
-*/owner/release) body= ;;]]
+            table.concat({
+                [[*/links/l1) body='{"code":"permission_denied","permission":"tasks.edit","message":"no write","board_id":"board-9"}'; status=403 ;;]],
+                "*/owner/release) body= ;;",
+            }, "\n")
         )
         out, code = dev(root, home, { "board", "unlink", "11111111-a", "blocked_by", "cccccccc" })
         testing.eq(code, 1, out)
@@ -9806,41 +12329,63 @@ testing.test(
 )
 
 testing.test("unlink of a blocks view deletes the blocked_by link on the holder's task", function()
+    -- Seed a blocks link whose holder carries the blocked_by link
     local links = '[{"id":"l1","kind":"blocks","target_id":"' .. ID_C .. '","board_id":"board-1"}]'
     local holder = '[{"id":"l9","kind":"blocked_by","target_id":"'
         .. ID_A
         .. '","board_id":"board-1"}]'
     local root, home = sandbox({ links = links, holder_links = holder })
+
+    -- Unlink the blocks view
     local out, code = dev(root, home, { "board", "unlink", "11111111-a", "blocks", "cccccccc" })
     testing.eq(code, 0, out)
     testing.eq(out, "unlinked 11111111 blocks cccccccc\n")
+
+    -- Check the holder's link was the one deleted
     local calls = requests(root)
     testing.ok(calls:find("/api/tasks/" .. ID_C .. "/links/l9", 1, true), calls)
     testing.ok(not calls:find("/api/tasks/" .. ID_A .. "/links/l1", 1, true), calls)
 end)
 
 testing.test("notes, note --edit and note --delete reach pomb's comment routes", function()
+    -- Set up a board whose card holds two comments
     local root, home = sandbox()
+
+    -- List the card's notes
     local out, code = dev(root, home, { "board", "notes", "11111111-a" })
     testing.eq(code, 0)
     testing.eq(
         out,
-        "aaaaaaaa  worker  -  -  2026-10-27 09:30  first\ndddddddd  human   -  x  2026-10-27 10:00  mine? no\n"
+        table.concat({
+            "aaaaaaaa  worker  -  -  2026-10-27 09:30  first",
+            "dddddddd  human   -  x  2026-10-27 10:00  mine? no",
+            "",
+        }, "\n")
     )
+
+    -- Show the card with its notes
     out, code = dev(root, home, { "board", "show", "11111111-a" })
     testing.eq(code, 0)
     testing.eq(
         out,
-        "11111111  "
-            .. support.COLUMN_NAME.READY
-            .. "  1 Pomodoro  docs  First\n"
-            .. link_a(root)
-            .. "\n\nWhy it matters.\n\n"
-            .. "checks:\n- dev test\n- dev lint\n\n"
-            .. "aaaaaaaa  worker  -  -  2026-10-27 09:30  first\n"
-            .. (" "):rep(42)
-            .. "line\ndddddddd  human   -  x  2026-10-27 10:00  mine? no\n"
+        table.concat({
+            "11111111  " .. support.COLUMN_NAME.READY .. "  1 Pomodoro  docs  First",
+            link_a(root),
+            "",
+            "Why it matters.",
+            "",
+            "checks:",
+            "- dev test",
+            "- dev lint",
+            "",
+            "aaaaaaaa  worker  -  -  2026-10-27 09:30  first",
+            (" "):rep(42) .. "line",
+            "dddddddd  human   -  x  2026-10-27 10:00  mine? no",
+            "",
+        }, "\n")
     )
+
+    -- Edit a note and check the patch
     out, code = dev(root, home, { "board", "note", "11111111-a", "--edit", "aaaaaaaa", "better" })
     testing.eq(code, 0)
     testing.eq(out, "edited 11111111 aaaaaaaa\n")
@@ -9855,6 +12400,8 @@ testing.test("notes, note --edit and note --delete reach pomb's comment routes",
         calls
     )
     testing.ok(calls:find('body={"body":"better"}', 1, true), calls)
+
+    -- Delete a note and check the delete
     out, code = dev(root, home, { "board", "note", "11111111-a", "--delete", "aaaaaaaa" })
     testing.eq(code, 0)
     testing.eq(out, "deleted 11111111 aaaaaaaa\n")
@@ -9871,9 +12418,14 @@ do
         .. ('"old_value":"%s","new_value":"%s"}'):format(PROGRESS_NAME, support.COLUMN_NAME.REVIEW)
 
     local function history_sandbox(rows, more)
+        -- Set up an empty board
         local root, home = sandbox()
+
+        -- Build the first page, pointing at a second page when there is one
         local cursor = more and '"c2"' or "null"
         local page = '{"items":[' .. rows .. '],"next_cursor":' .. cursor .. "}"
+
+        -- Write both pages for the fake to serve
         assert(fs.write(root .. "/history.json", page))
         assert(
             fs.write(
@@ -9881,11 +12433,16 @@ do
                 '{"items":[' .. (more or "") .. '],"next_cursor":null}'
             )
         )
+
+        -- Hand back the sandbox
         return root, home
     end
 
     testing.test("history prints each entry newest first with its actor and token name", function()
+        -- Seed a card with a created event and two moves
         local root, home = history_sandbox(HISTORY)
+
+        -- Print the history and check each entry, newest first
         local out, code = dev(root, home, { "board", "history", "11111111-a" })
         testing.eq(code, 0, out)
         testing.eq(
@@ -9903,8 +12460,12 @@ do
                 "",
             }, "\n")
         )
+
+        -- Refuse a call with no card id
         out, code = dev(root, home, { "board", "history" })
         testing.eq(code, 2, out)
+
+        -- Refuse a call with an unknown card id
         out, code = dev(root, home, { "board", "history", "deadbeef" })
         testing.eq(code, 1, out)
     end)
@@ -9912,10 +12473,15 @@ do
     testing.test(
         "history shows a dash for a browser move and none for a card without events",
         function()
+            -- Seed a card with a browser move
             local root, home = history_sandbox(HISTORY)
+
+            -- Check the browser move shows a dash for its token
             local out = dev(root, home, { "board", "history", "11111111-a" })
             local browser = out:match(("[^\n]+%s[^\n]*"):format(support.COLUMN_NAME.REVIEW))
             testing.ok(browser:find("admin      %-$"), browser)
+
+            -- Read the history of a card without events
             root, home = history_sandbox("")
             out = dev(root, home, { "board", "history", "11111111-a" })
             testing.eq(out, "no history\n")
@@ -9923,6 +12489,7 @@ do
     )
 
     testing.test("history follows the card route across next_cursor pages", function()
+        -- Seed a second page of history
         local second = '{"id":"e4","kind":"comment_added","time":"2026-11-18T10:05:00Z",'
             .. '"user":"admin","old_value":"(none)","new_value":"(none)"},'
             .. '{"id":"e5","kind":"moved","time":"2026-11-18T11:00:00Z","user":"admin",'
@@ -9931,14 +12498,20 @@ do
                 support.COLUMN_NAME.DONE
             )
         local root, home = history_sandbox(HISTORY, second)
+
+        -- Read the history across both pages
         local out, code = dev(root, home, { "board", "history", "11111111-a" })
         testing.eq(code, 0, out)
+
+        -- Check the moves of both pages are listed and the comment is not
         testing.eq(select(2, out:gsub("\n", "")), 4, out)
         testing.ok(
             out:find("2026-11-18 11:00  moved    " .. support.COLUMN_NAME.REVIEW, 1, true) == 1,
             out
         )
         testing.ok(not out:find("comment_added", 1, true), out)
+
+        -- Check each page was requested
         local calls = requests(root)
         testing.ok(calls:find("/api/tasks/" .. ID_A .. "/history", 1, true), calls)
         testing.ok(calls:find("/api/tasks/" .. ID_A .. "/history?cursor=c2", 1, true), calls)
@@ -9952,6 +12525,7 @@ do
     end
 
     testing.test("flow prints the landed count and the median and p90 minutes", function()
+        -- Build a card helper that carries a move history
         local done = support.column_id(support.Column.DONE)
         local function card(id, column, events, labels)
             return support.pomb_export_task({
@@ -9962,6 +12536,8 @@ do
                 history = "[" .. table.concat(events, ",") .. "]",
             })
         end
+
+        -- Seed landed, open, discarded and skipped-verify cards
         local verify, landed = support.COLUMN_NAME.VERIFY, support.COLUMN_NAME.DONE
         local export = '{"tasks":['
             .. table.concat({
@@ -9986,31 +12562,54 @@ do
             }, ",")
             .. "]}"
         local root, home = sandbox({ export = export })
+
+        -- Read the flow and check the landed count and the minutes
         local out, code = dev(root, home, { "board", "flow" })
         testing.eq(code, 0, out)
-        testing.eq(out, "landed 2\nmedian 30 min\np90 120 min\n")
+        testing.eq(out, table.concat({ "landed 2", "median 30 min", "p90 120 min", "" }, "\n"))
+
+        -- Refuse a stray argument
         out, code = dev(root, home, { "board", "flow", "extra" })
         testing.eq(code, 2, out)
     end)
 end
 
 testing.test("flow exits 1 on a local board", function()
-    local root, home = sandbox({ project = '[board]\nbackend = "local"\nname = "mine"\n' })
+    -- Set up a local board
+    local root, home = sandbox({
+        project = table.concat({
+            "[board]",
+            'backend = "local"',
+            'name = "mine"',
+            "",
+        }, "\n"),
+    })
+
+    -- Initialise the board
     local out, code = dev(root, home, { "board", "init" })
     testing.eq(code, 0, out)
+
+    -- Read the flow and check the board keeps no history
     out, code = dev(root, home, { "board", "flow" })
     testing.eq(code, 1, out)
     testing.ok(out:find("keeps no history", 1, true), out)
 end)
 
 testing.test("a 403 on a comment says it is not yours and exits 1", function()
+    -- Set up a board whose comments belong to another author
     local root, home = sandbox()
+
+    -- Edit a comment that is not ours
     local out, code = dev(root, home, { "board", "note", "11111111-a", "--edit", "dddddddd", "x" })
     testing.eq(code, 1)
     testing.eq(out, "That comment is not yours to change.\n")
+
+    -- Delete a comment that is not ours
     out, code = dev(root, home, { "board", "note", "11111111-a", "--delete", "dddddddd" })
     testing.eq(code, 1)
     testing.eq(out, "That comment is not yours to change.\n")
+
+    -- Delete a comment with too short an id
     out, code = dev(root, home, { "board", "note", "11111111-a", "--delete", "eeee" })
     testing.eq(code, 1)
     testing.eq(out, "A comment id needs at least 8 hex characters: eeee.\n")
@@ -10043,24 +12642,37 @@ local function locked_curl(root, method, path)
 end
 
 testing.test("a card_locked 403 on size prints Pomb's reason and exits 1", function()
+    -- Make Pomb lock the card on every patch
     local root, home = sandbox()
     locked_curl(root, "PATCH", "*")
+
+    -- Resize the card
     local out, code = dev(root, home, { "board", "size", "11111111-a", "2" })
+
+    -- Check Pomb's reason is printed
     testing.eq(code, 1, out)
     testing.ok(out:find("Pomb locked this card: this task carries a locking label", 1, true), out)
 end)
 
 testing.test("a card_locked 403 on order prints Pomb's reason and exits 1", function()
+    -- Make Pomb lock the card on every move
     local root, home = sandbox()
     locked_curl(root, "*", "*/move*")
+
+    -- Order the cards
     local out, code = dev(root, home, { "board", "order", "11111111-b", "11111111-a" })
+
+    -- Check Pomb's reason is printed
     testing.eq(code, 1, out)
     testing.ok(out:find("Pomb locked this card: this task carries a locking label", 1, true), out)
 end)
 
 testing.test("prose warnings reach standard error and the write still happens", function()
+    -- Set up a board and the warning every write must print
     local root, home = sandbox()
     local warning = "Card prose holds a path: src/a.lua. The write still went through.\n"
+
+    -- Define a write that adds a card and one that edits a description
     local cases = {
         {
             args = {
@@ -10068,7 +12680,17 @@ testing.test("prose warnings reach standard error and the write still happens", 
                 "add",
                 "Fresh",
                 "--description",
-                "## Problem\nlook in src/a.lua\n\n## Change\n- x\n\n## Out of scope\nnone\n",
+                table.concat({
+                    "## Problem",
+                    "look in src/a.lua",
+                    "",
+                    "## Change",
+                    "- x",
+                    "",
+                    "## Out of scope",
+                    "none",
+                    "",
+                }, "\n"),
                 "--size",
                 "1",
                 "--done-when",
@@ -10079,11 +12701,23 @@ testing.test("prose warnings reach standard error and the write still happens", 
         },
         {
             args = { "board", "edit", "11111111-a" },
-            input = "## Problem\nlook in src/a.lua\n\n## Change\n- x\n\n## Out of scope\nnone\n",
+            input = table.concat({
+                "## Problem",
+                "look in src/a.lua",
+                "",
+                "## Change",
+                "- x",
+                "",
+                "## Out of scope",
+                "none",
+                "",
+            }, "\n"),
             marker = "description",
             verb = "PATCH",
         },
     }
+
+    -- Check each write warns on standard error and still goes through
     for _, case in ipairs(cases) do
         local before = #requests(root)
         local out, code, errors = dev(root, home, case.args, { split = true, input = case.input })
@@ -10097,38 +12731,68 @@ testing.test("prose warnings reach standard error and the write still happens", 
 end)
 
 testing.test("add prints its prose warning after the added line", function()
+    -- Set up an empty board
     local root, home = sandbox()
+
+    -- Add a card whose description holds a path
     local out, code = dev(root, home, {
         "board",
         "add",
         "Fresh",
         "--description",
-        "## Problem\nlook in src/a.lua\n\n## Change\n- x\n\n## Out of scope\nnone\n",
+        table.concat({
+            "## Problem",
+            "look in src/a.lua",
+            "",
+            "## Change",
+            "- x",
+            "",
+            "## Out of scope",
+            "none",
+            "",
+        }, "\n"),
         "--size",
         "1",
         "--done-when",
         "a",
     })
     testing.eq(code, 0, out)
+
+    -- Check the warning follows the added line
     local added, warning = out:match("^(added [^\n]*)\n.*\n(Card prose [^\n]*)\n$")
     testing.ok(added, out)
     testing.eq(warning, "Card prose holds a path: src/a.lua. The write still went through.")
 end)
 
 testing.test("a prose warning says the write still went through", function()
+    -- Set up an empty board
     local root, home = sandbox()
+
+    -- Add a card whose description holds a path and a commit hash
     local _, code, errors = dev(root, home, {
         "board",
         "add",
         "Fresh",
         "--description",
-        "## Problem\nlook in src/a.lua and 2af0e003\n\n## Change\n- x\n\n## Out of scope\nnone\n",
+        table.concat({
+            "## Problem",
+            "look in src/a.lua and 2af0e003",
+            "",
+            "## Change",
+            "- x",
+            "",
+            "## Out of scope",
+            "none",
+            "",
+        }, "\n"),
         "--size",
         "1",
         "--done-when",
         "a",
     }, { split = true })
     testing.eq(code, 0)
+
+    -- Check each warning line says the write went through
     local count = 0
     for line in errors:gmatch("[^\n]+") do
         count = count + 1
@@ -10138,10 +12802,23 @@ testing.test("a prose warning says the write still went through", function()
 end)
 
 testing.test("edit finds the board from a subdirectory and not from outside the project", function()
+    -- Set up a board with a nested directory
     local root, home = sandbox()
-    local text = "## Problem\nwhy\n\n## Change\n- x\n\n## Out of scope\nnone\n"
+    local text = table.concat({
+        "## Problem",
+        "why",
+        "",
+        "## Change",
+        "- x",
+        "",
+        "## Out of scope",
+        "none",
+        "",
+    }, "\n")
     local sub = root .. "/src/deep"
     assert(fs.mkdir(sub, { parents = true }))
+
+    -- Edit the card from the root and from the subdirectory
     for _, cwd in ipairs({ root, sub }) do
         local out, code = dev(
             root,
@@ -10152,6 +12829,8 @@ testing.test("edit finds the board from a subdirectory and not from outside the 
         testing.eq(code, 0, out)
         testing.eq(out, "edited 11111111\n")
     end
+
+    -- Edit and show the card from outside the project
     for _, word in ipairs({ "edit", "show" }) do
         local out, code = dev(
             root,
@@ -10165,8 +12844,11 @@ testing.test("edit finds the board from a subdirectory and not from outside the 
 end)
 
 testing.test("a nonexistent column on the board is reported", function()
+    -- Give the board no columns
     local root, home = sandbox()
     assert(fs.write(root .. "/detail.json", '{"id":"board-1","name":"dotfiles","columns":[]}'))
+
+    -- Add a card to the missing Backlog column
     local out, code = dev(root, home, {
         "board",
         "add",
@@ -10182,23 +12864,35 @@ testing.test("a nonexistent column on the board is reported", function()
         "--done-when",
         "a",
     })
+
+    -- Check the missing column is named
     testing.eq(code, 1)
     testing.ok(out:find("The board has no Backlog column", 1, true), out)
 end)
 
 testing.test("board refuses --remote like the other machine-local parent commands", function()
+    -- Set up an empty board
     local root, home = sandbox()
+
+    -- Run a board command with --remote
     local out, code = dev(root, home, { "--remote", "--", "board", "ls" })
+
+    -- Check the command is refused
     testing.eq(code, 2)
     testing.eq(out, "dev board ls: runs on this machine only, so --remote does not apply\n")
 end)
 
 testing.test("capture_input hands the input to stdin and keeps it out of argv", function()
+    -- Pass the input on standard input and read it back
     local out, code = dev_os.capture_input({ "sh", "-c", "cat; echo done" }, "secret\n")
-    testing.eq(out, "secret\ndone\n")
+    testing.eq(out, table.concat({ "secret", "done", "" }, "\n"))
     testing.eq(code, 0)
+
+    -- Pass the exit code through
     out, code = dev_os.capture_input({ "sh", "-c", "cat >/dev/null; exit 5" }, "x")
     testing.eq(code, 5)
+
+    -- Refuse a call that sends standard output to null
     testing.raises(function()
         dev_os.capture_input({ "cat" }, "x", { stdout = "null" })
     end, "standard output")
@@ -10215,26 +12909,43 @@ testing.test("capture_input merges standard error into the output when asked", f
 end)
 
 testing.test("capture_input leaves no temporary file behind", function()
+    -- Make a temporary directory
     local dir = support.tempdir()
+
+    -- Build a script that captures input twice
     local script = string.format(
         "local o = require('@dev/os'); o.capture_input({'cat'}, 'x'); o.capture_input({'sh', '-c', 'cat >/dev/null; exit 3'}, 'x')"
     )
+
+    -- Run the script with the temporary directory set
     local _, code = dev_os.capture(support.eval(script), { env = { TMPDIR = dir } })
     testing.eq(code, 0)
+
+    -- Check nothing was left behind
     testing.eq(fs.list(dir), {})
 end)
 
 testing.test("a non-JSON answer from the server is reported as unreadable", function()
+    -- Make every answer a non-JSON page
     local root, home = sandbox()
     override(root, { { path = "*", status = 502, body = "<html>bad gateway</html>" } })
+
+    -- List the board
     local out, code = dev(root, home, { "board", "ls" })
+
+    -- Check the answer is reported as unreadable
     testing.eq(code, 1)
     testing.ok(out:find("Board unavailable: Pomb sent an answer dev cannot read", 1, true), out)
 end)
 
 testing.test("a note may begin with a dash", function()
+    -- Set up a fake backend
     local backend = fake(sample())
+
+    -- Post a note that begins with a dash
     local result = cmd_board.run("note", { "cccccccc", "- fixed", "it" }, backend)
+
+    -- Check the note reached the backend whole
     testing.eq(backend.calls[1], { "note", ID_C, "- fixed it", {} })
     testing.eq(result.output, "noted cccccccc")
 end)
@@ -10285,6 +12996,7 @@ end
 testing.test(
     "take grabs the owner with the agent name and renews the lease while the loop runs",
     function()
+        -- Claim the card
         local root, home = sandbox({ export = PLANNED_EXPORT })
         local out, code = dev(root, home, { "board", "take", "11111111-a" })
         testing.eq(code, 0)
@@ -10292,24 +13004,35 @@ testing.test(
             out:find("took 11111111, fence 7, renewing every 5m for up to 50m", 1, true),
             out
         )
+
+        -- Check the grab carried the agent name and the lease
         local calls = requests(root)
         testing.ok(calls:find("/api/tasks/" .. ID_A .. "/owner", 1, true), calls)
         testing.ok(calls:find('"ttl_seconds":900', 1, true), calls)
         testing.ok(calls:find('"name":"dotfiles/one"', 1, true), calls)
+
+        -- Wait for the loop to renew the lease
         testing.ok(wait_until(function()
             return heartbeats(root) >= 3
         end))
+
+        -- Check the renew carried the fence, the name and the lease
         local renewed = block_with(requests(root), "/owner/renew")
         testing.ok(renewed:find("/api/tasks/" .. ID_A .. "/owner/renew", 1, true), renewed)
         testing.ok(renewed:find("If-Owner-Fence: 7", 1, true), renewed)
         testing.ok(renewed:find('"name":"dotfiles/one"', 1, true), renewed)
         testing.ok(renewed:find('"ttl_seconds":900', 1, true), renewed)
+
+        -- Release the claim
         dev(root, home, { "board", "release", "11111111-a" })
     end
 )
 
 testing.test("take under DEV_AGENT sends the role part of the name with the grab", function()
+    -- Seed a planned card
     local root, home = sandbox({ export = PLANNED_EXPORT })
+
+    -- Claim the card as a runner
     local out, code = dev(
         root,
         home,
@@ -10317,32 +13040,50 @@ testing.test("take under DEV_AGENT sends the role part of the name with the grab
         { agent = "pomb/runner/abc" }
     )
     testing.eq(code, 0, out)
+
+    -- Check the grab carried the name and the role
     local calls = requests(root)
     testing.ok(calls:find('"name":"pomb/runner/abc"', 1, true), calls)
     testing.ok(calls:find('"role":"runner"', 1, true), calls)
+
+    -- Release the claim
     dev(root, home, { "board", "release", "11111111-a" }, { agent = "pomb/runner/abc" })
 end)
 
 testing.test("a claim renew sends the role part of the name under DEV_AGENT", function()
+    -- Claim the card as a runner
     local root, home = sandbox({ export = PLANNED_EXPORT })
     local agent = { agent = "pomb/runner/abc" }
     dev(root, home, { "board", "take", "11111111-a" }, agent)
+
+    -- Stop the renew loop
     local pid = loop_pid(home)
     dev_os.run({ "kill", pid })
     testing.ok(loop_gone(pid))
+
+    -- Take the card again
     local before = #requests(root)
     local out, code = dev(root, home, { "board", "take", "11111111-a" }, agent)
     testing.eq(code, 0, out)
+
+    -- Check the renew carried the name and the role
     local renewed = block_with(requests(root):sub(before), "/owner/renew")
     testing.ok(renewed:find("/api/tasks/" .. ID_A .. "/owner/renew", 1, true), renewed)
     testing.ok(renewed:find('"name":"pomb/runner/abc"', 1, true), renewed)
     testing.ok(renewed:find('"role":"runner"', 1, true), renewed)
+
+    -- Release the claim
     dev(root, home, { "board", "release", "11111111-a" }, agent)
 end)
 
 testing.test("take with no DEV_AGENT is refused and claims nothing", function()
+    -- Seed a planned card
     local root, home = sandbox({ export = PLANNED_EXPORT })
+
+    -- Take the card with no agent name
     local out, code = dev(root, home, { "board", "take", "11111111-a" }, { agent = "" })
+
+    -- Check the take was refused and claimed nothing
     testing.eq(code, 2, out)
     testing.ok(out:find("Set DEV_AGENT to <repo>/<role>[/<card>]", 1, true), out)
     testing.eq(requests(root):find("/owner", 1, true), nil)
@@ -10350,13 +13091,18 @@ testing.test("take with no DEV_AGENT is refused and claims nothing", function()
 end)
 
 testing.test("a move to progress with no DEV_AGENT is refused and claims nothing", function()
+    -- Seed a planned card
     local root, home = sandbox({ export = PLANNED_EXPORT })
+
+    -- Move the card to progress with no agent name
     local out, code = dev(
         root,
         home,
         { "board", "move", "11111111-a", support.Column.PROGRESS },
         { agent = "" }
     )
+
+    -- Check the move was refused and claimed nothing
     testing.eq(code, 2, out)
     testing.ok(out:find("Set DEV_AGENT to <repo>/<role>[/<card>]", 1, true), out)
     testing.eq(requests(root):find("/owner", 1, true), nil)
@@ -10364,33 +13110,47 @@ testing.test("a move to progress with no DEV_AGENT is refused and claims nothing
 end)
 
 testing.test("the state file holds the card, the fence and the pid at mode 600", function()
+    -- Claim the card
     local root, home = sandbox({ export = PLANNED_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
+
+    -- Check the state file holds the card, the fence and the pid but no token
     local state = read(home, "state/dev/board/" .. ID_A)
     testing.ok(state:find("card=" .. ID_A .. "\nfence=7\npid=", 1, true), state)
     testing.ok(state:find("pid=%d+\n$"), state)
     testing.eq(state:find(TOKEN, 1, true), nil)
+
+    -- Check the file and its directory are private
     local mode = dev_os.capture({ "ls", "-l", state_file(home) })
     testing.ok(mode:find("^%-rw%-%-%-%-%-%-%-"), mode)
     mode = dev_os.capture({ "ls", "-ld", home .. "/state/dev/board" })
     testing.ok(mode:find("^drwx%-%-%-%-%-%-"), mode)
+
+    -- Release the claim
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
 testing.test("release ends the owner lease and stops the loop", function()
+    -- Claim the card and wait for the loop to renew
     local root, home = sandbox({ export = PLANNED_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
     testing.ok(wait_until(function()
         return heartbeats(root) >= 2
     end))
+
+    -- Release the claim
     local pid = loop_pid(home)
     local out, code = dev(root, home, { "board", "release", "11111111-a" })
     testing.eq(code, 0)
     testing.eq(out, "released 11111111, fence 7\n")
+
+    -- Check the release carried the fence and the name
     local released = block_with(requests(root), "/owner/release")
     testing.ok(released:find("/api/tasks/" .. ID_A .. "/owner/release", 1, true), released)
     testing.ok(released:find("If-Owner-Fence: 7", 1, true), released)
     testing.ok(released:find('"name":"dotfiles/one"', 1, true), released)
+
+    -- Check the state file is gone and the loop stopped renewing
     testing.eq(fs.exists(state_file(home)), false)
     testing.ok(loop_gone(pid))
     local after = settle(root)
@@ -10398,9 +13158,14 @@ testing.test("release ends the owner lease and stops the loop", function()
 end)
 
 testing.test("take loses to another live owner and leaves no loop running", function()
+    -- Make another live owner hold the card
     local root, home = sandbox({ export = PLANNED_EXPORT })
     assert(fs.write(root .. "/owner_held", ""))
+
+    -- Take the card
     local out, code = dev(root, home, { "board", "take", "11111111-a" })
+
+    -- Check the take lost and left nothing running
     testing.eq(code, 1, out)
     testing.ok(out:find("task owned by dotfiles/other until 2999-01-01T00:00:00Z", 1, true), out)
     testing.eq(fs.exists(state_file(home)), false)
@@ -10410,6 +13175,7 @@ testing.test("take loses to another live owner and leaves no loop running", func
 end)
 
 testing.test("take names --from when another agent holds the card", function()
+    -- Make another agent hold the card
     local export = export_with_first_card({
         description = PLANNED_TEXT,
         subtasks = SUBTASKS,
@@ -10419,7 +13185,11 @@ testing.test("take names --from when another agent holds the card", function()
     })
     local root, home = sandbox({ export = export })
     assert(fs.write(root .. "/owner_held", ""))
+
+    -- Take the card
     local out, code = dev(root, home, { "board", "take", "11111111-a" })
+
+    -- Check the refusal names the holder and --from
     testing.eq(code, 1, out)
     testing.ok(out:find("task owned by dotfiles/other until 2999-01-01T00:00:00Z", 1, true), out)
     testing.ok(
@@ -10429,56 +13199,85 @@ testing.test("take names --from when another agent holds the card", function()
 end)
 
 testing.test("take refuses an epic with an open child and grabs nothing", function()
+    -- Seed an epic with an open child
     local export = PLANNED_EXPORT:gsub(
         '"name":"First"',
         '"name":"First","kind":"epic","children_total":3,"children_done":1',
         1
     )
     local root, home = sandbox({ export = export, task = EPIC_TASK:format(1) })
+
+    -- Take the epic
     local out, code = dev(root, home, { "board", "take", "11111111-a" })
+
+    -- Check the take was refused and grabbed nothing
     testing.eq(code, 1, out)
     testing.ok(out:find("cannot be taken. 2 of 3 children are open.", 1, true), out)
     testing.eq(requests(root):find("/owner body=", 1, true), nil)
 end)
 
 testing.test("a retake renews its fence and grabs again when Pomb answers stale_fence", function()
+    -- Claim the card
     local root, home = sandbox({ export = PLANNED_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
+
+    -- Stop the renew loop
     local pid = loop_pid(home)
     dev_os.run({ "kill", pid })
     testing.ok(loop_gone(pid))
+
+    -- Make the renew answer stale_fence and take the card again
     assert(fs.write(root .. "/hb_status", "409"))
     local before = #requests(root)
     local out, code = dev(root, home, { "board", "take", "11111111-a" })
     testing.eq(code, 0, out)
+
+    -- Check the renew was tried and then the grab was sent again
     local calls = requests(root):sub(before)
     local renewed = calls:find("/api/tasks/" .. ID_A .. "/owner/renew", 1, true)
     testing.ok(renewed, calls)
     testing.ok(calls:find("/api/tasks/" .. ID_A .. "/owner body=", renewed, true), calls)
+
+    -- Release the claim
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
 testing.test("a retake against another live owner shows the owner held message", function()
+    -- Claim the card
     local root, home = sandbox({ export = PLANNED_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
+
+    -- Make the renew conflict and another live owner hold the card
     assert(fs.write(root .. "/hb_status", "409"))
     assert(fs.write(root .. "/owner_held", ""))
+
+    -- Take the card again
     local out, code = dev(root, home, { "board", "take", "11111111-a" })
+
+    -- Check the owner held message is shown
     testing.eq(code, 1, out)
     testing.ok(out:find("task owned by dotfiles/other until 2999-01-01T00:00:00Z", 1, true), out)
 end)
 
 testing.test("release without a taken claim is a plain error", function()
+    -- Set up a board with no claim
     local root, home = sandbox()
+
+    -- Release the card
     local out, code = dev(root, home, { "board", "release", "11111111-a" })
+
+    -- Check the release was refused and sent nothing
     testing.eq(code, 1)
     testing.ok(out:find("No claim was taken", 1, true), out)
     testing.eq(requests(root):find("/owner/release", 1, true), nil)
 end)
 
 testing.test("release refuses a card a person owns", function()
+    -- Claim the card
     local root, home = sandbox({ export = PLANNED_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
+
+    -- Give the card to a person
     local person = (
         TASK:gsub(
             '"labels":%["docs"%]',
@@ -10488,31 +13287,42 @@ testing.test("release refuses a card a person owns", function()
         )
     )
     assert(fs.write(root .. "/task.json", person))
+
+    -- Release the card and check the refusal names the member
     local out, code = dev(root, home, { "board", "release", "11111111-a" })
     testing.eq(code, 1, out)
     testing.ok(out:find("The card is held by member 7.", 1, true), out)
     testing.eq(requests(root):find("/owner/release", 1, true), nil)
+
+    -- Give the card back and release it
     assert(fs.write(root .. "/task.json", TASK))
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
 testing.test("move out of progress stops the loop and sends the fence", function()
+    -- Claim the card and wait for the loop to renew
     local root, home = sandbox({ export = PLANNED_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
     testing.ok(wait_until(function()
         return heartbeats(root) >= 2
     end))
+
+    -- Move the card to Review
     local pid = loop_pid(home)
     assert(fs.write(root .. "/export.json", WORKING_EXPORT))
     local out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.REVIEW })
     testing.eq(code, 0)
     testing.eq(out, "moved 11111111 to Review\n")
+
+    -- Check the move carried the fence and released the claim
     local moved = block_with(requests(root), "/move")
     testing.ok(moved:find("If-Owner-Fence: 7", 1, true), moved)
     testing.ok(
         requests(root):find("/api/tasks/" .. ID_A .. "/owner/release", 1, true),
         requests(root)
     )
+
+    -- Check the state file is gone and the loop stopped renewing
     testing.eq(fs.exists(state_file(home)), false)
     testing.ok(loop_gone(pid))
     local after = settle(root)
@@ -10520,6 +13330,7 @@ testing.test("move out of progress stops the loop and sends the fence", function
 end)
 
 testing.test("take of a Backlog card with no checks row is refused", function()
+    -- Seed a Backlog card with no checks row
     local export = export_with_first_card({
         column_id = BACKLOG_COLUMN,
         description = PLANNED_TEXT,
@@ -10527,13 +13338,18 @@ testing.test("take of a Backlog card with no checks row is refused", function()
         fields = "{}",
     })
     local root, home = sandbox({ export = export })
+
+    -- Take the card
     local out, code = dev(root, home, { "board", "take", "11111111-a" })
+
+    -- Check the take was refused and grabbed nothing
     testing.eq(code, 1, out)
     testing.ok(out:find("has no checks row and cannot enter Ready", 1, true), out)
     testing.eq(requests(root):find("/owner", 1, true), nil)
 end)
 
 testing.test("take lets a planner take an unplanned Backlog card", function()
+    -- Seed a Backlog card with no checks row
     local export = export_with_first_card({
         column_id = BACKLOG_COLUMN,
         description = PLANNED_TEXT,
@@ -10542,13 +13358,18 @@ testing.test("take lets a planner take an unplanned Backlog card", function()
     })
     local root, home = sandbox({ export = export })
     local agent = { agent = PLANNER }
+
+    -- Take the card as a planner
     local out, code = dev(root, home, { "board", "take", "11111111-a" }, agent)
     testing.eq(code, 0, out)
     testing.ok(out:find("^took 11111111"), out)
+
+    -- Release the claim
     dev(root, home, { "board", "release", "11111111-a" }, agent)
 end)
 
 testing.test("take still refuses an unplanned card for a runner", function()
+    -- Seed a Backlog card with no checks row
     local export = export_with_first_card({
         column_id = BACKLOG_COLUMN,
         description = PLANNED_TEXT,
@@ -10557,13 +13378,18 @@ testing.test("take still refuses an unplanned card for a runner", function()
     })
     local root, home = sandbox({ export = export })
     local implementer = "dotfiles/implementer/abc"
+
+    -- Take the card as an implementer
     local out, code = dev(root, home, { "board", "take", "11111111-a" }, { agent = implementer })
+
+    -- Check the take was refused and grabbed nothing
     testing.eq(code, 1, out)
     testing.ok(out:find("has no checks row and cannot enter Ready", 1, true), out)
     testing.eq(requests(root):find("/owner", 1, true), nil)
 end)
 
 testing.test("take lets a planner take an unplanned Backlog card but not a Ready one", function()
+    -- Seed a Ready card with no checks row
     local export = export_with_first_card({
         column_id = READY_COLUMN,
         description = PLANNED_TEXT,
@@ -10571,13 +13397,18 @@ testing.test("take lets a planner take an unplanned Backlog card but not a Ready
         fields = "{}",
     })
     local root, home = sandbox({ export = export })
+
+    -- Take the card as a planner
     local out, code = dev(root, home, { "board", "take", "11111111-a" }, { agent = PLANNER })
+
+    -- Check the take was refused and grabbed nothing
     testing.eq(code, 1, out)
     testing.ok(out:find("has no checks row and cannot enter Ready", 1, true), out)
     testing.eq(requests(root):find("/owner", 1, true), nil)
 end)
 
 testing.test("take refuses a Backlog card with an outcome that names no check", function()
+    -- Seed a Backlog card whose outcomes name no deciding check
     local export = export_with_first_card({
         column_id = BACKLOG_COLUMN,
         description = PLANNED_TEXT,
@@ -10586,19 +13417,28 @@ testing.test("take refuses a Backlog card with an outcome that names no check", 
             .. '{"id":"sub-c","name":"c","done":false}]',
     })
     local root, home = sandbox({ export = export })
+
+    -- Take the card
     local out, code = dev(root, home, { "board", "take", "11111111-a" })
+
+    -- Check the take was refused and grabbed nothing
     testing.eq(code, 1, out)
     testing.ok(out:find("names no deciding check", 1, true), out)
     testing.eq(requests(root):find("/owner", 1, true), nil)
 end)
 
 testing.test("take refuses a card with an open blocker and names it", function()
+    -- Seed an open blocker on the card
     local backend = fake(sample())
     backend.blockers = { [ID_A] = "bbbbbbbb" }
+
+    -- Take the card and check the blocker is named
     local result = cmd_board.run("take", { "11111111-a", "--as", "dotfiles/implementer" }, backend)
     testing.eq(result.code, 1, result.message)
     testing.ok(result.message:find("blocked by open card bbbbbbbb", 1, true), result.message)
     testing.eq(#backend.calls, 0)
+
+    -- Fail the blocker lookup and check Pomb's error is shown
     backend.blocked_error = "pomb is down"
     result = cmd_board.run("take", { "11111111-a", "--as", "dotfiles/implementer" }, backend)
     testing.eq(result.code, 1, result.message)
@@ -10606,6 +13446,7 @@ testing.test("take refuses a card with an open blocker and names it", function()
 end)
 
 testing.test("take lets a planner take a blocked card", function()
+    -- Seed a blocked Backlog card
     local export = export_with_first_card({
         column_id = BACKLOG_COLUMN,
         description = PLANNED_TEXT,
@@ -10615,13 +13456,18 @@ testing.test("take lets a planner take a blocked card", function()
     local links = '[{"kind":"blocked_by","target_id":"22222222-0000-0000-0000-000000000000"}]'
     local root, home = sandbox({ export = export, links = links })
     local agent = { agent = PLANNER }
+
+    -- Take the card as a planner
     local out, code = dev(root, home, { "board", "take", "11111111-a" }, agent)
     testing.eq(code, 0, out)
     testing.ok(out:find("^took 11111111"), out)
+
+    -- Release the claim
     dev(root, home, { "board", "release", "11111111-a" }, agent)
 end)
 
 testing.test("take refuses a red Backlog card", function()
+    -- Seed a red Backlog card
     local export = export_with_first_card({
         column_id = BACKLOG_COLUMN,
         color_id = "red-id",
@@ -10629,13 +13475,18 @@ testing.test("take refuses a red Backlog card", function()
         subtasks = SUBTASKS,
     })
     local root, home = sandbox({ export = export })
+
+    -- Take the card
     local out, code = dev(root, home, { "board", "take", "11111111-a" })
+
+    -- Check the take was refused and grabbed nothing
     testing.eq(code, 1, out)
     testing.ok(out:find("is red, more than 3 Pomodori", 1, true), out)
     testing.eq(requests(root):find("/owner", 1, true), nil)
 end)
 
 testing.test("take of an Icebox card is refused for a runner and allowed for a planner", function()
+    -- Seed an unsized Icebox card
     local export = export_with_first_card({
         column_id = ICEBOX_COLUMN,
         color_id = false,
@@ -10674,19 +13525,25 @@ testing.test("take of an Icebox card is refused for a runner and allowed for a p
 end)
 
 testing.test("take of an epic with children skips the outcome and checks requirements", function()
+    -- Seed an epic with children and no outcomes
     local export = export_with_first_card({
         description = PLANNED_TEXT,
         subtasks = "[]",
         fields = "{}",
     })
     local root, home = sandbox({ export = export, task = EPIC_TASK:format(3) })
+
+    -- Take the epic
     local out, code = dev(root, home, { "board", "take", "11111111-a" })
     testing.eq(code, 0, out)
     testing.ok(out:find("^took 11111111"), out)
+
+    -- Release the claim
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
 testing.test("take of a childless epic with no outcomes is refused", function()
+    -- Seed an epic with no children and no outcomes
     local export = export_with_first_card({
         description = PLANNED_TEXT,
         subtasks = "[]",
@@ -10694,13 +13551,18 @@ testing.test("take of a childless epic with no outcomes is refused", function()
     })
     local task = EPIC_TASK:format(0):gsub('"children_total":3', '"children_total":0', 1)
     local root, home = sandbox({ export = export, task = task })
+
+    -- Take the epic
     local out, code = dev(root, home, { "board", "take", "11111111-a" })
+
+    -- Check the take was refused and grabbed nothing
     testing.eq(code, 1, out)
     testing.ok(out:find("Done when outcomes for an epic", 1, true), out)
     testing.eq(requests(root):find("/owner", 1, true), nil)
 end)
 
 testing.test("take of a Ready card with no checks row is refused", function()
+    -- Seed a Ready card with no checks row
     local export = export_with_first_card({
         column_id = support.column_id(support.Column.READY),
         description = PLANNED_TEXT,
@@ -10708,24 +13570,34 @@ testing.test("take of a Ready card with no checks row is refused", function()
         fields = "{}",
     })
     local root, home = sandbox({ export = export })
+
+    -- Take the card
     local out, code = dev(root, home, { "board", "take", "11111111-a" })
+
+    -- Check the take was refused and grabbed nothing
     testing.eq(code, 1, out)
     testing.ok(out:find("has no checks row and cannot enter Ready", 1, true), out)
     testing.eq(requests(root):find("/owner", 1, true), nil)
 end)
 
 testing.test("take of a card in Review is not held to the Ready requirements", function()
+    -- Seed a Review card with no checks row
     local export = export_with_first_card({
         column_id = support.column_id(support.Column.REVIEW),
         fields = "{}",
     })
     local root, home = sandbox({ export = export })
+
+    -- Take the card
     local out, code = dev(root, home, { "board", "take", "11111111-a" })
+
+    -- Check the take went through
     testing.eq(code, 0, out)
     testing.ok(out:find("^took 11111111"), out)
 end)
 
 testing.test("move to In Progress takes a card from Review past an open blocker", function()
+    -- Seed a blocked Review card
     local export = export_with_first_card({
         column_id = support.column_id(support.Column.REVIEW),
         description = PLANNED_TEXT,
@@ -10734,9 +13606,13 @@ testing.test("move to In Progress takes a card from Review past an open blocker"
     })
     local links = '[{"kind":"blocked_by","target_id":"22222222-0000-0000-0000-000000000000"}]'
     local root, home = sandbox({ export = export, links = links })
+
+    -- Move the card into progress
     local out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.PROGRESS })
     testing.eq(code, 0, out)
     testing.ok(not out:find("blocked by open card", 1, true), out)
+
+    -- Release the claim
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
@@ -10773,22 +13649,34 @@ local function blocker_sandbox(blocker_column)
 end
 
 testing.test("a blocker in Release does not hold a card", function()
+    -- Seed a card blocked by a card in Release
     local root, home = blocker_sandbox(support.Column.RELEASE)
+
+    -- Ask for the next card and check it is offered
     local out, code = dev(root, home, { "board", "next" })
     testing.eq(code, 0, out)
     testing.ok(out:find("^11111111", 1), out)
+
+    -- Take the card and check the take went through
     out, code = dev(root, home, { "board", "take", "11111111-a" })
     testing.eq(code, 0, out)
     testing.ok(out:find("^took 11111111"), out)
+
+    -- Release the claim
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
 testing.test("a blocker in Verify or Ready still holds a card", function()
     for _, column in ipairs({ support.Column.VERIFY, support.Column.READY }) do
+        -- Seed a card blocked by a card in this column
         local root, home = blocker_sandbox(column)
+
+        -- Ask for the next card and check none is offered
         local out, code = dev(root, home, { "board", "next" })
         testing.eq(code, 0, out)
         testing.eq(out, "No ready cards.\n")
+
+        -- Take the card and check the blocker is named
         out, code = dev(root, home, { "board", "take", "11111111-a" })
         testing.eq(code, 1, out)
         testing.ok(out:find("blocked by open card", 1, true), out)
@@ -10796,17 +13684,23 @@ testing.test("a blocker in Verify or Ready still holds a card", function()
 end)
 
 testing.test("take of a card in Verify is not held to the Ready requirements", function()
+    -- Seed a Verify card with no checks row
     local export = export_with_first_card({
         column_id = support.column_id(support.Column.VERIFY),
         fields = "{}",
     })
     local root, home = sandbox({ export = export })
+
+    -- Take the card
     local out, code = dev(root, home, { "board", "take", "11111111-a" })
+
+    -- Check the take went through
     testing.eq(code, 0, out)
     testing.ok(out:find("^took 11111111"), out)
 end)
 
 testing.test("move into progress refuses a card with no checks row as Ready does", function()
+    -- Seed a card with no checks row
     local card = colored("green")
     card.checks = {}
     card.outcomes = {
@@ -10814,8 +13708,12 @@ testing.test("move into progress refuses a card with no checks row as Ready does
         { id = "s2", name = "b " .. board.JUDGEMENT, done = false },
         { id = "s3", name = "c " .. board.JUDGEMENT, done = false },
     }
+
+    -- Move toward Ready and keep the refusal
     local toward_ready = cmd_board.run("move", { "cccccccc", support.Column.READY }, fake({ card }))
     testing.eq(toward_ready.code, 1)
+
+    -- Move into progress and check the same refusal
     local backend = fake({ card })
     local result = cmd_board.run("move", { "cccccccc", support.Column.PROGRESS }, backend)
     testing.eq(result.code, 1)
@@ -10829,9 +13727,12 @@ testing.test("move into progress refuses a Backlog card as Ready does", function
         support.COLUMN_NAME.BACKLOG,
         support.COLUMN_NAME.READY,
     }) do
+        -- Seed a card whose outcome names no deciding check
         local card = colored("green")
         card.column = origin
         card.outcomes[1].name = "an outcome that names no deciding check"
+
+        -- Move toward Ready and keep the refusal
         local toward_ready =
             cmd_board.run("move", { "cccccccc", support.Column.READY }, fake({ card }))
         testing.eq(toward_ready.code, 1)
@@ -10839,6 +13740,8 @@ testing.test("move into progress refuses a Backlog card as Ready does", function
             toward_ready.message:find("names no deciding check", 1, true),
             toward_ready.message
         )
+
+        -- Move into progress and check the same refusal
         local backend = fake({ card })
         local result = cmd_board.run("move", { "cccccccc", support.Column.PROGRESS }, backend)
         testing.eq(result.code, 1)
@@ -10848,42 +13751,62 @@ testing.test("move into progress refuses a Backlog card as Ready does", function
 end)
 
 testing.test("move into progress does not release the claim", function()
+    -- Claim the card
     local root, home = sandbox({ export = PLANNED_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
+
+    -- Move the card into progress and check the claim was kept
     dev(root, home, { "board", "move", "11111111-a", support.Column.PROGRESS })
     testing.eq(requests(root):find("/owner/release", 1, true), nil)
+
+    -- Release the claim
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
 testing.test("take prints the card with every comment in full after the claim", function()
+    -- Claim the card
     local root, home = sandbox({ export = PLANNED_EXPORT })
     local out, code = dev(root, home, { "board", "take", "11111111-a" })
     testing.eq(code, 0, out)
     testing.ok(out:find("^took 11111111, fence 7"), out)
+
+    -- Check the card and its comments are printed in full
     testing.ok(out:find("\n\n11111111  In Progress  1 Pomodoro  docs  First\n", 1, true), out)
     testing.ok(out:find("first\n", 1, true) and out:find("line", 1, true), out)
     testing.ok(out:find("mine? no", 1, true), out)
+
+    -- Release the claim
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
 testing.test(
     "a move into progress that takes the claim prints the card and its comments",
     function()
+        -- Seed a planned card
         local root, home = sandbox({ export = PLANNED_EXPORT })
+
+        -- Move the card into progress and check it prints the card and its comments
         local out, code =
             dev(root, home, { "board", "move", "11111111-a", support.Column.PROGRESS })
         testing.eq(code, 0, out)
         testing.ok(out:find("^moved 11111111 to In Progress\n\n11111111  In Progress  "), out)
         testing.ok(out:find("mine? no", 1, true), out)
+
+        -- Move it again and check it prints only the move
         out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.PROGRESS })
         testing.eq(code, 0, out)
         testing.eq(out, "moved 11111111 to In Progress\n")
+
+        -- Release the claim
         dev(root, home, { "board", "release", "11111111-a" })
     end
 )
 
 testing.test("move into progress posts the claim then the move to In Progress", function()
+    -- Seed a planned card
     local root, home = sandbox({ export = PLANNED_EXPORT })
+
+    -- Move the card into progress
     local out, code = dev(
         root,
         home,
@@ -10892,17 +13815,24 @@ testing.test("move into progress posts the claim then the move to In Progress", 
     )
     testing.eq(code, 0, out)
     testing.ok(out:find("^moved 11111111 to " .. PROGRESS_NAME .. "\n"), out)
+
+    -- Check the claim was posted before the move
     local calls = requests(root)
     local claim = calls:find("/api/tasks/" .. ID_A .. "/owner body=", 1, true)
     local moved = calls:find("/api/tasks/" .. ID_A .. "/move", 1, true)
     testing.ok(claim and moved and claim < moved, calls)
+
+    -- Check the move named the column and carried the fence
     local move_line = block_with(calls, "/move")
     testing.ok(move_line:find('"column_id":"' .. PROGRESS_COLUMN .. '"', 1, true), move_line)
     testing.ok(move_line:find("If-Owner-Fence: 7", 1, true), move_line)
+
+    -- Release the claim
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
 testing.test("take keeps the claim and warns when the card cannot be read after it", function()
+    -- Make the card unreadable once the grab is sent
     local root, home = sandbox({ export = PLANNED_EXPORT })
     override(root, {
         steps = {
@@ -10920,20 +13850,31 @@ testing.test("take keeps the claim and warns when the card cannot be read after 
             },
         },
     })
+
+    -- Take the card
     local out, code = dev(root, home, { "board", "take", "11111111-a" })
+
+    -- Check the claim was kept and the unreadable card was warned about
     testing.eq(code, 0, out)
     testing.ok(out:find("took 11111111, fence 7", 1, true), out)
     testing.ok(out:find("Took card 11111111, but ", 1, true), out)
     testing.eq(fs.exists(state_file(home)), true)
+
+    -- Release the claim
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
 testing.test("take names the claimant from --as, then DEV_AGENT, else dev@host", function()
+    -- Seed a planned card
     local root, home = sandbox({ export = PLANNED_EXPORT })
+
+    -- Take the card under --as and check the name sent
     local out, code = dev(root, home, { "board", "take", "11111111-a", "--as", "project-alt/x" })
     testing.eq(code, 0, out)
     testing.ok(requests(root):find('"name":"project-alt/x"', 1, true), requests(root))
     dev(root, home, { "board", "release", "11111111-a" })
+
+    -- Take the card under DEV_AGENT and check the name sent
     out, code = dev(root, home, { "board", "take", "11111111-a" }, { agent = "dotfiles/env" })
     testing.eq(code, 0, out)
     testing.ok(requests(root):find('"name":"dotfiles/env"', 1, true), requests(root))
@@ -10941,12 +13882,17 @@ testing.test("take names the claimant from --as, then DEV_AGENT, else dev@host",
 end)
 
 testing.test("take refuses a name that is not one word of the allowed characters", function()
+    -- Seed a planned card
     local root, home = sandbox({ export = PLANNED_EXPORT })
+
+    -- Refuse each bad --as name
     for _, name in ipairs({ "two words", "semi;colon", "a:b" }) do
         local out, code = dev(root, home, { "board", "take", "11111111-a", "--as", name })
         testing.eq(code, 2, out)
     end
     testing.eq(cmd_board.run("take", { "11111111-a", "--as", "" }, fake(sample())).code, 2)
+
+    -- Refuse a bad DEV_AGENT name and check nothing was claimed
     local _, code = dev(root, home, { "board", "take", "11111111-a" }, { agent = "bad name" })
     testing.eq(code, 2)
     testing.eq(requests(root):find("/owner", 1, true), nil)
@@ -11016,7 +13962,10 @@ end)
 testing.test(
     "move into progress takes the claim of an unclaimed card under the agent name",
     function()
+        -- Seed a planned card
         local root, home = sandbox({ export = PLANNED_EXPORT })
+
+        -- Move the card into progress
         local out, code = dev(
             root,
             home,
@@ -11024,19 +13973,26 @@ testing.test(
             { agent = "r/one" }
         )
         testing.eq(code, 0, out)
+
+        -- Check the claim named the agent and kept its fence
         local calls = requests(root)
         testing.ok(calls:find('"name":"r/one"', 1, true), calls)
         testing.ok(calls:find("If-Owner-Fence: 7", 1, true), calls)
         testing.eq(fs.exists(state_file(home)), true)
+
+        -- Release the claim
         dev(root, home, { "board", "release", "11111111-a" })
     end
 )
 
 testing.test("an epic whose children are done is claimed like any card", function()
+    -- Seed an epic whose children are done
     local root, home = sandbox({
         export = PLANNED_EXPORT,
         task = EPIC_TASK:format(3),
     })
+
+    -- Move the epic into progress
     local out, code = dev(
         root,
         home,
@@ -11044,10 +14000,14 @@ testing.test("an epic whose children are done is claimed like any card", functio
         { agent = "r/one" }
     )
     testing.eq(code, 0, out)
+
+    -- Check the epic was claimed with its fence
     local calls = requests(root)
     testing.ok(calls:find("/owner", 1, true), calls)
     testing.ok(calls:find("If-Owner-Fence: 7", 1, true), calls)
     testing.eq(fs.exists(state_file(home)), true)
+
+    -- Release the claim
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
@@ -11058,6 +14018,7 @@ local function refusing_moves(root)
 end
 
 local function grab_then_refuse(root, holder)
+    -- Build an export where the holder owns the card
     local export = export_with_first_card({
         description = PLANNED_TEXT,
         subtasks = SUBTASKS,
@@ -11065,12 +14026,16 @@ local function grab_then_refuse(root, holder)
         holder = holder,
         lease_expires_at = LIVE_LEASE,
     })
+
+    -- Pick out the owned card's line
     local owned
     for _, line in ipairs(support.export_lines(export)) do
         if line:find(ID_A, 1, true) == 8 then
             owned = line
         end
     end
+
+    -- Refuse every move, and show the owned card once the grab lands
     local refusal = { path = "*/move", status = 409, body = '{"message":"no room"}' }
     override(root, {
         steps = {
@@ -11091,6 +14056,7 @@ local function grab_then_refuse(root, holder)
 end
 
 testing.test("epic prints Pomb's already an epic refusal", function()
+    -- Make Pomb refuse the epic label
     local root, home = sandbox({ export = PLANNED_EXPORT })
     assert(fs.write(root .. "/label_fail", "1"))
     override(root, {
@@ -11101,14 +14067,19 @@ testing.test("epic prints Pomb's already an epic refusal", function()
             body = '{"message":"the card is already an epic"}',
         },
     })
+
+    -- Make the card an epic and check Pomb's refusal is printed
     local out, code = dev(root, home, { "board", "epic", "11111111-a" })
     testing.eq(code, 1, out)
     testing.ok(out:find("the card is already an epic", 1, true), out)
 end)
 
 testing.test("a move into progress that Pomb refuses releases the claim it just took", function()
+    -- Make Pomb refuse the move after the grab
     local root, home = sandbox({ export = PLANNED_EXPORT })
     grab_then_refuse(root, "r/one")
+
+    -- Move the card into progress
     local out, code = dev(
         root,
         home,
@@ -11117,10 +14088,14 @@ testing.test("a move into progress that Pomb refuses releases the claim it just 
     )
     testing.eq(code, 1)
     testing.ok(out:find("no room", 1, true), out)
+
+    -- Check the grab and the move carried the fence
     local calls = requests(root)
     testing.ok(calls:find("/api/tasks/" .. ID_A .. "/owner body=", 1, true), calls)
     local moved = block_with(calls, "/move")
     testing.ok(moved:find("If-Owner-Fence: 7", 1, true), moved)
+
+    -- Check the claim was released and the state file is gone
     local released = block_with(calls, "/owner/release")
     testing.ok(released:find("/api/tasks/" .. ID_A .. "/owner/release", 1, true), calls)
     testing.ok(released:find("If-Owner-Fence: 7", 1, true), released)
@@ -11128,6 +14103,7 @@ testing.test("a move into progress that Pomb refuses releases the claim it just 
 end)
 
 testing.test("a move into progress of a card claimed elsewhere takes no claim", function()
+    -- Seed a card held by another owner and refuse every move
     local export = export_with_first_card({
         description = PLANNED_TEXT,
         subtasks = SUBTASKS,
@@ -11137,6 +14113,8 @@ testing.test("a move into progress of a card claimed elsewhere takes no claim", 
     })
     local root, home = sandbox({ export = export })
     refusing_moves(root)
+
+    -- Move the card into progress
     local out, code = dev(
         root,
         home,
@@ -11145,12 +14123,15 @@ testing.test("a move into progress of a card claimed elsewhere takes no claim", 
     )
     testing.eq(code, 1)
     testing.ok(out:find("no room", 1, true), out)
+
+    -- Check no claim was taken
     local calls = requests(root)
     testing.eq(calls:find("/owner", 1, true), nil)
     testing.eq(fs.exists(state_file(home)), false)
 end)
 
 testing.test("move into progress grabs the owner and leaving it ends the lease", function()
+    -- Move the card into progress
     local root, home = sandbox({ export = PLANNED_EXPORT })
     local out, code = dev(
         root,
@@ -11159,6 +14140,8 @@ testing.test("move into progress grabs the owner and leaving it ends the lease",
         { agent = "r/one" }
     )
     testing.eq(code, 0, out)
+
+    -- Check the owner was grabbed under the agent name and the loop renews
     local calls = requests(root)
     testing.ok(calls:find("/api/tasks/" .. ID_A .. "/owner body=", 1, true), calls)
     local grabbed = block_with(calls, "/owner body=")
@@ -11166,12 +14149,16 @@ testing.test("move into progress grabs the owner and leaving it ends the lease",
     testing.ok(wait_until(function()
         return heartbeats(root) >= 2
     end))
+
+    -- Move the card out of progress
     local pid = loop_pid(home)
     assert(fs.write(root .. "/export.json", WORKING_EXPORT))
     out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.REVIEW }, {
         agent = "r/one",
     })
     testing.eq(code, 0, out)
+
+    -- Check the lease ended and the loop stopped
     local released = block_with(requests(root), "/owner/release")
     testing.ok(released:find("/api/tasks/" .. ID_A .. "/owner/release", 1, true), released)
     testing.ok(released:find("If-Owner-Fence: 7", 1, true), released)
@@ -11180,6 +14167,7 @@ testing.test("move into progress grabs the owner and leaving it ends the lease",
 end)
 
 testing.test("a release with no claim file sends the owner fence pomb reports", function()
+    -- Seed a card held by another owner
     local export = export_with_first_card({
         description = PLANNED_TEXT,
         subtasks = SUBTASKS,
@@ -11189,6 +14177,8 @@ testing.test("a release with no claim file sends the owner fence pomb reports", 
     })
     local root, home = sandbox({ export = export })
     assert(fs.write(root .. "/owner_name", "r/old"))
+
+    -- Take the card from that owner
     local out, code = dev(
         root,
         home,
@@ -11196,13 +14186,18 @@ testing.test("a release with no claim file sends the owner fence pomb reports", 
         { agent = "r/one" }
     )
     testing.ok(code == 0, out)
+
+    -- Check the release carried the fence Pomb reports
     local released = block_with(requests(root), "/owner/release")
     testing.ok(released:find("/api/tasks/" .. ID_A .. "/owner/release", 1, true), released)
     testing.ok(released:find("If-Owner-Fence: 7", 1, true), released)
+
+    -- Release the claim
     dev(root, home, { "board", "release", "11111111-a" }, { agent = "r/one" })
 end)
 
 testing.test("a release of an owner with no claim sends the owner fence", function()
+    -- Seed a card held by another owner
     local export = export_with_first_card({
         description = PLANNED_TEXT,
         subtasks = SUBTASKS,
@@ -11211,6 +14206,8 @@ testing.test("a release of an owner with no claim sends the owner fence", functi
         lease_expires_at = LIVE_LEASE,
     })
     local root, home = sandbox({ export = export })
+
+    -- Report that owner with fence 9
     local task = (
         TASK:gsub(
             '"labels":%["docs"%]',
@@ -11220,6 +14217,8 @@ testing.test("a release of an owner with no claim sends the owner fence", functi
         )
     )
     assert(fs.write(root .. "/task.json", task))
+
+    -- Take the card from that owner
     local out, code = dev(
         root,
         home,
@@ -11227,13 +14226,18 @@ testing.test("a release of an owner with no claim sends the owner fence", functi
         { agent = "r/one" }
     )
     testing.ok(code == 0, out)
+
+    -- Check the release carried the reported fence
     local released = block_with(requests(root), "/owner/release")
     testing.ok(released:find("If-Owner-Fence: 9", 1, true), released)
+
+    -- Restore the card and release the claim
     assert(fs.write(root .. "/task.json", TASK))
     dev(root, home, { "board", "release", "11111111-a" }, { agent = "r/one" })
 end)
 
 testing.test("take --from refuses when the holder changed before the release", function()
+    -- Seed a card whose holder changes before the release
     local cards = sample()
     cards[1].claimant = "r/old"
     local backend = fake(cards)
@@ -11248,8 +14252,12 @@ testing.test("take --from refuses when the holder changed before the release", f
         cards[1].claimant = nil
         return true
     end
+
+    -- Take the card from the old holder
     local result =
         cmd_board.run("take", { "11111111-a", "--from", "r/old", "--as", "r/one" }, backend)
+
+    -- Check the take was refused and left the holder alone
     testing.eq(result.code, 1, result.message)
     testing.ok(result.message:find("is held by r/third now, not by r/old", 1, true), result.message)
     testing.eq(released, { { ID_A, "r/old" } })
@@ -11263,6 +14271,7 @@ testing.test("take --from refuses when the holder changed before the release", f
 end)
 
 testing.test("pomb release sends no owner release when the holder changed", function()
+    -- Fake a backend whose card is held by a third owner
     local backend = assert(pomb.new({
         url = "https://pomb.example",
         token = "pass:secrets/worker/token/pomb",
@@ -11280,15 +14289,20 @@ testing.test("pomb release sends no owner release when the holder changed", func
             },
         }
     end
+
+    -- Release as the old holder and check only the lookup was sent
     local ok, message = backend:release(ID_A, 9, "r/old")
     testing.eq(ok, nil)
     testing.ok(message:find("is held by r/third now, not by r/old", 1, true), message)
     testing.eq(sent, { "GET /api/tasks/" .. ID_A })
+
+    -- Release as the real holder and check the release was sent
     testing.eq({ backend:release(ID_A, 9, "r/third") }, { true })
     testing.eq(sent[#sent], "POST /api/tasks/" .. ID_A .. "/owner/release")
 end)
 
 testing.test("take --from prints the sentence for a card a person holds", function()
+    -- Seed a card held by another owner
     local export = export_with_first_card({
         description = PLANNED_TEXT,
         subtasks = SUBTASKS,
@@ -11297,6 +14311,8 @@ testing.test("take --from prints the sentence for a card a person holds", functi
         lease_expires_at = LIVE_LEASE,
     })
     local root, home = sandbox({ export = export })
+
+    -- Report a person as the holder
     local person = (
         TASK:gsub(
             '"labels":%["docs"%]',
@@ -11306,6 +14322,8 @@ testing.test("take --from prints the sentence for a card a person holds", functi
         )
     )
     assert(fs.write(root .. "/task.json", person))
+
+    -- Take the card from the person
     local out, code = dev(
         root,
         home,
@@ -11313,6 +14331,8 @@ testing.test("take --from prints the sentence for a card a person holds", functi
         { agent = "r/one" }
     )
     assert(fs.write(root .. "/task.json", TASK))
+
+    -- Check the refusal names the member
     testing.eq(code, 1, out)
     testing.ok(
         out:find("The card is held by member 7. Only that member can release it in Pomb.", 1, true),
@@ -11321,8 +14341,11 @@ testing.test("take --from prints the sentence for a card a person holds", functi
 end)
 
 testing.test("a refused move into progress frees the owner", function()
+    -- Make Pomb refuse the move after the grab
     local root, home = sandbox({ export = PLANNED_EXPORT })
     grab_then_refuse(root, "r/one")
+
+    -- Move the card into progress
     local out, code = dev(
         root,
         home,
@@ -11331,6 +14354,8 @@ testing.test("a refused move into progress frees the owner", function()
     )
     testing.eq(code, 1, out)
     testing.ok(out:find("no room", 1, true), out)
+
+    -- Check the grab, the refused move and the release came in order
     local calls = requests(root)
     local grab = calls:find("/api/tasks/" .. ID_A .. "/owner body=", 1, true)
     local refused = calls:find("/api/tasks/" .. ID_A .. "/move", 1, true)
@@ -11339,12 +14364,15 @@ testing.test("a refused move into progress frees the owner", function()
     local released = block_with(calls, "/owner/release")
     testing.ok(released:find("If-Owner-Fence: 7", 1, true), released)
     testing.eq(fs.exists(state_file(home)), false)
+
+    -- Check the loop stopped renewing
     local stopped = heartbeats(root)
     dev_os.run({ "sleep", "0.6" })
     testing.eq(heartbeats(root), stopped)
 end)
 
 testing.test("ask ends the owner lease and a plain move to blocked keeps it", function()
+    -- Claim the card and wait for the loop to renew
     local root, home = sandbox({ export = PLANNED_EXPORT })
     assert(fs.write(root .. "/freeze", ""))
     dev(root, home, { "board", "take", "11111111-a" })
@@ -11352,6 +14380,8 @@ testing.test("ask ends the owner lease and a plain move to blocked keeps it", fu
         return heartbeats(root) >= 1
     end))
     local pid = loop_pid(home)
+
+    -- Ask the question
     local out, code = dev(
         root,
         home,
@@ -11373,6 +14403,8 @@ testing.test("ask ends the owner lease and a plain move to blocked keeps it", fu
     )
     testing.eq(code, 0, out)
     testing.eq(out, "asked 11111111\n")
+
+    -- Check the lease ended after the question and the loop stopped
     local calls = requests(root)
     local asked = calls:find('"kind":"question"', 1, true)
     local freed = calls:find("/owner/release", 1, true)
@@ -11383,6 +14415,7 @@ testing.test("ask ends the owner lease and a plain move to blocked keeps it", fu
     testing.eq(fs.exists(state_file(home)), false)
     testing.ok(loop_gone(pid))
 
+    -- Claim a second card and wait for the loop to renew
     local kept_root, kept_home = sandbox({ export = PLANNED_EXPORT })
     assert(fs.write(kept_root .. "/freeze", ""))
     dev(kept_root, kept_home, { "board", "take", "11111111-a" })
@@ -11390,6 +14423,8 @@ testing.test("ask ends the owner lease and a plain move to blocked keeps it", fu
         return heartbeats(kept_root) >= 1
     end))
     local before = heartbeats(kept_root)
+
+    -- Move it to Blocked and check the claim was kept
     out, code = dev(kept_root, kept_home, { "board", "move", "11111111-a", support.Column.BLOCKED })
     testing.eq(code, 0, out)
     testing.eq(read(kept_root, "calls"):find("/owner/release", 1, true), nil)
@@ -11401,12 +14436,15 @@ testing.test("ask ends the owner lease and a plain move to blocked keeps it", fu
 end)
 
 testing.test("ask keeps the owner lease when Pomb refuses the question", function()
+    -- Claim the card and make Pomb refuse the question
     local root, home = sandbox({ export = PLANNED_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
     testing.ok(wait_until(function()
         return heartbeats(root) >= 1
     end))
     assert(fs.write(root .. "/ask_refusal", '{"message":"question.why is required"}'))
+
+    -- Ask the question
     local out, code = dev(
         root,
         home,
@@ -11426,14 +14464,19 @@ testing.test("ask keeps the owner lease when Pomb refuses the question", functio
     )
     testing.eq(code, 1, out)
     testing.ok(out:find("question.why is required", 1, true), out)
+
+    -- Check the lease was kept
     local calls = requests(root)
     testing.ok(calls:find('"kind":"question"', 1, true), calls)
     testing.eq(calls:find("/owner/release", 1, true), nil)
     testing.eq(fs.exists(state_file(home)), true)
+
+    -- Release the claim
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
 testing.test("a move out of blocked ends the owner lease", function()
+    -- Claim the card and wait for the loop to renew
     local root, home = sandbox({ export = PLANNED_EXPORT })
     assert(fs.write(root .. "/freeze", ""))
     dev(root, home, { "board", "take", "11111111-a" })
@@ -11441,6 +14484,8 @@ testing.test("a move out of blocked ends the owner lease", function()
         return heartbeats(root) >= 1
     end))
     local pid = loop_pid(home)
+
+    -- Move the card to Blocked and check the lease was kept
     local out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.BLOCKED })
     testing.eq(code, 0, out)
     testing.eq(requests(root):find("/owner/release", 1, true), nil)
@@ -11454,8 +14499,12 @@ testing.test("a move out of blocked ends the owner lease", function()
         true,
         "the keepalive loop lapsed before the second move"
     )
+
+    -- Move the card out of Blocked
     out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.BACKLOG })
     testing.eq(code, 0, out)
+
+    -- Check the lease ended and the loop stopped
     local released = block_with(requests(root), "/owner/release")
     testing.ok(released, "no owner release in calls")
     testing.ok(released:find("/api/tasks/" .. ID_A .. "/owner/release", 1, true), released)
@@ -11481,6 +14530,7 @@ testing.test("take of a card a live owner holds names the owner and the lease en
 end)
 
 testing.test("move to ready takes an epic like any card", function()
+    -- Seed a planned epic
     local export = export_with_first_card({
         description = PLANNED_TEXT,
         subtasks = SUBTASKS,
@@ -11490,6 +14540,8 @@ testing.test("move to ready takes an epic like any card", function()
         export = export,
         task = EPIC_TASK:format(3),
     })
+
+    -- Move the epic to Ready and check the move was sent
     local out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.READY })
     testing.eq(code, 0, out)
     testing.ok(requests(root):find("/move", 1, true), requests(root))
@@ -11498,6 +14550,7 @@ end)
 testing.test(
     "a queued change that hits the needs:human refusal is dropped with its reason",
     function()
+        -- Seed a needs:human card and a queued move of it
         local export = EXPORT:gsub('"labels":%["docs"%]', '"labels":["needs:human"]', 1)
         local root, home = sandbox({ export = export })
         local queue = queue_file(home)
@@ -11508,6 +14561,8 @@ testing.test(
                 '[{"sub":"move","args":["11111111-a","review"],"at":"2026-10-30T00:00:00Z"}]\n'
             )
         )
+
+        -- List the board and check the queued change was dropped with its reason
         local out, code = dev(root, home, { "board", "ls" })
         testing.eq(code, 0, out)
         testing.ok(
@@ -11520,10 +14575,15 @@ testing.test(
 )
 
 testing.test("a release the server refuses after a move warns and the move succeeds", function()
+    -- Claim the card and make the server refuse the release
     local root, home = sandbox({ export = PLANNED_DONE_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
     curl_with(root, "*/owner/release) body=; status=503 ;;")
+
+    -- Move the card to Done
     local out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.DONE })
+
+    -- Check the move succeeded with a warning and dropped the state
     testing.eq(code, 0)
     testing.ok(out:find("moved 11111111 to Done", 1, true), out)
     testing.ok(out:find("the claim was not released", 1, true), out)
@@ -11531,8 +14591,11 @@ testing.test("a release the server refuses after a move warns and the move succe
 end)
 
 testing.test("a release refused for a card a person holds is written from its reason", function()
+    -- Claim the card
     local root, home = sandbox({ export = PLANNED_DONE_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
+
+    -- Report a person as the holder
     local person = (
         TASK:gsub(
             '"labels":%["docs"%]',
@@ -11542,6 +14605,8 @@ testing.test("a release refused for a card a person holds is written from its re
         )
     )
     assert(fs.write(root .. "/task.json", person))
+
+    -- Move the card to Done and check the warning gives the reason
     local out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.DONE })
     testing.eq(code, 0, out)
     testing.ok(
@@ -11556,10 +14621,15 @@ testing.test("a release refused for a card a person holds is written from its re
 end)
 
 testing.test("move into progress keeps the loop and the state", function()
+    -- Claim the card
     local root, home = sandbox({ export = PLANNED_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
+
+    -- Move the card into progress and check the state was kept
     dev(root, home, { "board", "move", "11111111-a", support.Column.PROGRESS })
     testing.eq(fs.exists(state_file(home)), true)
+
+    -- Check the loop keeps renewing
     local seen = heartbeats(root)
     testing.ok(wait_until(function()
         return heartbeats(root) > seen
@@ -11587,20 +14657,30 @@ testing.test("a renewal the server refuses ends the loop", function()
 end)
 
 testing.test("a renewal that cannot reach the server keeps trying", function()
+    -- Make every renewal fail with a server error
     local root, home = sandbox({ export = PLANNED_EXPORT })
     assert(fs.write(root .. "/hb_status", "503"))
+
+    -- Claim the card and wait for several renewals
     dev(root, home, { "board", "take", "11111111-a" })
     testing.ok(wait_until(function()
         return heartbeats(root) >= 3
     end))
+
+    -- Check the loop is still alive
     testing.eq(fs.exists(state_file(home)), true)
+
+    -- Release the claim
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
 testing.test("a second take renews with the stored fence", function()
+    -- Take the same card twice
     local root, home = sandbox({ export = PLANNED_EXPORT })
     dev(root, home, { "board", "take", "11111111-a" })
     dev(root, home, { "board", "take", "11111111-a" })
+
+    -- Check the renewal carried the stored fence
     testing.ok(
         block_with(requests(root), "/api/tasks/" .. ID_A .. "/owner/renew")
             and block_with(requests(root), "/api/tasks/" .. ID_A .. "/owner/renew"):find(
@@ -11610,6 +14690,8 @@ testing.test("a second take renews with the stored fence", function()
             ),
         requests(root)
     )
+
+    -- Release the claim
     dev(root, home, { "board", "release", "11111111-a" })
 end)
 
@@ -11624,19 +14706,25 @@ testing.test("take and release want exactly one card", function()
 end)
 
 testing.test("the token never reaches argv, the environment, the state or the output", function()
+    -- Claim the card verbosely and wait for the loop to renew
     local root, home = sandbox({ export = PLANNED_EXPORT })
     local out = dev(root, home, { "-vv", "board", "take", "11111111-a" })
     testing.ok(wait_until(function()
         return heartbeats(root) >= 2
     end))
+
+    -- Capture the process list, then release the claim verbosely
     local ps = dev_os.capture({ "ps", "-ax", "-o", "command=" })
     out = out .. dev(root, home, { "-vv", "board", "release", "11111111-a" })
+
+    -- Check the token shows up nowhere
     testing.eq(out:find(TOKEN, 1, true), nil)
     testing.eq(ps:find(TOKEN, 1, true), nil)
     testing.eq(read(home, "state/dev/board/" .. ID_A):find(TOKEN, 1, true), nil)
 end)
 
 testing.test("a lapsed owner lease counts as unowned in ls", function()
+    -- Seed one card with a live lease and one with a lapsed lease
     local root, home = sandbox()
     assert(fs.write(root .. "/export.json", '{"tasks":[' .. support.pomb_export_task({
         id = ID_A,
@@ -11654,15 +14742,21 @@ testing.test("a lapsed owner lease counts as unowned in ls", function()
         holder = "dev@old:1",
         lease_expires_at = "2001-01-01T00:00:00Z",
     }) .. "]}"))
+
+    -- List the board and check only the live lease names an owner
     local out = dev(root, home, { "board", "ls" })
     testing.eq(
         out,
-        "11111111  Ready  unsized  -  dev@box:42  First\n"
-            .. "11111111  Ready  unsized  -  -           Second\n"
+        table.concat({
+            "11111111  Ready  unsized  -  dev@box:42  First",
+            "11111111  Ready  unsized  -  -           Second",
+            "",
+        }, "\n")
     )
 end)
 
 testing.test("next skips live owned cards and takes lapsed ones", function()
+    -- Build a card owned until a given stamp
     local function owned(until_stamp)
         return (
             TASK:gsub(
@@ -11675,10 +14769,14 @@ testing.test("next skips live owned cards and takes lapsed ones", function()
             )
         )
     end
+
+    -- Check a live owner hides the card
     local root, home = sandbox({ task = owned("2999-01-01T00:00:00Z") })
     local out, code = dev(root, home, { "board", "next" })
     testing.eq(code, 0, out)
     testing.eq(out, "No ready cards.\n")
+
+    -- Check a lapsed owner offers the card
     root, home = sandbox({ task = owned("2001-01-01T00:00:00Z") })
     out, code = dev(root, home, { "board", "next" })
     testing.eq(code, 0, out)
@@ -11686,6 +14784,7 @@ testing.test("next skips live owned cards and takes lapsed ones", function()
 end)
 
 testing.test("a lapsed owner lease counts as unowned in lint", function()
+    -- Build an in-progress export held until a given lease
     local function in_progress(lease)
         return export_with_first_card({
             column_id = PROGRESS_COLUMN,
@@ -11695,9 +14794,13 @@ testing.test("a lapsed owner lease counts as unowned in lint", function()
     end
     local live = LIVE_LEASE
     local dead = "2001-01-01T00:00:00Z"
+
+    -- Check a live lease raises no unclaimed warning
     local root, home = sandbox({ export = in_progress(live) })
     local out = dev(root, home, { "board", "lint" })
     testing.eq(out:find("in progress with no claimant", 1, true), nil, out)
+
+    -- Check a lapsed lease raises the unclaimed warning
     root, home = sandbox({ export = in_progress(dead) })
     out = dev(root, home, { "board", "lint" })
     testing.ok(out:find("in progress with no claimant", 1, true), out)
@@ -11705,6 +14808,7 @@ end)
 
 do
     local function claimants_at(root, home, now)
+        -- Build a script that reads the claimant at a fixed clock
         local script = string.format(
             "local pomb = require('@dev/board/pomb'); local json = require('@dev/json'); "
                 .. "require('@dev/board/store').now = function() return %d end; "
@@ -11714,6 +14818,8 @@ do
                 .. "print(json.encode({claimant = held}))",
             now
         )
+
+        -- Run the script
         local out, code = dev_os.capture(support.eval(pomb_script(root, script)), {
             env = {
                 PATH = root .. "/bin:" .. dev_os.getenv("PATH"),
@@ -11724,10 +14830,13 @@ do
             stderr = "stdout",
         })
         testing.eq(code, 0, out)
+
+        -- Return the claimant it printed
         return assert(json.decode(out), out).claimant
     end
 
     testing.test("a pomb claim holds until store.now passes its lease", function()
+        -- Seed an in-progress card with a lease
         local root, home = sandbox({
             export = export_with_first_card({
                 column_id = PROGRESS_COLUMN,
@@ -11736,11 +14845,14 @@ do
             }),
         })
         local lease = assert(box.parse_time("2026-01-01T00:00:00Z"))
+
+        -- Check the claim holds before the lease ends and lapses after
         testing.eq(claimants_at(root, home, lease - 3600), "dev@box:42")
         testing.eq(claimants_at(root, home, lease + 3600), "nobody")
     end)
 
     local function card_read(root, home, id)
+        -- Build a script that reads one card
         local script = string.format(
             "local pomb = require('@dev/board/pomb'); local json = require('@dev/json'); "
                 .. "local b = assert(pomb.new({url = 'https://pomb.example', token = 'pass:secrets/worker/token/pomb', name = 'dotfiles'})); "
@@ -11749,6 +14861,8 @@ do
                 .. "claimant = card and card.claimant, found = card ~= nil, message = message}))",
             id
         )
+
+        -- Run the script
         local out, code = dev_os.capture(support.eval(pomb_script(root, script)), {
             env = {
                 PATH = root .. "/bin:" .. dev_os.getenv("PATH"),
@@ -11759,20 +14873,27 @@ do
             stderr = "stdout",
         })
         testing.eq(code, 0, out)
+
+        -- Return what it printed
         return assert(json.decode(out), out)
     end
 
     testing.test(
         "the pomb card read returns the name, done flag and claimant of one task",
         function()
+            -- Seed a done task held by an owner
             local pattern = READY_COLUMN:gsub("%p", "%%%0")
             local done = TASK:gsub(pattern, support.column_id(support.Column.DONE), 1)
             local root, home = sandbox({ export = '{"tasks":[]}', task = done })
             assert(fs.write(root .. "/owner_name", "dev@box:42"))
+
+            -- Read the card and check its fields
             local card = card_read(root, home, ID_A)
             testing.eq(card.name, "First")
             testing.eq(card.done, true)
             testing.eq(card.claimant, "dev@box:42")
+
+            -- Check the read used the task detail, not the export
             local calls = requests(root)
             testing.ok(calls:find("/api/tasks/" .. ID_A, 1, true), calls)
             testing.eq(calls:find("export-data", 1, true), nil)
@@ -11780,21 +14901,29 @@ do
     )
 
     testing.test("the pomb card read of a missing task returns nil and names the task", function()
+        -- Make the task missing
         local root, home = sandbox({ export = '{"tasks":[]}' })
         assert(fs.write(root .. "/far.json", '{"message":"task ' .. ID_D .. ' not found"}'))
         assert(fs.write(root .. "/far_gone", ""))
+
+        -- Read the card and check the message names the task
         local card = card_read(root, home, ID_D)
         testing.eq(card.found, false)
         testing.ok(card.message:find("404", 1, true), card.message)
         testing.ok(card.message:find(ID_D, 1, true), card.message)
+
+        -- Check the read made no export request
         testing.eq(requests(root):find("export-data", 1, true), nil)
     end)
 end
 
 testing.test("a prefix skips the list and writes with the full id", function()
+    -- Add a note by prefix
     local root, home = sandbox()
     local out, code = dev(root, home, { "board", "note", "11111111-a", "hello" })
     testing.eq(code, 0, out)
+
+    -- Check the list was skipped and the write used the full id
     local calls = requests(root)
     testing.eq(calls:find("export-data", 1, true), nil)
     testing.eq(calls:find("/tasks?limit=1000", 1, true), nil)
@@ -11803,13 +14932,18 @@ testing.test("a prefix skips the list and writes with the full id", function()
 end)
 
 testing.test("a prefix 404 falls back to the list and keeps the refusal texts", function()
+    -- Add a note by an ambiguous prefix
     local root, home = sandbox()
     local out, code = dev(root, home, { "board", "note", "11111111", "hello" })
     testing.eq(code, 1, out)
     testing.ok(out:find("More than one card starts with 11111111.", 1, true), out)
+
+    -- Add a note by an unknown prefix
     out, code = dev(root, home, { "board", "note", "99999999", "hello" })
     testing.eq(code, 1, out)
     testing.ok(out:find("No card starts with 99999999.", 1, true), out)
+
+    -- Check the requests fell back to the list and wrote no comment
     local calls = requests(root)
     testing.ok(calls:find("/api/tasks/99999999 body=", 1, true), calls)
     testing.ok(calls:find("/tasks?limit=1000", 1, true), calls)
@@ -11817,9 +14951,12 @@ testing.test("a prefix 404 falls back to the list and keeps the refusal texts", 
 end)
 
 testing.test("a full id skips the list and reads the task detail", function()
+    -- Add a note by full id
     local root, home = sandbox({ export = '{"tasks":[]}' })
     local out, code = dev(root, home, { "board", "note", ID_A, "hello" })
     testing.eq(code, 0, out)
+
+    -- Check the list was skipped and the task detail was read
     local calls = requests(root)
     testing.eq(calls:find("export-data", 1, true), nil)
     testing.eq(calls:find("/tasks?limit=1000", 1, true), nil)
@@ -11827,10 +14964,15 @@ testing.test("a full id skips the list and reads the task detail", function()
 end)
 
 testing.test("a full id of a card on another board is refused like an unknown prefix", function()
+    -- Seed a card on another board
     local root, home = far_sandbox("far-ready")
+
+    -- Add a note by that card's full id
     local out, code = dev(root, home, { "board", "note", ID_D, "hello" })
     testing.eq(code, 1, out)
     testing.ok(out:find("No card starts with " .. ID_D, 1, true), out)
+
+    -- Check the lookup fell back to the list and wrote no comment
     local calls = requests(root)
     testing.ok(calls:find("/api/tasks/" .. ID_D, 1, true), calls)
     testing.ok(calls:find("/tasks?limit=1000", 1, true), calls)
@@ -11838,10 +14980,15 @@ testing.test("a full id of a card on another board is refused like an unknown pr
 end)
 
 testing.test("a prefix of a card on another board is refused like an unknown prefix", function()
+    -- Seed a card on another board
     local root, home = far_sandbox("far-ready")
+
+    -- Add a note by that card's prefix
     local out, code = dev(root, home, { "board", "note", "dddddddd-d", "hello" })
     testing.eq(code, 1, out)
     testing.ok(out:find("No card starts with dddddddd-d.", 1, true), out)
+
+    -- Check the lookup fell back to the list and wrote no comment
     local calls = requests(root)
     testing.ok(calls:find("/api/tasks/dddddddd-d body=", 1, true), calls)
     testing.ok(calls:find("/tasks?limit=1000", 1, true), calls)
@@ -11849,12 +14996,15 @@ testing.test("a prefix of a card on another board is refused like an unknown pre
 end)
 
 testing.test("a short word makes no task request", function()
+    -- Add a note by each short word
     local root, home = sandbox()
     for _, word in ipairs({ "1111111", "11111111-z" }) do
         local out, code = dev(root, home, { "board", "note", word, "hello" })
         testing.eq(code, 1, out)
         testing.ok(out:find("A card id needs at least 8 hex characters: " .. word, 1, true), out)
     end
+
+    -- Check no task was requested by those words
     local calls = requests(root)
     testing.eq(calls:find("/api/tasks/1111111", 1, true), nil)
     testing.ok(calls:find("/tasks?limit=1000", 1, true), calls)
@@ -11882,19 +15032,25 @@ local function export_fetches(root, home, steps)
 end
 
 testing.test("one pomb backend reads the export once across cards and dwell", function()
+    -- Read cards, dwell and cards again through one backend
     local root, home = sandbox()
     local fetches =
         export_fetches(root, home, "assert(b:cards()); assert(b:dwell()); assert(b:cards())")
+
+    -- Check the export was fetched once
     testing.eq(fetches, 1)
 end)
 
 testing.test("a pomb write drops the cached export so the next read fetches it again", function()
+    -- Read cards, write a note and read cards again through one backend
     local root, home = sandbox()
     local fetches = export_fetches(
         root,
         home,
         string.format("assert(b:cards()); assert(b:note(%q, 'hello')); assert(b:cards())", ID_A)
     )
+
+    -- Check the export was fetched twice
     testing.eq(fetches, 2)
 end)
 
@@ -11925,8 +15081,11 @@ local function paged_summaries(root)
 end
 
 testing.test("a summary card list follows the cursor across pages", function()
+    -- Serve the summaries over two pages
     local root, home = sandbox()
     paged_summaries(root)
+
+    -- Read the summary cards through one backend
     export_fetches(
         root,
         home,
@@ -11934,19 +15093,27 @@ testing.test("a summary card list follows the cursor across pages", function()
             .. "assert(cards[1].name == 'Early'); assert(cards[2].column == 'Ready'); "
             .. "assert(cards[2].description == nil)"
     )
+
+    -- Check both pages were requested
     local calls = requests(root)
     testing.ok(calls:find("/tasks?limit=1000 body=", 1, true))
     testing.ok(calls:find("/tasks?limit=1000&cursor=c2", 1, true), calls)
 end)
 
 testing.test("summary cards read no export request", function()
+    -- Serve the summaries over two pages
     local root, home = sandbox()
     paged_summaries(root)
+
+    -- Read the summary cards through one backend
     local fetches = export_fetches(root, home, "assert(b:cards({summary = true}))")
+
+    -- Check no export was fetched
     testing.eq(fetches, 0)
 end)
 
 testing.test("detail cards keep outcomes and the description without the summary flag", function()
+    -- Read the detail cards through one backend
     local root, home = sandbox({ export = PLANNED_EXPORT })
     local fetches = export_fetches(
         root,
@@ -11957,62 +15124,91 @@ testing.test("detail cards keep outcomes and the description without the summary
             .. "' then found = card end end; "
             .. "assert(#found.outcomes == 3); assert(found.description:find('## Problem', 1, true))"
     )
+
+    -- Check the export was fetched once
     testing.eq(fetches, 1)
 end)
 
 testing.test("a pomb export read after a pause with no write fetches it again", function()
+    -- Read cards, let the clock pass and read cards again through one backend
     local root, home = sandbox()
     local fetches = export_fetches(
         root,
         home,
         "assert(b:cards()); local now = os.time; os.time = function() return now() + 30 end; assert(b:cards())"
     )
+
+    -- Check the export was fetched twice
     testing.eq(fetches, 2)
 end)
 
 testing.test("ls adds no holder column while nobody holds a claim", function()
+    -- List cards nobody holds and check there is no holder column
     local cards = sample()
     local result = cmd_board.run("ls", {}, fake(cards))
     testing.eq(result.output:find("dev@", 1, true), nil)
+
+    -- Hold one card and check the holder column appears
     cards[1].claimant = "dev@box:1"
     result = cmd_board.run("ls", {}, fake(cards))
     testing.eq(
         result.output,
-        "11111111  Ready    1 Pomodoro  docs  dev@box:1  Write docs\n"
-            .. "11111111  Backlog  unsized     -     -          Fix lint"
+        table.concat({
+            "11111111  Ready    1 Pomodoro  docs  dev@box:1  Write docs",
+            "11111111  Backlog  unsized     -     -          Fix lint",
+        }, "\n")
     )
 end)
 
 testing.test("a release the server refuses keeps the state so it can be retried", function()
+    -- Claim the card and make the server refuse the release
     local root, home = sandbox({ export = PLANNED_EXPORT })
     assert(fs.write(root .. "/freeze", ""))
     dev(root, home, { "board", "take", "11111111-a" })
     curl_with(root, "*/owner/release) body=; status=503 ;;")
+
+    -- Release the card and check the refusal kept the state
     local out, code = dev(root, home, { "board", "release", "11111111-a" })
     testing.eq(code, 1)
     testing.ok(out:find("Pomb answered 503", 1, true), out)
     testing.eq(fs.exists(state_file(home)), true)
+
+    -- Release again once the server answers
     override(root, nil)
     _, code = dev(root, home, { "board", "release", "11111111-a" })
     testing.eq(code, 0)
 end)
 
 testing.test("stale reads column_entered_at from every page of the tasks view", function()
+    -- List the stale cards
     local root, home = sandbox()
     local out, code = dev(root, home, { "board", "stale" })
     testing.eq(code, 0)
+
+    -- Check the report names the stale and unsized cards
     testing.ok(
-        out:find(
-            "^11111111  Ready  %d+d  1 Pomodoro  First\n11111111  Ready  %d+d  unsized     Second\n\nnewest comment is the owner's:\n.-\n\nunsized outside Icebox:\n"
-        ),
+        out:find(table.concat({
+            "^11111111  Ready  %d+d  1 Pomodoro  First",
+            "11111111  Ready  %d+d  unsized     Second",
+            "",
+            "newest comment is the owner's:",
+            ".-",
+            "",
+            "unsized outside Icebox:",
+            "",
+        }, "\n")),
         out
     )
     testing.ok(out:find("unsized outside Icebox:.*cccccccc  Backlog +Early.*Could not date"), out)
     testing.ok(out:find("unsized outside Icebox:.*11111111  Ready +Second.*Could not date"), out)
     testing.ok(out:find("Could not date cccccccc%S+ Early%.\n$"), out)
+
+    -- Check both pages were requested
     local calls = requests(root)
     testing.ok(calls:find("/tasks?limit=500 body=", 1, true), calls)
     testing.ok(calls:find("/tasks?limit=500&cursor=c2", 1, true), calls)
+
+    -- Check a bad --days is refused
     out, code = dev(root, home, { "board", "stale", "--days", "x" })
     testing.eq(code, 2)
 end)
@@ -12037,12 +15233,15 @@ local function answering(root, cases)
 end
 
 testing.test("a permission_denied with no board says the token lacks it everywhere", function()
+    -- Answer every route with a permission refusal that names no board
     local root, home = sandbox()
     answering(
         root,
         [[*) printf '{"code":"permission_denied","permission":"tasks.edit","message":"m","board_id":null}\n403' ;;
 ]]
     )
+
+    -- List the board and check the refusal text
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
     testing.eq(
@@ -12053,12 +15252,15 @@ testing.test("a permission_denied with no board says the token lacks it everywhe
 end)
 
 testing.test("a permission_denied with a board says the board is not assigned", function()
+    -- Answer every route with a permission refusal that names a board
     local root, home = sandbox()
     answering(
         root,
         [[*) printf '{"code":"permission_denied","permission":"tasks.edit","message":"m","board_id":"board-9"}\n403' ;;
 ]]
     )
+
+    -- List the board and check the refusal text
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
     testing.eq(
@@ -12071,11 +15273,11 @@ end)
 local function refusing(root, who, status_line)
     answering(
         root,
-        "*/api/v1/auth/whoami) printf '"
-            .. who
-            .. "\\n200' ;;\n*) printf '"
-            .. status_line
-            .. "' ;;\n"
+        table.concat({
+            "*/api/v1/auth/whoami) printf '" .. who .. "\\n200' ;;",
+            "*) printf '" .. status_line .. "' ;;",
+            "",
+        }, "\n")
     )
 end
 
@@ -12098,12 +15300,15 @@ testing.test("whoami-preset prints the preset line only when whoami holds one", 
 end)
 
 testing.test("role-refusal-denied names the refused permission and the role", function()
+    -- Refuse a permission for a named role
     local root, home = sandbox()
     refusing(
         root,
         '{"role_name":"implementer","permissions":[]}',
         '{"code":"permission_denied","permission":"tasks.edit","message":"m","board_id":null}\\n403'
     )
+
+    -- List the board and check the refusal text
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
     testing.eq(
@@ -12114,12 +15319,15 @@ testing.test("role-refusal-denied names the refused permission and the role", fu
 end)
 
 testing.test("role-refusal-denied-board names the role and the board", function()
+    -- Refuse a permission on a named board for a named role
     local root, home = sandbox()
     refusing(
         root,
         '{"role_name":"implementer","permissions":[]}',
         '{"code":"permission_denied","permission":"tasks.edit","message":"m","board_id":"board-9"}\\n403'
     )
+
+    -- List the board and check the refusal text
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
     testing.eq(
@@ -12130,61 +15338,78 @@ testing.test("role-refusal-denied-board names the role and the board", function(
 end)
 
 testing.test("role-refusal-exceeds-grant names the refused action and the role", function()
+    -- Refuse an action beyond the role's grant
     local root, home = sandbox()
     refusing(
         root,
         '{"role_name":"implementer"}',
         '{"code":"exceeds_grant","action":"tasks.bin","message":"m"}\\n403'
     )
+
+    -- List the board and check the refusal text
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
     testing.eq(out, "Board refused: Pomb answered 403: the implementer role cannot tasks.bin.\n")
 end)
 
 testing.test("role-refusal-norole keeps the refusal text with no role named", function()
+    -- Refuse an action with no role named
     local root, home = sandbox()
     refusing(
         root,
         '{"role_name":null}',
         '{"code":"exceeds_grant","action":"tasks.bin","message":"too much"}\\n403'
     )
+
+    -- List the board and check the refusal text
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
     testing.eq(out, "Board refused: Pomb answered 403: too much.\n")
 end)
 
 testing.test("role-refusal-expired says the role token expired and to mint it again", function()
+    -- Answer every route with an expired token
     local root, home = sandbox()
     answering(
         root,
         [[*) printf '{"code":"token_expired","message":"whatever"}\n401' ;;
 ]]
     )
+
+    -- List the board and check the refusal text
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
     testing.eq(out, "Board unavailable: The role token expired. Mint it again from its issuer.\n")
 end)
 
 testing.test("an insufficient_scope 403 still reports the server's message", function()
+    -- Answer every route with an insufficient scope refusal
     local root, home = sandbox()
     answering(
         root,
         [[*) printf '{"code":"insufficient_scope","message":"insufficient token scope: needs admin"}\n403' ;;
 ]]
     )
+
+    -- List the board and check the server's message is reported
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
     testing.eq(out, "Board refused: Pomb answered 403: insufficient token scope: needs admin.\n")
 end)
 
 testing.test("a board missing from a token's assigned boards gets its own message", function()
+    -- Assign the token to another board only
     local root, home = sandbox()
     answering(
         root,
-        [[*/api/v1/auth/whoami) printf '{"permissions":["tasks.read"],"boards":[{"id":"b1","name":"Other"}]}\n200' ;;
-*/api/boards) printf '[{"id":"b1","name":"Other"}]\n200' ;;
-]]
+        table.concat({
+            '*/api/v1/auth/whoami) printf \'{"permissions":["tasks.read"],"boards":[{"id":"b1","name":"Other"}]}\\n200\' ;;',
+            '*/api/boards) printf \'[{"id":"b1","name":"Other"}]\\n200\' ;;',
+            "",
+        }, "\n")
     )
+
+    -- List the board and check the message names the assigned board
     local out, code = dev(root, home, { "board", "ls" })
     testing.eq(code, 1)
     testing.eq(
@@ -12197,9 +15422,14 @@ end)
 testing.test("a missing board stays plain on a token that sees every board", function()
     for _, who in ipairs({ '{"scope":"work"}', '{"permissions":["tasks.read"],"boards":"all"}' }) do
         local root, home = sandbox()
-        answering(root, "*/api/v1/auth/whoami) printf '" .. who .. [[\n200' ;;
-*/api/boards) printf '[{"id":"b1","name":"Other"}]\n200' ;;
-]])
+        answering(
+            root,
+            table.concat({
+                "*/api/v1/auth/whoami) printf '" .. who .. "\\n200' ;;",
+                '*/api/boards) printf \'[{"id":"b1","name":"Other"}]\\n200\' ;;',
+                "",
+            }, "\n")
+        )
         local out, code = dev(root, home, { "board", "ls" })
         testing.eq(code, 1)
         testing.eq(out, "Board unavailable: Pomb has no board named dotfiles.\n")
@@ -12209,7 +15439,10 @@ end)
 testing.test(
     "add --checks on a Pomb board without the checks field is refused before any write",
     function()
+        -- Seed a board without the checks field
         local root, home = sandbox({ fields = "[]" })
+
+        -- Add a card with --checks
         local out, code = dev(root, home, {
             "board",
             "add",
@@ -12227,6 +15460,8 @@ testing.test(
             "--checks",
             "dev test",
         })
+
+        -- Check the add was refused before any write
         testing.eq(code, 2)
         testing.ok(out:find("no checks field", 1, true), out)
         testing.eq(requests(root):find("POST /", 1, true), nil)
@@ -12250,15 +15485,27 @@ testing.test(
             }
         )
         testing.eq(
-            board.prose_warnings("## Problem\nsee a/b.lua\n\n## Change\n- a/b.lua 2af0e003\n"),
+            board.prose_warnings(table.concat({
+                "## Problem",
+                "see a/b.lua",
+                "",
+                "## Change",
+                "- a/b.lua 2af0e003",
+                "",
+            }, "\n")),
             {
                 "Card prose holds a path: a/b.lua.",
             }
         )
         testing.eq(
-            board.prose_warnings(
-                "## Done when\n- [ ] x\n## Change\nsrc/a.lua\n## Out of scope\nsrc/a.lua"
-            ),
+            board.prose_warnings(table.concat({
+                "## Done when",
+                "- [ ] x",
+                "## Change",
+                "src/a.lua",
+                "## Out of scope",
+                "src/a.lua",
+            }, "\n")),
             {
                 "Card prose holds a path: src/a.lua.",
             }
@@ -12270,7 +15517,11 @@ testing.test("prose_warnings leaves a land line alone", function()
     testing.eq(board.prose_warnings("Landed commit 2af0e003 on trunk."), {})
     testing.eq(board.prose_warnings("landed 2af0e003 on dotfiles/main"), {})
     testing.eq(
-        board.prose_warnings("see 2af0e003\nLanded commit 0ef0e008 on trunk.\nfixed 3bf0e019"),
+        board.prose_warnings(table.concat({
+            "see 2af0e003",
+            "Landed commit 0ef0e008 on trunk.",
+            "fixed 3bf0e019",
+        }, "\n")),
         {
             "Card prose holds a hex id or hash: 2af0e003.",
             "Card prose holds a hex id or hash: 3bf0e019.",
@@ -12300,6 +15551,7 @@ testing.test("prose_warnings leaves clean prose, plain words, numbers and URLs a
 end)
 
 testing.test("note and note --edit with a commit id print no warning", function()
+    -- Add a note that names a commit id
     local backend = with_comments()
     local result = cmd_board.run(
         "note",
@@ -12308,6 +15560,8 @@ testing.test("note and note --edit with a commit id print no warning", function(
     )
     testing.eq(result.output, "noted cccccccc")
     testing.eq(result.warnings, nil)
+
+    -- Edit that note to name another commit id
     result = cmd_board.run("note", {
         "cccccccc",
         "--edit",
@@ -12326,16 +15580,29 @@ testing.test("note and note --edit with a commit id print no warning", function(
 end)
 
 testing.test("add with a hex id in its Problem still warns", function()
+    -- Add a card whose Problem holds a hex id
     local backend = fake(sample())
     local result = cmd_board.run("add", {
         "X",
         "--description",
-        "## Problem\nbroke at 2af0e003\n\n## Change\n- x\n\n## Out of scope\nnone\n",
+        table.concat({
+            "## Problem",
+            "broke at 2af0e003",
+            "",
+            "## Change",
+            "- x",
+            "",
+            "## Out of scope",
+            "none",
+            "",
+        }, "\n"),
         "--size",
         "1",
         "--done-when",
         "a",
     }, backend)
+
+    -- Check the warning was reported and the write went through
     testing.eq(
         result.warnings,
         { "Card prose holds a hex id or hash: 2af0e003. The write still went through." }
@@ -12343,11 +15610,22 @@ testing.test("add with a hex id in its Problem still warns", function()
 end)
 
 testing.test("add and edit report prose warnings and still write", function()
+    -- Add a card whose Problem holds a path
     local backend = fake(sample())
     local result = cmd_board.run("add", {
         "X",
         "--description",
-        "## Problem\nin src/a.lua\n\n## Change\n- x\n\n## Out of scope\nnone\n",
+        table.concat({
+            "## Problem",
+            "in src/a.lua",
+            "",
+            "## Change",
+            "- x",
+            "",
+            "## Out of scope",
+            "none",
+            "",
+        }, "\n"),
         "--size",
         "1",
         "--done-when",
@@ -12357,17 +15635,27 @@ testing.test("add and edit report prose warnings and still write", function()
         result.warnings,
         { "Card prose holds a path: src/a.lua. The write still went through." }
     )
+
+    -- Add a clean card and check it warns of nothing
     result = cmd_board.run(
         "add",
         { "X", "--description", V2, "--size", "1", "--done-when", "a" },
         backend
     )
     testing.eq(result.warnings, {})
-    result = cmd_board.run(
-        "edit",
-        { "cccccccc", "## Change\n- a/b.lua\n## Problem\nx/y.sh\n## Out of scope\nn" },
-        backend
-    )
+
+    -- Edit a card whose Problem holds a path outside Change
+    result = cmd_board.run("edit", {
+        "cccccccc",
+        table.concat({
+            "## Change",
+            "- a/b.lua",
+            "## Problem",
+            "x/y.sh",
+            "## Out of scope",
+            "n",
+        }, "\n"),
+    }, backend)
     testing.eq(
         result.warnings,
         { "Card prose holds a path: x/y.sh. The write still went through." }
@@ -12375,20 +15663,51 @@ testing.test("add and edit report prose warnings and still write", function()
 end)
 
 testing.test("split_checklist takes the Done when items and leaves the rest", function()
-    local items, rest = board.split_checklist(
-        "## Problem\nP\n\n\n## Done when\n* [X] one\n  - [ ] two\n\n## Out of scope\nN\n"
-    )
+    -- Split a description with a Done when section
+    local items, rest = board.split_checklist(table.concat({
+        "## Problem",
+        "P",
+        "",
+        "",
+        "## Done when",
+        "* [X] one",
+        "  - [ ] two",
+        "",
+        "## Out of scope",
+        "N",
+        "",
+    }, "\n"))
     testing.eq(items, { { name = "one", done = true }, { name = "two", done = false } })
-    testing.eq(rest, "## Problem\nP\n\n\n## Out of scope\nN")
-    items, rest = board.split_checklist("## Done when\n- [ ] only\n")
+    testing.eq(
+        rest,
+        table.concat({
+            "## Problem",
+            "P",
+            "",
+            "",
+            "## Out of scope",
+            "N",
+        }, "\n")
+    )
+
+    -- Split a description that holds only a Done when section
+    items, rest = board.split_checklist(table.concat({ "## Done when", "- [ ] only", "" }, "\n"))
     testing.eq(#items, 1)
     testing.eq(rest, "")
-    testing.eq(board.split_checklist("## Problem\n- [ ] not under the heading\n"), nil)
+
+    -- Check a checklist outside the Done when heading is left alone
+    testing.eq(
+        board.split_checklist(
+            table.concat({ "## Problem", "- [ ] not under the heading", "" }, "\n")
+        ),
+        nil
+    )
 end)
 
 local WAIT = {}
 
 local function waiting(root, home, call, status)
+    -- Stub the wait route and build the script
     override(
         root,
         { { path = "*/events/wait*", body = WAIT[root], status = tonumber(status) or 200 } }
@@ -12400,6 +15719,8 @@ local function waiting(root, home, call, status)
             .. "print(json.encode({got = got, message = message, oldest = oldest, refused = refused}))",
         call
     )
+
+    -- Run the script against the stubbed server
     local out, code = dev_os.capture(support.eval(pomb_script(root, script)), {
         env = {
             PATH = root .. "/bin:" .. dev_os.getenv("PATH"),
@@ -12411,6 +15732,8 @@ local function waiting(root, home, call, status)
         stderr = "stdout",
     })
     testing.eq(code, 0, out)
+
+    -- Decode the printed outcome
     return assert(require("@dev/json").decode(out), out)
 end
 
@@ -12419,17 +15742,23 @@ local function wait_route(root, reply)
 end
 
 testing.test("a pomb wait drops the cached export so the next read fetches it again", function()
+    -- Serve a wait reply that carries no events
     local root, home = sandbox()
     wait_route(root, '{"cursor":"9","events":[]}')
+
+    -- Read the cards on either side of a wait
     local fetches = export_fetches(
         root,
         home,
         "assert(b:cards()); assert(b:wait('7', nil, 1)); assert(b:cards())"
     )
+
+    -- Expect the second read to fetch the export again
     testing.eq(fetches, 2)
 end)
 
 testing.test("wait returns the events oldest first with column names and the cursor", function()
+    -- Serve two events newest last
     local root, home = sandbox()
     wait_route(
         root,
@@ -12437,7 +15766,11 @@ testing.test("wait returns the events oldest first with column names and the cur
             .. '{"cursor":"8","kind":"task_added","task_id":"t1","column_id":"col-ready","at":"x","actor_kind":"user","extra":1},'
             .. '{"cursor":"9","kind":"task_moved","task_id":"t2","column_id":"col-progress","from_column_id":"col-blocked","at":"2026-11-08T10:00:00Z","token_name":null}]}'
     )
+
+    -- Wait on both kinds from a known cursor
     local result = waiting(root, home, "'7', {'task_added', 'task_moved'}, 20")
+
+    -- Expect the events decoded with column names and the cursor
     testing.eq(result.got, {
         cursor = "9",
         events = {
@@ -12456,6 +15789,8 @@ testing.test("wait returns the events oldest first with column names and the cur
             },
         },
     })
+
+    -- Expect the request to carry the timeout, cursor and kinds
     local calls = requests(root)
     testing.ok(
         calls:find("/events/wait?timeout=20&after=7&kinds=task_added,task_moved", 1, true),
@@ -12464,42 +15799,67 @@ testing.test("wait returns the events oldest first with column names and the cur
 end)
 
 testing.test("wait returns an empty list and the cursor to send again", function()
+    -- Serve a wait reply that carries no events
     local root, home = sandbox()
     wait_route(root, '{"cursor":"7","events":[]}')
+
+    -- Expect an empty list with the cursor to send again
     testing.eq(waiting(root, home, "'7'").got, { cursor = "7", events = {} })
+
+    -- Expect the default timeout on the request
     local calls = requests(root)
     testing.ok(calls:find("/events/wait?timeout=50&after=7 body=", 1, true), calls)
 end)
 
 testing.test("wait with no cursor sends none", function()
+    -- Serve a wait reply that carries no events
     local root, home = sandbox()
     wait_route(root, '{"cursor":"3","events":[]}')
+
+    -- Expect the cursor the server returns
     testing.eq(waiting(root, home, "nil, nil, 0").got.cursor, "3")
+
+    -- Expect no cursor on the request
     local calls = requests(root)
     testing.ok(calls:find("/events/wait?timeout=0 body=", 1, true), calls)
 end)
 
 testing.test("wait returns the oldest cursor of a 410", function()
+    -- Serve an expired-cursor refusal
     local root, home = sandbox()
     wait_route(root, '{"code":"cursor_expired","message":"too old","oldest_cursor":"41"}')
+
+    -- Wait from a cursor the server has trimmed
     local result = waiting(root, home, "'1'", "410")
+
+    -- Expect no events, the oldest cursor and the refusal text
     testing.eq(result.got, nil)
     testing.eq(result.oldest, "41")
     testing.ok(result.message:find("Pomb answered 410: too old", 1, true), result.message)
 end)
 
 testing.test("wait sends the cursor and the timeout as query parameters", function()
+    -- Serve a wait reply that carries no events
     local root, home = sandbox()
     wait_route(root, '{"cursor":"7","events":[]}')
+
+    -- Wait with a cursor and a timeout
     waiting(root, home, "'7', nil, 50")
+
+    -- Expect the wait route to be called
     local calls = requests(root)
     testing.ok(calls:find("/events/wait", 1, true), calls)
 end)
 
 testing.test("wait surfaces too_many_waits as a 429 and keeps no cursor", function()
+    -- Serve a too-many-waits refusal
     local root, home = sandbox()
     wait_route(root, '{"code":"too_many_waits","message":"end one"}')
+
+    -- Wait and get the 429
     local result = waiting(root, home, "'7'", "429")
+
+    -- Expect the refusal flagged with no events and no cursor
     testing.eq(result.got, nil)
     testing.eq(result.oldest, nil)
     testing.ok(result.message:find("Pomb answered 429: end one", 1, true), result.message)
@@ -12509,10 +15869,13 @@ end)
 testing.test(
     "wait does not flag a 429 with another code or another status as too many waits",
     function()
+        -- Refuse with a 429 that carries another code
         local root, home = sandbox()
         wait_route(root, '{"code":"rate_limited","message":"slow down"}')
         local result = waiting(root, home, "'7'", "429")
         testing.eq(result.refused, nil)
+
+        -- Refuse with the too-many-waits code under another status
         wait_route(root, '{"code":"too_many_waits","message":"end one"}')
         result = waiting(root, home, "'7'", "503")
         testing.eq(result.refused, nil)
@@ -12521,6 +15884,7 @@ testing.test(
 
 do
     local function rate_limited(limited, hint, body)
+        -- Queue the rate limit refusals ahead of one good reply
         local root, home = sandbox()
         local steps = {}
         for _ = 1, limited do
@@ -12538,6 +15902,8 @@ do
         end
         steps[#steps + 1] = { prepend = { { path = "*", body = '{"name":"x"}' } } }
         override(root, { steps = steps })
+
+        -- Build a script that records each nap and prints the outcome
         local script = string.format(
             "local dev_os = require('@dev/os'); local naps = {}; "
                 .. "dev_os.nap = function(seconds) naps[#naps + 1] = seconds end; "
@@ -12546,6 +15912,8 @@ do
                 .. "local got, message = b:whoami(); "
                 .. "print(json.encode({name = got and got.name, message = message, naps = naps}))"
         )
+
+        -- Run the script against the stubbed server
         local out, code = dev_os.capture(support.eval(pomb_script(root, script)), {
             env = {
                 PATH = root .. "/bin:" .. dev_os.getenv("PATH"),
@@ -12556,6 +15924,8 @@ do
             stderr = "stdout",
         })
         testing.eq(code, 0, out)
+
+        -- Decode the outcome and count the requests made
         local result = assert(require("@dev/json").decode(out), out)
         result.calls = request_count(requests(root))
         return result
@@ -12607,6 +15977,7 @@ local function wait_flags(args)
 end
 
 local function waiter(replies)
+    -- Record what each wait was asked
     local seen = { afters = {}, kinds = {}, timeouts = {}, naps = {}, notices = {} }
     local backend = {}
     function backend:wait(after, kinds, timeout)
@@ -12617,17 +15988,24 @@ local function waiter(replies)
         backend.last = reply.message
         return reply.got, reply.message, reply.oldest, reply.refused
     end
+
+    -- Answer the other reads the wait command makes
     function backend:failure()
         return support.failure_of(backend.last)
     end
     function backend:columns()
         return backend.rows or {}
     end
+
+    -- Hand back the backend with what it saw
     return backend, seen
 end
 
 local function waited(replies, args, opts)
+    -- Default the options
     opts = opts or {}
+
+    -- Let a test change the world before a numbered wait
     local backend, seen = waiter(replies)
     if opts.before then
         local inner = backend.wait
@@ -12639,6 +16017,8 @@ local function waited(replies, args, opts)
             return inner(self, ...)
         end
     end
+
+    -- Answer card reads, failing as the test asks
     function backend:cards()
         local down = opts.cards_errors and table.remove(opts.cards_errors, 1)
         if down then
@@ -12652,6 +16032,8 @@ local function waited(replies, args, opts)
         backend.last = nil
         return opts.cards or {}
     end
+
+    -- Answer comment reads, failing or vanishing as the test asks
     if opts.comments then
         function backend:comments(id)
             if opts.comments_errors and table.remove(opts.comments_errors, 1) then
@@ -12669,6 +16051,8 @@ local function waited(replies, args, opts)
             return opts.comments[id] or {}
         end
     end
+
+    -- Answer blocker reads for the cards the test marks
     function backend:blocked(id)
         if opts.blocked_error then
             backend.last = opts.blocked_error
@@ -12677,6 +16061,8 @@ local function waited(replies, args, opts)
         backend.last = nil
         return (opts.blockers or {})[id] == true
     end
+
+    -- Run the wait command with the clock, naps and notices stubbed
     local path = opts.path or support.tempdir() .. "/wait"
     local result = cmd_board.wait(backend, wait_flags(args), {
         stem = path,
@@ -12737,11 +16123,14 @@ testing.test(
 )
 
 testing.test("wait --for ready skips a move into Ready of a card in another column", function()
+    -- Hold a done card, a claimed card and a free card
     local cards = {
         { id = ID_A, column = support.COLUMN_NAME.DONE },
         { id = ID_B, column = support.COLUMN_NAME.READY, claimant = "x" },
         { id = ID_C, column = support.COLUMN_NAME.READY },
     }
+
+    -- Wait for Ready through moves and adds of those cards
     local result, seen = waited({
         got("1"),
         got(
@@ -12751,16 +16140,23 @@ testing.test("wait --for ready skips a move into Ready of a card in another colu
         ),
         got("3", { kind = "task_moved", task_id = ID_C, column = support.COLUMN_NAME.READY }),
     }, { "--for", "ready" }, { cards = cards })
+
+    -- Expect only the free card to wake the wait
     testing.eq(result.output, "moved cccccccc to Ready")
     testing.eq(seen.afters, { "none", "1", "2" })
 end)
 
 testing.test("wait --for ready keeps waiting on a trim and wakes for an unclaimed card", function()
+    -- Hold one unclaimed Ready card
     local cards = { { id = ID_A, column = support.COLUMN_NAME.READY } }
+
+    -- Wait through a trimmed cursor and then an add of that card
     local result, seen, path = waited({
         { message = "Board refused: pomb answered 410: too old", oldest = "17" },
         got("18", { kind = "task_added", task_id = ID_A, column = support.COLUMN_NAME.READY }),
     }, { "--for", "ready" }, { cards = cards })
+
+    -- Expect the add to wake the wait from the trimmed cursor
     testing.eq(result.output, "added 11111111 to Ready")
     testing.eq(seen.afters, { "none", "17" })
     testing.eq(fs.read(path .. ".ready.cursor"), "18\n")
@@ -12811,6 +16207,7 @@ testing.test(
 )
 
 testing.test("wait --for human wakes on the owner's comment newer than its start", function()
+    -- Hold four cards with comments from before and after the start
     local started = assert(box.parse_time("2026-11-02T09:00:00Z"))
     local cards = {
         { id = ID_A, column = support.COLUMN_NAME.READY, labels = {}, done = false },
@@ -12827,6 +16224,8 @@ testing.test("wait --for human wakes on the owner's comment newer than its start
         },
         [ID_D] = { { actor = "human", at = "2026-11-02T10:00:00Z", body = "3" } },
     }
+
+    -- Wait for the owner through comment events on those cards
     local result, seen = waited({
         got("1"),
         got(
@@ -12842,12 +16241,15 @@ testing.test("wait --for human wakes on the owner's comment newer than its start
         comments = replies,
         now = started,
     })
+
+    -- Expect only the fresh owner comment to wake the wait
     testing.eq(result.output, "the owner commented on 11111111")
     testing.eq(seen.kinds[1], "task_moved,comment_added")
     testing.eq(seen.afters, { "none", "1", "2", "3" })
 end)
 
 testing.test("wait --for human settles for 60 seconds and prints one line per card", function()
+    -- Hold a Ready card with an owner comment and two Blocked cards
     local started = assert(box.parse_time("2026-11-02T09:00:00Z"))
     local at = "2026-11-02T10:00:00Z"
     local cards = {
@@ -12859,6 +16261,8 @@ testing.test("wait --for human settles for 60 seconds and prints one line per ca
         [ID_A] = { { actor = "human", at = at, body = "1" } },
         [ID_C] = { { actor = "agent", at = at, body = "q" } },
     }
+
+    -- Wait through a comment and a later move inside the settle window
     local result, seen = waited({
         got("1"),
         got("2", { kind = "comment_added", task_id = ID_A, column = support.COLUMN_NAME.READY }),
@@ -12872,13 +16276,18 @@ testing.test("wait --for human settles for 60 seconds and prints one line per ca
         }, { kind = "comment_added", task_id = ID_C, column = support.COLUMN_NAME.BLOCKED }),
         got("4"),
     }, { "--for", "human" }, { cards = cards, comments = replies, now = started })
+
+    -- Expect one line per card after a 60 second settle
     testing.eq(result.output, "the owner commented on 11111111\nmoved 11111111 out of Blocked")
     testing.eq(seen.afters, { "none", "1", "2", "3" })
     testing.eq(seen.timeouts, { "default", "default", 60, 60 })
 end)
 
 testing.test("wait --for human prints the lines it holds when the cursor is trimmed", function()
+    -- Hold one Blocked card
     local cards = { { id = ID_A, column = support.COLUMN_NAME.BLOCKED, labels = {}, done = false } }
+
+    -- Wait through the owner's move and then a trimmed cursor
     local result = waited({
         got("1"),
         got("2", {
@@ -12891,6 +16300,8 @@ testing.test("wait --for human prints the lines it holds when the cursor is trim
         }),
         { oldest = "9" },
     }, { "--for", "human" }, { cards = cards })
+
+    -- Expect the held line with the trimmed notice
     testing.eq(result.output, MOVED_A .. TRIMMED_NOTICE)
 end)
 
@@ -12929,29 +16340,41 @@ do
     end)
 
     testing.test("wait --for human reports a failed cursor save after its held lines", function()
+        -- Put a file where the cursor directory should be
         local root = support.tempdir()
         assert(fs.write(root .. "/file", ""))
+
+        -- Wait through a held move with a cursor path that cannot be written
         local result = waited(
             { got("1"), held_move(), got("3") },
             { "--for", "human" },
             { cards = blocked_a(), path = root .. "/file/wait" }
         )
+
+        -- Expect the held line first and then the save failure
         testing.ok(result.message:find(MOVED_A .. "\n", 1, true) == 1)
         testing.ok(result.code ~= nil)
     end)
 
     testing.test("wait --for human prints held lines again after a kill in the window", function()
+        -- Kill the wait while it holds a line in the window
         local path = support.tempdir() .. "/wait"
         local killed = pcall(waited, { got("1"), held_move() }, { "--for", "human" }, {
             cards = blocked_a(),
             path = path,
         })
+
+        -- Expect no cursor saved by the killed run
         testing.eq(killed, false)
         testing.eq((fs.read(path .. ".human.cursor")), nil)
+
+        -- Wait again from the same cursor path
         local result, seen = waited({ got("1"), held_move(), got("3") }, { "--for", "human" }, {
             cards = blocked_a(),
             path = path,
         })
+
+        -- Expect the held line printed again and the cursor saved
         testing.eq(result.output, MOVED_A)
         testing.eq(seen.afters[1], "none")
         testing.eq(fs.read(path .. ".human.cursor"), "3\n")
@@ -12959,7 +16382,10 @@ do
 end
 
 testing.test("wait --for human ignores a human move older than the wait's start", function()
+    -- Hold one Blocked card
     local cards = { { id = ID_A, column = board.DEFAULT_NAMES.blocked, labels = {}, done = false } }
+
+    -- Wait through a move before the start and a move after it
     local result = waited({
         got("1", {
             kind = "task_moved",
@@ -12979,14 +16405,19 @@ testing.test("wait --for human ignores a human move older than the wait's start"
         }),
         got("3"),
     }, { "--for", "human" }, { cards = cards, now = 100 })
+
+    -- Expect only the later move to wake the wait
     testing.eq(result.output, "moved cccccccc out of " .. board.DEFAULT_NAMES.blocked)
 end)
 
 testing.test("wait --for human keeps waiting on a trimmed stream with no moved card", function()
+    -- Hold a Blocked card and an Icebox card
     local cards = {
         { id = ID_A, column = board.DEFAULT_NAMES.blocked, labels = {}, done = false },
         { id = ID_B, column = board.DEFAULT_NAMES.icebox, labels = {}, done = false },
     }
+
+    -- Wait through trims with a move of a card the board never held
     local result, seen, path = waited({
         { oldest = "9" },
         got("10", {
@@ -12999,12 +16430,15 @@ testing.test("wait --for human keeps waiting on a trimmed stream with no moved c
         { oldest = "20" },
         { message = "stop" },
     }, { "--for", "human" }, { cards = cards })
+
+    -- Expect every trim to resume from its oldest cursor
     testing.eq(result.message, "Stop.")
     testing.eq(seen.afters, { "none", "9", "10", "11", "20" })
     testing.eq(fs.read(path .. ".human.cursor"), "20\n")
 end)
 
 testing.test("wait --for human names the card that left Blocked on a trimmed stream", function()
+    -- Show the card in Blocked on the first read and in Ready after
     local before =
         { { id = ID_A, column = board.DEFAULT_NAMES.blocked, labels = {}, done = false } }
     local after = { { id = ID_A, column = support.COLUMN_NAME.READY, labels = {}, done = false } }
@@ -13015,6 +16449,8 @@ testing.test("wait --for human names the card that left Blocked on a trimmed str
         reads = reads + 1
         return reads == 1 and before or after
     end
+
+    -- Wait through a trimmed cursor
     local path = support.tempdir() .. "/wait"
     local result = cmd_board.wait(backend, { ["for"] = "human" }, {
         stem = path,
@@ -13027,6 +16463,8 @@ testing.test("wait --for human names the card that left Blocked on a trimmed str
         end,
         notice = function() end,
     })
+
+    -- Expect the card named as moved and the trimmed cursor saved
     testing.eq(result.output, MOVED_A .. TRIMMED_NOTICE)
     testing.eq(seen.afters, { "none" })
     testing.eq(fs.read(path .. ".human.cursor"), "9\n")
@@ -13053,7 +16491,10 @@ local function trimmed_wait(before, after)
 end
 
 testing.test("wait --for human counts a human move in the second the wait started", function()
+    -- Hold one Blocked card
     local cards = { { id = ID_A, column = board.DEFAULT_NAMES.blocked, labels = {}, done = false } }
+
+    -- Wait through a move stamped at the start second
     local result = waited({
         got("1", {
             kind = "task_moved",
@@ -13065,6 +16506,8 @@ testing.test("wait --for human counts a human move in the second the wait starte
         }),
         got("2"),
     }, { "--for", "human" }, { cards = cards, now = 100 })
+
+    -- Expect the move to count
     testing.eq(result.output, MOVED_A)
 end)
 
@@ -13082,6 +16525,7 @@ testing.test("wait --for human reports an Icebox card that left on a trimmed str
 end)
 
 testing.test("wait --for lead wakes once on a needs:lead card in Blocked", function()
+    -- Hold lead cards that are wanted, owned, claimed or not in Blocked
     local cards = {
         { id = ID_A, column = support.COLUMN_NAME.BLOCKED, labels = { "needs:lead" } },
         {
@@ -13097,6 +16541,8 @@ testing.test("wait --for lead wakes once on a needs:lead card in Blocked", funct
             claimant = "x",
         },
     }
+
+    -- Wait for the lead through events on those cards
     local result, seen, path = waited({
         got("1"),
         got(
@@ -13111,12 +16557,15 @@ testing.test("wait --for lead wakes once on a needs:lead card in Blocked", funct
             { kind = "task_added", task_id = ID_A, column = support.COLUMN_NAME.BLOCKED }
         ),
     }, { "--for", "lead" }, { cards = cards })
+
+    -- Expect the one wanted card named once
     testing.eq(result.output, "11111111 is labelled needs:lead in Blocked")
     testing.eq(seen.kinds[1], "task_added,task_moved,task_updated")
     testing.eq(fs.read(path .. ".lead.cursor"), "3\n")
 end)
 
 testing.test("wait --for lead skips a run card and a card an open card blocks", function()
+    -- Hold a run card and two lead cards
     local cards = {
         {
             id = ID_A,
@@ -13126,6 +16575,8 @@ testing.test("wait --for lead skips a run card and a card an open card blocks", 
         { id = ID_B, column = support.COLUMN_NAME.BLOCKED, labels = { board.NEEDS_LEAD } },
         { id = ID_C, column = support.COLUMN_NAME.BLOCKED, labels = { board.NEEDS_LEAD } },
     }
+
+    -- Wait for the lead while an open card blocks one of them
     local result = waited({
         got("1"),
         got(
@@ -13135,6 +16586,8 @@ testing.test("wait --for lead skips a run card and a card an open card blocks", 
         ),
         got("3", { kind = "task_added", task_id = ID_C, column = support.COLUMN_NAME.BLOCKED }),
     }, { "--for", "lead" }, { cards = cards, blockers = { [ID_B] = true } })
+
+    -- Expect only the unblocked lead card named
     testing.eq(result.output, "cccccccc is labelled needs:lead in Blocked")
 end)
 
@@ -13155,7 +16608,10 @@ local function lead_card(id)
 end
 
 testing.test("wait --for lead announces a card once its last blocker is Done", function()
+    -- Hold a card behind one open blocker
     local blockers = { [ID_A] = true }
+
+    -- Wait for the lead, clearing the blocker before the Done event
     local result, _, path = waited({
         got("1"),
         got("2", blocked_event(ID_A)),
@@ -13169,6 +16625,8 @@ testing.test("wait --for lead announces a card once its last blocker is Done", f
             end,
         },
     })
+
+    -- Expect the card named once its last blocker is done
     testing.eq(result.output, "11111111 is labelled needs:lead in Blocked")
     testing.eq(fs.read(path .. ".lead.cursor"), "3\n")
 end)
@@ -13188,8 +16646,11 @@ testing.test("wait --for lead keeps quiet while another open blocker holds the c
 end)
 
 testing.test("wait --for planner announces a held card once its last open child closes", function()
+    -- Hold an epic with one child still open
     local epic = held_card(board.NEEDS_PLANNER)
     epic.epic = { done = 1, total = 2 }
+
+    -- Wait for the planner, closing the last child before the Done event
     local result = waited({
         got("1"),
         got("2", blocked_event(ID_A)),
@@ -13202,13 +16663,18 @@ testing.test("wait --for planner announces a held card once its last open child 
             end,
         },
     })
+
+    -- Expect the epic named once its last child closes
     testing.eq(result.output, "11111111 is labelled needs:planner in Blocked")
 end)
 
 testing.test(
     "wait --for lead announces a card once when its own event arrives with Done",
     function()
+        -- Hold a card behind one open blocker
         local blockers = { [ID_A] = true }
+
+        -- Wait for the lead with the card event and the Done event in one reply
         local result = waited({
             got("1"),
             got("2", blocked_event(ID_A)),
@@ -13222,13 +16688,18 @@ testing.test(
                 end,
             },
         })
+
+        -- Expect the card named once
         testing.eq(result.output, "11111111 is labelled needs:lead in Blocked")
     end
 )
 
 testing.test("wait --for lead announces a card once and not on a later Done event", function()
+    -- Hold two lead cards with one of them behind an open blocker
     local blockers = { [ID_A] = true }
     local cards = { lead_card(ID_A), lead_card(ID_C) }
+
+    -- Wait for the lead, clearing the blocker before the Done event
     local first, _, path = waited({
         got("1"),
         got("2", blocked_event(ID_A)),
@@ -13242,22 +16713,33 @@ testing.test("wait --for lead announces a card once and not on a later Done even
             end,
         },
     })
+
+    -- Expect the first card named
     testing.eq(first.output, "11111111 is labelled needs:lead in Blocked")
+
+    -- Wait again from the saved cursor through a later Done event
     local later = waited({
         got("4", done_event(ID_B)),
         got("5", blocked_event(ID_C)),
     }, { "--for", "lead" }, { cards = cards, blockers = blockers, path = path })
+
+    -- Expect only the next card named
     testing.eq(later.output, "cccccccc is labelled needs:lead in Blocked")
 end)
 
 testing.test("wait --for lead fails and keeps the cursor on unreadable blockers", function()
+    -- Hold one lead card
     local cards = {
         { id = ID_A, column = support.COLUMN_NAME.BLOCKED, labels = { board.NEEDS_LEAD } },
     }
+
+    -- Wait for the lead while the blocker read fails
     local result, _, path = waited({
         got("1"),
         got("2", { kind = "task_added", task_id = ID_A, column = support.COLUMN_NAME.BLOCKED }),
     }, { "--for", "lead" }, { cards = cards, blocked_error = "bad links" })
+
+    -- Expect a failure with the cursor left where it was
     testing.eq(result.code, 1)
     testing.eq(fs.read(path .. ".lead.cursor"), "1\n")
 end)
@@ -13281,6 +16763,8 @@ testing.test("wait --for planner wakes once on a needs:planner card in Blocked",
         ),
         got("3", { kind = "task_updated", task_id = ID_A, column = support.COLUMN_NAME.BLOCKED }),
     }, { "--for", "planner" }, { cards = cards })
+
+    -- Expect the one wanted card named once
     testing.eq(result.output, "11111111 is labelled needs:planner in Blocked")
     testing.eq(seen.kinds[1], "task_added,task_moved,task_updated")
     testing.eq(fs.read(path .. ".planner.cursor"), "3\n")
@@ -13294,11 +16778,14 @@ for _, stage in ipairs({
     testing.test(
         "wait --for " .. stage:lower() .. " prints the unclaimed card that reached " .. stage,
         function()
+            -- Hold a free card and a claimed card in the stage and one in Ready
             local cards = {
                 { id = ID_A, column = stage },
                 { id = ID_B, column = stage, claimant = "x" },
                 { id = ID_C, column = support.COLUMN_NAME.READY },
             }
+
+            -- Wait for the stage through moves of those cards
             local result, seen, path = waited({
                 got("1"),
                 got(
@@ -13308,6 +16795,8 @@ for _, stage in ipairs({
                 ),
                 got("3", { kind = "task_moved", task_id = ID_A, column = stage }),
             }, { "--for", stage:lower() }, { cards = cards })
+
+            -- Expect the free card named once
             testing.eq(result.output, "moved 11111111 to " .. stage)
             testing.eq(seen.kinds[1], "task_added,task_moved")
             testing.eq(fs.read(path .. "." .. stage:lower() .. ".cursor"), "3\n")
@@ -13370,17 +16859,22 @@ do
     testing.test(
         "wait --for lead gives up after ten unreachable board reads and keeps the cursor",
         function()
+            -- Queue ten board reads that fail
             local replies = { got("1") }
             local errors = {}
             for i = 1, 10 do
                 replies[#replies + 1] = lead_added()
                 errors[i] = DOWN
             end
+
+            -- Wait for the lead until it gives up
             local result, seen, path = waited(
                 replies,
                 { "--for", "lead" },
                 { cards_errors = errors }
             )
+
+            -- Expect a failure, nine naps and the cursor left in place
             testing.eq(result.code, 1)
             testing.ok(result.message:find("curl exit 7", 1, true), result.message)
             testing.eq(#seen.naps, 9)
@@ -13408,7 +16902,10 @@ do
     end
 
     testing.test("wait --for human retries an unreachable comment read", function()
+        -- Start the wait before the owner's comment
         local started = assert(box.parse_time("2026-11-02T09:00:00Z"))
+
+        -- Wait for the owner while the second card read is unreachable
         local result, seen = waited({
             got("1"),
             comment_added(),
@@ -13420,13 +16917,18 @@ do
             comments = { [ID_A] = { { actor = "human", at = "2026-11-02T10:00:00Z", body = "1" } } },
             now = started,
         })
+
+        -- Expect the owner's comment after one nap
         testing.eq(result.output, "the owner commented on 11111111")
         testing.eq(seen.naps, { 30 })
         testing.eq(seen.afters, { "none", "1", "1", "2" })
     end)
 
     testing.test("wait --for human retries a failed comment read", function()
+        -- Start the wait before the owner's comment
         local started = assert(box.parse_time("2026-11-02T09:00:00Z"))
+
+        -- Wait for the owner while the first comment read fails
         local result, seen = waited({
             got("1"),
             comment_added(),
@@ -13438,23 +16940,30 @@ do
             comments = { [ID_A] = { { actor = "human", at = "2026-11-02T10:00:00Z", body = "1" } } },
             now = started,
         })
+
+        -- Expect the owner's comment after one nap
         testing.eq(result.output, "the owner commented on 11111111")
         testing.eq(seen.naps, { 30 })
         testing.eq(seen.afters, { "none", "1", "1", "2" })
     end)
 
     testing.test("wait --for human gives up after ten failed comment reads", function()
+        -- Queue ten comment reads that fail
         local replies = { got("1") }
         local errors = {}
         for _ = 1, 10 do
             replies[#replies + 1] = comment_added()
             errors[#errors + 1] = true
         end
+
+        -- Wait for the owner until it gives up
         local result, seen = waited(replies, { "--for", "human" }, {
             cards = human_board(),
             comments_errors = errors,
             comments = {},
         })
+
+        -- Expect a failure naming the card and nine naps
         testing.eq(result.code, 1)
         testing.ok(
             result.message:find("Could not read the comments of " .. ID_A, 1, true),
@@ -13464,6 +16973,7 @@ do
     end)
 
     testing.test("a card whose comments answer 404 is not an owner comment", function()
+        -- Read a card whose comments answer 404
         local card = { id = ID_A, name = "Gone", done = false }
         local gone = {
             comments = function()
@@ -13471,6 +16981,8 @@ do
             end,
         }
         testing.eq(board_wait.commented(gone, card), false)
+
+        -- Read a card whose comments answer 502
         local down = {
             comments = function()
                 return nil, "Board unavailable: Pomb answered 502: bad gateway."
@@ -13479,6 +16991,8 @@ do
         local found, why = board_wait.commented(down, card)
         testing.eq(found, nil)
         testing.eq(why, "Could not read the comments of " .. ID_A .. " Gone.")
+
+        -- Wait for the owner across a card that vanished and one that stayed
         local result = waited({
             got("1"),
             got(
@@ -13498,6 +17012,8 @@ do
                 [ID_B] = { { actor = "human", at = "2026-11-02T10:00:00Z", body = "1" } },
             },
         })
+
+        -- Expect only the card that stayed to count
         testing.eq(result.output, "the owner commented on " .. ID_B:sub(1, 8))
     end)
 
@@ -13522,12 +17038,15 @@ do
     end
 
     testing.test("wait --for human restarts the settle window on each new owner event", function()
+        -- Step the clock so each owner event lands inside the window
         local started = assert(box.parse_time("2026-11-02T09:00:00Z"))
         local opts = window_board()
         local offsets = { 0, 0, 0, 50, 100, 100 }
         function opts.now(count)
             return started + offsets[count + 1]
         end
+
+        -- Wait for the owner through three comments and a quiet reply
         local result, seen = waited({
             got("1"),
             comment_on("2", ID_A, support.COLUMN_NAME.READY),
@@ -13535,6 +17054,8 @@ do
             comment_on("4", ID_C, support.COLUMN_NAME.REVIEW),
             got("5"),
         }, { "--for", "human" }, opts)
+
+        -- Expect both owner comments in one report after five waits
         testing.eq(
             result.output,
             "the owner commented on 11111111\nthe owner commented on " .. ID_B:sub(1, 8)
@@ -13543,39 +17064,52 @@ do
     end)
 
     testing.test("wait --for human closes the window once a non-matching event is late", function()
+        -- Step the clock so a late event lands past the window
         local started = assert(box.parse_time("2026-11-02T09:00:00Z"))
         local opts = window_board()
         local offsets = { 0, 0, 0, 61, 61 }
         function opts.now(count)
             return started + offsets[count + 1]
         end
+
+        -- Wait for the owner through a comment, an agent event and a late comment
         local result, seen = waited({
             got("1"),
             comment_on("2", ID_A, support.COLUMN_NAME.READY),
             comment_on("3", ID_C, support.COLUMN_NAME.REVIEW),
             comment_on("4", ID_B, support.COLUMN_NAME.READY),
         }, { "--for", "human" }, opts)
+
+        -- Expect the window closed on the first comment alone
         testing.eq(result.output, "the owner commented on 11111111")
         testing.eq(#seen.afters, 3)
     end)
 
     testing.test("wait --for human skips a comment whose time it cannot read", function()
+        -- Give the first card a comment with an unreadable time
         local started = assert(box.parse_time("2026-11-02T09:00:00Z"))
         local opts = window_board()
         opts.now = started
         opts.comments[ID_A] = { { actor = "human", at = "not a time", body = "1" } }
+
+        -- Wait for the owner through comments on both cards
         local result = waited({
             got("1"),
             comment_on("2", ID_A, support.COLUMN_NAME.READY),
             comment_on("3", ID_B, support.COLUMN_NAME.READY),
             got("4"),
         }, { "--for", "human" }, opts)
+
+        -- Expect only the readable comment to count
         testing.eq(result.output, "the owner commented on " .. ID_B:sub(1, 8))
     end)
 
     testing.test("wait --for human reads no comments of a card it already reported", function()
+        -- Record every comment read
         local started = assert(box.parse_time("2026-11-02T09:00:00Z"))
         local reads = {}
+
+        -- Wait for the owner through two comment events on one card
         local result = waited({
             got("1"),
             comment_added(),
@@ -13587,6 +17121,8 @@ do
             comments = { [ID_A] = { { actor = "human", at = "2026-11-02T10:00:00Z", body = "1" } } },
             now = started,
         })
+
+        -- Expect the card reported once and its comments read once
         testing.eq(result.output, "the owner commented on 11111111")
         testing.eq(reads, { ID_A })
     end)
@@ -13594,16 +17130,21 @@ do
     testing.test(
         "wait --for human gives up after ten unreachable comment reads and saves no cursor",
         function()
+            -- Queue ten card reads that are unreachable
             local replies = { got("1") }
             local errors = { false }
             for _ = 1, 10 do
                 replies[#replies + 1] = comment_added()
                 errors[#errors + 1] = DOWN
             end
+
+            -- Wait for the owner until it gives up
             local result, seen, path = waited(replies, { "--for", "human" }, {
                 cards = human_board(),
                 cards_errors = errors,
             })
+
+            -- Expect a failure, nine naps and no cursor saved
             testing.eq(result.code, 1)
             testing.ok(result.message:find("curl exit 7", 1, true), result.message)
             testing.eq(#seen.naps, 9)
@@ -13621,17 +17162,24 @@ testing.test("wait without --for matches every kind", function()
 end)
 
 testing.test("wait resumes from the stored cursor", function()
+    -- Store a cursor for the ready stage
     local path = support.tempdir() .. "/wait"
     assert(fs.write(path .. ".ready.cursor", "41\n"))
+
+    -- Wait for Ready from the stored cursor
     local result, seen = waited({
         got("42", { kind = "task_added", task_id = ID_A, column = support.COLUMN_NAME.READY }),
     }, { "--for", "ready" }, {
         path = path,
         cards = { { id = ID_A, column = support.COLUMN_NAME.READY } },
     })
+
+    -- Expect the wait to start at the stored cursor and save the next one
     testing.eq(result.output, "added 11111111 to Ready")
     testing.eq(seen.afters, { "41" })
     testing.eq(fs.read(path .. ".ready.cursor"), "42\n")
+
+    -- Wait for another stage on the same path
     local _, other = waited({
         got("9"),
         got("10", {
@@ -13644,6 +17192,8 @@ testing.test("wait resumes from the stored cursor", function()
         }),
         got("11"),
     }, { "--for", "human" }, { path = path, cards = {} })
+
+    -- Expect that stage to ignore the ready cursor
     testing.eq(other.afters, { "none", "9", "10" })
 end)
 
@@ -13660,16 +17210,21 @@ testing.test(
 )
 
 testing.test("wait retries Pomb being unreachable, then gives up after ten in a row", function()
+    -- Wait through one unreachable read and expect a single nap
     local result, seen = waited({
         { message = "Board unavailable: cannot reach https://p (curl exit 7)" },
         got("5", { kind = "task_added", task_id = ID_A, column = support.COLUMN_NAME.READY }),
     }, { "--for", "ready" }, { cards = { { id = ID_A, column = support.COLUMN_NAME.READY } } })
     testing.eq(result.output, "added 11111111 to Ready")
     testing.eq(seen.naps, { 30 })
+
+    -- Queue ten unreachable reads in a row
     local down = {}
     for i = 1, 10 do
         down[i] = { message = "Board unavailable: cannot reach https://p (curl exit 6)" }
     end
+
+    -- Expect the wait to give up after nine naps
     result, seen = waited(down, {})
     testing.ok(result.message:find("curl exit 6", 1, true), result.message)
     testing.eq(#seen.naps, 9)
@@ -13678,17 +17233,24 @@ end)
 testing.test(
     "wait.retry.backs.off by doubling to the bound and resets after a good read",
     function()
+        -- Queue six unreachable reads and then a good one
         local down = { message = "Board unavailable: cannot reach https://p (curl exit 7)" }
         local replies = {}
         for i = 1, 6 do
             replies[i] = down
         end
         replies[7] = got("5", { kind = "task_updated", task_id = ID_A })
+
+        -- Expect the pause to double up to the bound
         local result, seen = waited(replies, {})
         testing.eq(result.output, "updated 11111111")
         testing.eq(seen.naps, { 30, 60, 120, 240, 300, 300 })
+
+        -- Queue a good read between unreachable ones
         replies =
             { down, down, got("5"), down, got("6", { kind = "task_updated", task_id = ID_A }) }
+
+        -- Expect the pause to start over after the good read
         result, seen = waited(replies, {})
         testing.eq(seen.naps, { 30, 60, 30 })
     end
@@ -13701,15 +17263,20 @@ end
 testing.test(
     "wait keeps waiting through too many open waits, with a pause that grows to 5 minutes",
     function()
+        -- Queue fourteen refusals for too many open waits and then an add
         local replies = {}
         for i = 1, 14 do
             replies[i] = limited()
         end
         replies[15] =
             got("5", { kind = "task_added", task_id = ID_A, column = support.COLUMN_NAME.READY })
+
+        -- Wait for Ready through all of them
         local result, seen = waited(replies, { "--for", "ready" }, {
             cards = { { id = ID_A, column = support.COLUMN_NAME.READY } },
         })
+
+        -- Expect the add to wake the wait after pauses capped at five minutes
         testing.eq(result.output, "added 11111111 to Ready")
         testing.eq(
             seen.naps,
@@ -13719,10 +17286,13 @@ testing.test(
 )
 
 testing.test("wait spreads the pause with the random source and never passes the step", function()
+    -- Refuse twice for too many open waits and draw random fractions of zero and one
     local backend =
         waiter({ limited(), limited(), got("5", { kind = "task_updated", task_id = ID_A }) })
     local naps = {}
     local fractions = { 0, 1 }
+
+    -- Wait with the random source and the nap recorded
     cmd_board.wait(backend, {}, {
         stem = support.tempdir() .. "/wait",
         nap = function(seconds)
@@ -13733,6 +17303,8 @@ testing.test("wait spreads the pause with the random source and never passes the
         end,
         notice = function() end,
     })
+
+    -- Expect each pause spread within its step
     testing.eq(naps, { 30, 45 })
 end)
 
@@ -13749,6 +17321,7 @@ testing.test("wait reports too many open waits once", function()
 end)
 
 testing.test("wait does not count too many open waits toward the ten failures", function()
+    -- Queue nine unreachable reads, one refusal, nine more and then a good read
     local replies = {}
     for _ = 1, 9 do
         replies[#replies + 1] =
@@ -13760,7 +17333,11 @@ testing.test("wait does not count too many open waits toward the ten failures", 
             { message = "Board unavailable: cannot reach https://p (curl exit 6)" }
     end
     replies[#replies + 1] = got("5", { kind = "task_updated", task_id = ID_A })
+
+    -- Wait through all of them
     local result = waited(replies, {})
+
+    -- Expect the wait to survive both runs of failures
     testing.eq(result.output, "updated 11111111")
 end)
 
@@ -13790,7 +17367,10 @@ testing.test("wait rejects an unknown --for value and a card", function()
 end)
 
 testing.test("delete needs a card and a reason", function()
+    -- Build a fake board
     local backend = fake(sample())
+
+    -- Delete with a card or a reason missing
     for _, args in ipairs({
         {},
         { "cccccccc" },
@@ -13801,12 +17381,15 @@ testing.test("delete needs a card and a reason", function()
         testing.eq(result.code, 2)
         testing.eq(result.message, "Needs a card and --reason TEXT.")
     end
+
+    -- Expect the board never called
     testing.eq(backend.calls, {})
 end)
 
 testing.test(
     "delete notes the reason, then moves the card to the bin with the lead token",
     function()
+        -- Delete a card with a reason as the lead
         local root, home = sandbox({ user = LEAD_USER })
         local out, code = dev(
             root,
@@ -13814,8 +17397,12 @@ testing.test(
             { "board", "delete", "11111111-a", "--reason", "duplicate" },
             { agent = LEAD }
         )
+
+        -- Expect the card moved to the bin
         testing.eq(code, 0, out)
         testing.eq(out, "moved 11111111 to the bin\n")
+
+        -- Expect the note posted before the delete
         local calls = read(root, "calls")
         local sent = requests(root)
         local noted = sent:find("POST /", 1, true)
@@ -13823,6 +17410,8 @@ testing.test(
         testing.ok(noted and binned and noted < binned, sent)
         testing.ok(sent:find("/api/tasks/" .. ID_A .. "/comments", 1, true), sent)
         testing.ok(sent:find("DELETE /api/tasks/" .. ID_A .. " ", 1, true), sent)
+
+        -- Expect the lead token to be the only one read
         testing.ok(calls:find("pass show secrets/lead/token/pomb", 1, true), calls)
         testing.eq(calls:find("pass show secrets/worker", 1, true), nil)
         testing.ok(sent:find("the lead deletes this card, reason: duplicate", 1, true), sent)
@@ -13852,6 +17441,7 @@ testing.test("delete-runner-role refuses a runner name, with no call and no toke
         "lead/implementer/82f0e002/1",
         "project-run/pombbin",
     }) do
+        -- Delete a card under a runner name
         local root, home = sandbox({ user = LEAD_USER })
         local out, code = dev(
             root,
@@ -13859,9 +17449,13 @@ testing.test("delete-runner-role refuses a runner name, with no call and no toke
             { "board", "delete", "11111111-a", "--reason", "duplicate" },
             { agent = name }
         )
+
+        -- Expect a refusal that names the caller
         testing.eq(code, 1, out)
         testing.ok(out:find("Only the lead deletes a card", 1, true), out)
         testing.ok(out:find(name, 1, true), out)
+
+        -- Expect no call and no token read
         testing.eq(read(root, "calls"), "")
         testing.eq(requests(root), "")
     end
@@ -13871,6 +17465,7 @@ testing.test(
     "a lead command refuses an empty or slashless name when stdin is no terminal",
     function()
         for _, name in ipairs({ "", "project-lead" }) do
+            -- Delete a card under a name with no terminal behind it
             local root, home = sandbox({ user = LEAD_USER })
             local out, code = dev(
                 root,
@@ -13878,11 +17473,15 @@ testing.test(
                 { "board", "delete", "11111111-a", "--reason", "x" },
                 { agent = name, env = { FAKE_DEV = "1", FAKE_TTY = "0" } }
             )
+
+            -- Expect a refusal with no call
             testing.eq(code, 1, out)
             testing.ok(out:find("Only the lead deletes a card", 1, true), out)
             testing.ok(out:find("only at a terminal", 1, true), out)
             testing.eq(read(root, "calls"), "")
             testing.eq(requests(root), "")
+
+            -- Delete an outcome under the same name
             root, home = sandbox({ export = BACKLOG_EXPORT, user = LEAD_USER })
             out, code = dev(
                 root,
@@ -13890,6 +17489,8 @@ testing.test(
                 { "board", "outcome", "11111111", "--delete", "2", "--reason", "never possible" },
                 { agent = name, env = { FAKE_DEV = "1", FAKE_TTY = "0" } }
             )
+
+            -- Expect the same refusal with no call
             testing.eq(code, 1, out)
             testing.ok(out:find("Only the lead deletes an outcome", 1, true), out)
             testing.eq(read(root, "calls"), "")
@@ -13899,6 +17500,7 @@ testing.test(
 )
 
 testing.test("a lead command accepts an empty name when stdin is a terminal", function()
+    -- Delete a card under an empty name with a terminal behind it
     local root, home = sandbox({ user = LEAD_USER })
     local out, code = dev(
         root,
@@ -13906,6 +17508,8 @@ testing.test("a lead command accepts an empty name when stdin is a terminal", fu
         { "board", "delete", "11111111-a", "--reason", "duplicate" },
         { agent = "", env = { FAKE_DEV = "1", FAKE_TTY = "1" } }
     )
+
+    -- Expect the card moved to the bin
     testing.eq(code, 0, out)
     testing.eq(out, "moved 11111111 to the bin\n")
 end)
@@ -13925,6 +17529,7 @@ testing.test("lead-name-helper counts a name with no slash or a lead role as the
 end)
 
 testing.test("delete without a lead token or on a local board does nothing", function()
+    -- Delete a card on a board with no lead token
     local root, home = sandbox()
     local out, code = dev(
         root,
@@ -13932,22 +17537,36 @@ testing.test("delete without a lead token or on a local board does nothing", fun
         { "board", "delete", "11111111-a", "--reason", "x" },
         { agent = LEAD }
     )
+
+    -- Expect a refusal with no call
     testing.eq(code, 1, out)
     testing.ok(out:find("`lead_token` setting of `[board.pomb]` is not set", 1, true), out)
     testing.eq(read(root, "calls"), "")
     testing.eq(requests(root), "")
-    root, home = sandbox({ project = '[board]\nbackend = "local"\nname = "scratch"\n' })
+
+    -- Delete a card on a local board
+    root, home = sandbox({
+        project = table.concat({
+            "[board]",
+            'backend = "local"',
+            'name = "scratch"',
+            "",
+        }, "\n"),
+    })
     out, code = dev(
         root,
         home,
         { "board", "delete", "11111111-a", "--reason", "x" },
         { agent = LEAD }
     )
+
+    -- Expect a refusal that says there is no bin
     testing.eq(code, 1, out)
     testing.ok(out:find("keeps no recycle bin", 1, true), out)
 end)
 
 testing.test("delete shows Pomb's permission_denied and card_locked as they come", function()
+    -- Delete a card that Pomb refuses with permission_denied
     local root, home = sandbox({ user = LEAD_USER })
     assert(
         fs.write(
@@ -13961,8 +17580,12 @@ testing.test("delete shows Pomb's permission_denied and card_locked as they come
         { "board", "delete", "11111111-a", "--reason", "x" },
         { agent = LEAD }
     )
+
+    -- Expect the refusal to name the permission
     testing.eq(code, 1, out)
     testing.ok(out:find("tasks.bin", 1, true), out)
+
+    -- Delete a card that Pomb locks
     root, home = sandbox({ user = LEAD_USER })
     assert(fs.write(root .. "/locked", ""))
     out, code = dev(
@@ -13971,6 +17594,8 @@ testing.test("delete shows Pomb's permission_denied and card_locked as they come
         { "board", "delete", "11111111-a", "--reason", "x" },
         { agent = LEAD }
     )
+
+    -- Expect the refusal to say the card is locked and no delete sent
     testing.eq(code, 1, out)
     testing.ok(out:find("Pomb locked this card: locked", 1, true), out)
     testing.eq(requests(root):find("DELETE /", 1, true), nil)
@@ -13980,26 +17605,41 @@ local RESTORED_TEXT = "restored 11111111 to Ready. The links the delete dropped 
     .. " Add them again with `dev board link`."
 
 testing.test("restore brings a binned card back and says its links stay dropped", function()
+    -- Put a card in the bin of a fake board
     local backend = fake(sample())
     backend.in_bin = { { id = ID_A, name = "Gone", restores_to = "Ready" } }
+
+    -- Restore it by prefix
     local result = cmd_board.run("restore", { "11111111" }, backend)
+
+    -- Expect the card restored with the notice about its links
     testing.eq(result.output, RESTORED_TEXT)
     testing.eq(backend.calls, { { "binned" }, { "restore", ID_A } })
 end)
 
 testing.test("restore refuses a card that is not in the bin", function()
+    -- Put a card in the bin of a fake board
     local backend = fake(sample())
     backend.in_bin = { { id = ID_A, name = "Gone", restores_to = "Ready" } }
+
+    -- Restore a card that is not there
     local result = cmd_board.run("restore", { "cccccccc" }, backend)
+
+    -- Expect a refusal after only reading the bin
     testing.eq(result.code, 1)
     testing.eq(result.message, "No card in the bin starts with cccccccc.")
     testing.eq(backend.calls, { { "binned" } })
 end)
 
 testing.test("restore needs one card and a backend with a bin", function()
+    -- Build a fake board with a bin
     local backend = fake(sample())
+
+    -- Restore with no card or two cards
     testing.eq(cmd_board.run("restore", {}, backend).code, 2)
     testing.eq(cmd_board.run("restore", { "11111111", "x" }, backend).code, 2)
+
+    -- Restore on a board whose backend has no bin
     backend.restore = nil
     local result = cmd_board.run("restore", { "11111111" }, backend)
     testing.eq(result.code, 1)
@@ -14007,6 +17647,7 @@ testing.test("restore needs one card and a backend with a bin", function()
 end)
 
 testing.test("restore reads the bin and posts the restore with the ordinary token", function()
+    -- Serve a binned card and a restore reply
     local root, home = sandbox()
     assert(
         fs.write(
@@ -14022,9 +17663,15 @@ testing.test("restore reads the bin and posts the restore with the ordinary toke
             '{"id":"' .. ID_A .. '","column_id":"col-ready","column_name":"Ready"}'
         )
     )
+
+    -- Restore the card from the command line
     local out, code = dev(root, home, { "board", "restore", "11111111-a" })
+
+    -- Expect the card restored with the notice about its links
     testing.eq(code, 0, out)
     testing.eq(out, RESTORED_TEXT .. "\n")
+
+    -- Expect the bin read and the restore posted with the ordinary token
     local sent = requests(root)
     testing.ok(sent:find("/api/boards/board-1/bin", 1, true), sent)
     testing.ok(sent:find("POST /", 1, true), sent)
@@ -14033,8 +17680,20 @@ testing.test("restore reads the bin and posts the restore with the ordinary toke
 end)
 
 testing.test("restore on a local board says it has no bin", function()
-    local root, home = sandbox({ project = '[board]\nbackend = "local"\nname = "scratch"\n' })
+    -- Open a local board
+    local root, home = sandbox({
+        project = table.concat({
+            "[board]",
+            'backend = "local"',
+            'name = "scratch"',
+            "",
+        }, "\n"),
+    })
+
+    -- Restore a card from it
     local out, code = dev(root, home, { "board", "restore", "11111111-a" })
+
+    -- Expect a refusal that says there is no bin
     testing.eq(code, 1, out)
     testing.ok(out:find("keeps no recycle bin", 1, true), out)
 end)
@@ -14049,9 +17708,14 @@ do
     testing.test(
         "DEV_BOARD_TOKEN is sent as the bearer token and pass and the Keychain are never read",
         function()
+            -- Watch the Keychain as well as pass
             local root, home = sandbox()
             with_security(root)
+
+            -- List the board with an issued token
             local out, code = issued_dev(root, home, ISSUED)
+
+            -- Expect the token as the bearer and no secret store read
             testing.eq(code, 0, out)
             testing.ok(requests(root):find("Bearer " .. ISSUED, 1, true), requests(root))
             testing.eq(occurrences(read(root, "calls"), "pass show"), 0)
@@ -14060,13 +17724,20 @@ do
     )
 
     testing.test("DEV_BOARD_TOKEN unset or empty reads pass as before", function()
+        -- List the board with an empty issued token
         local root, home = sandbox()
         local out, code = issued_dev(root, home, "")
+
+        -- Expect the pass token as the bearer
         testing.eq(code, 0, out)
         testing.eq(occurrences(read(root, "calls"), "pass show"), 1)
         testing.ok(requests(root):find("Bearer " .. TOKEN, 1, true), requests(root))
+
+        -- List the board with no issued token
         root, home = sandbox()
         out, code = dev(root, home, { "board", "ls" })
+
+        -- Expect pass read once again
         testing.eq(code, 0, out)
         testing.eq(occurrences(read(root, "calls"), "pass show"), 1)
     end)
@@ -14074,10 +17745,15 @@ do
     testing.test(
         "DEV_BOARD_TOKEN refused with 401 names the issued token and never falls back to pass",
         function()
+            -- Make Pomb refuse every token
             local root, home = sandbox()
             with_security(root)
             override(root, { { path = "*", status = 401, body = '{"message":"bad"}' } })
+
+            -- List the board with an issued token
             local out, code = issued_dev(root, home, ISSUED)
+
+            -- Expect a failure that names the issued token and no fallback to pass
             testing.eq(code, 1)
             testing.ok(out:find("issued token", 1, true), out)
             testing.eq(occurrences(read(root, "calls"), "pass show"), 0)
@@ -14087,15 +17763,20 @@ do
     testing.test(
         "DEV_BOARD_TOKEN refused with 401 on another board names the issued token",
         function()
+            -- Make Pomb refuse every token
             local root, home = sandbox()
             with_security(root)
             override(root, { { path = "*", status = 401, body = '{"message":"bad"}' } })
+
+            -- Add a card on another board with an issued token
             local out, code = dev(
                 root,
                 home,
                 { "board", "add", "Far", "--board", "General", "--size", "1" },
                 { env = { DEV_BOARD_TOKEN = ISSUED } }
             )
+
+            -- Expect a failure that names the issued token and no fallback to pass
             testing.eq(code, 1)
             testing.ok(out:find("issued token", 1, true), out)
             testing.eq(occurrences(read(root, "calls"), "pass show"), 0)
@@ -14114,25 +17795,35 @@ do
     testing.test(
         "the keep-alive loop under DEV_BOARD_TOKEN sends that token and never reads pass",
         function()
+            -- Hold a fence for the keep-alive loop
             local root = sandbox()
             assert(fs.write(root .. "/state", "fence=7\n"))
+
+            -- Run one loop pass with an issued token
             shell(
                 root,
                 root .. "/pass.lock",
                 "DEV_BOARD_TOKEN=" .. ISSUED .. " " .. keepalive(root, 1, 0),
                 "600"
             )
+
+            -- Expect the token as the bearer and no pass read
             testing.ok(requests(root):find("Bearer " .. ISSUED, 1, true), requests(root))
             testing.eq(occurrences(read(root, "calls"), "pass show"), 0)
         end
     )
 
     local function keepalive_token_file(expires, env)
+        -- Write a token file that expires at the given time
         local root = sandbox()
         local file = root .. "/role-token"
-        assert(fs.write(file, "pomb_FILEtoken0123456789\n" .. expires .. "\n"))
+        assert(fs.write(file, table.concat({ "pomb_FILEtoken0123456789", expires, "" }, "\n")))
         assert(fs.write(root .. "/state", "fence=7\n"))
+
+        -- Run one loop pass against that file
         shell(root, root .. "/pass.lock", (env or "") .. keepalive(root, 1, 0, file), "600")
+
+        -- Hand back the sandbox to inspect
         return root
     end
 
@@ -14161,9 +17852,14 @@ end
 testing.test(
     "move to review on a board with a legacy review column and no Review names dev board init",
     function()
+        -- Hold a board that has only the legacy review column
         local backend = fake({ planned() })
         backend.limited = { support.COLUMN_NAME.IN_REVIEW }
+
+        -- Move a card to the review stage
         local result = cmd_board.run("move", { "cccccccc", support.Column.REVIEW }, backend)
+
+        -- Expect a refusal that points at dev board init
         testing.eq(result.code, 1)
         testing.ok(
             result.message:find(
@@ -14174,6 +17870,8 @@ testing.test(
             result.message
         )
         testing.ok(result.message:find("no Review column", 1, true), result.message)
+
+        -- Move a card to the legacy column by its own name
         result = cmd_board.run("move", { "cccccccc", support.COLUMN_NAME.IN_REVIEW }, backend)
         testing.eq(result.code, 1)
         testing.ok(result.message:find("Run `dev board init` to move", 1, true), result.message)
@@ -14196,12 +17894,17 @@ testing.test(
 testing.test(
     "wait on a board with a legacy review column and no Review names dev board init",
     function()
+        -- Hold a board that has only the legacy review column
         local backend = waiter({})
         backend.rows = {
             { name = support.COLUMN_NAME.IN_REVIEW, is_done = false },
             { name = support.COLUMN_NAME.DONE, is_done = true },
         }
+
+        -- Wait on that board
         local result = cmd_board.wait(backend, {}, { stem = support.tempdir() .. "/wait" })
+
+        -- Expect a refusal that points at dev board init
         testing.eq(result.code, 1)
         testing.ok(
             result.message:find(
@@ -14236,15 +17939,22 @@ do
     testing.test(
         "attach uploads a new file once and skips a name the card already holds",
         function()
+            -- Hold a card that already has old.png
             local root, home = sandbox()
             local dir = attach_files(root)
+
+            -- Attach a new file and the one it holds
             local out, code = dev(
                 root,
                 home,
                 { "board", "attach", "11111111-a", dir .. "/new.png", dir .. "/old.png" }
             )
+
+            -- Expect the new file attached and the held one skipped
             testing.eq(code, 0, out)
             testing.eq(out, "attached 99887766 new.png\nskipped old.png\n")
+
+            -- Expect a single upload of the new file
             local calls = requests(root)
             testing.ok(calls:find("POST /", 1, true), calls)
             testing.ok(calls:find("/api/tasks/" .. ID_A .. "/attachments", 1, true), calls)
@@ -14255,6 +17965,7 @@ do
     testing.test(
         "attach prints Pomb's refusal as Pomb words it and checks no size or type",
         function()
+            -- Make Pomb refuse the upload over a quota
             local root, home = sandbox()
             local dir = attach_files(root)
             assert(
@@ -14263,14 +17974,19 @@ do
                     '{"results":[{"name":"new.png","error":{"code":"quota_exceeded","message":"the task holds its most attachments"}}]}'
                 )
             )
+
+            -- Attach a file
             local out, code =
                 dev(root, home, { "board", "attach", "11111111-a", dir .. "/new.png" })
+
+            -- Expect Pomb's own words in the refusal
             testing.eq(code, 1)
             testing.ok(out:find("new.png: the task holds its most attachments", 1, true), out)
         end
     )
 
     testing.test("attach keeps uploading the other files after Pomb refuses one", function()
+        -- Make Pomb refuse the first upload and take the second
         local root, home = sandbox()
         local dir = attach_files(root)
         assert(
@@ -14287,42 +18003,61 @@ do
                     .. '"name":"third.png","size":1}}]}'
             )
         )
+
+        -- Attach both files
         local out, code = dev(
             root,
             home,
             { "board", "attach", "11111111-a", dir .. "/new.png", dir .. "/third.png" }
         )
+
+        -- Expect the refusal reported and the second file still uploaded
         testing.eq(code, 1)
         testing.ok(out:find("new.png: same bytes\nattached 55443322 third.png", 1, true), out)
         testing.eq(post_count(requests(root)), 2)
     end)
 
     testing.test("attach retries a busy answer after a nap and then uploads", function()
+        -- Make Pomb answer busy once
         local root, home = sandbox()
         local dir = attach_files(root)
         assert(fs.write(root .. "/busy", "1"))
+
+        -- Attach a file
         local out, code = dev(root, home, { "board", "attach", "11111111-a", dir .. "/new.png" })
+
+        -- Expect the file attached on the second try
         testing.eq(code, 0, out)
         testing.eq(out, "attached 99887766 new.png\n")
         testing.eq(post_count(requests(root)), 2)
     end)
 
     testing.test("attach gives up on a busy answer that stays", function()
+        -- Make Pomb answer busy nine times
         local root, home = sandbox()
         local dir = attach_files(root)
         assert(fs.write(root .. "/busy", "9"))
+
+        -- Attach a file
         local out, code = dev(root, home, { "board", "attach", "11111111-a", dir .. "/new.png" })
+
+        -- Expect a failure after three tries
         testing.eq(code, 1)
         testing.ok(out:find("Pomb answered 503", 1, true), out)
         testing.eq(post_count(requests(root)), 3)
     end)
 
     testing.test("attachments lists id prefix, size and name, or says there are none", function()
+        -- Hold a card that has one attachment
         local root, home = sandbox()
         attach_files(root)
+
+        -- List its attachments
         local out, code = dev(root, home, { "board", "attachments", "11111111-a" })
         testing.eq(code, 0, out)
         testing.eq(out, "abcdef12  2048  old.png\n")
+
+        -- List them again once the card holds none
         assert(fs.write(root .. "/attachments.json", "[]"))
         out = dev(root, home, { "board", "attachments", "11111111-a" })
         testing.eq(out, "No attachments.\n")
@@ -14331,11 +18066,14 @@ do
     testing.test(
         "detach removes an attachment by id prefix and reports a missing permission",
         function()
+            -- Detach an attachment by id prefix
             local root, home = sandbox()
             attach_files(root)
             local out, code = dev(root, home, { "board", "detach", "11111111-a", "abcd" })
             testing.eq(code, 0, out)
             testing.eq(out, "detached abcdef12 old.png\n")
+
+            -- Expect a delete of that attachment
             local calls = requests(root)
             testing.ok(calls:find("DELETE /", 1, true), calls)
             testing.ok(
@@ -14346,6 +18084,8 @@ do
                 ),
                 calls
             )
+
+            -- Detach again once Pomb denies the permission
             assert(
                 fs.write(
                     root .. "/detach_body",
@@ -14355,6 +18095,8 @@ do
             out, code = dev(root, home, { "board", "detach", "11111111-a", "abcd" })
             testing.eq(code, 1)
             testing.ok(out:find("lacks the attachments.delete permission", 1, true), out)
+
+            -- Detach an id the card does not hold
             out, code = dev(root, home, { "board", "detach", "11111111-a", "ffff" })
             testing.eq(code, 1)
             testing.ok(out:find("holds no attachment with the id ffff.", 1, true), out)
@@ -14362,6 +18104,7 @@ do
     )
 
     testing.test("download saves the bytes under the name and prints the path", function()
+        -- Download an attachment into a given directory
         local root, home = sandbox()
         attach_files(root)
         local out_dir = support.tempdir()
@@ -14370,6 +18113,8 @@ do
         testing.eq(code, 0, out)
         testing.eq(out, out_dir .. "/old.png\n")
         testing.eq(fs.read(out_dir .. "/old.png"), "bytes of the file")
+
+        -- Expect a GET of that attachment's file
         local calls = requests(root)
         testing.ok(calls:find("GET /", 1, true), calls)
         testing.ok(
@@ -14380,6 +18125,8 @@ do
             ),
             calls
         )
+
+        -- Download by name into the default directory
         out, code = dev(root, home, { "board", "download", "11111111-a", "old.png" })
         testing.eq(code, 0, out)
         local saved = out:gsub("\n$", "")
@@ -14388,16 +18135,23 @@ do
     end)
 
     testing.test("download refuses an unknown or ambiguous attachment and a bad out dir", function()
+        -- Hold a card with two attachments that share an id prefix
         local root, home = sandbox()
         attach_files(root)
         local second = ',{"id":"abcdef12-0000-4000-8000-000000000002","name":"b.png","size":1}]'
         assert(fs.write(root .. "/attachments.json", (ATTACHED:gsub("%]$", second))))
+
+        -- Download by the shared prefix
         local out, code = dev(root, home, { "board", "download", "11111111-a", "abcd" })
         testing.eq(code, 1)
         testing.ok(out:find("matches more than one attachment", 1, true), out)
+
+        -- Download an attachment the card does not hold
         out, code = dev(root, home, { "board", "download", "11111111-a", "ffff" })
         testing.eq(code, 1)
         testing.ok(out:find("holds no attachment with the id or name ffff.", 1, true), out)
+
+        -- Download into a directory that does not exist
         out, code =
             dev(root, home, { "board", "download", "11111111-a", "b.png", "--out", "/no/dir" })
         testing.eq(code, 1)
@@ -14405,13 +18159,18 @@ do
     end)
 
     testing.test("download reports Pomb's refusal and keeps a file already there", function()
+        -- Make Pomb refuse the file and leave a file in the target directory
         local root, home = sandbox()
         attach_files(root)
         assert(fs.write(root .. "/file_status", "404"))
         local out_dir = support.tempdir()
         assert(fs.write(out_dir .. "/old.png", "mine"))
+
+        -- Download the attachment into that directory
         local out, code =
             dev(root, home, { "board", "download", "11111111-a", "abcd", "--out", out_dir })
+
+        -- Expect Pomb's refusal and the existing file untouched
         testing.eq(code, 1)
         testing.ok(out:find("Pomb answered 404: no such file", 1, true), out)
         testing.eq(fs.read(out_dir .. "/old.png"), "mine")
@@ -14445,9 +18204,21 @@ do
     end
 
     local function local_cards()
-        local root, home = sandbox({ project = '[board]\nbackend = "local"\nname = "mine"\n' })
+        -- Open a local board
+        local root, home = sandbox({
+            project = table.concat({
+                "[board]",
+                'backend = "local"',
+                'name = "mine"',
+                "",
+            }, "\n"),
+        })
+
+        -- Initialise it
         local out, code = dev(root, home, { "board", "init" })
         testing.eq(code, 0, out)
+
+        -- Add three cards and keep their ids
         local ids = {}
         for _, name in ipairs({ "One", "Two", "Three" }) do
             local args = {
@@ -14470,6 +18241,8 @@ do
             end
             ids[name] = dev(root, home, args):gsub("%s+$", "")
         end
+
+        -- Hand back the board with the ids by name
         return root, home, ids
     end
 
@@ -14484,6 +18257,7 @@ do
     end
 
     local function pomb_placed(extra)
+        -- Add a Ready card with every field it needs
         local root, home = sandbox()
         local args = {
             "board",
@@ -14504,18 +18278,27 @@ do
             "--done-when",
             "c " .. board.JUDGEMENT,
         }
+
+        -- Append the placement flags
         for _, word in ipairs(extra) do
             args[#args + 1] = word
         end
+
+        -- Run it and hand back what Pomb saw
         local out, code = dev(root, home, args)
         return out, code, requests(root)
     end
 
     testing.test("add --top places the card first", function()
+        -- Hold a local board with three cards
         local root, home = local_cards()
+
+        -- Add a card at the top and expect it first
         local out, code = dev(root, home, add_args("Top", { "--top" }))
         testing.eq(code, 0, out)
         testing.eq(backlog_names(root, home), { "Top", "One", "Two", "Three" })
+
+        -- Place a card at the top on Pomb and expect position zero
         local _, status, calls = pomb_placed({ "--top" })
         testing.eq(status, 0)
         testing.ok(calls:find('"position":0', 1, true), calls)
@@ -14523,10 +18306,15 @@ do
     end)
 
     testing.test("add --before places the card directly above CARD", function()
+        -- Hold a local board with three cards
         local root, home, ids = local_cards()
+
+        -- Add a card before the third and expect it there
         local out, code = dev(root, home, add_args("Mid", { "--before", ids.Three }))
         testing.eq(code, 0, out)
         testing.eq(backlog_names(root, home), { "One", "Two", "Mid", "Three" })
+
+        -- Place a card before another on Pomb and expect the lookup and position
         local _, status, calls = pomb_placed({ "--before", "11111111-b" })
         testing.eq(status, 0)
         testing.ok(calls:find("/tasks?limit=1000", 1, true), calls)
@@ -14534,21 +18322,31 @@ do
     end)
 
     testing.test("add --after places the card directly below CARD", function()
+        -- Hold a local board with three cards
         local root, home, ids = local_cards()
+
+        -- Add a card after the first and expect it there
         local out, code = dev(root, home, add_args("Mid", { "--after", ids.One }))
         testing.eq(code, 0, out)
         testing.eq(backlog_names(root, home), { "One", "Mid", "Two", "Three" })
+
+        -- Place a card after another on Pomb and expect its position
         local _, status, calls = pomb_placed({ "--after", "11111111-a" })
         testing.eq(status, 0)
         testing.ok(calls:find('"position":1', 1, true), calls)
     end)
 
     testing.test("add refuses two placement flags and a CARD in another column", function()
+        -- Hold a local board with three cards
         local root, home, ids = local_cards()
+
+        -- Add with two placement flags
         local out, code = dev(root, home, add_args("Bad", { "--top", "--before", ids.One }))
         testing.eq(code, 2, out)
         out, code = dev(root, home, add_args("Bad", { "--before", ids.One, "--after", ids.Two }))
         testing.eq(code, 2, out)
+
+        -- Add into a column other than the one the placement card is in
         out, code = dev(
             root,
             home,
@@ -14561,9 +18359,13 @@ do
             out
         )
         testing.eq(backlog_names(root, home), { "One", "Two", "Three" })
+
+        -- Add after a card that does not exist
         out, code = dev(root, home, add_args("Bad", { "--after", "zzzzzzzz" }))
         testing.eq(code, 1, out)
         testing.eq(backlog_names(root, home), { "One", "Two", "Three" })
+
+        -- Place on Pomb with two flags and with a card in another column
         local pomb_out, status, calls = pomb_placed({ "--top", "--after", "11111111-a" })
         testing.eq(status, 2, pomb_out)
         testing.eq(calls:find("POST /", 1, true), nil)
@@ -14573,30 +18375,45 @@ do
     end)
 
     testing.test("add --top --id-only prints the id alone", function()
+        -- Hold a local board with three cards
         local root, home = local_cards()
+
+        -- Add a card at the top and expect only its id
         local out, code = dev(root, home, add_args("Top", { "--top", "--id-only" }))
         testing.eq(code, 0, out)
         testing.ok(out:match("^%x%x%x%x%x%x%x%x%-[%x%-]+\n?$"), out)
+
+        -- Place a card at the top on Pomb and expect only its id
         local pomb_out, status = pomb_placed({ "--top", "--id-only" })
         testing.eq(status, 0, pomb_out)
         testing.ok(pomb_out:match("^%x%x%x%x%x%x%x%x%-[%x%-]+\n?$"), pomb_out)
     end)
 
     testing.test("add --before --id-only prints the id alone", function()
+        -- Hold a local board with three cards
         local root, home, ids = local_cards()
+
+        -- Add a card before the third and expect only its id
         local out, code = dev(root, home, add_args("Mid", { "--before", ids.Three, "--id-only" }))
         testing.eq(code, 0, out)
         testing.ok(out:match("^%x%x%x%x%x%x%x%x%-[%x%-]+\n?$"), out)
+
+        -- Place a card before another on Pomb and expect only its id
         local pomb_out, status = pomb_placed({ "--before", "11111111-b", "--id-only" })
         testing.eq(status, 0, pomb_out)
         testing.ok(pomb_out:match("^%x%x%x%x%x%x%x%x%-[%x%-]+\n?$"), pomb_out)
     end)
 
     testing.test("add --after --id-only prints the id alone", function()
+        -- Hold a local board with three cards
         local root, home, ids = local_cards()
+
+        -- Add a card after the first and expect only its id
         local out, code = dev(root, home, add_args("Mid", { "--after", ids.One, "--id-only" }))
         testing.eq(code, 0, out)
         testing.ok(out:match("^%x%x%x%x%x%x%x%x%-[%x%-]+\n?$"), out)
+
+        -- Place a card after another on Pomb and expect only its id
         local pomb_out, status = pomb_placed({ "--after", "11111111-a", "--id-only" })
         testing.eq(status, 0, pomb_out)
         testing.ok(pomb_out:match("^%x%x%x%x%x%x%x%x%-[%x%-]+\n?$"), pomb_out)
@@ -14627,6 +18444,8 @@ do
         local mover = planned()
         mover.column = support.COLUMN_NAME.VERIFY
         mover.outcomes = { { id = "s1", name = "a", done = false } }
+
+        -- Hold a card that fills Review
         local held = {
             id = ID_A,
             name = "Held",
@@ -14638,6 +18457,8 @@ do
             checks = {},
             outcomes = {},
         }
+
+        -- Free the room after the given number of tries
         local backend = fake({ mover, held })
         local tries = 0
         function backend:limits()
@@ -14665,8 +18486,11 @@ do
     end
 
     testing.test("move names the full column with its count and limit", function()
+        -- Move into a column that is full
         local backend = crowded(1)
         local result = cmd_board.run("move", { "cccccccc", support.Column.REVIEW }, backend)
+
+        -- Expect a refusal that names the holder and the limit
         testing.eq(result.code, 3)
         testing.eq(
             result.message,
@@ -14675,9 +18499,13 @@ do
                 .. ID_A:sub(1, board.MIN_PREFIX)
                 .. "), at its limit of 1. Land one first."
         )
+
+        -- Expect the refused move never sent
         for _, call in ipairs(backend.calls) do
             testing.ok(call[1] ~= "move", "the refused move was sent")
         end
+
+        -- Move again when Pomb itself refuses the move as full
         backend = crowded(0)
         function backend:move()
             return nil, "no room", "full"
@@ -14688,13 +18516,20 @@ do
     end)
 
     testing.test("move wait retries a full column until room frees", function()
+        -- Hold a column that frees up after two tries
         local backend = crowded(2)
         local naps = {}
         local args = { "cccccccc", support.Column.REVIEW, "--wait", "60" }
+
+        -- Move into it with a wait
         local result = cmd_board.move(backend, args, ticking(naps))
+
+        -- Expect the move to land after two pauses
         testing.eq(result.code, nil)
         testing.eq(result.output, "moved cccccccc to " .. support.COLUMN_NAME.REVIEW)
         testing.eq(naps, { 5, 7.5 })
+
+        -- Expect exactly one move sent
         local moves = 0
         for _, call in ipairs(backend.calls) do
             moves = moves + (call[1] == "move" and 1 or 0)
@@ -14703,10 +18538,15 @@ do
     end)
 
     testing.test("waiting.move.backs.off while the column stays full", function()
+        -- Hold a column that stays full
         local backend = crowded(100)
         local naps = {}
         local args = { "cccccccc", support.Column.REVIEW, "--wait", "600" }
+
+        -- Move into it and wait out the whole bound
         cmd_board.move(backend, args, ticking(naps))
+
+        -- Expect the pauses to grow and stop at the bound
         testing.eq(naps[1], 5)
         testing.eq(naps[2], 7.5)
         testing.eq(naps[3], 11.25)
@@ -14718,20 +18558,32 @@ do
     end)
 
     testing.test("move wait gives up at its timeout with the full status", function()
+        -- Hold a column that stays full
         local backend = crowded(100)
         local naps = {}
         local args = { "cccccccc", support.Column.REVIEW, "--wait", "40" }
+
+        -- Move into it with a wait of forty seconds
         local result = cmd_board.move(backend, args, ticking(naps))
+
+        -- Expect the full status after the pauses that fit
         testing.eq(result.code, 3)
         testing.eq(naps, { 5, 7.5, 11.25, 16.25 })
+
+        -- Move again with a wait that is no number
         args[4] = "soon"
         result = cmd_board.move(backend, args)
+
+        -- Expect a usage error
         testing.eq(result.code, 2)
     end)
 
     local function flight_group(rooms)
+        -- Hold a card ready to be taken
         local taker = planned()
         taker.column = support.COLUMN_NAME.BLOCKED
+
+        -- Hold a card that fills the in-flight group
         local held = {
             id = ID_A,
             name = "Held",
@@ -14743,6 +18595,8 @@ do
             checks = {},
             outcomes = {},
         }
+
+        -- Free the room after the given number of tries and stub the claim
         local backend = fake({ taker, held })
         local tries = 0
         function backend:limits()
@@ -14780,18 +18634,28 @@ do
     end
 
     testing.test("take.waits.for.room.under.the.in-flight.limit", function()
+        -- Hold a group that frees up after two tries
         local backend = flight_group(2)
         local naps = {}
+
+        -- Take a card with a wait
         local result = cmd_board.take(backend, take_args("--wait", "60"), ticking(naps))
+
+        -- Expect two pauses and one claim
         testing.eq(naps, { 5, 7.5 })
         testing.eq(result.message, "Claim stubbed.")
         testing.eq(claim_calls(backend), 1)
     end)
 
     testing.test("take.wait.gives.up.at.the.bound.with.exit.3", function()
+        -- Hold a group that stays full
         local backend = flight_group(100)
         local naps = {}
+
+        -- Take a card with a wait of forty seconds
         local result = cmd_board.take(backend, take_args("--wait", "40"), ticking(naps))
+
+        -- Expect the full status after the pauses that fit and no claim
         testing.eq(result.code, 3)
         testing.eq(naps, { 5, 7.5, 11.25, 16.25 })
         testing.eq(claim_calls(backend), 0)
@@ -14800,20 +18664,28 @@ do
             result.message
         )
 
+        -- Take a card with no wait
         backend = flight_group(100)
         naps = {}
         result = cmd_board.take(backend, take_args(), ticking(naps))
+
+        -- Expect the full status at once
         testing.eq(result.code, 3)
         testing.eq(naps, {})
         testing.eq(claim_calls(backend), 0)
     end)
 
     testing.test("take.wait.refuses.a.bad.number.of.seconds", function()
+        -- Hold a group with room
         local backend = flight_group(0)
+
+        -- Take a card with a wait that is no whole number in range
         for _, seconds in ipairs({ "soon", "1.5", "86401" }) do
             local result = cmd_board.take(backend, take_args("--wait", seconds))
             testing.eq(result.code, 2)
         end
+
+        -- Expect no claim made
         testing.eq(claim_calls(backend), 0)
     end)
 
@@ -14827,9 +18699,14 @@ do
     end
 
     testing.test("take --from moves the claim and notes both names", function()
+        -- Hold a local board with three cards
         local root, home, ids = local_cards()
+
+        -- Take a card as the runner
         local out, code = dev(root, home, { "board", "take", ids.One }, { agent = "r/runner" })
         testing.eq(code, 0, out)
+
+        -- Take it over from the runner as the lead
         out, code = dev(
             root,
             home,
@@ -14837,8 +18714,12 @@ do
             { agent = "r/lead" }
         )
         testing.eq(code, 0, out)
+
+        -- Expect the claim to belong to the lead
         local card = local_card_state(home, ids.One)
         testing.eq(card.claim.claimant, "r/lead")
+
+        -- Expect the handoff noted in the comments
         local bodies = {}
         for _, comment in ipairs(card.comments) do
             bodies[#bodies + 1] = comment.body
@@ -14848,14 +18729,19 @@ do
             text:find("handoff: r/runner released the claim and r/lead took it", 1, true),
             text
         )
+
+        -- Release the card
         dev(root, home, { "board", "release", ids.One }, { agent = "r/lead" })
     end)
 
     testing.test(
         "take --from refuses a name that is not the claimant and changes nothing",
         function()
+            -- Hold a local board with a card the runner holds
             local root, home, ids = local_cards()
             dev(root, home, { "board", "take", ids.One }, { agent = "r/runner" })
+
+            -- Take it over from a name that is not the claimant
             local out, code = dev(
                 root,
                 home,
@@ -14865,6 +18751,8 @@ do
             testing.eq(code, 1, out)
             testing.ok(out:find("is claimed by r/runner, not by r/other", 1, true), out)
             testing.eq(local_card_state(home, ids.One).claim.claimant, "r/runner")
+
+            -- Take over a card that has no claim
             out, code = dev(
                 root,
                 home,
@@ -14874,6 +18762,8 @@ do
             testing.eq(code, 1, out)
             testing.ok(out:find("has no claim", 1, true), out)
             testing.eq(local_card_state(home, ids.Two).claim, nil)
+
+            -- Release the runner's card
             dev(root, home, { "board", "release", ids.One }, { agent = "r/runner" })
         end
     )
@@ -14912,18 +18802,26 @@ do
     }
 
     testing.test("pomb orders cards by lane then position", function()
+        -- Hold cards in two lanes
         local root, home = laned(LANED_TASKS)
+
+        -- List the Ready column
         local out, code = dev(root, home, { "board", "ls", "--column", support.Column.READY })
         testing.eq(code, 0, out)
+
+        -- Read each row's lane and name
         local rows = {}
         local pattern = support.COLUMN_NAME.READY .. "%s+(%S+)%s+%S+%s+%S+%s+(%S+)"
         for lane, name in out:gmatch(pattern) do
             rows[#rows + 1] = lane .. " " .. name
         end
+
+        -- Expect the lanes in order and the cards by position
         testing.eq(rows, { "Parity Charlie", "Parity Bravo", "Fixes Alpha" })
     end)
 
     testing.test("pomb puts column order before lane order", function()
+        -- Hold cards in two lanes with one in the Backlog
         local root, home = laned({
             { id = ID_A, name = "Alpha", lane = "lane-fixes", position = 1 },
             { id = ID_B, name = "Bravo", lane = "lane-parity", position = 3 },
@@ -14935,27 +18833,40 @@ do
                 column = BACKLOG_COLUMN,
             },
         })
+
+        -- List every column
         local out, code = dev(root, home, { "board", "ls" })
         testing.eq(code, 0, out)
+
+        -- Read each row's name
         local names = {}
         for line in out:gmatch("[^\n]+") do
             names[#names + 1] = line:match("(%S+)$")
         end
+
+        -- Expect the column order to come before the lane order
         testing.eq(names, { "Charlie", "Bravo", "Alpha" })
     end)
 
     testing.test("pomb sorts a card in an unknown lane last with no lane name", function()
+        -- Hold a card in a lane the board lacks beside the laned cards
         local tasks = { { id = ID_D, name = "Delta", lane = "lane-gone", position = 0 } }
         for _, task in ipairs(LANED_TASKS) do
             tasks[#tasks + 1] = task
         end
         local root, home = laned(tasks)
+
+        -- List the Ready column
         local out = dev(root, home, { "board", "ls", "--column", support.Column.READY })
+
+        -- Read each row's lane and name
         local rows = {}
         local pattern = support.COLUMN_NAME.READY .. "%s+(%S+)%s+%S+%s+%S+%s+(%S+)"
         for lane, name in out:gmatch(pattern) do
             rows[#rows + 1] = lane .. " " .. name
         end
+
+        -- Expect the unknown lane last with no lane name
         testing.eq(rows, { "Parity Charlie", "Parity Bravo", "Fixes Alpha", "- Delta" })
     end)
 
@@ -14970,7 +18881,10 @@ do
     end)
 
     testing.test("add with a lane puts the card in that lane", function()
+        -- Hold a laned board
         local root, home = laned(LANED_TASKS)
+
+        -- Build an add with no lane
         local args = {
             "board",
             "add",
@@ -14986,9 +18900,13 @@ do
             "--done-when",
             "a",
         }
+
+        -- Add it and expect no lane sent
         local out, code = dev(root, home, args)
         testing.eq(code, 0, out)
         testing.ok(not requests(root):find("swimlane_id", 1, true), requests(root))
+
+        -- Add it again with a lane and expect that lane sent
         table.insert(args, "--lane")
         table.insert(args, "fixes")
         out, code = dev(root, home, args)
@@ -14997,11 +18915,16 @@ do
     end)
 
     testing.test("move keeps the lane unless a lane is given", function()
+        -- Hold a laned board
         local root, home = laned(LANED_TASKS)
+
+        -- Move a card with no lane given and expect none sent
         local out, code = dev(root, home, { "board", "move", "11111111-a", support.Column.ICEBOX })
         testing.eq(code, 0, out)
         testing.ok(requests(root):find("/api/tasks/" .. ID_A .. "/move", 1, true), out)
         testing.ok(not requests(root):find("swimlane_id", 1, true), requests(root))
+
+        -- Move a card with a lane and expect that lane sent
         out, code = dev(
             root,
             home,
@@ -15012,19 +18935,27 @@ do
     end)
 
     testing.test("ls and next with a lane list only that lane", function()
+        -- Hold a laned board
         local root, home = laned(LANED_TASKS)
+
+        -- List a column for one lane
         local out, code =
             dev(root, home, { "board", "ls", "--column", support.Column.READY, "--lane", "parity" })
         testing.eq(code, 0, out)
         testing.ok(out:find("Charlie", 1, true) and out:find("Bravo", 1, true), out)
         testing.ok(not out:find("Alpha", 1, true), out)
+
+        -- Ask for the next card of another lane
         out, code = dev(root, home, { "board", "next", "--lane", "Fixes" })
         testing.eq(code, 0, out)
         testing.ok(requests(root):find("&swimlane_id=lane-fixes", 1, true), requests(root))
     end)
 
     testing.test("a lane the board lacks is refused", function()
+        -- Hold a laned board
         local root, home = laned(LANED_TASKS)
+
+        -- Name a lane it lacks in four commands
         for _, args in ipairs({
             { "board", "ls", "--lane", "Features" },
             { "board", "next", "--lane", "Features" },
@@ -15038,6 +18969,8 @@ do
                 out
             )
         end
+
+        -- Name a lane on a board with no lanes
         root, home = sandbox()
         local out, code = dev(root, home, { "board", "ls", "--lane", "Parity" })
         testing.eq(code, 2, out)
@@ -15339,7 +19272,11 @@ do
             end,
             clean_up = function(root, short)
                 cleaned[#cleaned + 1] = { root, short }
-                return "\nDeleted bookmark cccccccc\nThe workspace is gone."
+                return table.concat({
+                    "",
+                    "Deleted bookmark cccccccc",
+                    "The workspace is gone.",
+                }, "\n")
             end,
         })
         testing.eq(result.code, nil)
@@ -15628,8 +19565,11 @@ do
 end
 
 testing.test("stale lists a running clock", function()
+    -- Point the state at a fresh directory
     local previous = dev_os.getenv("XDG_STATE_HOME") or ""
     dev_os.setenv("XDG_STATE_HOME", support.tempdir())
+
+    -- Start a card's clock and age it past half an hour
     local cards, times = aged({ support.COLUMN_NAME.PROGRESS }, { 0 })
     cards[1].size = "3 Pomodori"
     local original = role_clock.now
@@ -15638,8 +19578,12 @@ testing.test("stale lists a running clock", function()
     end
     local started = role_clock.start(cards[1], "implementer")
     role_clock.now = original
+
+    -- List the stale cards and restore the state
     local result = cmd_board.run("stale", {}, fake(cards, times), NOW)
     dev_os.setenv("XDG_STATE_HOME", previous)
+
+    -- Expect the running clock listed
     testing.eq(started.code, nil, started.message)
     testing.eq(
         result.output:find("clocks running:\n00000001  implementer  30 min", 1, true) ~= nil,
@@ -15648,19 +19592,26 @@ testing.test("stale lists a running clock", function()
 end)
 
 testing.test("follow returns the dropped reason when the stop is refused", function()
+    -- Point the state at a fresh directory
     local previous = dev_os.getenv("XDG_STATE_HOME") or ""
     dev_os.setenv("XDG_STATE_HOME", support.tempdir())
+
+    -- Hold a card in progress with an aged implementer clock
     local card = colored("green")
     card.outcomes = outcomes(2)
     card.column = PROGRESS_NAME
     local backend = fake({ card })
     backend.stages = board.stages()
     local restore, started = support.start_aged(card, support.ROLE.IMPLEMENTER, 120)
+
+    -- Follow the card to Review while Pomb refuses the stop
     backend.refusal = "Pomb is down."
     local reason, detail = role_clock.follow(backend, card, support.COLUMN_NAME.REVIEW, LEAD)
     local left = role_clock.read(ID_C)
     restore()
     dev_os.setenv("XDG_STATE_HOME", previous)
+
+    -- Expect the dropped reason and the next role ticking
     testing.eq(started.code, nil, started.message)
     testing.eq(reason, role_clock.Reason.DROPPED)
     testing.eq(detail, "Pomb is down.")
@@ -15668,18 +19619,25 @@ testing.test("follow returns the dropped reason when the stop is refused", funct
 end)
 
 testing.test("follow logs nothing for a stretch under a minute and starts the next role", function()
+    -- Point the state at a fresh directory
     local previous = dev_os.getenv("XDG_STATE_HOME") or ""
     dev_os.setenv("XDG_STATE_HOME", support.tempdir())
+
+    -- Hold a card in progress with a clock under a minute old
     local card = colored("green")
     card.outcomes = outcomes(2)
     card.column = PROGRESS_NAME
     local backend = fake({ card })
     backend.stages = board.stages()
     local restore, started = support.start_aged(card, support.ROLE.IMPLEMENTER, 30)
+
+    -- Follow the card to Review
     local reason, detail = role_clock.follow(backend, card, support.COLUMN_NAME.REVIEW, LEAD)
     local ticking = role_clock.read(ID_C)
     restore()
     dev_os.setenv("XDG_STATE_HOME", previous)
+
+    -- Expect no time logged and the next role ticking
     testing.eq(started.code, nil, started.message)
     testing.eq(reason, nil, detail)
     testing.eq(backend.calls, {})
@@ -15758,7 +19716,7 @@ testing.test("failure keeps a message that starts with new.png lowercase", funct
 end)
 
 testing.test("failure leaves a multi-line message as written", function()
-    local message = "lint failed\nsecond line without a period"
+    local message = table.concat({ "lint failed", "second line without a period" }, "\n")
     testing.eq(guards.failure(message).message, message)
 end)
 

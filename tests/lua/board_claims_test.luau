@@ -79,7 +79,7 @@ testing.test("time start keeps a running clock and time stop logs it and removes
     clock.now = function()
         return 1000
     end
-    local started = clock.start(card, "reviewer")
+    local started = clock.start(card, support.ROLE.REVIEWER)
     local ticking = clock.read(CARD)
     clock.now = function()
         return 1000 + 25 * 60
@@ -93,9 +93,9 @@ testing.test("time start keeps a running clock and time stop logs it and removes
 
     -- Check the clock ran, logged under its role and is gone
     testing.eq(started.output, "started the reviewer clock on 11111111")
-    testing.eq(ticking.role, "reviewer")
+    testing.eq(ticking.role, support.ROLE.REVIEWER)
     testing.eq(ticking.start, 1000)
-    testing.eq(logged, { { CARD, 25, "reviewer", "looked" } })
+    testing.eq(logged, { { CARD, 25, support.ROLE.REVIEWER, "looked" } })
     testing.eq(stopped.output, "logged 25 minutes as reviewer on 11111111")
     testing.eq(left, nil)
 end)
@@ -140,20 +140,30 @@ local function take_stub(card)
 end
 
 testing.test("a state write that cannot make its pending file returns the write reason", function()
+    -- Block the claim's pending file in a scratch home
     local previous = dev_os.getenv("XDG_STATE_HOME") or ""
     dev_os.setenv("XDG_STATE_HOME", support.tempdir())
     local path = claims.path(CARD)
     assert(fs.mkdir(path .. ".new", { parents = true }))
+
+    -- Write a claim into the blocked state
     local ok, message, reason, detail = claims.write({ card = CARD, fence = 1, pid = 1 })
+
+    -- Restore the environment
     dev_os.setenv("XDG_STATE_HOME", previous)
+
+    -- Check the write reason and the blocked path come back
     testing.eq({ ok, message, reason, detail }, { nil, nil, board.FileReason.WRITE, path })
 end)
 
 testing.test("a take that cannot write its claim state prints the write sentence once", function()
+    -- Block the claim's pending file in a scratch home
     local previous = dev_os.getenv("XDG_STATE_HOME") or ""
     dev_os.setenv("XDG_STATE_HOME", support.tempdir())
     local path = claims.path(CARD)
     assert(fs.mkdir(path .. ".new", { parents = true }))
+
+    -- Take a card into the blocked state
     local card = {
         id = CARD,
         name = "x",
@@ -168,11 +178,16 @@ testing.test("a take that cannot write its claim state prints the write sentence
         { "11111111", "--as", "dotfiles/implementer/11111111" },
         take_stub(card)
     )
+
+    -- Restore the environment
     dev_os.setenv("XDG_STATE_HOME", previous)
+
+    -- Check the write sentence names the blocked path
     testing.eq(result.message, "Cannot write " .. path .. ".")
 end)
 
 testing.test("a take starts a clock under the role of the card's column", function()
+    -- Point the state at a scratch home and pick the columns to take from
     local previous = dev_os.getenv("XDG_STATE_HOME") or ""
     dev_os.setenv("XDG_STATE_HOME", support.tempdir())
     local name = "dotfiles/implementer/11111111"
@@ -182,6 +197,8 @@ testing.test("a take starts a clock under the role of the card's column", functi
         support.COLUMN_NAME.REVIEW,
         support.COLUMN_NAME.BLOCKED,
     }
+
+    -- Take a card from each column and note the role its clock counts for
     for _, column in ipairs(columns) do
         local card = {
             id = CARD,
@@ -199,32 +216,44 @@ testing.test("a take starts a clock under the role of the card's column", functi
         claims.stop(CARD)
         fs.remove(clock.path(CARD))
     end
+
+    -- Restore the environment
     dev_os.setenv("XDG_STATE_HOME", previous)
-    testing.eq(roles, { "implementer", "reviewer", "lead" })
+
+    -- Check each column counted for its own role
+    testing.eq(roles, { support.ROLE.IMPLEMENTER, support.ROLE.REVIEWER, support.ROLE.LEAD })
 end)
 
 testing.test("column_role names every column's role and takes the claimant's for Ready", function()
     local stages = board.stages({}, { support.COLUMN_NAME.DONE })
     local who = "dotfiles/verifier/11111111"
-    testing.eq(clock.column_role(stages, stages.icebox, who), "scoper")
-    testing.eq(clock.column_role(stages, stages.backlog, who), "planner")
-    testing.eq(clock.column_role(stages, stages.progress, who), "implementer")
-    testing.eq(clock.column_role(stages, stages.review, who), "reviewer")
-    testing.eq(clock.column_role(stages, stages.blocked, who), "lead")
-    testing.eq(clock.column_role(stages, stages.ready, who), "verifier")
-    testing.eq(clock.column_role(stages, stages.verify, who), "verifier")
+    testing.eq(clock.column_role(stages, stages.icebox, who), support.ROLE.SCOPER)
+    testing.eq(clock.column_role(stages, stages.backlog, who), support.ROLE.PLANNER)
+    testing.eq(clock.column_role(stages, stages.progress, who), support.ROLE.IMPLEMENTER)
+    testing.eq(clock.column_role(stages, stages.review, who), support.ROLE.REVIEWER)
+    testing.eq(clock.column_role(stages, stages.blocked, who), support.ROLE.LEAD)
+    testing.eq(clock.column_role(stages, stages.ready, who), support.ROLE.VERIFIER)
+    testing.eq(clock.column_role(stages, stages.verify, who), support.ROLE.VERIFIER)
     testing.eq(clock.column_role(stages, support.COLUMN_NAME.DONE, who), nil)
 end)
 
 testing.test("time stop refuses a card with no running clock", function()
+    -- Point the state at a scratch home
     local previous = dev_os.getenv("XDG_STATE_HOME") or ""
     dev_os.setenv("XDG_STATE_HOME", support.tempdir())
+
+    -- Stop a card that has no clock
     local result = clock.stop({}, { id = CARD }, nil)
+
+    -- Restore the environment
     dev_os.setenv("XDG_STATE_HOME", previous)
+
+    -- Check the stop was refused
     testing.eq(result.code, 1)
 end)
 
 testing.test("a stop whose claim of the clock file fails logs nothing", function()
+    -- Point the state at a scratch home and fake the backend
     local previous = dev_os.getenv("XDG_STATE_HOME") or ""
     dev_os.setenv("XDG_STATE_HOME", support.tempdir())
     local logged = {}
@@ -233,19 +262,28 @@ testing.test("a stop whose claim of the clock file fails logs nothing", function
         logged[#logged + 1] = { id, minutes }
         return true
     end
+
+    -- Age a clock past two hours with its stopping file already taken
     local card = { id = CARD, labels = {} }
     local restore = support.start_aged(card, support.ROLE.REVIEWER, 120)
     assert(fs.write(clock.stopping_path(CARD), "taken\n"))
+
+    -- Stop the card and see what is left of its clock
     local result = clock.stop(backend, card, nil)
     local kept = clock.read(CARD)
+
+    -- Restore the environment
     restore()
     dev_os.setenv("XDG_STATE_HOME", previous)
+
+    -- Check the stop failed, logged nothing and kept the clock
     testing.eq(result.code, 1)
     testing.eq(logged, {})
     testing.ok(kept, "the clock was lost")
 end)
 
 testing.test("a start clears a stop's leftover file so the next stop logs", function()
+    -- Point the state at a scratch home and fake the backend
     local previous = dev_os.getenv("XDG_STATE_HOME") or ""
     dev_os.setenv("XDG_STATE_HOME", support.tempdir())
     local logged = {}
@@ -254,18 +292,27 @@ testing.test("a start clears a stop's leftover file so the next stop logs", func
         logged[#logged + 1] = { id, minutes }
         return true
     end
+
+    -- Leave a stop's file behind, then start an aged clock over it
     local card = { id = CARD, labels = {} }
     assert(fs.mkdir(claims.dir(), { parents = true }))
     assert(fs.write(clock.stopping_path(CARD), "left behind\n"))
     local restore = support.start_aged(card, support.ROLE.REVIEWER, 120)
+
+    -- Stop the card
     local result = clock.stop(backend, card, nil)
+
+    -- Restore the environment
     restore()
     dev_os.setenv("XDG_STATE_HOME", previous)
+
+    -- Check the stop went through and logged once
     testing.eq(result.code, nil)
     testing.eq(#logged, 1)
 end)
 
 testing.test("a stop called from inside the first stop's log logs once", function()
+    -- Point the state at a scratch home and fake a backend that stops again while logging
     local previous = dev_os.getenv("XDG_STATE_HOME") or ""
     dev_os.setenv("XDG_STATE_HOME", support.tempdir())
     local logged = {}
@@ -277,11 +324,17 @@ testing.test("a stop called from inside the first stop's log logs once", functio
         nested = nested or clock.stop(backend, card, nil)
         return true
     end
+
+    -- Age a clock past two hours and stop it
     local restore = support.start_aged(card, support.ROLE.REVIEWER, 120)
     local first = clock.stop(backend, card, nil)
     local left = clock.read(CARD)
+
+    -- Restore the environment
     restore()
     dev_os.setenv("XDG_STATE_HOME", previous)
+
+    -- Check only the outer stop logged and the clock is gone
     testing.eq(#logged, 1)
     testing.eq(nested.code, 1)
     testing.eq(first.code, nil)
@@ -289,23 +342,31 @@ testing.test("a stop called from inside the first stop's log logs once", functio
 end)
 
 testing.test("a failed log puts the clock back so it keeps running", function()
+    -- Point the state at a scratch home and fake a backend that fails to log
     local previous = dev_os.getenv("XDG_STATE_HOME") or ""
     dev_os.setenv("XDG_STATE_HOME", support.tempdir())
     local backend = {}
     function backend:log_time()
         return nil, "pomb is away"
     end
+
+    -- Age a clock past two hours and stop it
     local card = { id = CARD, labels = {} }
     local restore = support.start_aged(card, support.ROLE.REVIEWER, 120)
     local result = clock.stop(backend, card, nil)
     local kept = clock.read(CARD)
+
+    -- Restore the environment
     restore()
     dev_os.setenv("XDG_STATE_HOME", previous)
+
+    -- Check the stop failed and the clock is still there
     testing.eq(result.code, 1)
     testing.ok(kept, "the clock was lost")
 end)
 
 testing.test("a stretch under a minute logs nothing and still clears the clock", function()
+    -- Point the state at a scratch home and fake the backend
     local previous = dev_os.getenv("XDG_STATE_HOME") or ""
     dev_os.setenv("XDG_STATE_HOME", support.tempdir())
     local logged = {}
@@ -314,13 +375,19 @@ testing.test("a stretch under a minute logs nothing and still clears the clock",
         logged[#logged + 1] = { id, minutes }
         return true
     end
+
+    -- Age a clock to 59 seconds and stop it twice
     local card = { id = CARD, labels = {} }
     local restore = support.start_aged(card, support.ROLE.REVIEWER, 59)
     local result = clock.stop(backend, card, nil)
     local left = clock.read(CARD)
     local again = clock.stop(backend, card, nil)
+
+    -- Restore the environment
     restore()
     dev_os.setenv("XDG_STATE_HOME", previous)
+
+    -- Check nothing was logged and the clock is cleared
     testing.eq(result.output, "logged nothing as reviewer on 11111111, under a minute")
     testing.eq(logged, {})
     testing.eq(left, nil)
@@ -328,6 +395,7 @@ testing.test("a stretch under a minute logs nothing and still clears the clock",
 end)
 
 testing.test("a stretch of exactly a minute still logs one minute", function()
+    -- Point the state at a scratch home and fake the backend
     local previous = dev_os.getenv("XDG_STATE_HOME") or ""
     dev_os.setenv("XDG_STATE_HOME", support.tempdir())
     local logged = {}
@@ -336,11 +404,17 @@ testing.test("a stretch of exactly a minute still logs one minute", function()
         logged[#logged + 1] = { id, minutes }
         return true
     end
+
+    -- Age a clock to exactly a minute and stop it
     local card = { id = CARD, labels = {} }
     local restore = support.start_aged(card, support.ROLE.REVIEWER, 60)
     local result = clock.stop(backend, card, nil)
+
+    -- Restore the environment
     restore()
     dev_os.setenv("XDG_STATE_HOME", previous)
+
+    -- Check one minute was logged
     testing.eq(result.output, "logged 1 minutes as reviewer on 11111111")
     testing.eq(logged, { { CARD, 1 } })
 end)
@@ -355,6 +429,7 @@ local function logging_backend()
 end
 
 testing.test("a lapsed claim logs time only up to its last heartbeat", function()
+    -- Point the state at a scratch home and freeze the clock
     local previous = dev_os.getenv("XDG_STATE_HOME") or ""
     dev_os.setenv("XDG_STATE_HOME", support.tempdir())
     local started = os.time()
@@ -362,24 +437,33 @@ testing.test("a lapsed claim logs time only up to its last heartbeat", function(
     clock.now = function()
         return started
     end
+
+    -- Start a clock with a claim whose last heartbeat came ten minutes in
     local began = clock.start({ id = CARD, labels = {} }, support.ROLE.IMPLEMENTER)
     local saved = claims.write({ card = CARD, fence = 1, pid = 0 })
     local beat = fs.write(clock.beat_path(CARD), string.format("%d\n", started + 10 * 60))
+
+    -- Sweep an hour later
     local backend = logging_backend()
     local card = { id = CARD, name = "x", size = "3 Pomodori", labels = {} }
     local ticking = clock.sweep(backend, { card }, started + 60 * 60)
     local left = clock.read(CARD)
+
+    -- Restore the environment
     clock.now = original
     dev_os.setenv("XDG_STATE_HOME", previous)
+
+    -- Check only the minutes up to the heartbeat were logged
     testing.eq(began.code, nil, began.message)
     testing.eq(saved, true)
     testing.eq(beat, true)
-    testing.eq(backend.logged, { { CARD, 10, "implementer" } })
+    testing.eq(backend.logged, { { CARD, 10, support.ROLE.IMPLEMENTER } })
     testing.eq(ticking, {})
     testing.eq(left, nil)
 end)
 
 testing.test("a clock with no claim stops at twice the card's size", function()
+    -- Point the state at a scratch home and freeze the clock
     local previous = dev_os.getenv("XDG_STATE_HOME") or ""
     dev_os.setenv("XDG_STATE_HOME", support.tempdir())
     local started = os.time()
@@ -387,34 +471,51 @@ testing.test("a clock with no claim stops at twice the card's size", function()
     clock.now = function()
         return started
     end
+
+    -- Start a clock on a one-Pomodoro card with no claim
     local began = clock.start({ id = CARD, labels = {} }, support.ROLE.REVIEWER)
     local backend = logging_backend()
     local card = { id = CARD, name = "x", size = "1 Pomodoro", labels = {} }
+
+    -- Sweep before and after the clock reaches twice the card's size
     local early = clock.sweep(backend, { card }, started + 30 * 60)
     local late = clock.sweep(backend, { card }, started + LAPSE_SECONDS)
+
+    -- Restore the environment
     clock.now = original
     dev_os.setenv("XDG_STATE_HOME", previous)
+
+    -- Check the clock ran until the later sweep stopped it
     testing.eq(began.code, nil, began.message)
     testing.eq(#early, 1)
     testing.eq(late, {})
-    testing.eq(backend.logged, { { CARD, 50, "reviewer" } })
+    testing.eq(backend.logged, { { CARD, 50, support.ROLE.REVIEWER } })
 end)
 
 testing.test("a sweep that stops a clock within a minute logs nothing and clears it", function()
+    -- Point the state at a scratch home and freeze the clock
     local previous = dev_os.getenv("XDG_STATE_HOME") or ""
     dev_os.setenv("XDG_STATE_HOME", support.tempdir())
     local original = clock.now
     clock.now = function()
         return support.CLOCK_START
     end
+
+    -- Start a clock whose last heartbeat came thirty seconds in
     local began = clock.start({ id = CARD, labels = {} }, support.ROLE.REVIEWER)
     local beat = fs.write(clock.beat_path(CARD), string.format("%d\n", support.CLOCK_START + 30))
+
+    -- Sweep once the lapse has passed
     local backend = logging_backend()
     local card = { id = CARD, name = "x", size = "1 Pomodoro", labels = {} }
     local ticking, warnings = clock.sweep(backend, { card }, support.CLOCK_START + LAPSE_SECONDS)
     local left = clock.read(CARD)
+
+    -- Restore the environment
     clock.now = original
     dev_os.setenv("XDG_STATE_HOME", previous)
+
+    -- Check the clock was cleared without logging
     testing.eq(began.code, nil, began.message)
     testing.eq(beat, true)
     testing.eq(ticking, {})
@@ -424,6 +525,7 @@ testing.test("a sweep that stops a clock within a minute logs nothing and clears
 end)
 
 testing.test("a clock on a card of another board stays and logs nothing", function()
+    -- Point the state at a scratch home and freeze the clock
     local previous = dev_os.getenv("XDG_STATE_HOME") or ""
     dev_os.setenv("XDG_STATE_HOME", support.tempdir())
     local started = os.time()
@@ -431,12 +533,18 @@ testing.test("a clock on a card of another board stays and logs nothing", functi
     clock.now = function()
         return started
     end
+
+    -- Start a clock and sweep a board that lists no card for it
     local began = clock.start({ id = CARD, labels = {} }, support.ROLE.REVIEWER)
     local backend = logging_backend()
     local ticking, warnings = clock.sweep(backend, {}, started + LAPSE_SECONDS)
     local kept = clock.read(CARD)
+
+    -- Restore the environment
     clock.now = original
     dev_os.setenv("XDG_STATE_HOME", previous)
+
+    -- Check the clock stays and nothing was logged
     testing.eq(began.code, nil, began.message)
     testing.eq(ticking, {})
     testing.eq(warnings, {})

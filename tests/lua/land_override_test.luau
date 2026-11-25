@@ -2,11 +2,14 @@ local testing = require("@dev/testing")
 local registry = require("@dev/registry")
 local support = require("./support")
 
-local SCRIPT = 'local dev_command = require("@dev/command")\n'
-    .. "return dev_command({\n"
-    .. '    summary = "Land the project\'s own way.",\n'
-    .. '    run = function() print("project land ran") end,\n'
-    .. "})\n"
+local SCRIPT = table.concat({
+    'local dev_command = require("@dev/command")',
+    "return dev_command({",
+    '    summary = "Land the project\'s own way.",',
+    '    run = function() print("project land ran") end,',
+    "})",
+    "",
+}, "\n")
 
 local FILES = { [".dev/commands/land.luau"] = SCRIPT }
 

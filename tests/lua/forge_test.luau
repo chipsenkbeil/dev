@@ -22,11 +22,16 @@ local function git(root, ...)
 end
 
 local function repo(remotes, config)
+    -- Make a git repo
     local root = assert(fs.realpath(support.tempdir()))
     git(root, "init", "-q")
+
+    -- Add each remote
     for _, remote in ipairs(remotes) do
         git(root, "remote", "add", remote[1], remote[2])
     end
+
+    -- Set each config key
     for _, pair in ipairs(config or {}) do
         git(root, "config", pair[1], pair[2])
     end
@@ -95,33 +100,50 @@ local CASES = {
 
 for _, case in ipairs(CASES) do
     testing.test("git: " .. case.name, function()
+        -- Make a repo with the remotes and config of the case
         local root = repo(case.remotes, case.config)
+
+        -- Resolve its forge
         local got, err = forge.resolve(root)
+
+        -- Name the forge and why, or the error
         if case.err then
             testing.eq(got, nil)
             testing.eq(err, case.err)
         else
             testing.eq({ got.kind, got.remote, got.why }, case.want)
         end
+
+        -- Remove the repo
         fs.remove(root, { recursive = true })
     end)
 end
 
 testing.test("a directory with neither .jj nor .git has no forge", function()
+    -- Make a directory with no repo
     local root = assert(fs.realpath(support.tempdir()))
+
+    -- Resolve its forge and find none
     local got, err = forge.resolve(root)
     testing.eq(got, nil)
     testing.eq(err, vcs.Reason.NO_CHECKOUT)
+
+    -- Remove the directory
     fs.remove(root, { recursive = true })
 end)
 
 if has_jj then
     local function jj_repo(remotes, config)
+        -- Make a jj repo
         local root = assert(fs.realpath(support.tempdir()))
         ok({ "jj", "git", "init", root }, { env = { JJ_CONFIG = "/dev/null" } })
+
+        -- Add each remote
         for _, remote in ipairs(remotes) do
             ok({ "jj", "--no-pager", "-R", root, "git", "remote", "add", remote[1], remote[2] })
         end
+
+        -- Set each config key in the git store
         local store = dev_os.capture({ "jj", "--no-pager", "-R", root, "git", "root" })
         for _, pair in ipairs(config or {}) do
             ok({ "git", "--git-dir=" .. store:gsub("\n$", ""), "config", pair[1], pair[2] })
@@ -130,21 +152,33 @@ if has_jj then
     end
 
     testing.test("jj: a gerrit remote means gerrit", function()
+        -- Make a jj repo with a github origin and a gerrit remote
         local root = jj_repo({ { "origin", GITHUB }, { "gerrit", "ssh://c@g:29418/r" } })
+
+        -- Resolve its forge as gerrit
         local got = forge.resolve(root)
         testing.eq({ got.kind, got.remote }, { "gerrit", "gerrit" })
+
+        -- Detect the jj backend and list both remotes
         testing.eq(vcs.backend(root), "jj")
         testing.eq(vcs.remotes(root, "jj"), { "gerrit", "origin" })
+
+        -- Remove the repo
         fs.remove(root, { recursive = true })
     end)
 
     testing.test("jj: forge.kind is read from the git store under .jj", function()
+        -- Make a jj repo whose git store says forge.kind is github
         local root = jj_repo({ { "origin", LOCAL } }, { { "forge.kind", "github" } })
+
+        -- Resolve its forge from that key
         local got = forge.resolve(root)
         testing.eq(
             { got.kind, got.remote, got.why },
             { "github", "origin", "git config forge.kind=github" }
         )
+
+        -- Remove the repo
         fs.remove(root, { recursive = true })
     end)
 end
@@ -156,6 +190,7 @@ testing.test("trunk prefers master over main and is nil without either", functio
 end)
 
 testing.test("git branches and remotes list what git has", function()
+    -- Make a repo with one commit on main
     local root = repo({})
     git(
         root,
@@ -170,18 +205,26 @@ testing.test("git branches and remotes list what git has", function()
         "x"
     )
     git(root, "branch", "-M", "main")
+
+    -- List the branch
     testing.eq(vcs.branches(root, "git"), { "main" })
+
+    -- Add a remote and list it
     git(root, "remote", "add", "origin", LOCAL)
     testing.eq(vcs.remotes(root, "git"), { "origin" })
+
+    -- Remove the repo
     fs.remove(root, { recursive = true })
 end)
 
-local SSH_STUB = [[#!/bin/sh
-echo "$*" >>"$STUB_LOG"
-case "$*" in
-*" query "*) cat "$STUB_QUERY" ;;
-esac
-]]
+local SSH_STUB = table.concat({
+    "#!/bin/sh",
+    'echo "$*" >>"$STUB_LOG"',
+    'case "$*" in',
+    '*" query "*) cat "$STUB_QUERY" ;;',
+    "esac",
+    "",
+}, "\n")
 
 local OPEN_ROW = table.concat({
     '{"id":"I1","status":"NEW","currentPatchSet":{"number":2,"revision":"abc123"}}',
@@ -190,11 +233,16 @@ local OPEN_ROW = table.concat({
 }, "\n")
 
 local function abandon_fixture(row)
+    -- Make a repo with a gerrit remote
     local root = repo({ { "gerrit", "ssh://c@g.example:29418/proj/sub.git" } })
+
+    -- Stand in for ssh with a stub
     local bin = root .. "/bin"
     assert(fs.mkdir(bin, { parents = true }))
     assert(fs.write(bin .. "/ssh", SSH_STUB))
     assert(dev_os.run({ "chmod", "755", bin .. "/ssh" }) == 0, "chmod failed")
+
+    -- Have the stub answer the query with the row
     assert(fs.write(root .. "/query", row))
     local env = { STUB_LOG = root .. "/log", STUB_QUERY = root .. "/query" }
     return root, env
@@ -205,28 +253,45 @@ local function calls(root)
 end
 
 testing.test("abandon.sends.the.query.then.the.review.abandon", function()
+    -- Abandon a change by its id
     local root, env = abandon_fixture(OPEN_ROW)
     local out, code = support.dev(root, { "abandon", "I1" }, { env = env })
     testing.eq(code, 0, out)
-    local want = "-o BatchMode=yes -p 29418 c@g.example gerrit query --format=JSON "
-        .. "--current-patch-set project:proj/sub change:I1\n"
-        .. "-o BatchMode=yes -p 29418 c@g.example gerrit review --abandon abc123\n"
+
+    -- Query it, then abandon its patch set
+    local want = table.concat({
+        "-o BatchMode=yes -p 29418 c@g.example gerrit query --format=JSON "
+            .. "--current-patch-set project:proj/sub change:I1",
+        "-o BatchMode=yes -p 29418 c@g.example gerrit review --abandon abc123",
+        "",
+    }, "\n")
     testing.eq(calls(root), want)
+
+    -- Remove the repo
     fs.remove(root, { recursive = true })
 end)
 
 testing.test("abandon.queries.a.change.by.its.number", function()
+    -- Abandon a change by its number
     local root, env = abandon_fixture(OPEN_ROW)
     local out, code = support.dev(root, { "abandon", "101" }, { env = env })
     testing.eq(code, 0, out)
-    local want = "-o BatchMode=yes -p 29418 c@g.example gerrit query --format=JSON "
-        .. "--current-patch-set project:proj/sub change:101\n"
-        .. "-o BatchMode=yes -p 29418 c@g.example gerrit review --abandon abc123\n"
+
+    -- Query it by number, then abandon its patch set
+    local want = table.concat({
+        "-o BatchMode=yes -p 29418 c@g.example gerrit query --format=JSON "
+            .. "--current-patch-set project:proj/sub change:101",
+        "-o BatchMode=yes -p 29418 c@g.example gerrit review --abandon abc123",
+        "",
+    }, "\n")
     testing.eq(calls(root), want)
+
+    -- Remove the repo
     fs.remove(root, { recursive = true })
 end)
 
 testing.test("abandon.sends.the.reason.as.the.message", function()
+    -- Abandon a change with a reason that holds a quote
     local root, env = abandon_fixture(OPEN_ROW)
     local out, code = support.dev(
         root,
@@ -234,17 +299,24 @@ testing.test("abandon.sends.the.reason.as.the.message", function()
         { env = env }
     )
     testing.eq(code, 0, out)
+
+    -- Send the reason shell-quoted as the message
     local want = [[gerrit review --abandon --message 'it'\''s stale' abc123]]
     testing.eq(calls(root):find(want, 1, true) ~= nil, true, calls(root))
+
+    -- Remove the repo
     fs.remove(root, { recursive = true })
 end)
 
 testing.test("abandon.refuses.a.change.that.is.not.open", function()
+    -- Offer a merged change and an unknown one
     local merged = OPEN_ROW:gsub("NEW", "MERGED")
     local cases = {
         { row = merged, want = "Change I1 is MERGED, not NEW." },
         { row = '{"type":"stats","rowCount":0}\n', want = "Gerrit has no change I1" },
     }
+
+    -- Refuse each one and send no review
     for _, case in ipairs(cases) do
         local root, env = abandon_fixture(case.row)
         local out, code = support.dev(root, { "abandon", "I1" }, { env = env })
@@ -256,21 +328,33 @@ testing.test("abandon.refuses.a.change.that.is.not.open", function()
 end)
 
 testing.test("abandon.picks.the.open.row.among.several.branches", function()
+    -- Offer a merged row before the open one
     local merged = '{"id":"I1","status":"MERGED","currentPatchSet":{"revision":"old000"}}\n'
     local root, env = abandon_fixture(merged .. OPEN_ROW)
     local out, code = support.dev(root, { "abandon", "I1" }, { env = env })
     testing.eq(code, 0, out)
+
+    -- Abandon the patch set of the open row
     testing.eq(calls(root):find("--abandon abc123", 1, true) ~= nil, true, calls(root))
+
+    -- Remove the repo
     fs.remove(root, { recursive = true })
 end)
 
 testing.test("abandon.refuses.a.forge.that.is.not.gerrit", function()
+    -- Make the repo a plain forge
     local root, env = abandon_fixture(OPEN_ROW)
     git(root, "config", "forge.kind", "plain")
     git(root, "remote", "add", "origin", LOCAL)
+
+    -- Abandon a change
     local out, code = support.dev(root, { "abandon", "I1" }, { env = env })
+
+    -- Refuse and call nothing
     testing.eq(code, 1, out)
     testing.eq(out:find("only a gerrit change can be abandoned", 1, true) ~= nil, true, out)
     testing.eq(calls(root), "")
+
+    -- Remove the repo
     fs.remove(root, { recursive = true })
 end)
