@@ -577,6 +577,7 @@ fails when a listed module or function goes away.
 - `@dev/command`: `die`, `need`, `no_args`, `note`, `say`, `show`,
   `usage_error`.
 - `@dev/config`: `get`, `user`.
+- `@dev/forge`: `resolve`.
 - `@dev/fs`: `basename`, `dirname`, `exists`, `is_dir`, `is_exec`, `is_file`,
   `is_link`, `join`, `list`, `mkdir`, `mktemp`, `read`, `readlink`, `realpath`,
   `remove`, `symlink`, `write`.
@@ -603,6 +604,10 @@ fails when a listed module or function goes away.
 - `@dev/vcs`: `backend`, `base`, `branches`, `files`, `remotes`, `require`,
   `with`.
 - `@dev/xdg`: `state_home`.
+
+`@dev/forge` field `Kind` is a table, not a function: the forges dev knows
+(`gerrit`, `github` and `plain`). `resolve(root)` returns the forge, with its
+`kind`, `remote`, `why` and `remotes`, or nil and the reason.
 
 `@dev/runtime` field `exe` is a string, not a function: the path of the
 running dev binary, which a command passes to `@dev/os` `run` to start dev

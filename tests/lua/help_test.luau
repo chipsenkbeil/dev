@@ -398,6 +398,13 @@ testing.test("a hidden subcommand is listed by -a under its parent only", functi
     fs.remove(root, { recursive = true })
 end)
 
+testing.test("help modules lists @dev/forge and its resolve function", function()
+    local root = project({})
+    local out = dev(root, { "help", "modules" })
+    fs.remove(root, { recursive = true })
+    testing.ok(out:find("- `@dev/forge`: `resolve`.", 1, true), "the @dev/forge entry is missing")
+end)
+
 testing.test("-a lists a hidden command two levels down", function()
     local root = project({
         ["n/m/x.sh"] = "#!/usr/bin/env bash\n# Shown.\n",
