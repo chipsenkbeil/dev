@@ -1,7 +1,6 @@
 local dev_os = require("@dev/os")
 local forge = require("@dev/forge")
 local json = require("@dev/json")
-local text = require("@dev/text")
 local vcs = require("@dev/vcs")
 local dev_command = require("@dev/command")
 
@@ -68,11 +67,11 @@ function M.run(change, reason, ctx)
     end
     local backend, err = vcs.require(ctx.root)
     if not backend then
-        dev_command.die(text.sentence(err))
+        dev_command.die(dev_command.vcs_sentence(err, ctx.root))
     end
     local found, ferr = forge.resolve(ctx.root)
     if not found then
-        dev_command.die(text.sentence(ferr))
+        dev_command.die(dev_command.vcs_sentence(ferr, ctx.root))
     end
     if found.kind ~= forge.Kind.GERRIT then
         dev_command.die(

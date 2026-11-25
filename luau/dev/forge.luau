@@ -27,7 +27,7 @@ end
 ---forge, else `origin`, and it must be a remote of the project.
 ---@param root string absolute path of the project root
 ---@return dev.forge.Forge? forge nil on failure
----@return string? err why there is no forge
+---@return string? err a `vcs.Reason`, or why there is no forge
 ---@return string[]? remotes the project's remotes, when they were read before the failure
 function M.resolve(root)
     local backend, err = vcs.require(root)

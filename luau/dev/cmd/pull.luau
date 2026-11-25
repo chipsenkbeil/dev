@@ -42,7 +42,7 @@ end
 function M.commands(root)
     local steps, err = resolve(root)
     if not steps then
-        return { text.sentence(err) }
+        return { dev_command.vcs_sentence(err, root) }
     end
     local lines = {}
     for _, argv in ipairs(steps) do
@@ -60,7 +60,7 @@ end
 function M.run(ctx)
     local steps, err = resolve(ctx.root)
     if not steps then
-        dev_command.die(text.sentence(err))
+        dev_command.die(dev_command.vcs_sentence(err, ctx.root))
     end
     for _, argv in ipairs(steps) do
         dev_command.show(ctx, argv)

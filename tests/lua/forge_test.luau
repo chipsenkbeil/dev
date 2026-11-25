@@ -111,7 +111,7 @@ testing.test("a directory with neither .jj nor .git has no forge", function()
     local root = assert(fs.realpath(support.tempdir()))
     local got, err = forge.resolve(root)
     testing.eq(got, nil)
-    testing.eq(err, "neither .jj nor .git found in " .. root)
+    testing.eq(err, vcs.Reason.NO_CHECKOUT)
     fs.remove(root, { recursive = true })
 end)
 

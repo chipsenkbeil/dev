@@ -2,6 +2,7 @@ local abandon = require("@dev/cmd/abandon")
 local board = require("@dev/board")
 local check = require("@dev/board/check")
 local config = require("@dev/config")
+local dev_command = require("@dev/command")
 local dev_os = require("@dev/os")
 local forge = require("@dev/forge")
 local fs = require("@dev/fs")
@@ -205,7 +206,7 @@ end
 ---The working-copy commit must hold work, carry a description and have no conflicts.
 ---@param root string the project root
 ---@return dev.board.check.State? state the commit and change
----@return string? message why the working copy cannot land
+---@return string? message a `vcs.Reason`, or why the working copy cannot land
 function M.state(root)
     local state, message = check.state(root)
     if not state then
@@ -648,7 +649,7 @@ end
 function M.trunk_problem(root)
     local found, why = forge.resolve(root)
     if not found then
-        return "Trunk cannot be compared. " .. sentence(why)
+        return "Trunk cannot be compared. " .. dev_command.vcs_sentence(why, root)
     end
     local out, code = fetch(root, found.remote)
     if code ~= 0 then
@@ -928,7 +929,7 @@ function M.rebase(root)
     local UNLANDED = "::@- ~ ::trunk()"
     local found, why = forge.resolve(root)
     if not found then
-        return nil, "Trunk cannot be compared. " .. sentence(why)
+        return nil, "Trunk cannot be compared. " .. dev_command.vcs_sentence(why, root)
     end
     local out, code = fetch(root, found.remote)
     if code ~= 0 then
@@ -1616,7 +1617,7 @@ function M.trunk_config(root)
     if vcs.backend(root) == vcs.GIT then
         local found, why = forge.resolve(root)
         if not found then
-            return nil, "Trunk cannot be read. " .. sentence(why)
+            return nil, "Trunk cannot be read. " .. dev_command.vcs_sentence(why, root)
         end
         local ref, ref_why = vcs.remote_trunk(root, found.remote)
         if not ref then
@@ -1941,7 +1942,7 @@ end
 local function git_run(root)
     local found, why = forge.resolve(root)
     if not found then
-        return false, "Trunk cannot be pushed. " .. sentence(why)
+        return false, "Trunk cannot be pushed. " .. dev_command.vcs_sentence(why, root)
     end
     local ref, read_why = vcs.remote_trunk(root, found.remote)
     if not ref then

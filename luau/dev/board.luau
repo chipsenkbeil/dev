@@ -1,4 +1,5 @@
 local config = require("@dev/config")
+local dev_command = require("@dev/command")
 local dev_os = require("@dev/os")
 local text = require("@dev/text")
 
@@ -2090,7 +2091,7 @@ function CardHandle:carry_proof()
     local land = land_module()
     local state, why = land.state(root)
     if not state then
-        return nil, text.sentence(why)
+        return nil, dev_command.vcs_sentence(why, root)
     end
     local comments, message = backend:comments(self.card.id)
     if not comments then

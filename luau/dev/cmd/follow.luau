@@ -80,7 +80,7 @@ local function main_refusal(root, err)
     elseif err == Reason.NO_MAIN then
         return "The git repository at " .. root .. " has no main checkout."
     end
-    return text.sentence(err)
+    return dev_command.vcs_sentence(err, root)
 end
 
 local function short(commit)
@@ -240,7 +240,7 @@ end
 function M.follow(main, rev)
     local backend, err = vcs.require(main)
     if not backend then
-        return "Cannot follow " .. main .. ". " .. text.sentence(err), 1
+        return "Cannot follow " .. main .. ". " .. dev_command.vcs_sentence(err, main), 1
     end
     if backend == vcs.JJ then
         return jj_follow(main, rev)

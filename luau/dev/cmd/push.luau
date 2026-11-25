@@ -184,7 +184,7 @@ end
 function M.commands(root)
     local plan, err = resolve(root)
     if not plan then
-        return { text.sentence(err) }
+        return { dev_command.vcs_sentence(err, root) }
     end
     local lines = {}
     for _, remote in ipairs(plan.remotes) do
@@ -212,7 +212,7 @@ function M.run(opts, args, ctx)
     end
     local plan, err = resolve(ctx.root, #tags > 0)
     if not plan then
-        dev_command.die(text.sentence(err))
+        dev_command.die(dev_command.vcs_sentence(err, ctx.root))
     end
     local remotes = plan.remotes
     if #names > 0 then

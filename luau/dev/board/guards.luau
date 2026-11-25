@@ -2,6 +2,7 @@ local board = require("@dev/board")
 local board_init = require("@dev/board/init")
 local check = require("@dev/board/check")
 local land = require("@dev/board/land")
+local dev_command = require("@dev/command")
 local dev_os = require("@dev/os")
 local text = require("@dev/text")
 local vcs = require("@dev/vcs")
@@ -399,7 +400,7 @@ local function proof_refusal(backend, card, column, opts)
                     board.MIN_PREFIX
                 )} +{board.NO_CHANGE}\`, then move it to Done.`
         else
-            problems[1] = why
+            problems[1] = dev_command.vcs_sentence(why, root)
         end
     end
     local open = done_refusal(card, column)

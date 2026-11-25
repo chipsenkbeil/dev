@@ -25,6 +25,14 @@ local function with_jj(opts, body)
     assert(ok, err)
 end
 
+testing.test("vcs.backend.returns.a.reason.for.a.folder.with.neither", function()
+    local root = project()
+    local backend, err = vcs.backend(root)
+    testing.eq(backend, nil)
+    testing.eq(err, vcs.Reason.NO_CHECKOUT)
+    fs.remove(root, { recursive = true })
+end)
+
 testing.test("a colocated repo without jj uses git", function()
     local root = project(".jj", ".git")
     with_jj({ installed = false }, function()

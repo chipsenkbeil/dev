@@ -3632,7 +3632,7 @@ function commands.check(backend, given, args)
     end
     local before, message = check.state(backend.root)
     if not before then
-        return failure(message)
+        return failure(dev_command.vcs_sentence(message, backend.root))
     end
     local stack = land.stack_note(backend.root)
     if stack then
@@ -3760,7 +3760,7 @@ function commands.review(backend, opts, args)
     end
     local rev, message = review.resolve(backend.root, opts.rev)
     if not rev then
-        return failure(message)
+        return failure(dev_command.vcs_sentence(message, backend.root))
     end
     local recorded
     for _, comment in ipairs(past) do

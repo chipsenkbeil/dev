@@ -2,6 +2,8 @@ local dev_os = require("@dev/os")
 local fs = require("@dev/fs")
 local runtime = require("@dev/runtime")
 local spec_check = require("@dev/spec")
+local dev_text = require("@dev/text")
+local vcs = require("@dev/vcs")
 
 local stderr = dev_os.stderr
 local stdout = dev_os.stdout
@@ -137,6 +139,17 @@ end
 ---@param msg string the whole message
 function M.note(msg)
     stderr:write(msg, "\n")
+end
+
+---Write the sentence for the error of `vcs.require`, `vcs.backend` or `forge.resolve`.
+---@param err string a `vcs.Reason`, or another error that becomes a sentence as it is
+---@param root string absolute path of the project root
+---@return string sentence the message to show
+function M.vcs_sentence(err, root)
+    if err == vcs.Reason.NO_CHECKOUT then
+        return "Neither .jj nor .git found in " .. root .. "."
+    end
+    return dev_text.sentence(err)
 end
 
 ---Print `msg` and exit 1.

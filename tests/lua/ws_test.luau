@@ -36,7 +36,7 @@ echo "git $*" >> "$LOG"
 mkdir -p "$(eval echo \$$#)"
 ]]
 local NO_GIT = "#!/bin/sh\nexit 1\n"
-local NO_REMOTE_MESSAGE = 'The trunk cannot be compared: "the remote of record origin '
+local NO_REMOTE_MESSAGE = 'The trunk cannot be compared: "The remote of record origin '
     .. "is not a remote of this project (detected: no gerrit remote "
     .. 'and origin is not on github.com)".\n'
 

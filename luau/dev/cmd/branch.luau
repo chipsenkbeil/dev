@@ -46,7 +46,7 @@ end
 local function open(ctx)
     local backend, err = vcs.require(ctx.root)
     if not backend then
-        dev_command.die(text.sentence(err))
+        dev_command.die(dev_command.vcs_sentence(err, ctx.root))
     end
     local repo = {
         root = ctx.root,

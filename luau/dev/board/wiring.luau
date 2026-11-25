@@ -785,7 +785,7 @@ local function rebased_change_run(root, ignore)
     end
     local state, bad = land.state(root)
     if not state then
-        return bad
+        return dev_command.vcs_sentence(bad, root)
     end
     return noted_run_problem(land.rebased_run_problem(root, state.commit))
 end
@@ -877,7 +877,7 @@ local function land_problems(backend, card, who)
     local problems = card_problems(backend, card, who)
     local state, message = land.state(backend.root)
     if not state then
-        problems[#problems + 1] = message
+        problems[#problems + 1] = dev_command.vcs_sentence(message, backend.root)
         return problems
     end
     local added = land.added(backend.root, state.commit)
@@ -1130,7 +1130,12 @@ local function land_prepare(opts)
     local message
     local state_ok, bad = land.state(backend.root)
     if not state_ok then
-        return failure("Card " .. short .. " cannot land for these reasons.\n  - " .. bad)
+        return failure(
+            "Card "
+                .. short
+                .. " cannot land for these reasons.\n  - "
+                .. dev_command.vcs_sentence(bad, backend.root)
+        )
     end
     local uploaded = failed_change_run(backend.root, state_ok.commit, opts.ignore_change_run)
     if uploaded then
@@ -1287,7 +1292,12 @@ local function land_held(opts)
     local check_only = opts.prepared.check_only
     local now, bad = land.state(backend.root)
     if not now then
-        return failure("Card " .. short .. " cannot land for these reasons.\n  - " .. bad)
+        return failure(
+            "Card "
+                .. short
+                .. " cannot land for these reasons.\n  - "
+                .. dev_command.vcs_sentence(bad, backend.root)
+        )
     end
     if rebased or now.commit ~= state.commit then
         return { moved = true }
@@ -1496,7 +1506,7 @@ local function settle(opts)
             "Card "
                 .. short
                 .. " cannot land. "
-                .. dev_text.sentence(opts.empty)
+                .. dev_command.vcs_sentence(opts.empty, backend.root)
                 .. " No run of `dev board check` is recorded on the card, so a change already on trunk cannot be matched to it."
         )
     end
@@ -1507,7 +1517,7 @@ local function settle(opts)
                 "Card "
                     .. short
                     .. " cannot land. "
-                    .. dev_text.sentence(opts.empty)
+                    .. dev_command.vcs_sentence(opts.empty, backend.root)
                     .. " Trunk does not hold the change checked at commit "
                     .. land.short(record.commit)
                     .. "."

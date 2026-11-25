@@ -1,6 +1,7 @@
 local testing = require("@dev/testing")
 local dev_os = require("@dev/os")
 local fs = require("@dev/fs")
+local push = require("@dev/cmd/push")
 local support = require("./support")
 
 dev_os.defaults.env = {
@@ -34,6 +35,12 @@ local function cleanup(root, remote)
     fs.remove(root, { recursive = true })
     fs.remove(remote, { recursive = true })
 end
+
+testing.test("push.commands.names.a.stray.folder", function()
+    local root = assert(fs.realpath(support.tempdir()))
+    testing.eq(push.commands(root), { "Neither .jj nor .git found in " .. root .. "." })
+    fs.remove(root, { recursive = true })
+end)
 
 testing.test("push.tag.sends.each.tag.to.the.remote.of.record", function()
     local root, remote = fixture()

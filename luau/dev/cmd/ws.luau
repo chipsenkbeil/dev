@@ -207,7 +207,10 @@ local function fetch_trunk(root, show)
     end
     local found, why = forge.resolve(root)
     if not found then
-        return string.format('The trunk cannot be compared: "%s".', quoted_reason(why))
+        return string.format(
+            'The trunk cannot be compared: "%s".',
+            quoted_reason(dev_command.vcs_sentence(why, root))
+        )
     end
     local argv = vcs.base(root, backend, { quiet = true })
     if backend == vcs.JJ then

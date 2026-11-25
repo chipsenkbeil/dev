@@ -433,7 +433,7 @@ end
 ---Refuses a jj working copy that has conflicts and a git tree that is dirty.
 ---@param root string the project root
 ---@return dev.board.check.State? state the commit and change
----@return string? message why no commit holds the working copy
+---@return string? message a `vcs.Reason`, or why no commit holds the working copy
 function M.state(root)
     local backend, message = vcs.require(root)
     if not backend then

@@ -62,7 +62,7 @@ end
 
 ---Read the commit and change the working copy holds.
 ---@return dev.board.check.State? state the commit and change
----@return string? problem why the working copy has no change to land
+---@return string? problem a `vcs.Reason`, or why the working copy has no change to land
 function Workspace:state()
     return land.state(self.root)
 end

@@ -77,7 +77,7 @@ end
 ---@param root string the project root
 ---@param rev string a jj revset or a git revision
 ---@return dev.board.review.Rev? resolved the commit and change ids
----@return string? message why the revision is not one commit
+---@return string? message a `vcs.Reason`, or why the revision is not one commit
 function M.resolve(root, rev: string)
     if rev == "" or rev:find("^%-") or rev:find("%c") then
         return nil, string.format("%q is not a revision", rev)

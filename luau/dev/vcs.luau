@@ -9,11 +9,16 @@ local fs = require("@dev/fs")
 ---@class dev.vcs.git_push.Opts
 ---@field git_dir string? the git folder to push from, the working folder's when unset
 
+---The reasons a project has no backend
+---@enum dev.vcs.Reason
+local Reason = { NO_CHECKOUT = "no_checkout" }
+
 ---@class dev.vcs
 ---@field JJ "jj" the jj backend
 ---@field GIT "git" the git backend
 ---@field LABEL table<dev.vcs.Backend, string> mapping of backend -> name at the start of a message
-local M = { JJ = "jj", GIT = "git", LABEL = { jj = "jj", git = "Git" } }
+---@field Reason table<string, dev.vcs.Reason> the reasons `backend` names
+local M = { JJ = "jj", GIT = "git", LABEL = { jj = "jj", git = "Git" }, Reason = Reason }
 
 local IGNORE_WORKING_COPY = "--ignore-working-copy"
 
@@ -31,7 +36,7 @@ end
 ---`.git` uses git.
 ---@param root string absolute path of the project root
 ---@return dev.vcs.Backend? backend nil when the project has neither
----@return string? err why there is no backend
+---@return dev.vcs.Reason? err `Reason.NO_CHECKOUT` when there is no backend
 function M.backend(root)
     local git = fs.exists(root .. "/.git")
     if fs.is_dir(root .. "/.jj") and (dev_os.which("jj") or not git) then
@@ -40,13 +45,13 @@ function M.backend(root)
     if git then
         return M.GIT
     end
-    return nil, "neither .jj nor .git found in " .. root
+    return nil, Reason.NO_CHECKOUT
 end
 
 ---Pick the backend and check its tool is installed.
 ---@param root string absolute path of the project root
 ---@return dev.vcs.Backend? backend nil on failure
----@return string? err why there is no usable backend
+---@return string? err a `Reason`, or why the backend's tool is missing
 function M.require(root)
     local backend, err = M.backend(root)
     if backend == M.JJ and not dev_os.which("jj") then
