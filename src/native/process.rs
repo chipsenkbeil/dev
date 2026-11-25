@@ -9,7 +9,7 @@ use std::sync::{Mutex, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::native::signals::{self, Foreground};
+use crate::native::signals::{self, Foreground, Start};
 use crate::runtime::{self, SIGNAL_EXIT_BASE};
 use crate::{Error, Result, log, overlay};
 
@@ -316,14 +316,7 @@ fn raise_interrupt() -> Result<()> {
 /// Makes `child` the foreground child, and forwards a signal that arrived while it started.
 fn enter_foreground(child: &Child, group: Group, pending_before: bool) -> Foreground {
     let pid = pid_of(child);
-    let foreground = Foreground::enter(pid, group == Group::Own);
-    #[cfg(unix)]
-    if !pending_before && runtime::interrupted() {
-        signals::forward_pending(pid, group == Group::Own);
-    }
-    #[cfg(windows)]
-    let _ = pending_before;
-    foreground
+    Foreground::enter(pid, group == Group::Own, Start::from(pending_before))
 }
 
 /// Runs the command, writing `input` to its standard input, and collects its standard output.

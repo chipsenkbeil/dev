@@ -18,12 +18,93 @@ pub const PIPE: i32 = 13;
 /// Signal number of SIGTERM.
 pub const TERM: i32 = 15;
 
-/// The foreground child a signal is forwarded to, 0 for none, and whether it leads its own
-/// process group.
-static FOREGROUND: Mutex<(i32, bool)> = Mutex::new((0, false));
+/// The foreground child a signal is forwarded to, and the signal that came before there was one.
+static FOREGROUND: Mutex<State> = Mutex::new(State::new());
+
+/// A signal that came while no child was in the foreground.
+#[cfg(unix)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Parked {
+    /// Number of the signal.
+    signal: i32,
+    /// Who delivered it.
+    sender: Sender,
+}
+
+/// A signal to pass on to a child.
+#[cfg(unix)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Forward {
+    /// Child that gets the signal.
+    pid: i32,
+    /// Whether that child leads its own process group.
+    own_group: bool,
+    /// Number of the signal.
+    signal: i32,
+    /// Who delivered it.
+    sender: Sender,
+}
+
+/// What the signal thread and the thread that starts a child agree on, under one lock.
+#[derive(Debug)]
+struct State {
+    /// The foreground child, 0 for none.
+    pid: i32,
+    /// Whether the foreground child leads its own process group.
+    own_group: bool,
+    /// The last signal that found no foreground child while the interrupt was pending.
+    #[cfg(unix)]
+    parked: Option<Parked>,
+}
+
+impl State {
+    /// Returns the state with no foreground child.
+    #[must_use]
+    const fn new() -> Self {
+        Self {
+            pid: 0,
+            own_group: false,
+            #[cfg(unix)]
+            parked: None,
+        }
+    }
+
+    /// Decides where a signal goes: to the foreground child while the interrupt is still
+    /// pending, and otherwise nowhere, with the signal kept for the next child to enter.
+    #[cfg(unix)]
+    fn deliver(&mut self, signal: i32, sender: Sender, pending: bool) -> Option<Forward> {
+        if !pending {
+            return None;
+        }
+        match forward_target((self.pid, self.own_group), pending) {
+            Some((pid, own_group)) => Some(Forward {
+                pid,
+                own_group,
+                signal,
+                sender,
+            }),
+            None => {
+                self.parked = Some(Parked { signal, sender });
+                None
+            }
+        }
+    }
+
+    /// Takes the signal kept for the child that is now in the foreground, when it is still due.
+    #[cfg(unix)]
+    fn claim(&mut self, due: bool) -> Option<Forward> {
+        let parked = self.parked.take().filter(|_| due)?;
+        Some(Forward {
+            pid: self.pid,
+            own_group: self.own_group,
+            signal: parked.signal,
+            sender: parked.sender,
+        })
+    }
+}
 
 /// Locks the foreground child, even after a thread panicked while holding it.
-fn foreground() -> MutexGuard<'static, (i32, bool)> {
+fn foreground() -> MutexGuard<'static, State> {
     FOREGROUND.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
@@ -49,6 +130,25 @@ pub fn send(pid: i32, signal: i32) -> bool {
     sent.is_ok()
 }
 
+/// Whether an interrupt was already pending when a child started.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Start {
+    /// No interrupt was pending.
+    Clear,
+    /// An interrupt was pending, so the child started after it.
+    Interrupted,
+}
+
+impl From<bool> for Start {
+    fn from(pending: bool) -> Self {
+        if pending {
+            Self::Interrupted
+        } else {
+            Self::Clear
+        }
+    }
+}
+
 /// Keeps a child as the target of forwarded signals until it is dropped.
 #[derive(Debug)]
 pub struct Foreground {
@@ -63,11 +163,25 @@ impl Foreground {
     ///
     /// A child that leads its own group gets the signal for the whole group. A child in dev's own
     /// group already receives a terminal's interrupt, so it gets SIGTERM, and a SIGINT or SIGHUP
-    /// that another process sent to dev alone.
+    /// that another process sent to dev alone. A signal that came after the child started and
+    /// before this call is passed on here, once, unless `start` says the interrupt was already
+    /// pending when the child started.
     #[must_use]
-    pub fn enter(pid: i32, own_group: bool) -> Self {
-        let (previous_pid, previous_own_group) =
-            std::mem::replace(&mut *foreground(), (pid, own_group));
+    pub fn enter(pid: i32, own_group: bool, start: Start) -> Self {
+        let mut state = foreground();
+        let previous_pid = std::mem::replace(&mut state.pid, pid);
+        let previous_own_group = std::mem::replace(&mut state.own_group, own_group);
+        #[cfg(unix)]
+        {
+            use crate::runtime;
+
+            let due = start == Start::Clear && runtime::interrupted();
+            if let Some(due) = state.claim(due) {
+                forward(due.pid, due.own_group, due.signal, due.sender);
+            }
+        }
+        #[cfg(windows)]
+        let _ = start;
         Self {
             previous_pid,
             previous_own_group,
@@ -77,7 +191,9 @@ impl Foreground {
 
 impl Drop for Foreground {
     fn drop(&mut self) {
-        *foreground() = (self.previous_pid, self.previous_own_group);
+        let mut state = foreground();
+        state.pid = self.previous_pid;
+        state.own_group = self.previous_own_group;
     }
 }
 
@@ -91,9 +207,12 @@ const WATCHED: [i32; 3] = [INT, TERM, HUP];
 /// recording it again here would interrupt a cleanup that runs after the first interrupt.
 #[cfg(unix)]
 fn on_signal(origin: &signal_hook::low_level::siginfo::Origin) {
-    let current = foreground();
-    if let Some((pid, own_group)) = forward_target(*current, crate::runtime::interrupted()) {
-        forward(pid, own_group, origin.signal, sender_of(origin));
+    use crate::runtime;
+
+    let mut state = foreground();
+    let pending = runtime::interrupted();
+    if let Some(due) = state.deliver(origin.signal, sender_of(origin), pending) {
+        forward(due.pid, due.own_group, due.signal, due.sender);
     }
 }
 
@@ -154,21 +273,6 @@ fn forward(pid: i32, own_group: bool, signal: i32, sender: Sender) {
     } else if reaches_group_child(signal, sender) {
         let _ = send(pid, signal);
     }
-}
-
-/// Passes the interrupt that is pending on to child `pid`.
-///
-/// The sender of a pending interrupt is unknown, so a child in dev's group gets only TERM.
-#[cfg(unix)]
-pub fn forward_pending(pid: i32, own_group: bool) {
-    use crate::runtime;
-
-    forward(
-        pid,
-        own_group,
-        runtime::interrupt_code() - runtime::SIGNAL_EXIT_BASE,
-        Sender::Terminal,
-    );
 }
 
 /// Returns the number of the signal called `name`, with or without the `SIG` prefix.
@@ -256,6 +360,37 @@ mod tests {
         assert!(reaches_group_child(HUP, Sender::Process));
         assert!(!reaches_group_child(INT, Sender::Terminal));
         assert!(!reaches_group_child(HUP, Sender::Terminal));
+    }
+
+    #[test]
+    fn claim_should_pass_a_process_sent_int_that_came_before_the_child_to_a_group_child() {
+        let mut state = State::new();
+        assert_eq!(state.deliver(INT, Sender::Process, true), None);
+        state.pid = 42;
+        let due = state.claim(true).expect("the parked signal is due");
+        assert_eq!((due.pid, due.signal), (42, INT));
+        assert!(reaches_group_child(due.signal, due.sender));
+        assert_eq!(state.claim(true), None);
+    }
+
+    #[test]
+    fn claim_should_pass_nothing_when_the_interrupt_was_pending_before_the_child() {
+        let mut state = State::new();
+        assert_eq!(state.deliver(INT, Sender::Process, true), None);
+        state.pid = 42;
+        assert_eq!(state.claim(false), None);
+    }
+
+    #[test]
+    fn deliver_should_forward_to_a_foreground_child_and_park_nothing() {
+        let mut state = State::new();
+        state.pid = 42;
+        let due = state
+            .deliver(INT, Sender::Process, true)
+            .expect("a forward");
+        assert_eq!(due.pid, 42);
+        assert_eq!(state.claim(true), None);
+        assert_eq!(state.deliver(INT, Sender::Process, false), None);
     }
 
     #[test]
