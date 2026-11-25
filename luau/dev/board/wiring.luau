@@ -832,10 +832,15 @@ local function credential_problems(comments, state)
     local problems = {}
     for _, shared in ipairs(land.shared_credentials(comments, state)) do
         problems[#problems + 1] = string.format(
-            "The %s review by %s was recorded on the credential of %s, which claimed the card.",
+            "The %s review by %s was recorded on the credential of %s, which claimed the card. "
+                .. "Record a new %s review from a reviewer credential, which a reviewer holds only "
+                .. "when its agent name has the form PROJECT/SEAT-reviewer/CARD "
+                .. "(for example PROJECT/%s-reviewer/CARD).",
             shared.kind,
             shared.by,
-            shared.claimant
+            shared.claimant,
+            shared.kind,
+            shared.kind
         )
     end
     return problems

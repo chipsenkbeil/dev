@@ -358,8 +358,26 @@ testing.test("land refuses a review recorded on the claimant's credential", func
         testing.eq(
             problems[1],
             "The code review by r was recorded on the credential of dotfiles/implementer/c1, "
-                .. "which claimed the card."
+                .. "which claimed the card. Record a new code review from a reviewer credential, "
+                .. "which a reviewer holds only when its agent name has the form "
+                .. string.format(
+                    "PROJECT/SEAT-reviewer/CARD (for example PROJECT/%s-reviewer/CARD).",
+                    "code"
+                )
         )
+    end)
+end)
+
+testing.test("the credential refusal names the kind to record again", function()
+    local comments = {
+        claimed_by("runner-token", "dotfiles/implementer/c1"),
+        on_credential("runner-token", reviewed("style", COMMIT)),
+    }
+    with_reviewer_token(true, function()
+        local problems = wiring.credential_problems(comments, STATE)
+        testing.eq(#problems, 1)
+        testing.ok(problems[1]:find("Record a new style review", 1, true), problems[1])
+        testing.ok(problems[1]:find("for example PROJECT/style-", 1, true), problems[1])
     end)
 end)
 

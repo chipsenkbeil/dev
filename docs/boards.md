@@ -3437,7 +3437,11 @@ lists each one that fails. A refusal can leave the change rebased onto trunk.
   comment. The newest review of each kind counts, whoever recorded it, so an
   older review on that credential does not refuse once a newer one of the same
   kind is recorded under any reviewer name, on any credential. The refusal names
-  the reviewer and the claimant. With no `reviewer_token` the check is skipped.
+  the reviewer and the claimant, and the kind to record again. To clear it,
+  record a new review of that kind (with the same `--of` for a recheck) from a
+  reviewer credential, which a reviewer holds only when its agent name has the
+  form `PROJECT/SEAT-reviewer/CARD`, where `SEAT` is `code`, `style` or
+  `recheck`. With no `reviewer_token` the check is skipped.
 - On a Pomb board every seat must be approved at the landing commit. Land reads
   the seats with the seat read, and a seat that asks for changes, has not
   answered or approved another commit refuses and is named. A seat of the code
