@@ -234,6 +234,9 @@ reset
 DEV_AGENT=dotfiles/runner/x box box create --ttl 6 >/dev/null 2>&1
 assert_eq "create passes --ttl" "$(calls)" "ci box create --by dotfiles/runner/x --ttl 6 --json"
 reset
+DEV_AGENT=dotfiles/runner/x box box create --wait 30m >/dev/null 2>&1
+assert_eq "create passes --wait" "$(calls)" "ci box create --by dotfiles/runner/x --wait 30m --json"
+reset
 DEV_AGENT=dotfiles/runner/x box box create --by agent:s2 >/dev/null 2>&1
 assert_eq "create passes --by over DEV_AGENT" "$(calls)" "ci box create --by agent:s2 --json"
 reset
@@ -765,6 +768,7 @@ out="$(box help box create)"
 assert_contains "create help states the default lifetime" "$out" "4 hours"
 assert_contains "create help names the target and shape" "$out" "--target <string>"
 assert_contains "create help lists --keep" "$out" "--keep"
+assert_contains "create help lists --wait" "$out" "--wait <string>"
 assert_eq "completion box lists the subcommands" "$(box __complete -- box "" | cut -f1 | paste -sd' ' -)" "connect create delete extend ls resume retag show stop targets tools"
 assert_eq "completion box create" "$(box __complete -- box create -- | cut -f1 | sed -n 1,6p | paste -sd' ' -)" "--target --shape --arch --by --ttl --keep"
 assert_eq "completion box delete" "$(box __complete -- box delete -- | cut -f1 | sed -n 1,3p | paste -sd' ' -)" "--yes --no-archive --help"

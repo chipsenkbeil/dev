@@ -103,6 +103,7 @@ local State, Exit = M.State, M.Exit
 ---@field by string? who made the box
 ---@field ttl string? the hours to live
 ---@field keep boolean? whether the box has no expiry
+---@field wait string? how long ci waits for room
 ---@field yes boolean? whether to skip the delete question
 ---@field no_archive boolean? whether a delete skips the archive
 ---@field ssh boolean? whether to connect through `ci ssh`
@@ -119,6 +120,7 @@ local State, Exit = M.State, M.Exit
 ---@field by string? the `--by` value
 ---@field ttl string? the `--ttl` hours
 ---@field keep boolean whether `--keep` was given
+---@field wait string? the `--wait` duration
 ---@field yes boolean whether `-y` or `--yes` was given
 ---@field all boolean whether `--all` was given
 ---@field json boolean whether `--json` was given
@@ -133,6 +135,7 @@ local State, Exit = M.State, M.Exit
 ---@field by string? who asks, `human:` and the user when nil
 ---@field ttl string? the lifetime in hours
 ---@field keep boolean whether the box is kept
+---@field wait string? how long ci waits for room, ci's default when nil
 ---@field projects string[] the projects to put on the box
 
 ---Render a decoded value for a message, null as `null`.
@@ -330,6 +333,7 @@ function M.gather(ctx, opts, args)
         shape = opts.shape,
         arch = opts.arch,
         by = opts.by,
+        wait = opts.wait,
         pos = {},
     }
     if opts.ttl ~= nil then
@@ -602,6 +606,7 @@ function M.create(opts)
     append_flag(args, "--by", requester(opts.by))
     append_flag(args, "--ttl", opts.ttl)
     append_flag(args, "--keep", opts.keep)
+    append_flag(args, "--wait", opts.wait)
     args[#args + 1] = "--json"
     if #opts.projects > 0 then
         args[#args + 1] = "--"
@@ -1290,6 +1295,7 @@ function M.create_from_flags(opts, args, ctx)
         by = parsed.by,
         ttl = parsed.ttl,
         keep = parsed.keep,
+        wait = parsed.wait,
         projects = projects,
     })
     return 0

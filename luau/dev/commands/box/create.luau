@@ -12,6 +12,7 @@ return dev_command({
         { name = "by", kind = "string", help = "A label for who made it" },
         { name = "ttl", kind = "string", help = "Hours to live, a whole number" },
         { name = "keep", kind = "boolean", help = "Keep the box with no expiry" },
+        { name = "wait", kind = "string", help = "Wait this long for room, such as 30m" },
     },
     args = {
         { name = "projects", list = true },

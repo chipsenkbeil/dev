@@ -60,7 +60,7 @@ is `✓ fits` or ci's reason in dim. `--json` prints ci's document unchanged.
 
 ```
 dev box create [--target T] [--shape S] [--arch ARCH] [--by LABEL]
-[--ttl HOURS | --keep] [PROJECT...]
+[--ttl HOURS | --keep] [--wait DURATION] [PROJECT...]
 ```
 
 Inside a project with no project named, dev passes the project root's
@@ -69,6 +69,10 @@ as it is. Without it ci gets no `--arch` flag and picks `x86_64`.
 
 The lifetime is 4 hours unless you pass `--ttl HOURS` or `--keep`. `--ttl`
 takes a whole number of hours, and `--ttl` with `--keep` exits 2.
+
+`--wait DURATION`, such as `30m`, goes to `ci box create` as it is, so ci
+queues the create behind a full box cap or a busy host for that long. Without
+it ci gets no `--wait` flag, and dev retries nothing itself.
 
 `--by` defaults to `$DEV_AGENT`, else `human:$USER` (or `human:$LOGNAME`) when
 stdin is a terminal, and dev always passes it. With none of those, dev exits
@@ -303,7 +307,7 @@ Every box is named by ci, and dev takes the host only from the box's
   - `--json` prints ci's targets document (the first line) unchanged, without
     the shapes document.
 - `create [--target T] [--shape S] [--arch ARCH] [--by LABEL] [--ttl HOURS or
-  --keep] [PROJECT...]`: creates a box and prints its line.
+  --keep] [--wait DURATION] [PROJECT...]`: creates a box and prints its line.
   - On a terminal (standard input and output are both terminals) with no
     `--target`, it asks which target to run (`What should the <project> box
     run?`). Rows are `<target>  <OS> · <image>  from <min shape>  @ <machines>`
