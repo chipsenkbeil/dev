@@ -720,6 +720,34 @@ local function leave_landed(path)
     end
 end
 
+---Read the working copy of a jj workspace whose folder is gone.
+---@param root string the folder jj runs in
+---@param name string the workspace's name
+---@param path string the missing folder
+---@return boolean held whether the working copy holds changes, or could not be read
+---@return dev.cmd.ws.Reason? why the refusal, set when held
+local function unsaved_missing(root, name, path)
+    local escaped = name:gsub('[\\"]', "\\%0")
+    local argv = vcs.with(
+        vcs.base(root, vcs.JJ, { quiet = true }),
+        "--ignore-working-copy",
+        "log",
+        "-r",
+        `"{escaped}"@ ~ ::trunk()`,
+        "--no-graph",
+        "-T",
+        'if(empty || description != "", "", "changes")'
+    )
+    local out, code = dev_os.capture(argv, { stderr = "stdout" })
+    if code ~= 0 then
+        return true, { reason = Refusal.UNREADABLE, path = path, detail = first_line(out) }
+    end
+    if out ~= "" then
+        return true, { reason = Refusal.DIRTY, path = path }
+    end
+    return false
+end
+
 local function remove_missing(root, name, opts)
     local backend = vcs.backend(root)
     if backend ~= vcs.JJ and backend ~= vcs.GIT then
@@ -730,6 +758,12 @@ local function remove_missing(root, name, opts)
     end
     if backend == vcs.JJ and (name == "default" or forgotten(root, name)) then
         return refused({ reason = Refusal.NOT_FORGETTABLE, name = name })
+    end
+    if backend == vcs.JJ then
+        local held, why = unsaved_missing(root, name, opts.missing)
+        if held then
+            return refused(why)
+        end
     end
     local ok, why = detach(root, name, { backend = backend, path = opts.missing, show = opts.show })
     if not ok then
@@ -1086,6 +1120,10 @@ local function prune_workspaces(ctx, steps, opts)
             ok = true
             if step.kind == Step.DONE and fs.is_link(step.path) then
                 ok, why = false, { reason = Refusal.LINK, path = step.path }
+            elseif step.kind == Step.GONE and opts.backend == vcs.JJ then
+                local held
+                held, why = unsaved_missing(ctx.root, step.name, step.path)
+                ok = not held
             elseif step.kind == Step.DONE then
                 ok, why =
                     M.__clean(opts.backend, step.path, { stale_ok = true, described_ok = true })

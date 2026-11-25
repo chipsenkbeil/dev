@@ -375,7 +375,10 @@ process is killed. `ws.__processes_proc` finds them on Linux from the
 
 `ws.remove` also takes `opts.missing`, the folder jj or git recorded. A folder
 that is gone skips every folder check, and the call only forgets the jj
-workspace or removes the git worktree record, never the default workspace.
+workspace or removes the git worktree record, never the default workspace. A
+jj workspace whose working copy is not empty, not described and not in trunk is
+refused as holding changes not in a commit, and a dry run keeps it too. An
+empty working copy is forgotten with its commit.
 
 `ws prune [--dry-run]` clears what finished work leaves behind, for a jj or a
 git project. Each action is one sentence on standard output and the last line

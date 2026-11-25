@@ -2927,3 +2927,72 @@ testing.test("prune dry-run names the merged git branch and deletes nothing", fu
     testing.ok(out:find("Would delete merged branch merged.", 1, true), out)
     testing.eq(has_branch(root, "merged"), true)
 end)
+
+if dev_os.which("jj") then
+    local function gone_workspace(change)
+        local env, base = adopt_env()
+        local root = support.sandbox({}, {})
+        local init = { stdout = "null", stderr = "null", env = IDENT }
+        assert(dev_os.run({ "jj", "git", "init", root }, init) == 0, "jj git init failed")
+        assert(fs.write(root .. "/base", "1"))
+        local _, code = real_jj(root, "commit", "-m", "base")
+        testing.eq(code, 0)
+        local path = base .. "/elsewhere/gone"
+        assert(fs.mkdir(base .. "/elsewhere", { parents = true }))
+        _, code = real_jj(root, "workspace", "add", "--name", "gone", "-r", "@-", path)
+        testing.eq(code, 0)
+        if change then
+            assert(fs.write(path .. "/work", "1"))
+        end
+        local head = real_jj(path, "log", "-r", "@", "--no-graph", "-T", "commit_id")
+        assert(fs.remove(path, { recursive = true }))
+        return root, path, env, head
+    end
+
+    local function all_ids(root)
+        return real_jj(root, "log", "-r", "all()", "--no-graph", "-T", 'commit_id ++ "\\n"')
+    end
+
+    testing.test("prune keeps a gone jj workspace whose working copy holds changes", function()
+        -- Lose the folder of a workspace that held an undescribed change
+        local root, path, env, head = gone_workspace(true)
+
+        -- Prune so the gone workspace is judged
+        local out, code = support.dev(root, { "ws", "prune" }, env)
+
+        -- Expect the workspace named and kept, with its working copy still there
+        testing.eq(code, 0, out)
+        local kept = "Kept workspace gone. " .. path .. " holds changes not in a commit"
+        testing.ok(out:find(kept, 1, true), out)
+        testing.ok(real_jj(root, "workspace", "list"):find("gone:", 1, true) ~= nil)
+        testing.ok(all_ids(root):find(head, 1, true) ~= nil)
+    end)
+
+    testing.test("prune dry-run keeps a gone jj workspace that holds changes", function()
+        -- Lose the folder of a workspace that held an undescribed change
+        local root, path, env = gone_workspace(true)
+
+        -- Plan the prune
+        local out, code = support.dev(root, { "ws", "prune", "--dry-run" }, env)
+
+        -- Expect the plan to name the workspace as kept
+        testing.eq(code, 0, out)
+        local kept = "Kept workspace gone. " .. path .. " holds changes not in a commit"
+        testing.ok(out:find(kept, 1, true), out)
+        testing.ok(real_jj(root, "workspace", "list"):find("gone:", 1, true) ~= nil)
+    end)
+
+    testing.test("prune forgets an empty gone jj workspace and leaves no head", function()
+        -- Lose the folder of a workspace whose working copy is empty
+        local root, _, env, head = gone_workspace(false)
+
+        -- Prune so the gone workspace is forgotten
+        local out, code = support.dev(root, { "ws", "prune" }, env)
+
+        -- Expect the workspace forgotten and its working-copy commit gone
+        testing.eq(code, 0, out)
+        testing.ok(out:find("Forgot workspace gone.", 1, true), out)
+        testing.eq(real_jj(root, "workspace", "list"):find("gone:", 1, true), nil)
+        testing.eq(all_ids(root):find(head, 1, true), nil)
+    end)
+end
