@@ -184,7 +184,7 @@ end
 ---   Pomb's refusal and `no_seat` when the card has no such seat and the token cannot add it, nil
 ---   on a board with no seats
 ---@field seats fun(self: dev.board.Backend, id: string): dev.board.Seat[]?, string? the seats the
----   card holds, each with its name, holder, role, verdict, revision and idle flag, a nil verdict
+---   card holds, each with its name, holder, role, verdict and revision, a nil verdict
 ---   and revision before an answer, an empty list for a card with no seats, or nil and why the read
 ---   failed. The field is optional: it is nil on a board with no seats
 ---@field reset_seat (fun(self: dev.board.Backend, id: string, seat: string): boolean?, string?,
@@ -359,7 +359,6 @@ end
 ---@field role string? the role the seat is for
 ---@field verdict string? `approved` or `changes_needed`, nil before an answer
 ---@field revision string? the change the holder suggests with the verdict
----@field idle boolean? whether the seat has no live holder
 
 ---@class dev.board.Ask
 ---@field text string? the question

@@ -1548,7 +1548,6 @@ function Backend:seats(id)
                 role = json.present(seat.role),
                 verdict = json.present(seat.verdict),
                 revision = json.present(seat.revision),
-                idle = json.present(seat.idle),
             }
         end
     end

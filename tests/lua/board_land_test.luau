@@ -460,8 +460,14 @@ testing.test("land skips the credential check when no reviewer token is set", fu
     end)
 end)
 
-local function seat(name, verdict, revision, idle)
-    return { name = name, role = "reviewer", verdict = verdict, revision = revision, idle = idle }
+local function seat(name, verdict, revision, holder)
+    return {
+        name = name,
+        role = "reviewer",
+        verdict = verdict,
+        revision = revision,
+        holder = holder,
+    }
 end
 
 local function with_seats(seats)
@@ -477,13 +483,34 @@ local function seat_opts(carried, comments)
 end
 
 testing.test("land.refuses.a.seat.still.waiting", function()
-    local problems = land.seats_problem({ seat("code", nil, nil, false) }, COMMIT, seat_opts())
+    local problems = land.seats_problem({ seat("code", nil, nil, "r") }, COMMIT, seat_opts())
     testing.eq(problems, { "The reviewer seat code has not answered." })
+    local style = with_seats({ seat("style", nil, nil, "r") })
+    testing.eq(wiring.seat_problems(style, { id = "c" }, STATE, seat_opts()), {
+        "The reviewer seat style has not answered.",
+    })
+end)
+
+testing.test("an.open.seat.asks.nothing", function()
+    local open = with_seats({ seat("code") })
+    testing.eq(land.seats_problem({ seat("code") }, COMMIT, seat_opts()), {})
+    testing.eq(wiring.seat_problems(open, { id = "c" }, STATE, seat_opts()), {})
+end)
+
+testing.test("a.working.seat.has.not.answered", function()
+    local problems = land.seats_problem({ seat("code", nil, nil, "r") }, COMMIT, seat_opts())
+    testing.eq(problems, { "The reviewer seat code has not answered." })
+end)
+
+testing.test("a.reasked.seat.has.not.answered", function()
+    local reasked = seat("code", nil, OTHER, "r")
     testing.eq(
-        wiring.seat_problems(with_seats({ seat("style") }), { id = "c" }, STATE, seat_opts()),
-        {
-            "The reviewer seat style has not answered.",
-        }
+        land.seats_problem({ reasked }, COMMIT, seat_opts(OTHER)),
+        { "The reviewer seat code has not answered." }
+    )
+    testing.eq(
+        wiring.seat_problems(with_seats({ reasked }), { id = "c" }, STATE, seat_opts(OTHER)),
+        { "The reviewer seat code has not answered." }
     )
 end)
 
@@ -519,7 +546,7 @@ testing.test("land.lands.when.every.seat.approved.the.revision", function()
     local seats = {
         seat("code", review.SeatVerdict.APPROVED, COMMIT),
         seat("style", review.SeatVerdict.APPROVED, OTHER),
-        seat("recheck", nil, nil, true),
+        seat("recheck"),
     }
     testing.eq(land.seats_problem(seats, COMMIT, seat_opts(OTHER)), {})
     testing.eq(wiring.seat_problems(with_seats(seats), { id = "c" }, STATE, seat_opts(OTHER)), {})
@@ -626,7 +653,7 @@ testing.test("land.lands.on.a.recheck.of.a.stale.seat", function()
     local seats = {
         seat(review.Kind.CODE, review.SeatVerdict.APPROVED, OTHER),
         seat(review.Kind.STYLE, review.SeatVerdict.APPROVED, OTHER),
-        seat(review.Kind.RECHECK, nil, nil, true),
+        seat(review.Kind.RECHECK),
     }
     local comments = {
         rechecked_as(review.Kind.CODE, COMMIT, review.Verdict.CLEAN),

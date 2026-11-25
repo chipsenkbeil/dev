@@ -396,7 +396,7 @@ end
 ---@field role string? the seat's role
 ---@field verdict string? the answer, nil before one
 ---@field revision string? the commit the answer is about
----@field idle boolean? true when nobody took the seat
+---@field holder string? the credential that took the seat, nil when nobody did
 
 ---List the kinds whose newest recheck at a commit is clean or minor.
 ---@param comments {body: string}[] the card's comments, oldest first
@@ -459,7 +459,7 @@ function M.seats_problem(seats, commit, opts)
                 reason = string.format("The %s asks for changes.", label)
             end
         elseif seat.verdict ~= review.SeatVerdict.APPROVED then
-            if seat.verdict ~= nil or not seat.idle then
+            if seat.verdict ~= nil or seat.holder ~= nil then
                 reason = string.format("The %s has not answered.", label)
             end
         elseif revision == nil or (stale and not covered) then

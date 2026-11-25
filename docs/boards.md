@@ -326,7 +326,7 @@ token of its own.
   again only after `dev board token revoke --as NAME` or its expiry.
 - The seat read: `Backend:seats` reads the card seats from the task, with `GET
   /api/tasks/ID`, and returns a list of `{name, holder, role, verdict,
-  revision, idle}`. A seat that has not answered has no verdict and no
+  revision}`. A seat that has not answered has no verdict and no
   revision, and a task with no `seats` key gives an empty list. A failed read
   returns nil and the reason. A local board has no seats and leaves the field
   unset.
