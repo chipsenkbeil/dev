@@ -239,7 +239,7 @@ STUB
 @test "a SIGINT sent to dev's pid alone stops a child in dev's group" {
     local ready="$BATS_TEST_TMPDIR/ready" started=$SECONDS devpid
     set -m
-    dev -l "$RUN_CHILD" sh -c 'touch "$1"; exec sleep 8.654' sh "$ready" >/dev/null 2>&1 &
+    dev -l "$RUN_CHILD" sh -c ': >"$1"; exec sleep 8.654' sh "$ready" >/dev/null 2>&1 &
     devpid=$!
     set +m
     pty_wait_for "$ready"
