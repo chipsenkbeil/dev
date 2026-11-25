@@ -677,3 +677,52 @@ testing.test("split_lua gives selene the .lua files and luau-analyze the .luau f
     testing.eq(lua, { "a.lua", ".ci/d.lua" })
     testing.eq(luau, { "b.luau", "e/f.luau" })
 end)
+
+testing.test("stanza headers flags the unheaded stanza of a three-stanza function", function()
+    local mixed = table.concat({
+        "local function f()",
+        "    -- Make a",
+        "    local a = 1",
+        "",
+        "    run(a)",
+        "",
+        "    -- Check a",
+        "    check(a)",
+        "end",
+        "",
+    }, "\n")
+    testing.eq(lintset.unheaded(mixed), { 5 })
+    local root = support.tempdir()
+    assert(fs.write(root .. "/mixed.luau", mixed))
+    local lint = lint_for(root)
+    local original = dev_command.note
+    local notes = {}
+    dev_command.note = function(text)
+        notes[#notes + 1] = text
+    end
+    local ok, err = pcall(lint.stanza_headers, lint, "mixed.luau")
+    dev_command.note = original
+    assert(ok, err)
+    testing.eq(lint.failed, { "stanza headers" })
+    testing.eq(notes, { "mixed.luau:5: stanza with no intent comment above it, add one" })
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("stanza headers passes a three-stanza function with every stanza headed", function()
+    local headed = table.concat({
+        "local function f()",
+        "    -- Make a",
+        "    local a = 1",
+        "",
+        "    -- Run a",
+        "    run(a)",
+        "",
+        "    -- Check a",
+        "    check(a)",
+        "end",
+        "",
+    }, "\n")
+    testing.eq(lintset.unheaded(headed), {})
+    local two = "local function f()\n    a()\n\n    b()\nend\n"
+    testing.eq(lintset.unheaded(two), {})
+end)
