@@ -3419,6 +3419,57 @@ print("carry: " .. tostring(ok) .. " " .. tostring(why))
         end
     )
 
+    local function seats_at(commit)
+        return {
+            seat(review.Kind.CODE, review.SeatVerdict.APPROVED, commit),
+            seat(review.Kind.STYLE, review.SeatVerdict.APPROVED, commit),
+            seat(review.Kind.RECHECK, review.SeatVerdict.APPROVED, commit),
+        }
+    end
+
+    local function stale_line(name, answered, landing)
+        return "The reviewer seat "
+            .. name
+            .. " approved commit "
+            .. land.short(answered)
+            .. ", not the commit "
+            .. land.short(landing)
+            .. " that would land."
+    end
+
+    testing.test("a seat that answered an earlier commit with an empty interdiff is met", function()
+        local project = jj_project()
+        local answered = head(project.root)
+        jj(project.root, "describe", "-m", "feat: work again")
+        local landing = head(project.root)
+        local seats = seats_at(answered)
+        testing.eq(land.seats_problem(seats, landing, seat_opts()), {
+            stale_line(review.Kind.CODE, answered, landing),
+            stale_line(review.Kind.STYLE, answered, landing),
+            stale_line(review.Kind.RECHECK, answered, landing),
+        })
+        local opts = { comments = {}, root = project.root }
+        testing.eq(land.seats_problem(seats, landing, opts), {})
+        local changes = seat(review.Kind.CODE, review.SeatVerdict.CHANGES_NEEDED, answered)
+        testing.eq(land.seats_problem({ changes }, landing, opts), {
+            "The reviewer seat " .. review.Kind.CODE .. " asks for changes.",
+        })
+    end)
+
+    testing.test("a seat at an earlier commit with a changed patch is refused", function()
+        local project = jj_project()
+        local answered = head(project.root)
+        assert(fs.write(project.root .. "/more.txt", "more\n"), "write failed")
+        local landing = head(project.root)
+        testing.ok(landing ~= answered)
+        local opts = { comments = {}, root = project.root }
+        testing.eq(land.seats_problem(seats_at(answered), landing, opts), {
+            stale_line(review.Kind.CODE, answered, landing),
+            stale_line(review.Kind.STYLE, answered, landing),
+            stale_line(review.Kind.RECHECK, answered, landing),
+        })
+    end)
+
     local function checked_past_reviews(project)
         local id = new_card(project)
         to_verify(project, id)

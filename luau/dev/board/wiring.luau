@@ -943,6 +943,7 @@ local function land_problems(backend, card, who)
     local seat_lines = seat_problems(backend, card, state, {
         carried = not check_only and carried or nil,
         comments = who.comments,
+        root = backend.root,
     })
     for _, line in ipairs(seat_lines) do
         problems[#problems + 1] = line
