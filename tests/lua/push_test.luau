@@ -42,6 +42,27 @@ testing.test("push.commands.names.a.stray.folder", function()
     fs.remove(root, { recursive = true })
 end)
 
+testing.test("push.commands names a missing jj", function()
+    local root = assert(fs.realpath(support.tempdir()))
+    assert(fs.mkdir(root .. "/.jj"))
+    local which = dev_os.which
+    dev_os.which = function(tool)
+        if tool == "jj" then
+            return nil
+        end
+        return which(tool)
+    end
+    local ok, err = pcall(function()
+        testing.eq(
+            push.commands(root),
+            { "The tool jj was not found. Install it with `brew install jj`." }
+        )
+    end)
+    dev_os.which = which
+    fs.remove(root, { recursive = true })
+    assert(ok, err)
+end)
+
 testing.test("push.tag.sends.each.tag.to.the.remote.of.record", function()
     local root, remote = fixture()
     git(root, "tag", "v1")

@@ -9,9 +9,9 @@ local fs = require("@dev/fs")
 ---@class dev.vcs.git_push.Opts
 ---@field git_dir string? the git folder to push from, the working folder's when unset
 
----The reasons a project has no backend
+---The reasons a project has no usable backend
 ---@enum dev.vcs.Reason
-local Reason = { NO_CHECKOUT = "no_checkout" }
+local Reason = { NO_CHECKOUT = "no_checkout", NO_JJ = "no_jj" }
 
 ---@class dev.vcs
 ---@field JJ "jj" the jj backend
@@ -51,11 +51,11 @@ end
 ---Pick the backend and check its tool is installed.
 ---@param root string absolute path of the project root
 ---@return dev.vcs.Backend? backend nil on failure
----@return string? err a `Reason`, or why the backend's tool is missing
+---@return dev.vcs.Reason? err a reason when no usable backend exists
 function M.require(root)
     local backend, err = M.backend(root)
     if backend == M.JJ and not dev_os.which("jj") then
-        return nil, "Tool jj not found. Install it with brew install jj."
+        return nil, Reason.NO_JJ
     end
     return backend, err
 end

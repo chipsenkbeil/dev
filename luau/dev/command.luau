@@ -149,6 +149,9 @@ function M.vcs_sentence(err, root)
     if err == vcs.Reason.NO_CHECKOUT then
         return "Neither .jj nor .git found in " .. root .. "."
     end
+    if err == vcs.Reason.NO_JJ then
+        return "The tool jj was not found. Install it with `brew install jj`."
+    end
     return dev_text.sentence(err)
 end
 
