@@ -92,7 +92,9 @@ jobs:
             target=x86_64-unknown-freebsd
             cargo build --release --locked --target "$target"
             binary=target/$target/release/dev
-            ./$binary release test $binary --tag "$DEV_RELEASE_TAG"
+            pw useradd tester -m
+            chown -R tester .
+            su tester -c "cd $PWD && ./$binary release test $binary --tag $DEV_RELEASE_TAG"
       - uses: actions/upload-artifact@v7
         with:
           name: dev-${{ github.ref_name }}-x86_64-unknown-freebsd
