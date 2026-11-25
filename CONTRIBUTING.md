@@ -155,8 +155,13 @@ them too.
    `dev push --tag vX.Y.Z`. Gerrit mirrors it to GitHub.
 2. A Linux x86_64 musl job and one macOS job build with `DEV_RELEASE_TAG` set
    to the tag, so `dev --version` prints it, run `dev release test` on each
-   binary and upload it. The macOS job runs on an Apple-chip runner, builds
-   aarch64 natively and cross-compiles x86_64, which it tests under Rosetta.
+   binary and upload it. The Linux job builds with `cargo zigbuild` for the
+   musl C++ compiler that `mlua-sys` needs for Luau and Ubuntu lacks. It pins
+   Zig 0.17.1 and cargo-zigbuild 0.24.1, which caches the Zig download under a
+   fixed key, and fails unless `file` reports the binary as static. Every job
+   sets `timeout-minutes` to keep a hung step from holding a release. The
+   macOS job runs on an Apple-chip runner, builds aarch64 natively and
+   cross-compiles x86_64, which it tests under Rosetta.
 3. A last job runs the built Linux binary's `dev release publish`, which writes
    `SHA256SUMS` and creates the GitHub release, as a pre-release when the tag
    holds `-pre.`.

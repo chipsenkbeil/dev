@@ -15,6 +15,7 @@ jobs:
   build:
     name: build x86_64-unknown-linux-musl
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     env:
       TARGET: x86_64-unknown-linux-musl
     steps:
@@ -22,11 +23,19 @@ jobs:
       - name: Add the Rust target
         run: rustup target add "$TARGET"
       - uses: mlugg/setup-zig@v2
+        timeout-minutes: 5
+        with:
+          version: 0.17.1
       - uses: taiki-e/install-action@v2
         with:
-          tool: cargo-zigbuild
+          tool: cargo-zigbuild@0.24.1
       - name: Build the release binary
         run: cargo zigbuild --release --locked --target "$TARGET"
+      - name: Require a static binary
+        run: |
+          binary=target/$TARGET/release/dev
+          file "$binary"
+          file "$binary" | grep -q 'static'
       - name: Test the release binary
         run: |
           binary=target/$TARGET/release/dev
@@ -40,6 +49,7 @@ jobs:
   build-macos:
     name: build both macOS targets
     runs-on: macos-26
+    timeout-minutes: 30
     env:
       ARM: aarch64-apple-darwin
       INTEL: x86_64-apple-darwin
@@ -75,6 +85,7 @@ jobs:
   build-freebsd:
     name: build x86_64-unknown-freebsd
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
       - name: Build and test inside FreeBSD
@@ -104,6 +115,7 @@ jobs:
   build-windows:
     name: build x86_64-pc-windows-msvc
     runs-on: windows-2025
+    timeout-minutes: 30
     defaults:
       run:
         shell: bash
@@ -128,6 +140,7 @@ jobs:
     needs: [build, build-macos, build-freebsd, build-windows]
     if: ${{ startsWith(github.ref, 'refs/tags/v') && !cancelled() && needs.build.result == 'success' && needs.build-macos.result == 'success' && needs.build-freebsd.result == 'success' && needs.build-windows.result == 'success' }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: write
     env:
