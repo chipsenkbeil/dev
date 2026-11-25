@@ -372,11 +372,15 @@ local function depends_on(doc, from, goal, seen)
     return false
 end
 
-local function is_blocked(doc, card, release_column)
+local function is_blocked(doc, card, release_column, except)
     for _, blocker in ipairs(blockers(card)) do
         local held = find_by_id(doc.cards, blocker)
         local column = held and find_by_id(doc.columns, held.column_id)
-        if held and not (column and (column.is_done or column.name == release_column)) then
+        if
+            held
+            and blocker ~= except
+            and not (column and (column.is_done or column.name == release_column))
+        then
             return true, blocker
         end
     end
@@ -386,8 +390,9 @@ end
 ---Report whether a card outside Done blocks a card.
 ---A blocker the board no longer holds does not.
 ---@param id string the card id
+---@param except string? nil when unset, the id of a blocker to leave out
 ---@return boolean? blocked, string? blocker the open blocker's id, or the message when nil
-function Backend:blocked(id)
+function Backend:blocked(id, except)
     local doc, message = self:__read()
     if not doc then
         return nil, message
@@ -397,7 +402,7 @@ function Backend:blocked(id)
     if not card then
         return nil, message
     end
-    return is_blocked(doc, card, (self.stages or board.stages()).release)
+    return is_blocked(doc, card, (self.stages or board.stages()).release, except)
 end
 
 function Backend:link(id, kind, other)

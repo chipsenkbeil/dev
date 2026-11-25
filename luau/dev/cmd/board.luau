@@ -100,6 +100,7 @@ local OWNER_SEAT_CODE = "owner_seat"
 local SEAT_NAME_PATTERN = "^[%w_-]+$"
 local WAIT_FLAG = "--wait"
 local FROM_FLAG = "--from"
+local ON_FLAG = "--on"
 local IGNORE_CHANGE_RUN_FLAG = "--ignore-change-run"
 local LEAD_TOKEN_KEY = "lead_token"
 local REVIEWER_TOKEN_KEY = "reviewer_token"
@@ -1585,14 +1586,36 @@ end
 ---Refuse a card that has not started while an open card blocks it.
 ---@param backend dev.board.Backend the board
 ---@param card dev.board.Card the card
+---@param on dev.board.Card? nil when unset, the card the take starts on, which may block it
 ---@return dev.cmd.board.Result? refused the failure, nil when the card has started or is free
-local function blocker_refusal(backend, card)
+local function blocker_refusal(backend, card, on)
     if not before_work(backend.stages, card) then
         return nil
     end
     local blocked, blocker = backend:blocked(card.id)
     if blocked == nil then
         return failure(blocker)
+    end
+    if on then
+        if not blocked then
+            return failure(
+                "Card "
+                    .. card.id:sub(1, board.MIN_PREFIX)
+                    .. " is not blocked by card "
+                    .. on.id:sub(1, board.MIN_PREFIX)
+                    .. ". "
+                    .. ON_FLAG
+                    .. " starts a card on the open card that blocks it."
+            )
+        end
+        local rest, other = backend:blocked(card.id, on.id)
+        if rest == nil then
+            return failure(other)
+        end
+        if not rest then
+            return nil
+        end
+        blocker = other
     end
     if not blocked then
         return nil
@@ -3945,9 +3968,11 @@ end
 ---Make the workspace of a card that a take claimed, or find the one it already has.
 ---@param root string absolute path of the project root dev runs in
 ---@param short string the card's short id, which names its workspace
+---@param on string? nil when unset, the short id of the card whose change the workspace starts on
 ---@return string? path the workspace folder, nil when none was made
 ---@return string? why what stopped it, nil when the project has no version control
-function M.new_workspace(root, short)
+---@return boolean? fresh true when this call made the workspace
+function M.new_workspace(root, short, on)
     local ws = require("@dev/cmd/ws")
     if not vcs.backend(root) then
         return nil
@@ -3956,11 +3981,19 @@ function M.new_workspace(root, short)
     if found then
         return found
     end
-    local path, message, code = ws.make(root, short, function() end)
+    local path, message, code = ws.make(root, short, function() end, { on = on })
     if path then
-        return path
+        return path, nil, true
     end
     return nil, message or ("the version control command exited " .. code)
+end
+
+---Find the folder of a card's workspace.
+---@param root string absolute path of the project root dev runs in
+---@param short string the card's short id, which names its workspace
+---@return string? path the workspace folder, nil when the card has none
+function M.workspace_of(root, short)
+    return require("@dev/cmd/ws").path(root, short)
 end
 
 ---@class dev.cmd.board.companion_cards.Opts
@@ -5185,6 +5218,105 @@ function commands.lint(backend, opts, args)
     }
 end
 
+---Read the card that a take with `--on` starts on, refusing one that is not in flight or has no workspace.
+---@param backend dev.board.Backend the board
+---@param card dev.board.Card the card being taken
+---@param word string the card word that `--on` names
+---@param clock dev.cmd.board.move.Opts? the workspace finder, injected by tests
+---@return dev.board.Card? base the card to start on
+---@return dev.cmd.board.Result? refused the failure
+local function stack_base(backend, card, word, clock)
+    local stages = backend.stages
+    local base, err = find_card(backend, word)
+    if not base then
+        return nil, err
+    end
+    local short = card.id:sub(1, board.MIN_PREFIX)
+    local under = base.id:sub(1, board.MIN_PREFIX)
+    if base.id == card.id then
+        return nil, failure("Card " .. short .. " cannot start on itself.")
+    end
+    if
+        base.column ~= stages.progress
+        and base.column ~= stages.review
+        and base.column ~= stages.verify
+    then
+        return nil,
+            failure(
+                string.format(
+                    "Card %s is in %s, not in %s, %s or %s, so card %s cannot start on it.",
+                    under,
+                    base.column,
+                    stages.progress,
+                    stages.review,
+                    stages.verify,
+                    short
+                )
+            )
+    end
+    if backend.root and vcs.backend(backend.root) then
+        local find = if clock and clock.workspace_of then clock.workspace_of else M.workspace_of
+        if not find(backend.root, under) then
+            return nil,
+                failure(
+                    "Card "
+                        .. under
+                        .. " has no workspace, so card "
+                        .. short
+                        .. " has no change to start on."
+                )
+        end
+    end
+    return base
+end
+
+---@class dev.cmd.board.note_stack.Opts
+---@field card dev.board.Card the card that took
+---@field on dev.board.Card the card its workspace starts on
+---@field fence integer the fence of the taker's claim
+
+---Note on both cards that the taken card's workspace starts on the other card's change.
+---@param backend dev.board.Backend the board
+---@param opts dev.cmd.board.note_stack.Opts the two cards and the claim
+local function note_stack(backend, opts)
+    local short = opts.card.id:sub(1, board.MIN_PREFIX)
+    local under = opts.on.id:sub(1, board.MIN_PREFIX)
+    local notes = {
+        {
+            opts.card.id,
+            string.format(
+                "stacked: the workspace starts on card %s's change, and landing waits until card %s has landed.",
+                under,
+                under
+            ),
+            opts.fence,
+            { kind = board.NoteKind.STATUS },
+        },
+        {
+            opts.on.id,
+            string.format(
+                "stacked: card %s was taken with %s %s, and its workspace builds on this card's change. Rewriting this change rebases it.",
+                short,
+                ON_FLAG,
+                under
+            ),
+        },
+    }
+    for _, args in ipairs(notes) do
+        local ok, message = backend:note(table.unpack(args))
+        if not ok then
+            dev_command.note(
+                "Card "
+                    .. short
+                    .. " is stacked on "
+                    .. under
+                    .. ", but a note was not posted. "
+                    .. message
+            )
+        end
+    end
+end
+
 ---Claim a card once, refusing with the full-column code when the in-flight limit is full.
 ---@param backend dev.board.Backend the board
 ---@param opts table<string, any> the parsed flags
@@ -5224,13 +5356,21 @@ local function take_once(backend, opts, args, clock)
             return failure(from .. " already holds card " .. short .. ".")
         end
     end
+    local on
+    if opts.on then
+        local why_on
+        on, why_on = stack_base(backend, card, opts.on, clock)
+        if not on then
+            return why_on
+        end
+    end
     local refused = runner.refusal(card, limit)
     if refused then
         return refused
     end
     local stages = backend.stages
     if not plans_card(stages, card, name) then
-        refused = blocker_refusal(backend, card)
+        refused = blocker_refusal(backend, card, on)
         if refused then
             return refused
         end
@@ -5318,9 +5458,25 @@ local function take_once(backend, opts, args, clock)
         end
     end
     if backend.root and card.column == stages.progress and card.kind ~= board.Kind.EPIC then
-        local path, why = (clock and clock.new_workspace or M.new_workspace)(backend.root, short)
+        local under = on and on.id:sub(1, board.MIN_PREFIX)
+        local make = if clock and clock.new_workspace then clock.new_workspace else M.new_workspace
+        local path, why, fresh = make(backend.root, short, under)
         if path then
-            result.output = result.output .. "\nworkspace " .. path
+            result.output ..= "\nworkspace " .. path
+            if on and fresh then
+                result.output ..= "\nstacked on " .. under
+                note_stack(backend, { card = card, on = on, fence = fence })
+            elseif on then
+                dev_command.note(
+                    "Card "
+                        .. short
+                        .. " already had a workspace, so "
+                        .. ON_FLAG
+                        .. " did not stack it on card "
+                        .. under
+                        .. "."
+                )
+            end
         elseif why then
             dev_command.note(
                 "Took card "

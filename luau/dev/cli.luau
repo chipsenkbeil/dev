@@ -10,6 +10,7 @@ local registry = require("@dev/registry")
 local remote = require("@dev/remote")
 local root = require("@dev/root")
 local spec_check = require("@dev/spec")
+local stack = require("@dev/stack")
 local vcs = require("@dev/vcs")
 local version = require("@dev/version")
 
@@ -557,6 +558,14 @@ function M.main(parsed)
     end
     if name == "help" and not parsed.remote and not (row and row.script) then
         return help.run(ctx, reg)
+    end
+    local refusal, notice = stack.refresh(project_root)
+    if notice then
+        stderr:write(notice, "\n")
+    end
+    if refusal then
+        stderr:write(refusal, "\n")
+        dev_os.exit(1)
     end
     if parsed.remote and not fetch_job and not patch_job then
         return remote.run(ctx, words, tail(rest, math.max(1, #rest - parsed.after + 1)), {

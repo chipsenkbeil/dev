@@ -2,6 +2,7 @@ local cmd_board = require("@dev/cmd/board")
 local dev_os = require("@dev/os")
 local forge = require("@dev/forge")
 local fs = require("@dev/fs")
+local stack = require("@dev/stack")
 local dev_text = require("@dev/text")
 local vcs = require("@dev/vcs")
 local dev_command = require("@dev/command")
@@ -312,6 +313,7 @@ end
 
 ---@class dev.cmd.ws.plan.Opts
 ---@field start string? nil when unset, the git start point of the worktree
+---@field rev string? nil when unset, the jj revision the workspace starts on, else trunk
 
 local function plan(root, name, path, opts)
     local backend = vcs.backend(root)
@@ -323,7 +325,7 @@ local function plan(root, name, path, opts)
             "--name",
             name,
             "-r",
-            "trunk()",
+            opts.rev or "trunk()",
             path
         )
     end
@@ -383,14 +385,68 @@ function M.new(opts, args, ctx)
     return 0
 end
 
+local function first_line(text)
+    for line in text:gmatch("[^\n]+") do
+        if line:find("%S") then
+            return line
+        end
+    end
+    return nil
+end
+
+---@class dev.cmd.ws.make.Opts
+---@field on string? nil when unset, the name of the workspace whose change the new one starts on
+
 ---Make the workspace NAME of the project at `root`, as `dev ws new` does, and print nothing.
+---
+---With `opts.on` the workspace starts on the change of that workspace instead of trunk: a jj
+---workspace on a new change above its working copy, a git worktree on a new branch off its
+---branch. The workspace records what it sits on, so `stack.refresh` can keep it current.
 ---@param root string absolute path of the project root
 ---@param name string the workspace folder's name
 ---@param show fun(argv: string[]) called with each command before it runs
+---@param opts dev.cmd.ws.make.Opts? where the workspace starts
 ---@return string? path the workspace folder, nil when it was not made
 ---@return string? message the sentence that says why it was not made
 ---@return integer? code the exit code of the jj or git command that failed, with no message
-function M.make(root, name, show)
+function M.make(root, name, show, opts)
+    local on = opts and opts.on
+    local under_tip
+    if on then
+        local under_path = M.path(root, on)
+        if not under_path then
+            return nil, "Workspace " .. on .. " does not exist, so there is no change to start on."
+        end
+        if vcs.backend(root) == vcs.JJ then
+            dev_os.capture(
+                vcs.with(
+                    vcs.base(under_path, vcs.JJ, { quiet = true }),
+                    "workspace",
+                    "update-stale"
+                ),
+                { stderr = "null" }
+            )
+            dev_os.capture(
+                vcs.with(
+                    vcs.base(under_path, vcs.JJ, { quiet = true }),
+                    "log",
+                    "-r",
+                    "@",
+                    "--no-graph",
+                    "-T",
+                    "''"
+                ),
+                { stderr = "null" }
+            )
+        end
+        if vcs.backend(root) == vcs.GIT then
+            under_tip = stack.tip(root, on)
+            if not under_tip then
+                return nil,
+                    "The branch " .. on .. " does not exist, so there is nothing to start on."
+            end
+        end
+    end
     local marked = false
     for _, marker in ipairs({ ".jj", ".git", ".dev" }) do
         marked = marked or fs.exists(root .. "/" .. marker)
@@ -423,7 +479,12 @@ function M.make(root, name, show)
             return nil, stuck
         end
     end
-    local argv = plan(root, name, path, { start = start })
+    local rev
+    if on then
+        rev = string.format('"%s"@', (on:gsub('[\\"]', "\\%0")))
+        start = on
+    end
+    local argv = plan(root, name, path, { start = start, rev = rev })
     if argv == nil then
         made, why = fs.mkdir(path)
         if not made then
@@ -436,16 +497,10 @@ function M.make(root, name, show)
             return nil, nil, code
         end
     end
-    return path
-end
-
-local function first_line(text)
-    for line in text:gmatch("[^\n]+") do
-        if line:find("%S") then
-            return line
-        end
+    if on then
+        stack.write(path, { on = on, tip = under_tip })
     end
-    return nil
+    return path
 end
 
 ---@class dev.cmd.ws.clean.Opts

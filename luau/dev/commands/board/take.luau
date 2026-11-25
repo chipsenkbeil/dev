@@ -8,6 +8,7 @@ return dev_command({
         { name = "as", kind = "string", help = "Claim as NAME" },
         { name = "from", kind = "string", help = "Take over the claim held by NAME" },
         { name = "max-size", kind = "string", help = "Largest size to take" },
+        { name = "on", kind = "string", help = "Start the workspace on card A's change" },
         { name = "wait", kind = "string", help = "Seconds to wait for room" },
     },
     args = {

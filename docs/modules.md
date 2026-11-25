@@ -302,9 +302,14 @@ only the refusal of the workspace dev runs in, which `dev board land` uses when
 it removes the card's workspace. With `opts.inside` a jj workspace whose `@`
 holds a change already on trunk is first moved to a new change on trunk.
 
-`ws new NAME` calls `ws.make(root, name, show)`, which returns the folder, or
-nil with a sentence, or nil with the exit code of a failed jj or git command.
-`dev board take` uses it. `ws.path(root, name)` finds the folder of a workspace,
+`ws new NAME` calls `ws.make(root, name, show, opts)`, which returns the folder,
+or nil with a sentence, or nil with the exit code of a failed jj or git command.
+`dev board take` uses it. With `opts.on` set to another workspace's name the
+workspace starts on that workspace's change, and `stack.write` records it.
+`stack.refresh(root)` runs before each dev command and reads the record: jj
+updates a stale workspace and reports conflicts, git rebases onto the other
+branch's new tip or returns the sentence that refuses the command.
+`ws.path(root, name)` finds the folder of a workspace,
 and `ws.work(path)` lists what it holds that has not landed: for jj the
 non-empty commits above trunk (the working copy included), for git the commits
 not on the local or remote trunk branch (a pushed card branch still counts)

@@ -3956,6 +3956,20 @@ testing.test(
     end
 )
 
+testing.test("blocked leaves out the blocker it is told to except", function()
+    local _, home = local_board()
+    local ready = support.COLUMN_NAME.READY
+    local backend = localboard.new({ name = "mine", path = file_of(home), private = true })
+    local blocked = assert(backend:add("blocked", ready, {}))
+    local first = assert(backend:add("first", ready, {}))
+    local second = assert(backend:add("second", ready, {}))
+    assert(backend:link(blocked.id, "blocked_by", first.id))
+    testing.eq({ backend:blocked(blocked.id) }, { true, first.id })
+    testing.eq({ backend:blocked(blocked.id, first.id) }, { false })
+    assert(backend:link(blocked.id, "blocked_by", second.id))
+    testing.eq({ backend:blocked(blocked.id, first.id) }, { true, second.id })
+end)
+
 testing.test("wait on a local board answers at once that there is nothing to wait on", function()
     local backend = require("@dev/board/localboard").new({ name = "mine" })
     local got, message = backend:wait("1", { "task_added" }, 5)

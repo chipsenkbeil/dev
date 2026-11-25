@@ -1868,6 +1868,36 @@ The card's workspace:
 - The removal is the one behind `dev ws rm`, which moves the folder to the
   trash.
 
+A card stacked on another, `dev board take B --on A`:
+
+- It lets two agents share a stack: A is the card whose change B builds on.
+  The take skips the `blocked_by` refusal for A only. Another open blocker
+  still refuses, and so does a B that A does not block.
+- A must be In Progress, Review or Verify on the same board and have a
+  workspace, else the take refuses before it claims. A in Backlog or Done, and
+  A equal to B, refuse.
+- B's workspace is made by the same path as any card's and starts on A's
+  change: a jj workspace on a new change above A's working copy, or a git
+  worktree on a new branch off A's branch. The output adds `stacked on A`, and
+  a status note on B and a note on A say so.
+- The workspace records what it sits on, in `.jj/dev-on` for jj and in the
+  worktree's own git directory for git. Before each dev command that runs in
+  it, dev reads the record.
+- jj: jj itself rebases B's change when A's is rewritten, as all workspaces
+  share one repo, so dev runs `jj workspace update-stale` in B first. A
+  conflict from that rebase stays recorded in B's change, dev prints that the
+  workspace has conflicts, and `check` and `land` refuse B until they are
+  resolved.
+- git: when A's branch has moved, dev runs `git rebase --onto NEW OLD B` first.
+  On a conflict dev aborts the rebase, leaves B's branch as it was and refuses
+  the command with a sentence naming the conflicting files. A worktree with
+  uncommitted changes, a detached HEAD or a rebase in progress refuses the same
+  way, before dev starts a rebase. When branch A is gone because A landed, dev
+  rebases B from A's recorded tip onto the remote trunk and drops the record.
+  The hook runs before `--remote` dispatch too.
+- `land` refuses B while A has not landed, with the refusal for a change on an
+  unlanded parent. When A lands, B moves onto trunk through the child rule.
+
 `move` refuses to take a claimed card out of In Progress to Review, Ready or
 Blocked (exit 1) until its claimant has left a note after claiming it. The
 refusal reads ``Card ID has no note from its claimant NAME since the claim. It
@@ -4516,8 +4546,9 @@ Elsewhere:
 
 ### take
 
-`dev board take CARD [--as NAME] [--from NAME] [--max-size N] [--wait SECONDS]`
-claims the card and starts the keep-alive loop.
+`dev board take CARD [--as NAME] [--from NAME] [--on CARD] [--max-size N]
+[--wait SECONDS]` claims the card and starts the keep-alive loop. `--on CARD`
+is described under the card's workspace.
 
 A full in-flight limit:
 

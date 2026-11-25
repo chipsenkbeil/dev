@@ -13,6 +13,8 @@ local runtime = require("@dev/runtime")
 local fs = require("@dev/fs")
 local guards = require("@dev/board/guards")
 local json = require("@dev/json")
+local land = require("@dev/board/land")
+local stack = require("@dev/stack")
 local pomb = require("@dev/board/pomb")
 local queue_store = require("@dev/board/queue")
 local runner = require("@dev/board/runner")
@@ -122,12 +124,12 @@ local function fake(cards, times, finished)
     function backend:has_field()
         return not backend.nofield
     end
-    function backend:blocked(id)
+    function backend:blocked(id, except)
         if backend.blocked_error then
             return nil, backend.blocked_error
         end
         local held = (backend.blockers or {})[id]
-        if held then
+        if held and held ~= except then
             return true, held
         end
         return false
@@ -5743,6 +5745,46 @@ testing.test("a board with no host prints no link", function()
     local added = "added cccccccc " .. support.COLUMN_NAME.BACKLOG
     testing.eq(cmd_board.run("add", new_card_args(), backend).output, added)
     testing.eq(cmd_board.run("next", {}, backend).output:find("link:", 1, true), nil)
+end)
+
+testing.test("pomb blocked skips the excepted blocker and counts every other open one", function()
+    local backend = assert(pomb.new({
+        url = "https://pomb.example/",
+        token = "pass:secrets/worker/token/pomb",
+        name = "dotfiles",
+    }))
+    local links = {}
+    function backend:__load()
+        self.__detail = {
+            id = "board-1",
+            columns = {
+                { id = "col-p", name = support.COLUMN_NAME.PROGRESS },
+                { id = "col-r", name = support.COLUMN_NAME.REVIEW },
+            },
+            swimlanes = {},
+        }
+        self.__colors, self.__values = {}, {}
+        return true
+    end
+    function backend:__request(_, path)
+        if path == "/api/boards" then
+            return { { id = "board-1", name = "dotfiles" } }
+        elseif path:find("/links", 1, true) then
+            return links
+        end
+        return {
+            tasks = {
+                { id = ID_A, name = "a", column_id = "col-p", labels = {} },
+                { id = ID_B, name = "b", column_id = "col-r", labels = {} },
+            },
+        }
+    end
+    links = { { kind = "blocked_by", target_id = ID_A } }
+    testing.eq({ backend:blocked(ID_C) }, { true, ID_A })
+    testing.eq({ backend:blocked(ID_C, ID_A) }, { false })
+    links = { { kind = "blocked_by", target_id = ID_A }, { kind = "blocked_by", target_id = ID_B } }
+    testing.eq({ backend:blocked(ID_C, ID_A) }, { true, ID_B })
+    testing.eq({ backend:blocked(ID_C, ID_D) }, { true, ID_A })
 end)
 
 testing.test("pomb card url joins the host and the card id", function()
@@ -15953,6 +15995,10 @@ for _, kind in ipairs({ "jj", "git" }) do
                 JJ_FORGE = "",
                 JJ_USER = IDENT.JJ_USER,
                 JJ_EMAIL = IDENT.JJ_EMAIL,
+                GIT_AUTHOR_NAME = "t",
+                GIT_AUTHOR_EMAIL = "t@example.com",
+                GIT_COMMITTER_NAME = "t",
+                GIT_COMMITTER_EMAIL = "t@example.com",
             }
             local previous = {}
             for name, value in pairs(vars) do
@@ -16137,6 +16183,215 @@ for _, kind in ipairs({ "jj", "git" }) do
                 testing.eq(fs.exists(path), false)
             end)
         end)
+
+        local UNDER = "dddddddd"
+
+        local function commit_in(path, file, text, message)
+            assert(fs.write(path .. "/" .. file, text))
+            if kind == "jj" then
+                quietly({ "jj", "-R", path, "describe", "-m", message }, IDENT)
+            else
+                support.git(path, "add", "-A")
+                support.git(path, "commit", "-q", "-m", message)
+            end
+        end
+
+        local function rewrite_in(path, file, text)
+            assert(fs.write(path .. "/" .. file, text))
+            if kind == "jj" then
+                quietly({ "jj", "-R", path, "status" }, IDENT)
+            else
+                support.git(path, "add", "-A")
+                support.git(path, "commit", "-q", "--amend", "--no-edit")
+            end
+        end
+
+        local function stacked(root)
+            local a = workspace(root)
+            commit_in(a, "a.txt", "one\n", "feat: a")
+            local b, why = cmd_board.new_workspace(root, UNDER, SHORT)
+            return a, assert(b, why)
+        end
+
+        local function run_dev(path)
+            local env = {
+                JJ_USER = IDENT.JJ_USER,
+                JJ_EMAIL = IDENT.JJ_EMAIL,
+                GIT_AUTHOR_NAME = "t",
+                GIT_AUTHOR_EMAIL = "t@example.com",
+                GIT_COMMITTER_NAME = "t",
+                GIT_COMMITTER_EMAIL = "t@example.com",
+                DEV_WS_ROOT = dev_os.getenv("DEV_WS_ROOT"),
+                XDG_STATE_HOME = dev_os.getenv("XDG_STATE_HOME"),
+            }
+            return support.dev(path, { "ws", "ls" }, { cwd = path, env = env })
+        end
+
+        testing.test(
+            kind .. " take --on starts the workspace on the other card's change",
+            function()
+                within(function(root)
+                    local a, b = stacked(root)
+                    testing.eq(fs.read(b .. "/a.txt"), "one\n")
+                    testing.eq(stack.read(b).on, SHORT)
+                    testing.eq(fs.read(a .. "/a.txt"), "one\n")
+                end)
+            end
+        )
+
+        testing.test(kind .. " a workspace on a card with no workspace is not made", function()
+            within(function(root)
+                local path, why = cmd_board.new_workspace(root, UNDER, SHORT)
+                testing.eq(path, nil)
+                testing.ok(why:find("does not exist", 1, true), why)
+                local base = dev_os.getenv("DEV_WS_ROOT") .. "/" .. fs.basename(root)
+                testing.eq(fs.exists(base .. "/" .. UNDER), false)
+            end)
+        end)
+
+        testing.test(
+            kind .. " take --on refuses a card with no workspace before it claims",
+            function()
+                within(function(root)
+                    local under = colored("green")
+                    under.column = support.COLUMN_NAME.PROGRESS
+                    under.outcomes = outcomes(1, 1)
+                    local card = colored("green")
+                    card.id = ID_D
+                    card.column = support.COLUMN_NAME.READY
+                    local backend = fake({ under, card })
+                    backend.root = root
+                    backend.blockers = { [ID_D] = ID_C }
+                    function backend:claim()
+                        error("the card was claimed")
+                    end
+                    local result = cmd_board.take(
+                        backend,
+                        { UNDER, "--on", SHORT, "--as", "dotfiles/implementer/" .. UNDER }
+                    )
+                    testing.eq(result.code, 1)
+                    testing.ok(result.message:find("has no workspace", 1, true), result.message)
+                end)
+            end
+        )
+
+        testing.test(kind .. " a rewrite of the other card leaves the workspace fresh", function()
+            within(function(root)
+                local a, b = stacked(root)
+                rewrite_in(a, "a.txt", "two\n")
+                local out, code = run_dev(b)
+                testing.eq(code, 0, out)
+                testing.eq(fs.read(b .. "/a.txt"), "two\n")
+            end)
+        end)
+
+        testing.test(
+            kind .. " a rewrite that conflicts is reported and the land is refused",
+            function()
+                within(function(root)
+                    local a, b = stacked(root)
+                    commit_in(b, "a.txt", "from b\n", "feat: b")
+                    local before = support.rev(b, "HEAD")
+                    rewrite_in(a, "a.txt", "two\n")
+                    local out, code = run_dev(b)
+                    if kind == "jj" then
+                        testing.eq(code, 0, out)
+                        testing.ok(out:find("holds conflicts", 1, true), out)
+                        local state, why = land.state(b)
+                        testing.eq(state, nil)
+                        testing.ok(why:find("has conflicts", 1, true), why)
+                    else
+                        testing.eq(code, 1, out)
+                        testing.ok(out:find("conflicts in a.txt", 1, true), out)
+                        testing.eq(support.rev(b, "HEAD"), before)
+                        local status = dev_os.capture({ "git", "-C", b, "status", "--porcelain" })
+                        testing.eq(status, "")
+                        local git_dir = dev_os.capture({ "git", "-C", b, "rev-parse", "--git-dir" })
+                        testing.eq(fs.exists(git_dir:gsub("\n$", "") .. "/rebase-merge"), false)
+                    end
+                end)
+            end
+        )
+
+        if kind == "git" then
+            testing.test(
+                "git a stacked worktree follows trunk when the other card landed",
+                function()
+                    within(function(root)
+                        local a, b = stacked(root)
+                        commit_in(b, "b.txt", "b\n", "feat: b")
+                        assert(fs.write(root .. "/t.txt", "t\n"))
+                        support.git(root, "add", "-A")
+                        support.git(root, "commit", "-q", "-m", "trunk moves")
+                        support.git(root, "push", "-q", "origin", "master")
+                        support.git(a, "fetch", "-q", "origin")
+                        support.git(a, "rebase", "-q", "origin/master")
+                        support.git(a, "push", "-q", "origin", "HEAD:master")
+                        support.git(root, "worktree", "remove", "--force", a)
+                        support.git(root, "branch", "-D", SHORT)
+                        support.git(root, "fetch", "-q", "origin")
+                        local refusal, notice = stack.refresh(b)
+                        testing.eq(refusal, nil)
+                        testing.eq(notice, nil)
+                        testing.eq(stack.read(b), nil)
+                        testing.eq(fs.read(b .. "/a.txt"), "one\n")
+                        testing.eq(fs.read(b .. "/t.txt"), "t\n")
+                        local out, code = dev_os.capture({
+                            "git",
+                            "-C",
+                            b,
+                            "merge-base",
+                            "--is-ancestor",
+                            "origin/master",
+                            "HEAD",
+                        })
+                        testing.eq(code, 0, out)
+                        local moved, why = land.rebase(b)
+                        testing.eq(moved, false, tostring(why))
+                    end)
+                end
+            )
+
+            testing.test(
+                "git a stacked worktree with uncommitted changes refuses to follow",
+                function()
+                    within(function(root)
+                        local a, b = stacked(root)
+                        rewrite_in(a, "a.txt", "two\n")
+                        assert(fs.write(b .. "/a.txt", "dirty\n"))
+                        local refusal = stack.refresh(b)
+                        testing.ok(refusal:find("uncommitted changes", 1, true), tostring(refusal))
+                        testing.eq(fs.read(b .. "/a.txt"), "dirty\n")
+                        testing.eq(stack.read(b).on, SHORT)
+                    end)
+                end
+            )
+
+            testing.test("git a detached stacked worktree is left alone", function()
+                within(function(root)
+                    local a, b = stacked(root)
+                    support.git(b, "checkout", "-q", "--detach")
+                    local before = support.rev(b, "HEAD")
+                    rewrite_in(a, "a.txt", "two\n")
+                    local refusal = stack.refresh(b)
+                    testing.ok(refusal:find("detached", 1, true), tostring(refusal))
+                    testing.eq(support.rev(b, "HEAD"), before)
+                end)
+            end)
+        end
+
+        testing.test(
+            kind .. " land refuses the stacked card while the other has not landed",
+            function()
+                within(function(root)
+                    local _, b = stacked(root)
+                    commit_in(b, "b.txt", "b\n", "feat: b")
+                    local moved, why = land.rebase(b)
+                    testing.eq(moved, nil)
+                    testing.ok(tostring(why):find("unlanded parent", 1, true), tostring(why))
+                end)
+            end
+        )
     end
 end
 
@@ -16186,4 +16441,138 @@ testing.test("take makes no workspace for a project with no version control", fu
     end)
     testing.eq(result.code, nil, result.message)
     testing.eq(result.output:find("\nworkspace ", 1, true), nil)
+end)
+
+---@class test.taken_on.Opts
+---@field column string the column of the card to start on
+---@field blockers table<string, string>? the blockers the board reports, by card id
+---@field maker fun(root: string, short: string, on: string?): string?, string?, boolean? the workspace maker
+---@field args string[]? the words after the card, `--on cccccccc` when unset
+
+---@param opts test.taken_on.Opts the other card and the maker
+local function taken_on(opts)
+    local result, backend
+    support.with_env("XDG_STATE_HOME", support.tempdir(), function()
+        local under = colored("green")
+        under.column = opts.column
+        under.outcomes = outcomes(1, 1)
+        local card = colored("green")
+        card.id = ID_D
+        card.column = support.COLUMN_NAME.READY
+        backend = fake({ under, card })
+        backend.root = "/proof"
+        backend.timed = false
+        backend.blockers = opts.blockers or { [ID_D] = ID_C }
+        function backend:claim()
+            return 7
+        end
+        function backend:keepalive()
+            return 0
+        end
+        local args = { "dddddddd", "--as", "dotfiles/implementer/dddddddd" }
+        for _, word in ipairs(opts.args or { "--on", "cccccccc" }) do
+            args[#args + 1] = word
+        end
+        result = cmd_board.take(backend, args, { new_workspace = opts.maker })
+    end)
+    return result, backend
+end
+
+local function notes_of(backend)
+    local notes = {}
+    for _, call in ipairs(backend.calls) do
+        if call[1] == "note" and not call[3]:find("dev-claim", 1, true) then
+            notes[#notes + 1] = call
+        end
+    end
+    return notes
+end
+
+testing.test("take --on starts the workspace on the card and notes both cards", function()
+    local asked
+    local result, backend = taken_on({
+        column = support.COLUMN_NAME.REVIEW,
+        maker = function(root, short, on)
+            asked = { root, short, on }
+            return "/w/dddddddd", nil, true
+        end,
+    })
+    testing.eq(result.code, nil, result.message)
+    testing.eq(asked, { "/proof", "dddddddd", "cccccccc" })
+    testing.ok(result.output:find("\nworkspace /w/dddddddd", 1, true), result.output)
+    testing.ok(result.output:find("\nstacked on cccccccc", 1, true), result.output)
+    local notes = notes_of(backend)
+    testing.eq(#notes, 2)
+    testing.eq(notes[1][2], ID_D)
+    testing.eq(notes[1][4], { kind = board.NoteKind.STATUS })
+    testing.ok(notes[1][3]:find("starts on card cccccccc", 1, true), notes[1][3])
+    testing.eq(notes[2][2], ID_C)
+    testing.ok(notes[2][3]:find("--on cccccccc", 1, true), notes[2][3])
+end)
+
+testing.test("take --on takes a card whose blocker is in progress or verify", function()
+    for _, column in ipairs({ support.COLUMN_NAME.PROGRESS, support.COLUMN_NAME.VERIFY }) do
+        local result = taken_on({
+            column = column,
+            maker = function()
+                return "/w/dddddddd", nil, true
+            end,
+        })
+        testing.eq(result.code, nil, result.message)
+    end
+end)
+
+testing.test("take --on refuses a card that is not in flight and makes no workspace", function()
+    for _, column in ipairs({ support.COLUMN_NAME.BACKLOG, support.COLUMN_NAME.DONE }) do
+        local result, backend = taken_on({
+            column = column,
+            maker = function()
+                error("a workspace was made")
+            end,
+        })
+        testing.eq(result.code, 1)
+        testing.ok(result.message:find("cannot start on it", 1, true), result.message)
+        testing.ok(result.message:find("is in " .. column, 1, true), result.message)
+        testing.eq(#notes_of(backend), 0)
+    end
+end)
+
+testing.test("take --on keeps every other blocker and a card nothing blocks", function()
+    local maker = function()
+        error("a workspace was made")
+    end
+    local result = taken_on({
+        column = support.COLUMN_NAME.PROGRESS,
+        blockers = { [ID_D] = "bbbbbbbb" },
+        maker = maker,
+    })
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("blocked by open card bbbbbbbb", 1, true), result.message)
+    result = taken_on({ column = support.COLUMN_NAME.PROGRESS, blockers = {}, maker = maker })
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("is not blocked by card cccccccc", 1, true), result.message)
+end)
+
+testing.test("take --on refuses a card to start on itself", function()
+    local result = taken_on({
+        column = support.COLUMN_NAME.PROGRESS,
+        args = { "--on", "dddddddd" },
+        maker = function()
+            error("a workspace was made")
+        end,
+    })
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("cannot start on itself", 1, true), result.message)
+end)
+
+testing.test("take without --on still refuses a blocked card", function()
+    local result = taken_on({
+        column = support.COLUMN_NAME.PROGRESS,
+        args = {},
+        maker = function()
+            error("a workspace was made")
+        end,
+    })
+    testing.eq(result.code, 1)
+    testing.ok(result.message:find("blocked by open card cccccccc", 1, true), result.message)
 end)
