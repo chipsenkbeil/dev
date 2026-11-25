@@ -1830,10 +1830,9 @@ end
 ---@param backend dev.board.Backend the board
 ---@param card dev.board.Card the card that moved
 ---@param opts dev.cmd.board.move.Opts? the checks and the removal, injected by tests
----@param closed boolean? true when the move closed the card for its empty working copy
 ---@return string lines the cleanup's lines behind a newline, empty when nothing was removed or kept
-local function no_change_clean_up(backend, card, opts, closed)
-    if not (backend.root and (closed or board.labelled(card, board.NO_CHANGE))) then
+local function no_change_clean_up(backend, card, opts)
+    if not (backend.root and board.labelled(card, board.NO_CHANGE)) then
         return ""
     end
     local short = card.id:sub(1, board.MIN_PREFIX)
@@ -1907,39 +1906,6 @@ local function unlanded_refusal(backend, card, verb, opts)
             short
         )
     )
-end
-
----Say whether a card closes with no change: nothing in its working copy and no check run or land.
----
----The working copy is empty when `land.state` says so, or when the card's workspace holds no
----unlanded work. A recorded check run or land note means the card carried a change, which only
----trunk can prove, so it never closes this way.
----@param backend dev.board.Backend the board
----@param card dev.board.Card the card
----@param opts dev.cmd.board.move.Opts? the reads, injected by tests
----@return boolean closes true when the card closes with no change
-local function closes_empty(backend, card, opts)
-    local root = backend.root
-    local read = opts and opts.state or root and vcs.backend(root) and land.state
-    if not root or not read then
-        return false
-    end
-    local comments = backend:comments(card.id)
-    if not comments or land.landed_commit(comments) then
-        return false
-    end
-    for _, comment in ipairs(comments) do
-        local parsed = check.parse(comment.body)
-        if parsed then
-            return false
-        end
-    end
-    local _, why = read(root)
-    if why == land.EMPTY then
-        return true
-    end
-    local path, work = workspace_work(backend, card, opts)
-    return path ~= nil and work ~= nil and #work == 0
 end
 
 ---Remove the workspace of a card that left In Progress, Review and Verify, when it is empty.
@@ -2049,13 +2015,10 @@ local function move_once(backend, flags, words, opts)
         and not (opts and (opts.landed or opts.drop))
         and not board.labelled(card, board.TRUNK_BLOCKER)
         and not (to_done and board.labelled(card, board.NO_CHANGE))
-    local empty_close = proving
-        and to_done
+    local no_change_close = to_done
         and card.column ~= column
-        and closes_empty(backend, card, opts)
-    if empty_close then
-        proving = false
-    end
+        and board.labelled(card, board.NO_CHANGE)
+        and not (opts and (opts.landed or opts.drop))
     if proving and guards.landed_on_trunk(backend, card, opts) then
         local refused = guards.done_refusal(card, column)
         if refused then
@@ -2230,10 +2193,10 @@ local function move_once(backend, flags, words, opts)
         local refused = board.move_refusal(refusal, message, column, lane)
         return to_done and unqueued(failure(refused)) or failure(refused)
     end
-    if empty_close then
+    if no_change_close then
         local noted, why = backend:note(
             card.id,
-            "Closed with no change. The working copy was empty and no check run was recorded.",
+            "Closed with no change. The card carries the no-change label.",
             held and held.fence,
             { kind = board.NoteKind.DONE }
         )
@@ -2268,7 +2231,7 @@ local function move_once(backend, flags, words, opts)
             .. " has every child Done and can close now."
     end
     if card.column ~= column and not (opts and opts.landed) then
-        local cleaned = to_done and no_change_clean_up(backend, card, opts, empty_close) or ""
+        local cleaned = to_done and no_change_clean_up(backend, card, opts) or ""
         if cleaned == "" then
             cleaned = leave_workspace(backend, card, column, opts)
         end

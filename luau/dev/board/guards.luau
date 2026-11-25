@@ -392,7 +392,15 @@ local function proof_refusal(backend, card, column, opts)
             )
         end
     else
-        problems[1] = why
+        if why == land.EMPTY then
+            problems[1] =
+                `{why} To close a card that lands nothing, run \`dev board label {card.id:sub(
+                    1,
+                    board.MIN_PREFIX
+                )} +{board.NO_CHANGE}\`, then move it to Done.`
+        else
+            problems[1] = why
+        end
     end
     local open = done_refusal(card, column)
     if #problems == 0 then

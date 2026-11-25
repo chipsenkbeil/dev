@@ -3730,14 +3730,11 @@ Cleanup never changes the exit code or the card's column.
 
 - A shell left inside the workspace stays in the moved folder under the trash,
   and the output says to run the next command from another folder.
-- A move into Done of a card with the no-change label, or of a card whose
-  working copy holds no change (an empty jj working copy, or a workspace with no
-  unlanded work), that has no recorded check run and no land note, runs the same
-  cleanup after the move line. That card never lands, so the move does it. The
-  cleanup acts only when the working copy is in a folder named for the card and
-  is the card's own workspace, so a move from any other folder, a git main
-  checkout included, removes nothing. A workspace with uncommitted changes
-  stays.
+- A move into Done of a card with the no-change label runs the same cleanup
+  after the move line. That card never lands, so the move does it. The cleanup
+  acts only when the working copy is in a folder named for the card and is the
+  card's own workspace, so a move from any other folder, a git main checkout
+  included, removes nothing. A workspace with uncommitted changes stays.
 - A workspace outside the central root, or one with changes not in a commit,
   stays. The output names it and why.
 - A jj workspace whose `@` holds the landed change is moved to a new change on
@@ -4306,11 +4303,6 @@ The refusals run in this order:
   makes itself skip it, and so does a project with no jj or git checkout. So
   does a move into Done of a card with the no-change label, a spike or a
   check-only card that ships no change, which still needs every outcome ticked.
-  So does a move into Done of a card without the label whose working copy holds
-  no change, which has no recorded check run and no land note and has every
-  outcome ticked. It writes the done note `Closed with no change.` first. A card
-  with a recorded check run still goes through the proof, so a change that never
-  reached trunk is refused.
   So does a move into Release or Done of a card whose newest land note names a
   commit that trunk holds, from a workspace with any working copy, though it
   still needs every outcome ticked. That rule trusts the land note, so a card
@@ -4325,6 +4317,12 @@ The refusals run in this order:
 - A move into Done of a card with the no-change label, made from the card's own
   workspace, removes that workspace the way the land cleanup does, and prints
   its lines after the move line. A move from any other folder removes nothing.
+  The move writes the done note `Closed with no change.` too.
+- A card that lands nothing closes by one route: `dev board label CARD
+  +no-change`, then the move into Done. A move into Release or Done of a card
+  without the label whose working copy is empty is refused with ``The
+  working-copy commit is empty. There is no change to land.`` followed by a
+  sentence that names that route.
 - A move into Review is refused unless the card is in In Progress under a claim
   or comes back from Verify, and a move into Verify is always refused. A card
   outside Review reads ``Card <id prefix> cannot move to <column> from

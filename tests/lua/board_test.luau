@@ -15309,8 +15309,8 @@ do
         end
     )
 
-    testing.test("a card with a check run and no landed note is refused when empty", function()
-        local backend = proof_backend({ ticked = true, check = true })
+    testing.test("a card with no landed note is refused with an empty working copy", function()
+        local backend = proof_backend({ ticked = true })
         local result = empty_move(backend, nil, trunk_holds)
         testing.eq(result.code, 1)
         testing.ok(result.message:find("There is no change to land", 1, true), result.message)
@@ -15368,7 +15368,7 @@ do
         })
         testing.eq(result.code, nil)
         testing.eq(result.output, "moved cccccccc to Done\n" .. kept)
-        testing.eq(backend.calls[#backend.calls], { "move", ID_C, support.COLUMN_NAME.DONE })
+        testing.eq(backend.calls[#backend.calls - 1], { "move", ID_C, support.COLUMN_NAME.DONE })
     end)
 
     testing.test("a no-change card moved from a git main checkout keeps workspaces", function()
@@ -15577,69 +15577,32 @@ do
         testing.eq(result.output, "moved cccccccc to Blocked")
     end)
 
-    testing.test("a card with no label and no check run closes with a note when empty", function()
-        local backend = proof_backend({ ticked = true })
+    testing.test(
+        "an unlabelled card with an empty working copy is refused with the label route",
+        function()
+            local backend = proof_backend({ ticked = true })
+            local result = empty_move(backend)
+            testing.eq(result.code, 1)
+            testing.ok(result.message:find("There is no change to land", 1, true), result.message)
+            testing.ok(
+                result.message:find("dev board label cccccccc +" .. board.NO_CHANGE, 1, true),
+                result.message
+            )
+            testing.ok(result.message:find("then move it to Done", 1, true), result.message)
+            for _, call in ipairs(backend.calls) do
+                testing.ok(call[1] ~= "move" and call[1] ~= "note", "the card moved or was noted")
+            end
+        end
+    )
+
+    testing.test("a no-change card moved to Done writes the closed note after the move", function()
+        local backend = proof_backend({ ticked = true, labels = { board.NO_CHANGE } })
         local result = empty_move(backend)
         testing.eq(result.code, nil)
-        testing.eq(result.output, "moved cccccccc to Done")
         local calls = backend.calls
         testing.eq(calls[#calls][1], "note")
         testing.ok(calls[#calls][3]:find("Closed with no change", 1, true))
         testing.eq(calls[#calls - 1], { "move", ID_C, support.COLUMN_NAME.DONE })
-    end)
-
-    testing.test("an empty card closed with no change removes its workspace", function()
-        local backend = proof_backend({ ticked = true })
-        backend.root = "/w/cccccccc"
-        local cleaned = {}
-        local result = empty_move(backend, nil, nil, {
-            workspace_problem = function()
-                return nil
-            end,
-            clean_up = function(root, short)
-                cleaned[#cleaned + 1] = { root, short }
-                return "\nThe workspace is gone."
-            end,
-        })
-        testing.eq(result.code, nil)
-        testing.eq(result.output, "moved cccccccc to Done\nThe workspace is gone.")
-        testing.eq(cleaned, { { "/w/cccccccc", "cccccccc" } })
-    end)
-
-    testing.test("an empty card with a recorded check run is still refused", function()
-        local backend = proof_backend({ ticked = true, check = true })
-        local result = empty_move(backend)
-        testing.eq(result.code, 1)
-        testing.ok(result.message:find("There is no change to land", 1, true), result.message)
-        for _, call in ipairs(backend.calls) do
-            testing.ok(call[1] ~= "move" and call[1] ~= "note", "the card moved or was noted")
-        end
-    end)
-
-    testing.test("an empty card with only an expect-fail record is still refused", function()
-        local backend = proof_backend({ ticked = true })
-        local rows = {
-            { run = support.READY_CHECKS[1], result = check.Result.FAIL, run_id = "ab12" },
-        }
-        backend.listed[#backend.listed + 1] = { body = check.record(PROOF, rows, true) }
-        local result = empty_move(backend)
-        testing.eq(result.code, 1)
-        for _, call in ipairs(backend.calls) do
-            testing.ok(call[1] ~= "move" and call[1] ~= "note", "the card was closed")
-        end
-    end)
-
-    testing.test("an empty card whose landed commit is not on trunk is not closed", function()
-        local backend = proof_backend({ ticked = true, landed = true })
-        local result = empty_move(backend, nil, trunk_lacks)
-        testing.eq(result.code, 1)
-    end)
-
-    testing.test("an empty card with an unticked outcome is refused", function()
-        local backend = proof_backend({})
-        local result = empty_move(backend)
-        testing.eq(result.code, 1)
-        testing.ok(result.message:find("1 of 1 outcomes are unticked", 1, true), result.message)
     end)
 
     testing.test("a card labelled no-change is still proven for a move into Release", function()
@@ -16085,11 +16048,12 @@ for _, kind in ipairs({ "jj", "git" }) do
         end)
 
         testing.test(
-            kind .. " move to Done closes an empty card and removes its workspace",
+            kind .. " move to Done closes a no-change card and removes its workspace",
             function()
                 within(function(root)
                     local path = workspace(root)
                     local backend = in_progress(path, support.COLUMN_NAME.VERIFY)
+                    backend:cards()[1].labels = { board.NO_CHANGE }
                     backend.listed = {}
                     local result = cmd_board.move(backend, { SHORT, support.COLUMN_NAME.DONE })
                     testing.eq(result.code, nil, result.message)
@@ -16103,17 +16067,16 @@ for _, kind in ipairs({ "jj", "git" }) do
             end
         )
 
-        testing.test(kind .. " move to Done refuses an empty card with a check run", function()
+        testing.test(kind .. " move to Done refuses an unlabelled empty card", function()
             within(function(root)
                 local path = workspace(root)
                 local backend = in_progress(path, support.COLUMN_NAME.VERIFY)
-                local rows = {
-                    { run = support.READY_CHECKS[1], result = check.Result.PASS, run_id = "ab12" },
-                }
-                backend.listed =
-                    { { body = check.record({ commit = "deadbeef", change = "-" }, rows, false) } }
+                backend.listed = {}
                 local result = cmd_board.move(backend, { SHORT, support.COLUMN_NAME.DONE })
                 testing.eq(result.code, 1)
+                if kind == "jj" then
+                    testing.ok(result.message:find("+" .. board.NO_CHANGE, 1, true), result.message)
+                end
                 testing.eq(fs.exists(path), true)
                 for _, call in ipairs(backend.calls) do
                     testing.ok(call[1] ~= "move" and call[1] ~= "note", "the card was closed")
