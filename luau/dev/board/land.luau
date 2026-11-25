@@ -20,6 +20,8 @@ local WORKSPACE_TEMPLATE = 'if(target.current_working_copy(), name ++ "\\n")'
 local TRUNK_REVSET = "trunk()"
 ---The revset that names the trunk commit.
 M.TRUNK_REVSET = TRUNK_REVSET
+---What `state` says of a working copy that holds no change.
+M.EMPTY = "The working-copy commit is empty. There is no change to land."
 local BARE_LINK = 'empty() & description(exact:"") & ~merges()'
 local COMMIT_CHARS = 12
 local RUN_HISTORY = "1000"
@@ -225,7 +227,7 @@ function M.state(root)
             return nil, "Git could not read the HEAD commit of " .. root .. "."
         end
         if not files:match("%S") then
-            return nil, "The working-copy commit is empty. There is no change to land."
+            return nil, M.EMPTY
         end
         if not body:match("%S") then
             return nil, "The working-copy commit has no description."
@@ -241,7 +243,7 @@ function M.state(root)
         return nil, "The `jj` command could not read the working-copy commit of " .. root .. "."
     end
     if shape == "empty" then
-        return nil, "The working-copy commit is empty. There is no change to land."
+        return nil, M.EMPTY
     end
     if naming == "bare" then
         return nil, "The working-copy commit has no description."
