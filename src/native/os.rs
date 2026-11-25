@@ -1,13 +1,12 @@
 use std::collections::BTreeMap;
 use std::ffi::OsString;
-use std::fs::{self, File};
 use std::io::{self, BufRead, IsTerminal, Read};
 use std::path::{Path, PathBuf};
 use std::result::Result as StdResult;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
-use std::{env, thread};
+use std::{env, fs, thread};
 
 use mlua::{Function, Lua, LuaString, Table, Value, Variadic};
 
@@ -84,6 +83,7 @@ const DEFAULT_PATHEXT: &str = ".COM;.EXE;.BAT;.CMD";
 const S_IFMT: i64 = 0xF000;
 
 /// The random device `random_bytes` reads.
+#[cfg(unix)]
 const RANDOM_DEVICE: &str = "/dev/urandom";
 
 /// How long `nap` sleeps between looks for an interrupt.
@@ -297,6 +297,25 @@ native_fn! {
     }
 }
 
+/// Fills `bytes` from the random device, or returns the reason it could not.
+#[cfg(unix)]
+fn fill_random(bytes: &mut [u8]) -> StdResult<(), String> {
+    let read = fs::File::open(RANDOM_DEVICE).and_then(|mut device| device.read_exact(bytes));
+    match read {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => Err(format!(
+            "The random device {RANDOM_DEVICE} returned too few bytes."
+        )),
+        Err(error) => Err(process::reason(&Error::io("read the random device", error))),
+    }
+}
+
+/// Fills `bytes` from the system random source, or returns the reason it could not.
+#[cfg(not(unix))]
+fn fill_random(bytes: &mut [u8]) -> StdResult<(), String> {
+    getrandom::fill(bytes).map_err(|error| format!("Cannot read random bytes: {error}."))
+}
+
 native_fn! {
     /// Reads exactly `count` random bytes, or returns `nil` and the reason.
     ///
@@ -305,13 +324,9 @@ native_fn! {
     /// Returns the Lua error when the string cannot be created.
     pub fn random_bytes(lua: &Lua, count: usize) -> mlua::Result<StdResult<LuaString, String>> {
         let mut bytes = vec![0u8; count];
-        let read = File::open(RANDOM_DEVICE).and_then(|mut device| device.read_exact(&mut bytes));
-        match read {
+        match fill_random(&mut bytes) {
             Ok(()) => Ok(Ok(lua.create_string(&bytes)?)),
-            Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => Ok(Err(format!(
-                "The random device {RANDOM_DEVICE} returned too few bytes."
-            ))),
-            Err(error) => Ok(Err(process::reason(&Error::io("read the random device", error)))),
+            Err(reason) => Ok(Err(reason)),
         }
     }
 }

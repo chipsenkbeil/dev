@@ -20,6 +20,9 @@ webpki-roots = "1"
 rustix = { version = "1", features = ["fs", "net", "process", "stdio", "termios"] }
 signal-hook = { version = "0.3", features = ["extended-siginfo"] }
 
+[target.'cfg(windows)'.dependencies]
+getrandom = "0.4"
+
 [profile.release]
 codegen-units = 1
 lto = true
