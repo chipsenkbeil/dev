@@ -1,14 +1,15 @@
 //! A fake HTTP server for the Lua suites.
 //!
 //! `fake_http ROUTES [--log FILE]` binds a free port on 127.0.0.1, prints the port on one line,
-//! and serves until it is killed. ROUTES is read again on every request, so a suite can rewrite
-//! it between calls. A line holds up to seven tab-separated fields and the first line that matches wins.
+//! and serves one connection at a time until it is killed. ROUTES is read again on every request,
+//! so a suite can rewrite it between calls. A line holds up to seven tab-separated fields and the
+//! first line that matches wins.
 //!
 //! 1. method, or `*` for any
 //! 2. a pattern for the path without its query, or for the whole target when it holds a `?`;
 //!    `*` stands for any run of bytes and `#` for one lowercase hex digit or dash
-//! 3. status, 0 to close the connection without an answer, or -1 to reset the connection and stop
-//!    listening, so every later connect is refused
+//! 3. status, 0 to close the connection without an answer, or -1 to stop listening and then
+//!    reset the connection, so every later connect is refused
 //! 4. headers as `Name: value` joined by `|`, or `-`
 //! 5. body file, relative to ROUTES, or `-` for an empty body
 //! 6. a text the request target, headers or body must contain, or `-` for no condition (optional)
@@ -23,7 +24,6 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use std::thread;
 use std::time::Duration;
 
 /// One request as the server read it.
@@ -208,10 +208,9 @@ fn record(log: &Path, request: &Request) {
     }
 }
 
-fn serve(mut stream: TcpStream, routes: &Path, log: Option<&Path>) {
-    let Some(request) = read_request(&stream) else {
-        return;
-    };
+/// Answers one connection, or hands it back unanswered when its route says to stop.
+fn serve(mut stream: TcpStream, routes: &Path, log: Option<&Path>) -> Option<TcpStream> {
+    let request = read_request(&stream)?;
     if let Some(log) = log {
         record(log, &request);
     }
@@ -221,13 +220,10 @@ fn serve(mut stream: TcpStream, routes: &Path, log: Option<&Path>) {
         body: b"no route".to_vec(),
     });
     if answer.status < 0 {
-        #[cfg(unix)]
-        let _ = rustix::net::sockopt::set_socket_linger(&stream, Some(Duration::ZERO));
-        drop(stream);
-        std::process::exit(0);
+        return Some(stream);
     }
     if answer.status == 0 {
-        return;
+        return None;
     }
     let mut head = format!(
         "HTTP/1.1 {} X\r\nContent-Length: {}\r\nConnection: close\r\n",
@@ -241,6 +237,7 @@ fn serve(mut stream: TcpStream, routes: &Path, log: Option<&Path>) {
     head.push_str("\r\n");
     let _ = stream.write_all(head.as_bytes());
     let _ = stream.write_all(&answer.body);
+    None
 }
 
 fn main() -> ExitCode {
@@ -264,10 +261,16 @@ fn main() -> ExitCode {
         println!("{}", address.port());
         let _ = std::io::stdout().flush();
     }
-    for stream in listener.incoming().flatten() {
-        let routes = routes.clone();
-        let log = log.clone();
-        thread::spawn(move || serve(stream, &routes, log.as_deref()));
+    loop {
+        let Ok((stream, _)) = listener.accept() else {
+            continue;
+        };
+        if let Some(stream) = serve(stream, &routes, log.as_deref()) {
+            drop(listener);
+            #[cfg(unix)]
+            let _ = rustix::net::sockopt::set_socket_linger(&stream, Some(Duration::ZERO));
+            drop(stream);
+            return ExitCode::SUCCESS;
+        }
     }
-    ExitCode::SUCCESS
 }

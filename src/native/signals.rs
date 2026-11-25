@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
+use std::sync::{Mutex, MutexGuard, PoisonError};
 
 /// Signal number of SIGHUP.
 pub const HUP: i32 = 1;
@@ -18,11 +18,14 @@ pub const PIPE: i32 = 13;
 /// Signal number of SIGTERM.
 pub const TERM: i32 = 15;
 
-/// Process id of the foreground child a signal is forwarded to, 0 for none.
-static FOREGROUND_PID: AtomicI32 = AtomicI32::new(0);
+/// The foreground child a signal is forwarded to, 0 for none, and whether it leads its own
+/// process group.
+static FOREGROUND: Mutex<(i32, bool)> = Mutex::new((0, false));
 
-/// Whether the foreground child leads its own process group.
-static FOREGROUND_OWN_GROUP: AtomicBool = AtomicBool::new(false);
+/// Locks the foreground child, even after a thread panicked while holding it.
+fn foreground() -> MutexGuard<'static, (i32, bool)> {
+    FOREGROUND.lock().unwrap_or_else(PoisonError::into_inner)
+}
 
 /// Sends `signal` to process `pid`, or to the process group `-pid` when `pid` is negative.
 ///
@@ -63,17 +66,18 @@ impl Foreground {
     /// that another process sent to dev alone.
     #[must_use]
     pub fn enter(pid: i32, own_group: bool) -> Self {
+        let (previous_pid, previous_own_group) =
+            std::mem::replace(&mut *foreground(), (pid, own_group));
         Self {
-            previous_pid: FOREGROUND_PID.swap(pid, Ordering::SeqCst),
-            previous_own_group: FOREGROUND_OWN_GROUP.swap(own_group, Ordering::SeqCst),
+            previous_pid,
+            previous_own_group,
         }
     }
 }
 
 impl Drop for Foreground {
     fn drop(&mut self) {
-        FOREGROUND_PID.store(self.previous_pid, Ordering::SeqCst);
-        FOREGROUND_OWN_GROUP.store(self.previous_own_group, Ordering::SeqCst);
+        *foreground() = (self.previous_pid, self.previous_own_group);
     }
 }
 
@@ -87,10 +91,24 @@ const WATCHED: [i32; 3] = [INT, TERM, HUP];
 /// recording it again here would interrupt a cleanup that runs after the first interrupt.
 #[cfg(unix)]
 fn on_signal(origin: &signal_hook::low_level::siginfo::Origin) {
-    let pid = FOREGROUND_PID.load(Ordering::SeqCst);
-    if pid > 0 {
-        let own_group = FOREGROUND_OWN_GROUP.load(Ordering::SeqCst);
+    let current = foreground();
+    if let Some((pid, own_group)) = forward_target(*current, crate::runtime::interrupted()) {
         forward(pid, own_group, origin.signal, sender_of(origin));
+    }
+}
+
+/// Picks the child a signal is passed on to: the foreground child while the interrupt is still
+/// pending.
+///
+/// Once Luau has raised the interrupt, the child that was in the foreground when the signal came
+/// has ended, and the one there now is a cleanup that started after the signal, so it gets none.
+#[cfg(unix)]
+#[must_use]
+const fn forward_target(current: (i32, bool), pending: bool) -> Option<(i32, bool)> {
+    if pending && current.0 > 0 {
+        Some(current)
+    } else {
+        None
     }
 }
 
@@ -238,5 +256,12 @@ mod tests {
         assert!(reaches_group_child(HUP, Sender::Process));
         assert!(!reaches_group_child(INT, Sender::Terminal));
         assert!(!reaches_group_child(HUP, Sender::Terminal));
+    }
+
+    #[test]
+    fn forward_target_should_skip_a_child_that_started_after_luau_took_the_interrupt() {
+        assert_eq!(forward_target((42, true), true), Some((42, true)));
+        assert_eq!(forward_target((42, false), false), None);
+        assert_eq!(forward_target((0, false), true), None);
     }
 }

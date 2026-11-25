@@ -19,7 +19,7 @@ M.FAKE_DEV = assert(
 ---@field method string? the request method, any when unset
 ---@field path string the request path, a prefix when it ends in `*`
 ---@field status integer? the status, 200 when unset, 0 to close the connection unanswered, -1 to
----   reset the connection and stop listening so later connects are refused
+---   stop listening and then reset the connection, so later connects are refused
 ---@field headers string[]? the response headers as `Name: value`
 ---@field body string? the response body
 ---@field contains string? a text the request target, headers or body must hold
