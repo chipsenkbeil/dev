@@ -17,6 +17,7 @@ binary per target, named `dev-TAG-TRIPLE`, and a `SHA256SUMS` file:
 - `dev-TAG-aarch64-apple-darwin`
 - `dev-TAG-x86_64-apple-darwin`
 - `dev-TAG-x86_64-unknown-freebsd`
+- `dev-TAG-x86_64-pc-windows-msvc.exe`
 - `SHA256SUMS`
 
 Download the binary for your machine and `SHA256SUMS` with the `gh` client.
@@ -41,6 +42,22 @@ Make the binary executable, move it to a directory on your `PATH` as `dev`
 ```sh
 chmod +x dev-TAG-TRIPLE
 mv dev-TAG-TRIPLE DIR/dev
+```
+
+On Windows, run the same `gh release download` command with
+`dev-TAG-x86_64-pc-windows-msvc.exe` as the first `--pattern`, then print the
+file's hash in PowerShell.
+
+```powershell
+Get-FileHash -Algorithm SHA256 dev-TAG-x86_64-pc-windows-msvc.exe
+```
+
+The `Hash` value matches the file's line in `SHA256SUMS` when the download is
+intact (`Get-FileHash` prints it in uppercase). Rename the file to `dev.exe`
+in a directory on your `PATH`.
+
+```powershell
+Move-Item dev-TAG-x86_64-pc-windows-msvc.exe DIR\dev.exe
 ```
 
 ## Build from source
