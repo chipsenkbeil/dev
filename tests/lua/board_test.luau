@@ -11346,6 +11346,7 @@ end)
 
 testing.test("ask ends the owner lease and a plain move to blocked keeps it", function()
     local root, home = sandbox({ export = PLANNED_EXPORT })
+    assert(fs.write(root .. "/freeze", ""))
     dev(root, home, { "board", "take", "11111111-a" })
     testing.ok(wait_until(function()
         return heartbeats(root) >= 1
@@ -11383,6 +11384,7 @@ testing.test("ask ends the owner lease and a plain move to blocked keeps it", fu
     testing.ok(loop_gone(pid))
 
     local kept_root, kept_home = sandbox({ export = PLANNED_EXPORT })
+    assert(fs.write(kept_root .. "/freeze", ""))
     dev(kept_root, kept_home, { "board", "take", "11111111-a" })
     testing.ok(wait_until(function()
         return heartbeats(kept_root) >= 1
