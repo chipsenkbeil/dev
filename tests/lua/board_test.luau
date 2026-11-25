@@ -11990,6 +11990,7 @@ end)
 
 testing.test("a release the server refuses keeps the state so it can be retried", function()
     local root, home = sandbox({ export = PLANNED_EXPORT })
+    assert(fs.write(root .. "/freeze", ""))
     dev(root, home, { "board", "take", "11111111-a" })
     curl_with(root, "*/owner/release) body=; status=503 ;;")
     local out, code = dev(root, home, { "board", "release", "11111111-a" })
