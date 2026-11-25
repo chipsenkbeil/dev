@@ -1823,6 +1823,98 @@ local function no_change_clean_up(backend, card, opts)
     return (opts and opts.clean_up or M.clean_up)(backend.root, short)
 end
 
+---Say whether a column keeps the workspace of the card in it.
+---@param stages dev.board.Stages the board's columns
+---@param column string the column
+---@return boolean keeps true for In Progress, Review and Verify
+local function keeps_workspace(stages, column)
+    return column == stages.progress or column == stages.review or column == stages.verify
+end
+
+---Read what the card's workspace holds that has not landed.
+---@param backend dev.board.Backend the board
+---@param card dev.board.Card the card
+---@param opts dev.cmd.board.move.Opts? the read, injected by tests
+---@return string? path the workspace folder, nil when the card has none
+---@return string[]? work one line per unlanded commit or change, nil when it could not be read
+---@return string? why what stopped the read
+local function workspace_work(backend, card, opts)
+    if not backend.root then
+        return nil
+    end
+    local read = opts and opts.workspace_work or M.workspace_work
+    return read(backend.root, card.id:sub(1, board.MIN_PREFIX))
+end
+
+---Refuse to close a card whose workspace holds unlanded work.
+---@param backend dev.board.Backend the board
+---@param card dev.board.Card the card
+---@param verb string what the card cannot do, such as "move to Done"
+---@param opts dev.cmd.board.move.Opts? the read, injected by tests
+---@return dev.cmd.board.Result? refusal naming the work, nil when the workspace is empty or absent
+local function unlanded_refusal(backend, card, verb, opts)
+    local path, work, why = workspace_work(backend, card, opts)
+    if not path then
+        return nil
+    end
+    local short = card.id:sub(1, board.MIN_PREFIX)
+    if not work then
+        return failure(
+            string.format(
+                "Card %s cannot %s. Its workspace %s could not be read: %s",
+                short,
+                verb,
+                path,
+                dev_text.sentence(why or "unknown error")
+            )
+        )
+    end
+    if #work == 0 then
+        return nil
+    end
+    return failure(
+        string.format(
+            "Card %s cannot %s. Its workspace %s holds unlanded work: %s. "
+                .. "Land it with `dev board land %s`, or abandon it first.",
+            short,
+            verb,
+            path,
+            table.concat(work, ", "),
+            short
+        )
+    )
+end
+
+---Remove the workspace of a card that left In Progress, Review and Verify, when it is empty.
+---
+---A workspace that holds work stays, and one line names it.
+---@param backend dev.board.Backend the board
+---@param card dev.board.Card the card, still in the column it left
+---@param column string the column it moved to
+---@param opts dev.cmd.board.move.Opts? the read and the removal, injected by tests
+---@return string lines the removal or the kept line behind a newline, empty when no workspace
+local function leave_workspace(backend, card, column, opts)
+    if card.column == column or keeps_workspace(backend.stages, column) then
+        return ""
+    end
+    local path, work, why = workspace_work(backend, card, opts)
+    if not path then
+        return ""
+    end
+    if work and #work == 0 then
+        return (opts and opts.clean_up or M.clean_up)(
+            backend.root,
+            card.id:sub(1, board.MIN_PREFIX)
+        )
+    end
+    return string.format(
+        "\nKept the workspace %s. %s",
+        path,
+        work and "It holds unlanded work."
+            or dev_text.sentence("It could not be read: " .. (why or "unknown error"))
+    )
+end
+
 ---Move a card to a column, checking its outcomes first when the column is Done.
 ---@param backend dev.board.Backend the board
 ---@param flags table<string, any> the parsed flags of the move
@@ -1885,6 +1977,13 @@ local function move_once(backend, flags, words, opts)
         local refused = guards.done_refusal(card, stages:done_column())
         if refused then
             return refused
+        end
+    end
+    if column == stages:done_column() and card.column ~= column and not (opts and opts.landed) then
+        local verb = opts and opts.drop and "be discarded" or "move to " .. column
+        local refused = unlanded_refusal(backend, card, verb, opts)
+        if refused then
+            return to_done and unqueued(refused) or refused
         end
     end
     local proving = (column == stages.release or to_done)
@@ -2091,8 +2190,12 @@ local function move_once(backend, flags, words, opts)
             .. closes:sub(1, board.MIN_PREFIX)
             .. " has every child Done and can close now."
     end
-    if to_done and card.column ~= column and not (opts and opts.landed) then
-        result.output = result.output .. no_change_clean_up(backend, card, opts)
+    if card.column ~= column and not (opts and opts.landed) then
+        local cleaned = to_done and no_change_clean_up(backend, card, opts) or ""
+        if cleaned == "" then
+            cleaned = leave_workspace(backend, card, column, opts)
+        end
+        result.output = result.output .. cleaned
     end
     if started then
         card.column = column
@@ -2111,7 +2214,12 @@ end
 ---@field workspace_problem (fun(root: string, short: string): string?)? says why the working copy
 ---   is not the card's own workspace, `land.workspace_problem` when nil
 ---@field clean_up (fun(root: string, short: string): string)? removes the card's workspace after a
----   no-change move into Done, `M.clean_up` when nil
+---   no-change move into Done, or a move out of In Progress, Review and Verify, `M.clean_up` when
+---   nil
+---@field workspace_work (fun(root: string, short: string): string?, string[]?, string?)? reads the
+---   card's workspace folder and what it holds that has not landed, `M.workspace_work` when nil
+---@field new_workspace (fun(root: string, short: string): string?, string?)? makes the card's
+---   workspace for a take, `M.new_workspace` when nil
 ---@field nap (fun(seconds: number))? sleeps between tries, `dev.os.nap` when nil
 ---@field random dev.board.turn.Random? jitters the sleeps, `turn.entropy` when nil
 ---@field now (fun(): integer)? the clock in seconds since the epoch, `store.now` when nil
@@ -2382,6 +2490,12 @@ function commands.discard(backend, opts, args)
     local held_back = owner_holds(card)
     if held_back then
         return held_back
+    end
+    if card.column ~= backend.stages:done_column() then
+        local unlanded = unlanded_refusal(backend, card, "be discarded")
+        if unlanded then
+            return unlanded
+        end
     end
     local missing = {}
     if not (reason and card.column == backend.stages.icebox) then
@@ -2728,7 +2842,11 @@ function commands.ask(backend, opts, args)
             )
         end
     end
-    return { output = "asked " .. card.id:sub(1, board.MIN_PREFIX) }
+    return {
+        output = "asked "
+            .. card.id:sub(1, board.MIN_PREFIX)
+            .. leave_workspace(backend, card, backend.stages.blocked),
+    }
 end
 
 function commands.answer(backend, opts, args)
@@ -3729,13 +3847,18 @@ function M.clean_up(root, short)
         )
         delete_branch_from(root)
     end
+    local folder = ws.path(root, short)
+    local inside = folder ~= nil and fs.realpath(folder) == fs.realpath(root)
     local result = ws.remove(root, short, { inside = true })
     if result.ok then
         add(result.message)
         for _, line in ipairs(result.purged) do
             add(line)
         end
-        add("The workspace is gone. Run the next command from another folder.")
+        add(
+            inside and "The workspace is gone. Run the next command from another folder."
+                or "The workspace is gone."
+        )
         if kind == vcs.GIT then
             delete_branch_from(main)
         end
@@ -3747,6 +3870,43 @@ function M.clean_up(root, short)
         add("Kept the workspace. " .. reason)
     end
     return "\n" .. table.concat(lines, "\n")
+end
+
+---Read the folder of a card's workspace and what it holds that has not landed.
+---@param root string absolute path of the project root dev runs in
+---@param short string the card's short id, which names its workspace
+---@return string? path the workspace folder, nil when the card has none
+---@return string[]? work one line per unlanded commit or change, nil when it could not be read
+---@return string? why what stopped the read
+function M.workspace_work(root, short)
+    local ws = require("@dev/cmd/ws")
+    local path = ws.path(root, short)
+    if not path then
+        return nil
+    end
+    local work, why = ws.work(path)
+    return path, work, why
+end
+
+---Make the workspace of a card that a take claimed, or find the one it already has.
+---@param root string absolute path of the project root dev runs in
+---@param short string the card's short id, which names its workspace
+---@return string? path the workspace folder, nil when none was made
+---@return string? why what stopped it, nil when the project has no version control
+function M.new_workspace(root, short)
+    local ws = require("@dev/cmd/ws")
+    if not vcs.backend(root) then
+        return nil
+    end
+    local found = ws.path(root, short)
+    if found then
+        return found
+    end
+    local path, message, code = ws.make(root, short, function() end)
+    if path then
+        return path
+    end
+    return nil, message or ("the version control command exited " .. code)
 end
 
 ---@class dev.cmd.board.companion_cards.Opts
@@ -4975,8 +5135,9 @@ end
 ---@param backend dev.board.Backend the board
 ---@param opts table<string, any> the parsed flags
 ---@param args table<string, any> the parsed arguments
+---@param clock dev.cmd.board.move.Opts? the workspace maker, injected by tests
 ---@return dev.cmd.board.Result result the output, or a message and the exit code
-local function take_once(backend, opts, args)
+local function take_once(backend, opts, args, clock)
     if args.card == nil then
         return usage("Needs a card.")
     end
@@ -5102,6 +5263,19 @@ local function take_once(backend, opts, args)
             )
         end
     end
+    if backend.root and card.column == stages.progress and card.kind ~= board.Kind.EPIC then
+        local path, why = (clock and clock.new_workspace or M.new_workspace)(backend.root, short)
+        if path then
+            result.output = result.output .. "\nworkspace " .. path
+        elseif why then
+            dev_command.note(
+                "Took card "
+                    .. short
+                    .. ", but its workspace was not made. "
+                    .. dev_text.sentence(why)
+            )
+        end
+    end
     return claimed_view(backend, card, result)
 end
 
@@ -5117,7 +5291,7 @@ local function take_card(backend, opts, args, clock)
         return bad_wait
     end
     return until_room(wait, clock, function()
-        return take_once(backend, opts, args)
+        return take_once(backend, opts, args, clock)
     end)
 end
 

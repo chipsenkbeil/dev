@@ -1849,6 +1849,25 @@ dev board take 8af0e001
 dev board move 8af0e001 progress
 ```
 
+The card's workspace:
+
+- `take` of a card that ends in In Progress makes the card's workspace as `dev
+  ws new` does (a jj workspace, or a git worktree on a branch named for the
+  card) and prints `workspace PATH`. An existing one is reused. A project with
+  no `.jj` or `.git` gets none, and a failed make is a note on standard error
+  that leaves the claim in place.
+- The workspace lives while the card is In Progress, Review or Verify, and a
+  move between those three never touches it.
+- A move to Icebox, Backlog, Ready, Release or Blocked, and `ask`, removes the
+  workspace when it is empty: an empty working copy and no commits of its own
+  above trunk. A workspace that holds work, or that dev cannot read, stays and
+  the output says `Kept the workspace PATH.` and the reason, `It holds unlanded
+  work.` or `It could not be read: WHY.` The move still happens.
+- A move to Done removes an empty workspace and is refused, naming the commits,
+  while the workspace holds unlanded work. `land` removes it after the land.
+- The removal is the one behind `dev ws rm`, which moves the folder to the
+  trash.
+
 `move` refuses to take a claimed card out of In Progress to Review, Ready or
 Blocked (exit 1) until its claimant has left a note after claiming it. The
 refusal reads ``Card ID has no note from its claimant NAME since the claim. It
@@ -4421,6 +4440,8 @@ The rules:
   done.
 - A card labelled `needs:human` is refused before any step, as `move` refuses
   it, so nothing is posted.
+- A card whose workspace holds unlanded work is refused before any step, naming
+  the work, as a move to Done is. An empty workspace is removed.
 - A blank `--reason` is exit 2.
 - `--board B`, right after `CARD`, drops the card on the Pomb board named `B`
   from any repo, looked up as `add --board` looks it up. A local board refuses

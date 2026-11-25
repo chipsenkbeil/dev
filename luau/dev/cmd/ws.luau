@@ -199,22 +199,22 @@ local function remote_trunk(root, remote)
     return ref
 end
 
-local function fetch_trunk(ctx)
-    local backend = vcs.backend(ctx.root)
+local function fetch_trunk(root, show)
+    local backend = vcs.backend(root)
     if backend ~= vcs.JJ and backend ~= vcs.GIT then
         return nil
     end
-    local found, why = forge.resolve(ctx.root)
+    local found, why = forge.resolve(root)
     if not found then
         return string.format('The trunk cannot be compared: "%s".', quoted_reason(why))
     end
-    local argv = vcs.base(ctx.root, backend, { quiet = true })
+    local argv = vcs.base(root, backend, { quiet = true })
     if backend == vcs.JJ then
         argv = vcs.with(argv, IGNORE_WORKING_COPY, "git", "fetch", "--remote", found.remote)
     else
         argv = vcs.with(argv, "fetch", found.remote)
     end
-    dev_command.show(ctx, argv)
+    show(argv)
     local out, code = dev_os.capture(argv, { stderr = "stdout" })
     if code ~= 0 then
         return sentence(
@@ -222,7 +222,7 @@ local function fetch_trunk(ctx)
         )
     end
     if backend == vcs.GIT then
-        local start, err = remote_trunk(ctx.root, found.remote)
+        local start, err = remote_trunk(root, found.remote)
         if start == nil then
             return err
         end
@@ -370,55 +370,73 @@ end
 ---@return integer code the exit code
 function M.new(opts, args, ctx)
     local name = folder_name(ctx, args.name)
-    local marked = false
-    for _, marker in ipairs({ ".jj", ".git", ".dev" }) do
-        marked = marked or fs.exists(ctx.root .. "/" .. marker)
-    end
-    if not marked then
-        dev_command.die(ctx.root .. " is not inside a project.")
-    end
-    local base = workspace_root()
-    local path = fs.join(base, repo_name(base, ctx.root), name)
-    if fs.exists(path) then
-        dev_command.die(path .. " already exists.")
-    end
-    local failure, start = fetch_trunk(ctx)
-    if failure then
-        dev_command.die(failure)
-    end
-    local made, why = fs.mkdir(fs.dirname(path), { parents = true })
-    if not made then
-        dev_command.die(mkdir_failure(fs.dirname(path), why))
-    end
-    if vcs.backend(ctx.root) == vcs.JJ then
-        local refresh = vcs.with(vcs.base(ctx.root, vcs.JJ), "workspace", "update-stale")
-        dev_command.show(ctx, refresh)
-        local refreshed = dev_os.run(refresh) or 1
-        if refreshed ~= 0 then
-            return refreshed
-        end
-        local stuck = drop_own_record(ctx.root, path, function(shown)
-            dev_command.show(ctx, shown)
-        end)
-        if stuck then
-            dev_command.die(stuck)
-        end
-    end
-    local argv = plan(ctx.root, name, path, { start = start })
-    if argv == nil then
-        made, why = fs.mkdir(path)
-        if not made then
-            dev_command.die(mkdir_failure(path, why))
-        end
-    else
+    local path, message, code = M.make(ctx.root, name, function(argv)
         dev_command.show(ctx, argv)
-        local code = dev_os.run(argv) or 1
-        if code ~= 0 then
-            return code
-        end
+    end)
+    if message then
+        dev_command.die(message)
+    end
+    if code then
+        return code
     end
     print(path)
     return 0
+end
+
+---Make the workspace NAME of the project at `root`, as `dev ws new` does, and print nothing.
+---@param root string absolute path of the project root
+---@param name string the workspace folder's name
+---@param show fun(argv: string[]) called with each command before it runs
+---@return string? path the workspace folder, nil when it was not made
+---@return string? message the sentence that says why it was not made
+---@return integer? code the exit code of the jj or git command that failed, with no message
+function M.make(root, name, show)
+    local marked = false
+    for _, marker in ipairs({ ".jj", ".git", ".dev" }) do
+        marked = marked or fs.exists(root .. "/" .. marker)
+    end
+    if not marked then
+        return nil, root .. " is not inside a project."
+    end
+    local base = workspace_root()
+    local path = fs.join(base, repo_name(base, root), name)
+    if fs.exists(path) then
+        return nil, path .. " already exists."
+    end
+    local failure, start = fetch_trunk(root, show)
+    if failure then
+        return nil, failure
+    end
+    local made, why = fs.mkdir(fs.dirname(path), { parents = true })
+    if not made then
+        return nil, mkdir_failure(fs.dirname(path), why)
+    end
+    if vcs.backend(root) == vcs.JJ then
+        local refresh = vcs.with(vcs.base(root, vcs.JJ), "workspace", "update-stale")
+        show(refresh)
+        local refreshed = dev_os.run(refresh) or 1
+        if refreshed ~= 0 then
+            return nil, nil, refreshed
+        end
+        local stuck = drop_own_record(root, path, show)
+        if stuck then
+            return nil, stuck
+        end
+    end
+    local argv = plan(root, name, path, { start = start })
+    if argv == nil then
+        made, why = fs.mkdir(path)
+        if not made then
+            return nil, mkdir_failure(path, why)
+        end
+    else
+        show(argv)
+        local code = dev_os.run(argv) or 1
+        if code ~= 0 then
+            return nil, nil, code
+        end
+    end
+    return path
 end
 
 local function first_line(text)
@@ -708,6 +726,89 @@ local function listed_folder(root, name, real_base)
         return listed
     end
     return nil
+end
+
+---Find the folder of the workspace NAME of the project at `root`.
+---@param root string absolute path of the project root
+---@param name string the workspace folder's name
+---@return string? path the folder, nil when the project has no such workspace
+function M.path(root, name)
+    local base = workspace_root()
+    local path = fs.join(base, repo_name(base, root), name)
+    if fs.is_dir(path) then
+        return path
+    end
+    return listed_folder(root, name, fs.realpath(base))
+end
+
+---Name what a workspace holds that has not landed.
+---
+---A jj workspace holds its non-empty commits above trunk, its working copy included. A git
+---worktree holds the commits of its branch that no other branch or remote branch reaches, and a
+---line for the files its status lists. An empty list means the workspace holds no work.
+---@param path string the workspace folder
+---@return string[]? work one line per commit or change, nil when the workspace cannot be read
+---@return string? why what stopped the read
+function M.work(path)
+    local backend = vcs.backend(path)
+    local work = {}
+    if backend == vcs.JJ then
+        local base = vcs.base(path, backend, { quiet = true })
+        local text, status =
+            dev_os.capture(vcs.with(base, "workspace", "update-stale"), { stderr = "stdout" })
+        if status ~= 0 then
+            return nil, first_line(text) or "jj could not refresh the workspace"
+        end
+        local argv = vcs.with(
+            base,
+            "log",
+            "-r",
+            "::@ ~ ::trunk() ~ empty()",
+            "--no-graph",
+            "-T",
+            'commit_id.short(12) ++ " " ++ description.first_line() ++ "\\n"'
+        )
+        local out, code = dev_os.capture(argv, { stderr = "stdout" })
+        if code ~= 0 then
+            return nil, first_line(out) or "jj could not list the commits"
+        end
+        for line in out:gmatch("[^\n]+") do
+            work[#work + 1] = line
+        end
+        return work
+    end
+    if backend ~= vcs.GIT then
+        return work
+    end
+    local base = vcs.base(path, backend)
+    local status_out, status_code =
+        dev_os.capture(vcs.with(base, "status", "--porcelain"), { stderr = "stdout" })
+    if status_code ~= 0 then
+        return nil, first_line(status_out) or "git could not read the status"
+    end
+    local log = vcs.with(base, "log", "--format=%h %s", "HEAD", "--not")
+    local found = forge.resolve(path)
+    local remote_ref = vcs.remote_trunk(path, found and found.remote or "origin")
+    for _, ref in ipairs({ "refs/heads/master", "refs/heads/main", remote_ref }) do
+        local _, known = dev_os.capture(
+            vcs.with(base, "rev-parse", "--verify", "--quiet", ref .. "^{commit}"),
+            { stderr = "null" }
+        )
+        if known == 0 then
+            log = vcs.with(log, ref)
+        end
+    end
+    local out, code = dev_os.capture(log, { stderr = "stdout" })
+    if code ~= 0 then
+        return nil, first_line(out) or "git could not list the commits"
+    end
+    for line in out:gmatch("[^\n]+") do
+        work[#work + 1] = line
+    end
+    if status_out ~= "" then
+        work[#work + 1] = "uncommitted changes"
+    end
+    return work
 end
 
 local function leave_landed(path)

@@ -15348,6 +15348,193 @@ do
         testing.eq(result.output, "moved cccccccc to Done")
     end)
 
+    local WORKSPACE = "/w/cccccccc"
+    local UNLANDED = { "abc123 feat: x", "uncommitted changes" }
+
+    local function proven_backend()
+        return proof_backend({ ticked = true, check = true, reviews = { "code", "style" } })
+    end
+
+    local function done_move(backend, extra)
+        local opts = {
+            state = function()
+                return PROOF
+            end,
+            clean_up = function()
+                error("a workspace was removed")
+            end,
+        }
+        for key, value in pairs(extra) do
+            opts[key] = value
+        end
+        return cmd_board.move(backend, { "cccccccc", support.COLUMN_NAME.DONE }, opts)
+    end
+
+    testing.test("a move to Done refuses a workspace that holds unlanded work", function()
+        local backend = proven_backend()
+        local result = done_move(backend, {
+            workspace_work = function(root, short)
+                testing.eq({ root, short }, { "/proof", "cccccccc" })
+                return WORKSPACE, UNLANDED
+            end,
+        })
+        testing.eq(result.code, 1)
+        testing.eq(
+            result.message,
+            "Card cccccccc cannot move to Done. Its workspace /w/cccccccc holds unlanded work: "
+                .. "abc123 feat: x, uncommitted changes. "
+                .. "Land it with `dev board land cccccccc`, or abandon it first."
+        )
+        for _, call in ipairs(backend.calls) do
+            testing.ok(call[1] ~= "move", "the card moved")
+        end
+    end)
+
+    testing.test("a move to Done refuses a workspace it cannot read", function()
+        local result = done_move(proven_backend(), {
+            workspace_work = function()
+                return WORKSPACE, nil, "no such repo"
+            end,
+        })
+        testing.eq(result.code, 1)
+        testing.ok(
+            result.message:find(
+                "Its workspace /w/cccccccc could not be read: No such repo.",
+                1,
+                true
+            ),
+            result.message
+        )
+    end)
+
+    testing.test("a move to Done removes an empty workspace", function()
+        local removed = {}
+        local result = done_move(proven_backend(), {
+            workspace_work = function()
+                return WORKSPACE, {}
+            end,
+            clean_up = function(root, short)
+                removed[#removed + 1] = { root, short }
+                return "\nThe workspace is gone."
+            end,
+        })
+        testing.eq(result.code, nil)
+        testing.eq(result.output, "moved cccccccc to Done\nThe workspace is gone.")
+        testing.eq(removed, { { "/proof", "cccccccc" } })
+    end)
+
+    testing.test("a card with no workspace moves to Done as before", function()
+        local result = done_move(proven_backend(), {
+            workspace_work = function()
+                return nil
+            end,
+        })
+        testing.eq(result.code, nil)
+        testing.eq(result.output, "moved cccccccc to Done")
+    end)
+
+    testing.test("a landed move to Done leaves the workspace to land", function()
+        local backend = proof_backend({ ticked = true })
+        local result = cmd_board.move(backend, { "cccccccc", support.COLUMN_NAME.DONE }, {
+            landed = true,
+            workspace_work = function()
+                error("the workspace was read")
+            end,
+        })
+        testing.eq(result.code, nil)
+        testing.eq(result.output, "moved cccccccc to Done")
+    end)
+
+    testing.test("a move among In Progress, Review and Verify never reads the workspace", function()
+        local backend = proof_backend({ ticked = true })
+        local result = cmd_board.move(backend, { "cccccccc", support.COLUMN_NAME.REVIEW }, {
+            workspace_work = function()
+                error("the workspace was read")
+            end,
+            clean_up = function()
+                error("a workspace was removed")
+            end,
+        })
+        testing.eq(result.code, nil)
+        testing.eq(result.output, "moved cccccccc to Review")
+    end)
+
+    local function leaving()
+        local card = colored("green")
+        card.column = support.COLUMN_NAME.PROGRESS
+        card.outcomes = outcomes(1, 1)
+        local backend = fake({ card })
+        backend.root = "/proof"
+        return backend
+    end
+
+    for _, column in ipairs({
+        support.COLUMN_NAME.BLOCKED,
+        support.COLUMN_NAME.BACKLOG,
+        support.COLUMN_NAME.ICEBOX,
+    }) do
+        testing.test("a move to " .. column .. " removes an empty workspace", function()
+            local backend = leaving()
+            local removed = {}
+            local result = cmd_board.move(backend, { "cccccccc", column }, {
+                workspace_work = function()
+                    return WORKSPACE, {}
+                end,
+                clean_up = function(root, short)
+                    removed[#removed + 1] = { root, short }
+                    return "\nThe workspace is gone."
+                end,
+            })
+            testing.eq(result.code, nil)
+            testing.eq(result.output, "moved cccccccc to " .. column .. "\nThe workspace is gone.")
+            testing.eq(removed, { { "/proof", "cccccccc" } })
+        end)
+
+        testing.test("a move to " .. column .. " keeps a workspace that holds work", function()
+            local backend = leaving()
+            local result = cmd_board.move(backend, { "cccccccc", column }, {
+                workspace_work = function()
+                    return WORKSPACE, UNLANDED
+                end,
+                clean_up = function()
+                    error("a workspace was removed")
+                end,
+            })
+            testing.eq(result.code, nil)
+            testing.eq(
+                result.output,
+                "moved cccccccc to "
+                    .. column
+                    .. "\nKept the workspace /w/cccccccc. It holds unlanded work."
+            )
+            testing.eq(backend.calls[#backend.calls], { "move", ID_C, column })
+        end)
+    end
+
+    testing.test("a move to Blocked keeps a workspace it cannot read and says so", function()
+        local backend = leaving()
+        local result = cmd_board.move(backend, { "cccccccc", support.COLUMN_NAME.BLOCKED }, {
+            workspace_work = function()
+                return WORKSPACE, nil, "jj broke"
+            end,
+        })
+        testing.eq(result.code, nil)
+        testing.eq(
+            result.output,
+            "moved cccccccc to Blocked\nKept the workspace /w/cccccccc. It could not be read: jj broke."
+        )
+    end)
+
+    testing.test("a move to Blocked of a card with no workspace prints one line", function()
+        local backend = leaving()
+        local result = cmd_board.move(backend, { "cccccccc", support.COLUMN_NAME.BLOCKED }, {
+            workspace_work = function()
+                return nil
+            end,
+        })
+        testing.eq(result.output, "moved cccccccc to Blocked")
+    end)
+
     testing.test("a card with no no-change label is refused with an empty working copy", function()
         local backend = proof_backend({ ticked = true })
         local result = empty_move(backend)
@@ -15657,4 +15844,251 @@ testing.test("transport_refusal writes the layout lookup sentences", function()
         board.transport_refusal(Reason.ROLES_QUOTA, { message = "Over." }),
         refused .. "The account is over its quota. The standard roles cannot be created. Over."
     )
+end)
+
+for _, kind in ipairs({ "jj", "git" }) do
+    if dev_os.which(kind) and dev_os.which("git") then
+        local IDENT = { JJ_USER = "t", JJ_EMAIL = "t@example.com" }
+        local SHORT = "cccccccc"
+
+        local function quietly(argv, env)
+            local code = dev_os.run(argv, { stdout = "null", stderr = "null", env = env })
+            assert(code == 0, "failed: " .. table.concat(argv, " "))
+        end
+
+        local function project()
+            local root = assert(fs.realpath(support.tempdir()))
+            local bare = support.tempdir()
+            quietly({ "git", "init", "--bare", "-q", "-b", "master", bare })
+            if kind == "jj" then
+                quietly({ "jj", "git", "init", root }, IDENT)
+                quietly({ "jj", "-R", root, "git", "remote", "add", "origin", bare }, IDENT)
+                assert(fs.write(root .. "/base", "1"))
+                quietly({ "jj", "-R", root, "commit", "-m", "base" }, IDENT)
+                quietly({ "jj", "-R", root, "bookmark", "create", "master", "-r", "@-" }, IDENT)
+                quietly({
+                    "jj",
+                    "-R",
+                    root,
+                    "git",
+                    "push",
+                    "--remote",
+                    "origin",
+                    "--bookmark",
+                    "master",
+                }, IDENT)
+            else
+                quietly({ "git", "init", "-q", "-b", "master", root })
+                assert(fs.write(root .. "/base", "1"))
+                support.git(root, "add", "-A")
+                support.git(root, "commit", "-q", "-m", "base")
+                support.git(root, "remote", "add", "origin", bare)
+                support.git(root, "push", "-q", "origin", "master")
+            end
+            return root
+        end
+
+        local function within(run)
+            local vars = {
+                DEV_WS_ROOT = assert(fs.realpath(support.tempdir())),
+                XDG_STATE_HOME = support.tempdir(),
+                JJ_FORGE = "",
+                JJ_USER = IDENT.JJ_USER,
+                JJ_EMAIL = IDENT.JJ_EMAIL,
+            }
+            local previous = {}
+            for name, value in pairs(vars) do
+                previous[name] = dev_os.getenv(name)
+                dev_os.setenv(name, value)
+            end
+            local ok, err = pcall(run, project())
+            for name in pairs(vars) do
+                dev_os.setenv(name, previous[name] or "")
+            end
+            assert(ok, err)
+        end
+
+        local function in_progress(root, column)
+            local card = colored("green")
+            card.column = column or support.COLUMN_NAME.PROGRESS
+            card.outcomes = outcomes(1, 1)
+            local backend = fake({ card })
+            backend.root = root
+            return backend
+        end
+
+        local function workspace(root)
+            local path, why = cmd_board.new_workspace(root, SHORT)
+            return assert(path, why)
+        end
+
+        testing.test(kind .. " take makes the card's workspace and reuses it", function()
+            within(function(root)
+                -- Take a Ready card on a board whose project root is the primary checkout
+                local card = colored("green")
+                card.column = support.COLUMN_NAME.READY
+                local backend = fake({ card })
+                backend.root = root
+                backend.timed = false
+                function backend:claim()
+                    return 7
+                end
+                function backend:keepalive()
+                    return 0
+                end
+                local result =
+                    cmd_board.take(backend, { SHORT, "--as", "dotfiles/implementer/" .. SHORT })
+
+                -- Expect the workspace named for the card, printed and made
+                local path = dev_os.getenv("DEV_WS_ROOT")
+                    .. "/"
+                    .. fs.basename(root)
+                    .. "/"
+                    .. SHORT
+                testing.eq(result.code, nil, result.message)
+                testing.ok(result.output:find("\nworkspace " .. path, 1, true), result.output)
+                testing.eq(fs.is_dir(path), true)
+                testing.eq(cmd_board.new_workspace(root, SHORT), path)
+            end)
+        end)
+
+        testing.test(kind .. " move to Blocked removes an empty workspace", function()
+            within(function(root)
+                local path = workspace(root)
+                local result =
+                    cmd_board.move(in_progress(root), { SHORT, support.COLUMN_NAME.BLOCKED })
+                testing.eq(result.code, nil, result.message)
+                testing.ok(result.output:find("The workspace is gone.", 1, true), result.output)
+                testing.eq(fs.exists(path), false)
+            end)
+        end)
+
+        testing.test(kind .. " move to Blocked keeps a workspace that holds work", function()
+            within(function(root)
+                local path = workspace(root)
+                assert(fs.write(path .. "/draft", "x"))
+                local backend = in_progress(root)
+                local result = cmd_board.move(backend, { SHORT, support.COLUMN_NAME.BLOCKED })
+                testing.eq(result.code, nil, result.message)
+                testing.eq(
+                    result.output,
+                    "moved cccccccc to Blocked\nKept the workspace "
+                        .. path
+                        .. ". It holds unlanded work."
+                )
+                testing.eq(fs.exists(path .. "/draft"), true)
+            end)
+        end)
+
+        testing.test(kind .. " move to Done refuses a workspace that holds work", function()
+            within(function(root)
+                local path = workspace(root)
+                assert(fs.write(path .. "/draft", "x"))
+                local backend = in_progress(root, support.COLUMN_NAME.VERIFY)
+                local result = cmd_board.move(backend, { SHORT, support.COLUMN_NAME.DONE })
+                testing.eq(result.code, 1)
+                testing.ok(result.message:find("holds unlanded work", 1, true), result.message)
+                testing.ok(result.message:find(path, 1, true), result.message)
+                testing.eq(fs.exists(path .. "/draft"), true)
+                for _, call in ipairs(backend.calls) do
+                    testing.ok(call[1] ~= "move", "the card moved")
+                end
+            end)
+        end)
+
+        testing.test(kind .. " discard refuses a workspace that holds work", function()
+            within(function(root)
+                local path = workspace(root)
+                assert(fs.write(path .. "/draft", "x"))
+                local backend = in_progress(root)
+                local result = cmd_board.run("discard", { SHORT }, backend)
+                testing.eq(result.code, 1)
+                testing.ok(result.message:find("cannot be discarded", 1, true), result.message)
+                testing.ok(result.message:find("holds unlanded work", 1, true), result.message)
+                testing.eq(fs.exists(path .. "/draft"), true)
+                testing.eq(#backend.calls, 0)
+            end)
+        end)
+
+        testing.test(kind .. " discard removes an empty workspace", function()
+            within(function(root)
+                local path = workspace(root)
+                local result = cmd_board.run("discard", { SHORT }, in_progress(root))
+                testing.eq(result.code, nil, result.message)
+                testing.eq(fs.exists(path), false)
+            end)
+        end)
+
+        testing.test(kind .. " ask removes an empty workspace", function()
+            within(function(root)
+                local path = workspace(root)
+                local result = cmd_board.run("ask", {
+                    SHORT,
+                    "--question",
+                    "Which way?",
+                    "--choice",
+                    support.COLUMN_NAME.READY .. "=go",
+                    "--choice",
+                    support.COLUMN_NAME.BACKLOG .. "=stop",
+                    "--recommend",
+                    "1",
+                    "--why",
+                    "Both work.",
+                    "--searched",
+                    "no precedent found",
+                }, in_progress(root))
+                testing.eq(result.code, nil, result.message)
+                testing.ok(result.output:find("The workspace is gone.", 1, true), result.output)
+                testing.eq(fs.exists(path), false)
+            end)
+        end)
+    end
+end
+
+local function taken(maker)
+    local result
+    support.with_env("XDG_STATE_HOME", support.tempdir(), function()
+        local card = colored("green")
+        card.column = support.COLUMN_NAME.READY
+        local backend = fake({ card })
+        backend.root = "/proof"
+        backend.timed = false
+        function backend:claim()
+            return 7
+        end
+        function backend:keepalive()
+            return 0
+        end
+        local args = { "cccccccc", "--as", "dotfiles/implementer/cccccccc" }
+        result = cmd_board.take(backend, args, { new_workspace = maker })
+    end)
+    return result
+end
+
+testing.test("take prints the workspace it made", function()
+    local asked
+    local result = taken(function(root, short)
+        asked = { root, short }
+        return "/w/cccccccc"
+    end)
+    testing.eq(result.code, nil, result.message)
+    testing.eq(asked, { "/proof", "cccccccc" })
+    testing.ok(result.output:find("\nworkspace /w/cccccccc", 1, true), result.output)
+end)
+
+testing.test("take keeps the claim when the workspace cannot be made", function()
+    local result = taken(function()
+        return nil, "the fetch failed"
+    end)
+    testing.eq(result.code, nil, result.message)
+    testing.ok(result.output:find("took cccccccc", 1, true), result.output)
+    testing.eq(result.output:find("\nworkspace ", 1, true), nil)
+end)
+
+testing.test("take makes no workspace for a project with no version control", function()
+    local result = taken(function()
+        return nil
+    end)
+    testing.eq(result.code, nil, result.message)
+    testing.eq(result.output:find("\nworkspace ", 1, true), nil)
 end)

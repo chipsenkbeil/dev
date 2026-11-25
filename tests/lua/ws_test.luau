@@ -2996,3 +2996,157 @@ if dev_os.which("jj") then
         testing.eq(all_ids(root):find(head, 1, true), nil)
     end)
 end
+
+local function with_vars(vars, run)
+    local previous = {}
+    for name, value in pairs(vars) do
+        previous[name] = dev_os.getenv(name)
+        dev_os.setenv(name, value)
+    end
+    local ok, err = pcall(run)
+    for name in pairs(vars) do
+        dev_os.setenv(name, previous[name] or "")
+    end
+    assert(ok, err)
+end
+
+local function quietly(argv, env)
+    local code = dev_os.run(argv, { stdout = "null", stderr = "null", env = env })
+    assert(code == 0, "failed: " .. table.concat(argv, " "))
+end
+
+local function bare_remote()
+    local bare = support.tempdir()
+    quietly({ "git", "init", "--bare", "-q", "-b", "master", bare })
+    return bare
+end
+
+if dev_os.which("jj") and dev_os.which("git") then
+    local function jj_project()
+        local root = assert(fs.realpath(support.tempdir()))
+        quietly({ "jj", "git", "init", root }, IDENT)
+        quietly({ "jj", "-R", root, "git", "remote", "add", "origin", bare_remote() }, IDENT)
+        assert(fs.write(root .. "/base", "1"))
+        quietly({ "jj", "-R", root, "commit", "-m", "base" }, IDENT)
+        quietly({ "jj", "-R", root, "bookmark", "create", "master", "-r", "@-" }, IDENT)
+        quietly(
+            { "jj", "-R", root, "git", "push", "--remote", "origin", "--bookmark", "master" },
+            IDENT
+        )
+        return root
+    end
+
+    local function made_in(root, base, name)
+        local vars =
+            { DEV_WS_ROOT = base, JJ_FORGE = "", JJ_USER = "t", JJ_EMAIL = "t@example.com" }
+        local path, message, code
+        with_vars(vars, function()
+            path, message, code = cmd_ws.make(root, name, function() end)
+        end)
+        testing.eq(message, nil)
+        testing.eq(code, nil)
+        return assert(path)
+    end
+
+    testing.test("make builds a jj workspace that path finds and work reads as empty", function()
+        -- Make a jj project and a workspace of it under a central root
+        local root = jj_project()
+        local base = assert(fs.realpath(support.tempdir()))
+        local path = made_in(root, base, "feat")
+
+        -- Expect the folder under the root, found by path and holding no work
+        testing.eq(path, base .. "/" .. fs.basename(root) .. "/feat")
+        testing.eq(fs.exists(path .. "/.jj"), true)
+        with_vars({ DEV_WS_ROOT = base }, function()
+            testing.eq(cmd_ws.path(root, "feat"), path)
+            testing.eq(cmd_ws.path(root, "other"), nil)
+        end)
+        testing.eq(cmd_ws.work(path), {})
+    end)
+
+    testing.test("make refuses a workspace that exists and says why", function()
+        -- Make the workspace twice
+        local root = jj_project()
+        local base = assert(fs.realpath(support.tempdir()))
+        local path = made_in(root, base, "feat")
+        local again, message
+        with_vars({ DEV_WS_ROOT = base, JJ_FORGE = "" }, function()
+            again, message = cmd_ws.make(root, "feat", function() end)
+        end)
+
+        -- Expect the second make to name the folder and make nothing
+        testing.eq(again, nil)
+        testing.eq(message, path .. " already exists.")
+    end)
+
+    testing.test("work lists a jj workspace's changes and commits above trunk", function()
+        -- Start with a file in the working copy and no commit
+        local root = jj_project()
+        local base = assert(fs.realpath(support.tempdir()))
+        local path = made_in(root, base, "feat")
+        assert(fs.write(path .. "/draft", "x"))
+
+        -- Expect the working copy to count as one change
+        local work = assert(cmd_ws.work(path))
+        testing.eq(#work, 1)
+
+        -- Commit it and expect the commit to count with its title, and the empty copy above it not
+        quietly({ "jj", "-R", path, "commit", "-m", "feat: draft" }, IDENT)
+        work = assert(cmd_ws.work(path))
+        testing.eq(#work, 1)
+        testing.ok(work[1]:find("feat: draft", 1, true) ~= nil, work[1])
+
+        -- Land it on trunk and expect nothing left
+        quietly({ "jj", "-R", path, "bookmark", "set", "master", "-r", "@-" }, IDENT)
+        quietly(
+            { "jj", "-R", path, "git", "push", "--remote", "origin", "--bookmark", "master" },
+            IDENT
+        )
+        testing.eq(cmd_ws.work(path), {})
+    end)
+end
+
+if dev_os.which("git") then
+    local function git_project()
+        local root = assert(fs.realpath(support.tempdir()))
+        quietly({ "git", "init", "-q", "-b", "master", root })
+        assert(fs.write(root .. "/base", "1"))
+        support.git(root, "add", "-A")
+        support.git(root, "commit", "-q", "-m", "base")
+        support.git(root, "remote", "add", "origin", bare_remote())
+        support.git(root, "push", "-q", "origin", "master")
+        return root
+    end
+
+    testing.test("work lists a git worktree's changes and commits no branch reaches", function()
+        -- Make a git project and a worktree of it under a central root
+        local root = git_project()
+        local base = assert(fs.realpath(support.tempdir()))
+        local path, message
+        with_vars({ DEV_WS_ROOT = base, JJ_FORGE = "" }, function()
+            path, message = cmd_ws.make(root, "feat", function() end)
+        end)
+        testing.eq(message, nil)
+        testing.eq(path, base .. "/" .. fs.basename(root) .. "/feat")
+        testing.eq(cmd_ws.work(path), {})
+
+        -- Expect an untracked file to count as uncommitted changes
+        assert(fs.write(path .. "/draft", "x"))
+        testing.eq(cmd_ws.work(path), { "uncommitted changes" })
+
+        -- Commit it and expect the commit with its title
+        support.git(path, "add", "-A")
+        support.git(path, "commit", "-q", "-m", "feat: draft")
+        local work = assert(cmd_ws.work(path))
+        testing.eq(#work, 1)
+        testing.ok(work[1]:find("feat: draft", 1, true) ~= nil, work[1])
+
+        -- Push the card branch and expect the commit to still count
+        support.git(path, "push", "-q", "origin", "feat")
+        testing.eq(#assert(cmd_ws.work(path)), 1)
+
+        -- Land it on master and expect nothing left
+        support.git(root, "merge", "-q", "--ff-only", "feat")
+        testing.eq(cmd_ws.work(path), {})
+    end)
+end

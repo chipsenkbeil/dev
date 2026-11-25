@@ -302,6 +302,15 @@ only the refusal of the workspace dev runs in, which `dev board land` uses when
 it removes the card's workspace. With `opts.inside` a jj workspace whose `@`
 holds a change already on trunk is first moved to a new change on trunk.
 
+`ws new NAME` calls `ws.make(root, name, show)`, which returns the folder, or
+nil with a sentence, or nil with the exit code of a failed jj or git command.
+`dev board take` uses it. `ws.path(root, name)` finds the folder of a workspace,
+and `ws.work(path)` lists what it holds that has not landed: for jj the
+non-empty commits above trunk (the working copy included), for git the commits
+not on the local or remote trunk branch (a pushed card branch still counts)
+plus a line for uncommitted files. An
+empty list is an empty workspace, and `dev board move` and `discard` use it.
+
 The lookup runs in order: the folder `ROOT/<repo>/NAME` for the checkout's own
 folder name, then, from any workspace of the repo including a sibling, the
 folder `jj workspace root --name NAME` lists. The listed folder is taken only
