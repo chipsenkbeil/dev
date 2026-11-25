@@ -2,9 +2,6 @@ use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fs::{self, File};
 use std::io::{self, BufRead, IsTerminal, Read};
-use std::os::unix::ffi::{OsStrExt, OsStringExt};
-use std::os::unix::fs::PermissionsExt;
-use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::result::Result as StdResult;
 use std::sync::OnceLock;
@@ -63,6 +60,25 @@ const STDOUT: &str = "stdout";
 
 /// Stream value that is never valid, since standard output cannot merge into standard error.
 const STDERR: &str = "stderr";
+
+/// Characters that make a program name a path, so PATH is not searched.
+#[cfg(unix)]
+const PATH_SLASHES: &[char] = &['/'];
+
+/// Characters that make a program name a path, so PATH is not searched.
+#[cfg(not(unix))]
+const PATH_SLASHES: &[char] = &['/', '\\'];
+
+/// Separator between the folders of PATH.
+#[cfg(unix)]
+const PATH_SEPARATOR: &str = ":";
+
+/// Separator between the folders of PATH.
+#[cfg(not(unix))]
+const PATH_SEPARATOR: &str = ";";
+
+/// Extensions a program may carry when `PATHEXT` is unset.
+const DEFAULT_PATHEXT: &str = ".COM;.EXE;.BAT;.CMD";
 
 /// The file type bits of a mode.
 const S_IFMT: i64 = 0xF000;
@@ -190,8 +206,38 @@ native_fn! {
     ///
     /// Never fails.
     pub fn getuid(_lua: &Lua) -> mlua::Result<u32> {
-        Ok(rustix::process::getuid().as_raw())
+        Ok(real_user_id())
     }
+}
+
+/// Returns the real user id of the process.
+#[must_use]
+#[cfg(unix)]
+fn real_user_id() -> u32 {
+    rustix::process::getuid().as_raw()
+}
+
+/// Returns the id that stands for a user who is never root, where the platform has no user ids.
+#[must_use]
+#[cfg(not(unix))]
+fn real_user_id() -> u32 {
+    u32::MAX
+}
+
+/// Turns bytes into an `OsString`, replacing what is not UTF-8 where the platform needs it.
+#[must_use]
+#[cfg(unix)]
+fn os_string(bytes: Vec<u8>) -> OsString {
+    use std::os::unix::ffi::OsStringExt;
+
+    OsString::from_vec(bytes)
+}
+
+/// Turns bytes into an `OsString`, replacing what is not UTF-8 where the platform needs it.
+#[must_use]
+#[cfg(not(unix))]
+fn os_string(bytes: Vec<u8>) -> OsString {
+    OsString::from(String::from_utf8_lossy(&bytes).into_owned())
 }
 
 native_fn! {
@@ -280,9 +326,9 @@ native_fn! {
         if dirs.is_empty() {
             return Ok(());
         }
-        let added = dirs.join(":");
+        let added = dirs.join(PATH_SEPARATOR);
         let path = match overlay::get("PATH") {
-            Some(old) if !old.is_empty() => format!("{old}:{added}"),
+            Some(old) if !old.is_empty() => format!("{old}{PATH_SEPARATOR}{added}"),
             _ => added,
         };
         overlay::set("PATH", Some(&path));
@@ -307,8 +353,9 @@ fn find_program(name: &str) -> Option<PathBuf> {
         return None;
     }
     let cwd = env::current_dir().ok()?;
-    if name.contains('/') {
-        return executable(&cwd.join(name));
+    let pathext = pathext();
+    if name.contains(PATH_SLASHES) {
+        return first_executable(&cwd, name, &pathext);
     }
     let path = overlay::get("PATH")?;
     env::split_paths(&path)
@@ -319,13 +366,70 @@ fn find_program(name: &str) -> Option<PathBuf> {
                 &dir
             })
         })
-        .find_map(|dir| executable(&dir.join(name)))
+        .find_map(|dir| first_executable(&dir, name, &pathext))
+}
+
+/// Returns the first executable file `name` can mean inside `dir`.
+#[must_use]
+fn first_executable(dir: &Path, name: &str, pathext: &str) -> Option<PathBuf> {
+    program_names(name, pathext)
+        .iter()
+        .find_map(|candidate| executable(&dir.join(candidate)))
+}
+
+/// Returns the file names `name` can mean when run: itself, then with each `PATHEXT` extension.
+///
+/// An empty `pathext`, which is every platform without extensions, gives only `name`.
+#[must_use]
+fn program_names(name: &str, pathext: &str) -> Vec<String> {
+    let mut names = Vec::new();
+    if pathext.is_empty() || has_pathext(name, pathext) {
+        names.push(name.to_owned());
+    }
+    for extension in pathext.split(';').filter(|extension| !extension.is_empty()) {
+        names.push(format!("{name}{extension}"));
+    }
+    names
+}
+
+/// Returns whether `name` ends in one of the `;`-separated extensions of `pathext`, ignoring case.
+#[must_use]
+pub fn has_pathext(name: &str, pathext: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    pathext
+        .split(';')
+        .filter(|extension| !extension.is_empty())
+        .any(|extension| lower.ends_with(&extension.to_ascii_lowercase()))
+}
+
+/// Returns the extensions a program may carry: `PATHEXT` on Windows, none elsewhere.
+#[must_use]
+pub fn pathext() -> String {
+    if cfg!(windows) {
+        overlay::get("PATHEXT").unwrap_or_else(|| DEFAULT_PATHEXT.to_owned())
+    } else {
+        String::new()
+    }
 }
 
 /// Returns `path` when it is a file someone may run.
+#[must_use]
+#[cfg(unix)]
 fn executable(path: &Path) -> Option<PathBuf> {
+    use std::os::unix::fs::PermissionsExt;
+
     let meta = fs::metadata(path).ok()?;
     (meta.is_file() && meta.permissions().mode() & 0o111 != 0).then(|| path.to_path_buf())
+}
+
+/// Returns `path` when it is a file, since Windows runs a file by its extension, not a mode bit.
+#[must_use]
+#[cfg(not(unix))]
+fn executable(path: &Path) -> Option<PathBuf> {
+    fs::metadata(path)
+        .ok()?
+        .is_file()
+        .then(|| path.to_path_buf())
 }
 
 /// Quotes `arg` as one shell word.
@@ -506,7 +610,7 @@ fn spec_of(
                 "{who} cannot take an argument with a NUL byte"
             )));
         }
-        words.push(OsString::from_vec(bytes.to_vec()));
+        words.push(os_string(bytes.to_vec()));
     }
     let defaults: Table = lua.named_registry_value(DEFAULTS_KEY)?;
     let mut merged: BTreeMap<Vec<u8>, Vec<u8>> =
@@ -535,9 +639,9 @@ fn spec_of(
         argv: words,
         env_set: merged
             .into_iter()
-            .map(|(name, value)| (OsString::from_vec(name), OsString::from_vec(value)))
+            .map(|(name, value)| (os_string(name), os_string(value)))
             .collect(),
-        env_unset: unset.into_iter().map(OsString::from_vec).collect(),
+        env_unset: unset.into_iter().map(os_string).collect(),
         ..Spec::default()
     };
     let Some(opts) = opts else {
@@ -588,7 +692,7 @@ fn announce(lua: &Lua, spec: &Spec) -> mlua::Result<()> {
             if index > 0 {
                 line.push(b' ');
             }
-            line.extend(quote_bytes(word.as_bytes()));
+            line.extend(quote_bytes(word.as_encoded_bytes()));
         }
         line.push(b'\n');
         runtime::write_err(&line);
@@ -757,10 +861,27 @@ native_fn! {
         let spec = spec_of(lua, "exec", &argv_of(&argv)?, opts.as_ref(), true)?;
         prepare(lua, &spec)?;
         let error = match spec.command(spec.input(), None) {
-            Ok(mut command) => Error::io("start the command", command.exec()),
+            Ok(mut command) => Error::io("start the command", replace_with(&mut command)),
             Err(error) => error,
         };
         Ok((None, process::reason(&error)))
+    }
+}
+
+/// Replaces dev with `command`, returning the error when it cannot start.
+#[cfg(unix)]
+fn replace_with(command: &mut std::process::Command) -> io::Error {
+    use std::os::unix::process::CommandExt;
+
+    command.exec()
+}
+
+/// Runs `command` to the end and exits with its status, since Windows cannot replace a process.
+#[cfg(not(unix))]
+fn replace_with(command: &mut std::process::Command) -> io::Error {
+    match command.status() {
+        Ok(status) => std::process::exit(status.code().unwrap_or(1)),
+        Err(error) => error,
     }
 }
 
@@ -1036,10 +1157,7 @@ pub fn register(lua: &Lua) -> mlua::Result<Table> {
 
 #[cfg(test)]
 mod tests {
-    use std::ffi::OsString;
-    use std::io;
-
-    use super::{Error, Spec, find_program, named_reason, quote_bytes, valid_name};
+    use super::*;
 
     #[test]
     fn quote_bytes_should_escape_single_quotes() {
@@ -1058,6 +1176,49 @@ mod tests {
     fn find_program_should_find_sh_and_miss_a_made_up_name() {
         assert!(find_program("sh").is_some_and(|path| path.is_absolute()));
         assert!(find_program("no-such-program-anywhere").is_none());
+    }
+
+    #[test]
+    fn program_names_should_add_each_extension_to_a_bare_name() {
+        assert_eq!(
+            program_names("git", ".COM;.EXE;.CMD"),
+            ["git.COM", "git.EXE", "git.CMD"]
+        );
+    }
+
+    #[test]
+    fn program_names_should_keep_a_name_that_has_an_extension() {
+        let names = program_names("git.exe", ".COM;.EXE");
+        assert_eq!(names.first().map(String::as_str), Some("git.exe"));
+    }
+
+    #[test]
+    fn program_names_should_give_only_the_name_without_extensions() {
+        assert_eq!(program_names("git", ""), ["git"]);
+    }
+
+    #[test]
+    fn has_pathext_should_ignore_case() {
+        assert!(has_pathext("Tool.EXE", ".com;.exe"));
+        assert!(!has_pathext("tool.txt", ".COM;.EXE"));
+        assert!(!has_pathext("tool", ""));
+    }
+
+    #[test]
+    fn first_executable_should_find_git_exe_by_pathext() {
+        let dir = env::temp_dir().join(format!("dev-os-pathext-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let program = dir.join("git.exe");
+        fs::write(&program, "").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+
+            fs::set_permissions(&program, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        assert_eq!(first_executable(&dir, "git", ".COM;.exe"), Some(program));
+        assert_eq!(first_executable(&dir, "git", ""), None);
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

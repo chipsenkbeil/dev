@@ -1,11 +1,11 @@
-use std::fs::{self, File, OpenOptions};
-use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+use std::fs::{File, OpenOptions};
 use std::time::{Duration, Instant};
 use std::{io, thread};
 
 use fs4::fs_std::FileExt;
 use mlua::{Lua, MetaMethod, Table, UserData, UserDataMethods};
 
+use crate::native::mode;
 use crate::{luau_handle, native_fn, native_struct, runtime};
 
 /// Name of this module under `dev`.
@@ -84,16 +84,13 @@ enum Wait {
 
 /// Opens the lock file, creating it with `mode`.
 fn open_lock_file(path: &str, mode: Option<u32>) -> io::Result<File> {
-    let created = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create_new(true)
-        .mode(mode.unwrap_or(DEFAULT_MODE))
-        .open(path);
+    let mut options = OpenOptions::new();
+    options.read(true).write(true).create_new(true);
+    let created = mode::create_with(&mut options, mode.unwrap_or(DEFAULT_MODE)).open(path);
     match created {
         Ok(file) => {
             if let Some(mode) = mode {
-                file.set_permissions(fs::Permissions::from_mode(mode))?;
+                mode::set_file_mode(&file, mode)?;
             }
             Ok(file)
         }
@@ -202,6 +199,7 @@ native_fn! {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
     use std::path::PathBuf;
 
     use super::*;
@@ -259,12 +257,12 @@ mod tests {
 
     #[test]
     fn open_lock_file_should_apply_the_mode_to_a_new_file() {
-        use std::os::unix::fs::MetadataExt;
-
         let path = lock_path("mode");
         let path_text = path.to_string_lossy().into_owned();
         drop(open_lock_file(&path_text, Some(0o600)).unwrap());
-        assert_eq!(fs::metadata(&path).unwrap().mode() & 0o777, 0o600);
+        if cfg!(unix) {
+            assert_eq!(mode::mode_of(&fs::metadata(&path).unwrap()) & 0o777, 0o600);
+        }
         fs::remove_file(&path).unwrap();
     }
 

@@ -7,6 +7,7 @@ use std::{fs, process};
 
 use mlua::{Error, Function, Lua, LuaString, MultiValue, Table, Value, VmState};
 
+use crate::native::fs as native_fs;
 use crate::native::signals::{INT as SIGINT, PIPE as SIGPIPE};
 use crate::resolve::{DEV_ALIAS, Target, resolve};
 use crate::{Error as DevError, embed, log};
@@ -358,9 +359,8 @@ fn find(name: &str, target: &Target) -> mlua::Result<(Vec<u8>, String, String)> 
             stem.push(".luau");
             for candidate in [PathBuf::from(stem), base.join("init.luau")] {
                 if let Ok(bytes) = fs::read(&candidate) {
-                    let key = candidate
-                        .canonicalize()
-                        .unwrap_or_else(|_| candidate.clone());
+                    let key =
+                        native_fs::canonical(&candidate).unwrap_or_else(|_| candidate.clone());
                     return Ok((
                         bytes,
                         format!("@{}", candidate.display()),

@@ -14,6 +14,8 @@ pub mod lock;
 pub mod log;
 /// `dev.manifest`: the tools manifest parser.
 pub mod manifest;
+/// Permission bits across platforms, for `dev.fs` and `dev.lock`.
+pub mod mode;
 /// `dev.os`: the environment, processes, streams and exit.
 pub mod os;
 /// The built-in pager behind `dev.term.page`.

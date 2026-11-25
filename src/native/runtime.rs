@@ -5,7 +5,7 @@ use mlua::{Function, Lua, LuaString, MultiValue, Table, Value};
 
 use crate::flags::{self, FlagsEnv};
 use crate::luau::{self, LuauFnRecord};
-use crate::native::{globals, os};
+use crate::native::{fs, globals, os};
 use crate::runtime::{self, EXEC_FAILED, FAILURE_EXIT, SIGNAL_EXIT_BASE};
 use crate::{embed, native_fn, native_struct};
 
@@ -224,7 +224,7 @@ pub fn register_exit(lua: &Lua, os_table: &Table) -> mlua::Result<()> {
 #[must_use]
 fn exe() -> String {
     env::current_exe()
-        .and_then(|path| path.canonicalize())
+        .and_then(|path| fs::canonical(&path))
         .map(|path| path.display().to_string())
         .unwrap_or_default()
 }

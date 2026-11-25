@@ -1,16 +1,14 @@
 use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
-use std::os::fd::AsRawFd;
-use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, PoisonError};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use mlua::{Lua, LuaString, Table, Variadic};
-use rustix::fs::OFlags;
 
+use crate::native::mode;
 use crate::{native_fn, native_struct};
 
 /// Name of this module under `dev`.
@@ -51,6 +49,10 @@ const DEFAULT_FILE_MODE: u32 = 0o666;
 
 /// Counter that keeps temporary names of one process apart.
 static COUNTER: AtomicU64 = AtomicU64::new(0);
+
+/// Next number `open_nofollow` hands out where a file has no descriptor of its own.
+#[cfg(not(unix))]
+static NEXT_DESCRIPTOR: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(3);
 
 /// Descriptors opened by `open_nofollow`, by number, until `close`.
 static DESCRIPTORS: Mutex<Option<HashMap<i32, File>>> = Mutex::new(None);
@@ -173,10 +175,10 @@ fn kind_of(mode: u32) -> &'static str {
 /// Builds the table shape of `stat` from file metadata.
 fn stat_of(meta: &fs::Metadata) -> FsStat {
     FsStat {
-        uid: meta.uid(),
-        mode: meta.mode(),
-        size: meta.size(),
-        kind: kind_of(meta.mode()).to_owned(),
+        uid: mode::owner_of(meta),
+        mode: mode::mode_of(meta),
+        size: meta.len(),
+        kind: kind_of(mode::mode_of(meta)).to_owned(),
     }
 }
 
@@ -217,8 +219,22 @@ native_fn! {
 native_fn! {
     /// Checks that the process may execute `path`.
     pub fn is_exec(_lua: &Lua, path: String) -> mlua::Result<bool> {
-        Ok(rustix::fs::access(path.as_str(), rustix::fs::Access::EXEC_OK).is_ok())
+        Ok(is_runnable(&path))
     }
+}
+
+/// Returns whether the process may execute `path`.
+#[cfg(unix)]
+fn is_runnable(path: &str) -> bool {
+    rustix::fs::access(path, rustix::fs::Access::EXEC_OK).is_ok()
+}
+
+/// Returns whether `path` is a file whose name ends in one of the `PATHEXT` extensions.
+#[cfg(windows)]
+fn is_runnable(path: &str) -> bool {
+    use crate::native::os;
+
+    fs::metadata(path).is_ok_and(|meta| meta.is_file()) && os::has_pathext(path, &os::pathext())
 }
 
 native_fn! {
@@ -238,16 +254,13 @@ fn at(path: &Path) -> impl Fn(io::Error) -> crate::Error + '_ {
 
 /// Opens `path` for writing and truncates it, applying `mode` when the call creates it.
 fn open_for_write(path: &Path, mode: Option<u32>) -> crate::Result<File> {
-    let created = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(mode.unwrap_or(DEFAULT_FILE_MODE))
-        .open(path);
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    let created = mode::create_with(&mut options, mode.unwrap_or(DEFAULT_FILE_MODE)).open(path);
     match created {
         Ok(file) => {
             if let Some(mode) = mode {
-                file.set_permissions(fs::Permissions::from_mode(mode))
-                    .map_err(at(path))?;
+                mode::set_file_mode(&file, mode).map_err(at(path))?;
             }
             Ok(file)
         }
@@ -273,24 +286,38 @@ fn sibling_temp(target: &Path) -> PathBuf {
 
 /// Writes `text` to the new file `temp` and renames it over `path`.
 fn fill_and_rename(temp: &Path, path: &Path, text: &[u8], mode: Option<u32>) -> crate::Result<()> {
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(mode.unwrap_or(DEFAULT_FILE_MODE))
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    let mut file = mode::create_with(&mut options, mode.unwrap_or(DEFAULT_FILE_MODE))
         .open(temp)
         .map_err(at(path))?;
     if let Some(mode) = mode {
-        file.set_permissions(fs::Permissions::from_mode(mode))
-            .map_err(at(path))?;
+        mode::set_file_mode(&file, mode).map_err(at(path))?;
     }
     file.write_all(text).map_err(at(path))?;
     file.sync_all().map_err(at(path))?;
     fs::rename(temp, path).map_err(at(path))
 }
 
+/// Returns the permission bits of the file at `path`, which an atomic write keeps.
+#[must_use]
+#[cfg(unix)]
+fn existing_mode(path: &Path) -> Option<u32> {
+    fs::metadata(path)
+        .ok()
+        .map(|meta| mode::mode_of(&meta) & 0o7777)
+}
+
+/// Returns no mode, since a read-only flag kept on the copy would stop it replacing the file.
+#[must_use]
+#[cfg(not(unix))]
+fn existing_mode(_path: &Path) -> Option<u32> {
+    None
+}
+
 /// Writes `text` to a temporary file next to `path` and renames it over `path`.
 fn write_atomic(path: &Path, text: &[u8], mode: Option<u32>) -> crate::Result<()> {
-    let mode = mode.or_else(|| fs::metadata(path).ok().map(|meta| meta.mode() & 0o7777));
+    let mode = mode.or_else(|| existing_mode(path));
     let temp = sibling_temp(path);
     let outcome = fill_and_rename(&temp, path, text, mode);
     if outcome.is_err() {
@@ -380,7 +407,7 @@ fn copy_tree(from: &Path, to: &Path) -> crate::Result<()> {
     let meta = fs::symlink_metadata(from).map_err(at(from))?;
     if meta.file_type().is_symlink() {
         let target = fs::read_link(from).map_err(at(from))?;
-        std::os::unix::fs::symlink(target, to).map_err(at(to))
+        copy_symlink(&meta, &target, to).map_err(at(to))
     } else if meta.is_dir() {
         fs::create_dir(to).map_err(at(to))?;
         for entry in fs::read_dir(from).map_err(at(from))? {
@@ -454,7 +481,7 @@ native_fn! {
 native_fn! {
     /// Resolves `path` to an absolute path with no links.
     pub fn realpath(_lua: &Lua, path: String) -> mlua::Result<Result<String, String>> {
-        match fs::canonicalize(&path) {
+        match canonical(Path::new(&path)) {
             Ok(real) => Ok(Ok(real.to_string_lossy().into_owned())),
             Err(_) => Ok(Err(format!("cannot resolve {path}"))),
         }
@@ -503,18 +530,17 @@ native_fn! {
             (opts.prefix, opts.dir.unwrap_or(false))
         });
         let prefix = prefix.unwrap_or_else(|| "dev".to_owned());
-        let tmpdir = std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_owned());
+        let tmpdir = std::env::var("TMPDIR").unwrap_or_else(|_| default_tmpdir());
         let base = tmpdir.trim_end_matches('/').to_owned();
         for _ in 0..NAME_ATTEMPTS {
             let count = COUNTER.fetch_add(1, Ordering::Relaxed);
             let path = format!("{base}/{prefix}.{}", random_suffix(count));
             let made = if dir {
-                fs::DirBuilder::new().mode(TEMP_DIR_MODE).create(&path)
+                mode::create_dir_with(Path::new(&path), TEMP_DIR_MODE)
             } else {
-                OpenOptions::new()
-                    .write(true)
-                    .create_new(true)
-                    .mode(TEMP_FILE_MODE)
+                let mut options = OpenOptions::new();
+                options.write(true).create_new(true);
+                mode::create_with(&mut options, TEMP_FILE_MODE)
                     .open(&path)
                     .map(drop)
             };
@@ -531,15 +557,94 @@ native_fn! {
 native_fn! {
     /// Makes a symbolic link at `link` holding `target`.
     pub fn symlink(_lua: &Lua, target: String, link: String) -> mlua::Result<Result<bool, String>> {
-        let outcome = std::os::unix::fs::symlink(&target, &link);
+        let outcome = make_symlink(Path::new(&target), Path::new(&link));
         Ok(outcome.map(|()| true).map_err(|error| reason(&link, &error)))
     }
+}
+
+/// Returns the folder `mktemp` uses when `TMPDIR` is unset.
+#[must_use]
+#[cfg(unix)]
+fn default_tmpdir() -> String {
+    "/tmp".to_owned()
+}
+
+/// Returns the folder `mktemp` uses when `TMPDIR` is unset.
+#[must_use]
+#[cfg(not(unix))]
+fn default_tmpdir() -> String {
+    std::env::temp_dir().to_string_lossy().into_owned()
+}
+
+/// Makes a symbolic link at `link` holding `target`.
+#[cfg(unix)]
+fn make_symlink(target: &Path, link: &Path) -> io::Result<()> {
+    std::os::unix::fs::symlink(target, link)
+}
+
+/// Makes a symbolic link at `link` holding `target`, of the kind its target is.
+#[cfg(windows)]
+fn make_symlink(target: &Path, link: &Path) -> io::Result<()> {
+    let resolved = link
+        .parent()
+        .map_or_else(|| target.to_path_buf(), |parent| parent.join(target));
+    if resolved.is_dir() {
+        std::os::windows::fs::symlink_dir(target, link)
+    } else {
+        std::os::windows::fs::symlink_file(target, link)
+    }
+}
+
+/// Copies the symbolic link `source` describes to `link`, holding `target`.
+#[cfg(unix)]
+fn copy_symlink(_source: &fs::Metadata, target: &Path, link: &Path) -> io::Result<()> {
+    make_symlink(target, link)
+}
+
+/// Copies the symbolic link `source` describes to `link`, of the kind the original is.
+#[cfg(windows)]
+fn copy_symlink(source: &fs::Metadata, target: &Path, link: &Path) -> io::Result<()> {
+    use std::os::windows::fs::FileTypeExt;
+
+    if source.file_type().is_symlink_dir() {
+        std::os::windows::fs::symlink_dir(target, link)
+    } else {
+        std::os::windows::fs::symlink_file(target, link)
+    }
+}
+
+/// Resolves `path` to an absolute path with no links and no verbatim prefix.
+///
+/// # Errors
+///
+/// Returns the error of the system call that resolves it.
+pub fn canonical(path: &Path) -> io::Result<PathBuf> {
+    let real = fs::canonicalize(path)?;
+    Ok(match real.to_str().and_then(strip_verbatim) {
+        Some(plain) => PathBuf::from(plain),
+        None => real,
+    })
+}
+
+/// Returns `path` without its `\\?\` prefix, or `None` when it has none.
+#[must_use]
+fn strip_verbatim(path: &str) -> Option<String> {
+    let rest = path.strip_prefix(r"\\?\")?;
+    if let Some(share) = rest.strip_prefix(r"UNC\") {
+        return Some(format!(r"\\{share}"));
+    }
+    let mut chars = rest.chars();
+    let on_drive = chars
+        .next()
+        .is_some_and(|letter| letter.is_ascii_alphabetic())
+        && chars.next() == Some(':');
+    on_drive.then(|| rest.to_owned())
 }
 
 native_fn! {
     /// Sets the permission bits of `path`.
     pub fn chmod(_lua: &Lua, path: String, mode: u32) -> mlua::Result<Result<bool, String>> {
-        let outcome = fs::set_permissions(&path, fs::Permissions::from_mode(mode));
+        let outcome = mode::set_path_mode(Path::new(&path), mode);
         Ok(outcome.map(|()| true).map_err(|error| reason(&path, &error)))
     }
 }
@@ -610,19 +715,59 @@ native_fn! {
         if path.contains('\0') {
             return Ok(Err("path has a NUL byte".to_owned()));
         }
-        let opened = OpenOptions::new()
-            .read(true)
-            .custom_flags((OFlags::NOFOLLOW | OFlags::CLOEXEC | OFlags::NONBLOCK).bits().cast_signed())
-            .open(&path);
-        match opened {
+        match open_without_following(&path) {
             Ok(file) => {
-                let fd = file.as_raw_fd();
+                let fd = descriptor_of(&file);
                 with_descriptors(|table| table.insert(fd, file));
                 Ok(Ok(fd))
             }
             Err(error) => Ok(Err(message(&error))),
         }
     }
+}
+
+/// Opens `path` for reading, refusing a symbolic link in its last part, without blocking.
+#[cfg(unix)]
+fn open_without_following(path: &str) -> io::Result<File> {
+    use std::os::unix::fs::OpenOptionsExt;
+
+    use rustix::fs::OFlags;
+
+    OpenOptions::new()
+        .read(true)
+        .custom_flags(
+            (OFlags::NOFOLLOW | OFlags::CLOEXEC | OFlags::NONBLOCK)
+                .bits()
+                .cast_signed(),
+        )
+        .open(path)
+}
+
+/// Opens `path` for reading, refusing a symbolic link in its last part.
+#[cfg(not(unix))]
+fn open_without_following(path: &str) -> io::Result<File> {
+    if fs::symlink_metadata(path)?.file_type().is_symlink() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Too many levels of symbolic links",
+        ));
+    }
+    File::open(path)
+}
+
+/// Returns the number that names `file` in the descriptor table.
+#[must_use]
+#[cfg(unix)]
+fn descriptor_of(file: &File) -> i32 {
+    use std::os::fd::AsRawFd;
+
+    file.as_raw_fd()
+}
+
+/// Returns the number that names `file` in the descriptor table, a fresh one off unix.
+#[cfg(not(unix))]
+fn descriptor_of(_file: &File) -> i32 {
+    NEXT_DESCRIPTOR.fetch_add(1, Ordering::Relaxed)
 }
 
 native_fn! {
@@ -723,9 +868,43 @@ mod tests {
     }
 
     #[test]
+    fn strip_verbatim_should_drop_the_prefix_of_a_drive_path() {
+        assert_eq!(
+            strip_verbatim(r"\\?\C:\Users\dev").as_deref(),
+            Some(r"C:\Users\dev")
+        );
+    }
+
+    #[test]
+    fn strip_verbatim_should_turn_a_verbatim_share_into_a_unc_path() {
+        assert_eq!(
+            strip_verbatim(r"\\?\UNC\server\share\dir").as_deref(),
+            Some(r"\\server\share\dir")
+        );
+    }
+
+    #[test]
+    fn strip_verbatim_should_leave_other_paths_alone() {
+        assert_eq!(strip_verbatim(r"C:\Users\dev"), None);
+        assert_eq!(strip_verbatim("/usr/bin"), None);
+        assert_eq!(strip_verbatim(r"\\?\Volume{1234}\dir"), None);
+        assert_eq!(strip_verbatim(r"\\?\"), None);
+    }
+
+    #[test]
+    fn canonical_should_resolve_an_existing_path_without_a_verbatim_prefix() {
+        let dir = scratch("canonical");
+        let real = canonical(&dir).unwrap();
+        assert!(!real.to_string_lossy().starts_with(r"\\?\"));
+        assert!(real.is_absolute());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn message_should_drop_the_os_error_tail() {
         let error = fs::read("/nonexistent/dev-fs-test").unwrap_err();
-        assert_eq!(message(&error), "No such file or directory");
+        assert!(error.to_string().contains("(os error "));
+        assert!(!message(&error).contains("os error"));
     }
 
     #[test]
@@ -752,7 +931,12 @@ mod tests {
         let dir = scratch("mode");
         let target = dir.join("secret");
         drop(open_for_write(&target, Some(0o600)).unwrap());
-        assert_eq!(fs::metadata(&target).unwrap().mode() & 0o777, 0o600);
+        if cfg!(unix) {
+            assert_eq!(
+                mode::mode_of(&fs::metadata(&target).unwrap()) & 0o777,
+                0o600
+            );
+        }
         fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -762,7 +946,7 @@ mod tests {
         let from = dir.join("from");
         fs::create_dir_all(from.join("sub")).unwrap();
         fs::write(from.join("sub/file"), "x").unwrap();
-        std::os::unix::fs::symlink("sub/file", from.join("link")).unwrap();
+        make_symlink(Path::new("sub/file"), &from.join("link")).unwrap();
         let to = dir.join("to");
         copy_tree(&from, &to).unwrap();
         assert_eq!(fs::read_to_string(to.join("sub/file")).unwrap(), "x");

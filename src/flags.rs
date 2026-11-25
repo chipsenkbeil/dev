@@ -1,6 +1,7 @@
 use std::path::Path;
 use std::{env, fmt};
 
+use crate::native::fs;
 use crate::{log, overlay, runtime};
 
 /// Values of `DEV_REMOTE` that ask for a local run.
@@ -294,7 +295,7 @@ pub fn apply(flags: &Flags) -> Result<(), FlagsError> {
             overlay::set(name, None);
         }
     }
-    if let Ok(exe) = env::current_exe().and_then(|path| path.canonicalize()) {
+    if let Ok(exe) = env::current_exe().and_then(|path| fs::canonical(&path)) {
         overlay::set("DEV_SELF", Some(&exe.display().to_string()));
     }
     if let Some(agent) = &flags.agent {
