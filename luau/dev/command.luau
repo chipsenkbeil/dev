@@ -155,6 +155,14 @@ function M.vcs_sentence(err, root)
     return dev_text.sentence(err)
 end
 
+---The sentence that says a command did not load, with the reason it gave.
+---@param name string the command name
+---@param reason any the reason the load gave
+---@return string message the full sentence
+function M.load_failure(name, reason)
+    return "The command " .. name .. " did not load: " .. (tostring(reason):gsub("%.$", "")) .. "."
+end
+
 ---Print `msg` and exit 1.
 ---@param msg string the whole message
 function M.die(msg)
@@ -285,7 +293,7 @@ function M.run(path, ctx, loaded)
         if tostring(reason):find(INTERRUPTED, 1, true) then
             return dev_os.interrupt_code()
         end
-        M.note("dev " .. ctx.name .. ": " .. tostring(reason))
+        M.note(M.load_failure(ctx.name, reason))
         return 1
     end
     local words = ctx.argv or {}
@@ -305,20 +313,14 @@ function M.run(path, ctx, loaded)
         if text:find(INTERRUPTED, 1, true) then
             return dev_os.interrupt_code()
         end
-        M.note("dev " .. ctx.name .. ": " .. strip_position(text, path))
+        M.note(strip_position(text, path))
         return 1
     end
     if result == nil then
         return 0
     end
     if type(result) ~= "number" or result % 1 ~= 0 then
-        M.note(
-            "dev "
-                .. ctx.name
-                .. ": the script returned "
-                .. tostring(result)
-                .. ", not an exit code"
-        )
+        M.note("The script returned " .. tostring(result) .. ", not an exit code.")
         return 1
     end
     return result % 256

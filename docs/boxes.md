@@ -389,7 +389,7 @@ and `delete` pick one with the shared picker (`dev.ui.picker`, rows as in
   stopped ones for `resume`).
 - skipped screen: `stop` and `delete` always show the screen, and the others
   skip it when one row is left.
-- no such box: dev prints `dev <command>: no running boxes to stop` (or the
+- no such box: dev prints `There are no running boxes to stop.` (or the
   matching words) and exits 1.
 
 Without a terminal a missing name is a usage error with exit 2. The line ends

@@ -376,7 +376,7 @@ local function run_shell(row, spec, ctx)
     local argv
     if row.lang == "ps1" then
         if dev_os.name() ~= "Windows" then
-            command.die("dev " .. ctx.name .. ": A .ps1 command runs only on Windows.")
+            command.die("A .ps1 command runs only on Windows.")
         end
         argv = { "pwsh", "-File", row.script }
     elseif log.xtrace() then
@@ -591,7 +591,7 @@ function M.main(parsed)
         help.usage_error(ctx, reg, "unknown command " .. name)
     end
     if not spec then
-        command.die("dev " .. ctx.name .. ": " .. tostring(broken))
+        command.die(command.load_failure(ctx.name, broken))
     end
     if patch_job and not on_remote_host and fetches(parsed, project_root) then
         return fetch.apply(project_root, patch_job)

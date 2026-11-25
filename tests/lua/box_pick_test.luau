@@ -137,7 +137,7 @@ testing.test("a command with no box it can act on says so", function()
     assert(fs.write(root .. "/ls.json", '{"ok":true,"boxes":[]}'))
     local out, code = support.dev(root, { "box", "resume" }, env(root))
     testing.eq(code, 1)
-    testing.eq(out, "dev box resume: no stopped boxes to resume\n")
+    testing.eq(out, "There are no stopped boxes to resume.\n")
     fs.remove(root, { recursive = true })
 end)
 

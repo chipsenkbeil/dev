@@ -291,7 +291,7 @@ mkdir -p "$DASH/.git"
 fx create "$(doc "$KEPT")"
 out="$(cd "$DASH" && DEV_AGENT=dotfiles/runner/x PATH="$STUBS:$BASE_PATH" "$DEV" box create 2>&1)"
 assert_eq "create skips a default project that starts with a dash" "$(calls)" "ci box create --by dotfiles/runner/x --json"
-assert_contains "the skipped default is warned about" "$out" "not using -dash as the default project"
+assert_contains "the skipped default is warned about" "$out" "Not using -dash as the default project"
 reset
 NOHOST="$(jq -c '.tailnet_name = null | .state = "creating" | .expires_at = null' <<<"$RUNNING")"
 fx show "$(doc "$NOHOST")"

@@ -528,9 +528,7 @@ function M.default_project(root)
     end
     if name:sub(1, 1) == "-" then
         dev_command.note(
-            "dev box: not using "
-                .. name
-                .. " as the default project, a project name cannot start with -"
+            "Not using " .. name .. " as the default project. A project name cannot start with -."
         )
         return nil
     end
@@ -1363,13 +1361,13 @@ local function pick_name(ctx, parsed, opts)
         end
     end
     if #items == 0 then
-        dev_command.note("dev " .. ctx.name .. ": " .. opts.none)
+        dev_command.note(opts.none)
         dev_os.exit(Exit.FAILED)
     end
     local ok, picked =
         pcall(picker.run, ui.context(), items, { title = opts.title, auto = opts.auto })
     if not ok then
-        dev_command.note("dev " .. ctx.name .. ": " .. tostring(picked))
+        dev_command.note(tostring(picked))
         dev_os.exit(Exit.FAILED)
     end
     if not picked or picked == "" then
@@ -1404,7 +1402,7 @@ function M.show(opts, args, ctx)
         sub = "show",
         title = "Show which box?",
         keep = any_box,
-        none = "no boxes to show",
+        none = "There are no boxes to show.",
         auto = true,
     })
     M.need_ci()
@@ -1458,7 +1456,7 @@ function M.stop(opts, args, ctx)
         sub = "stop",
         title = "Stop which box?",
         keep = in_state(State.RUNNING),
-        none = "no running boxes to stop",
+        none = "There are no running boxes to stop.",
         auto = false,
     })
     M.need_ci()
@@ -1484,7 +1482,7 @@ function M.resume(opts, args, ctx)
         sub = "resume",
         title = "Resume which box?",
         keep = in_state(State.STOPPED),
-        none = "no stopped boxes to resume",
+        none = "There are no stopped boxes to resume.",
         auto = true,
     })
     M.need_ci()
@@ -1506,7 +1504,7 @@ function M.extend(opts, args, ctx)
         sub = "extend",
         title = "Extend which box?",
         keep = in_state(State.RUNNING),
-        none = "no running boxes to extend",
+        none = "There are no running boxes to extend.",
         example = " --keep",
         auto = true,
     })
@@ -1547,7 +1545,7 @@ function M.tools_install(opts, args, ctx)
         sub = "tools install",
         title = "Install tools on which box?",
         keep = in_state(State.RUNNING),
-        none = "no running boxes to install tools on",
+        none = "There are no running boxes to install tools on.",
         auto = true,
         rest = true,
     })
@@ -1630,7 +1628,7 @@ function M.delete(opts, args, ctx)
         sub = "delete",
         title = "Delete which box?",
         keep = any_box,
-        none = "no boxes to delete",
+        none = "There are no boxes to delete.",
         example = " -y",
         auto = false,
     })
