@@ -507,5 +507,5 @@ the terminal unchanged. When dev cannot make a temporary file for that standard
 error, it prints "Cannot make a temporary path for the standard error of ci. Ci
 will write it to the terminal." and runs ci anyway.
 
-`tests/lua/connect_test.lua` and `tests/dev/box_test.sh` run all of it against
+`tests/lua/connect_test.luau` and `tests/dev/box_test.sh` run all of it against
 a fake `ci` and `ssh`.

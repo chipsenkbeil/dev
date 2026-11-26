@@ -501,7 +501,7 @@ card's bookmark.
 ### Test support
 
 - `@dev/testing`: `test(name, fn)` registers a case, and `eq`, `ok` and
-  `raises` assert. These moved from `tests/lua/testing.lua`.
+  `raises` assert.
 - `@dev/testrun`: `run(root)` runs every `root/.dev/tests/*_test.luau` sorted,
   and each file finds the project's `.dev/lib` through its `.luaurc`. It
   prints `ok - NAME` and `not ok - NAME` with the error, and returns 1 when a
@@ -518,7 +518,7 @@ card's bookmark.
     launcher in `root` with `root/bin` first on PATH and `opts.env`. It
     returns `out, code, err` with standard error apart.
 
-  `tests/lua/projtest_test.lua` pins all three helpers.
+  `tests/lua/projtest_test.luau` pins all three helpers.
 
 ### System, release and terminal
 
@@ -556,7 +556,7 @@ word or 8 columns, and wraps the text inside the cells. It never falls back to
 the raw row. `color` off drops the markers and paints nothing.
 
 `dev help` calls it with the terminal's width capped at 100 when standard
-output takes color. `tests/lua/markdown_test.lua` pins both modes.
+output takes color. `tests/lua/markdown_test.luau` pins both modes.
 
 The picker behaves this way:
 

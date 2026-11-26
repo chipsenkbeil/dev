@@ -1553,7 +1553,7 @@ strict = true
 
 The same table can list the checks rows every card must hold. The required
 setting is a list of commands, and a card row satisfies one when it equals it
-or starts with it and a space, so `dev --remote test -- tests/lua/x_test.lua`
+or starts with it and a space, so `dev --remote test -- tests/lua/x_test.luau`
 counts as `dev --remote test`. `dev board lint` reports an open card in Ready,
 In Progress or Review that lacks a listed row, and `dev board move CARD ready`
 refuses it. An epic, a card with children and a card labelled `no-change` are
@@ -1602,7 +1602,7 @@ neither passed nor failed. A `mac_only` that is not a list of file paths makes
 
 ```toml
 [board.check]
-mac_only = ["tests/lua/mac_only_test.lua"]
+mac_only = ["tests/lua/mac_only_test.luau"]
 ```
 
 ### landing before starting
@@ -4940,7 +4940,7 @@ Failures:
   exits 1 at once.
 
 `wait` is not in the queue rules, and a reply with no matching event loops
-again. `tests/lua/board_test.lua` covers it with a fake backend and stub
+again. `tests/lua/board_test.luau` covers it with a fake backend and stub
 `nap`, `random` and `notice` options.
 
 ### The local backend
@@ -5050,7 +5050,7 @@ malformed:
   not be queued. WHY.` (`push` refuses a malformed file), and nothing
   overwrites the file.
 
-`tests/lua/board_local_test.lua` covers the local backend on a temporary state
+`tests/lua/board_local_test.luau` covers the local backend on a temporary state
 directory, a tracked path, six processes writing at once and the queue.
 
 ### Arguments
@@ -5246,7 +5246,7 @@ or `board X: N changes`. A failure prints `<message>` with exit 1 after the
 lines of the changes already made. A `403` adds
 ``. This token may not change this board, so run `dev board init --admin`.``
 
-`tests/lua/board_init_test.lua` runs the algorithm against a stateful fake
+`tests/lua/board_init_test.luau` runs the algorithm against a stateful fake
 layout and the command against a fake `curl`.
 
 ### Tokens for init

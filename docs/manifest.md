@@ -141,9 +141,6 @@ executable or run. It runs `rustup-init` with
 pins, and skips when `rustup` is in `CARGO_HOME/bin` (else `~/.cargo/bin`) or
 on PATH. `--check` is that test.
 
-`tests/lua/pkg_pins_rust_test.lua` covers every rust row, the dry run order and
-the script against a stub `curl` and a stub `rustup-init`.
-
 ## Ubuntu
 
 On Linux with `apt-get` on PATH and neither pacman nor dnf, the driver reads
