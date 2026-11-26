@@ -801,8 +801,7 @@ testing.test("analyze_findings reports a misspelled alias and drops a bound one"
     fs.remove(root, { recursive = true })
 end)
 
-local function analyze_with(output: string): ({ string }, { string })
-    local root = support.tempdir()
+local function analyze_in(root: string, output: string): ({ string }, { string })
     local lint = lint_for(root)
     local which, capture, say, note =
         dev_os.which, dev_os.capture, dev_command.say, dev_command.note
@@ -811,7 +810,7 @@ local function analyze_with(output: string): ({ string }, { string })
         return true
     end
     dev_os.capture = function()
-        return output, 1
+        return output, output == "" and 0 or 1
     end
     dev_command.say = function() end
     dev_command.note = function(text)
@@ -819,9 +818,15 @@ local function analyze_with(output: string): ({ string }, { string })
     end
     local ok, err = pcall(lint.luau_analyze, lint, { "a.luau" })
     dev_os.which, dev_os.capture, dev_command.say, dev_command.note = which, capture, say, note
-    fs.remove(root, { recursive = true })
     assert(ok, err)
     return lint.failed, notes
+end
+
+local function analyze_with(output: string): ({ string }, { string })
+    local root = support.tempdir()
+    local failed, notes = analyze_in(root, output)
+    fs.remove(root, { recursive = true })
+    return failed, notes
 end
 
 testing.test(
@@ -840,4 +845,45 @@ testing.test("luau_analyze fails a stub analyzer that reports a real finding", f
             .. "a.luau(2,1): (W000) Unknown global 'nope'\n"
     )
     testing.eq(failed, { "luau-analyze" })
+end)
+
+testing.test("dev_alias reads the folder the .luaurc gives the dev alias", function()
+    -- Read a root with no .luaurc, then one with and without the alias
+    local root = support.tempdir()
+    testing.eq(lintset.dev_alias(root), nil)
+    assert(fs.write(`{root}/.luaurc`, '{ "aliases": { "lib": ".dev/lib" } }'))
+    testing.eq(lintset.dev_alias(root), nil)
+    assert(fs.write(`{root}/.luaurc`, '{ "aliases": { "dev": "./.dev/types" } }'))
+    testing.eq(lintset.dev_alias(root), "./.dev/types")
+
+    -- Remove the directory
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("luau_analyze writes the dev declarations when the .luaurc sets the alias", function()
+    -- Set the alias in a project and run a stub analyzer
+    local root = support.tempdir()
+    assert(fs.write(`{root}/.luaurc`, '{ "aliases": { "dev": "./.dev/types" } }'))
+    local failed = analyze_in(root, "")
+
+    -- Expect no failure and the declarations on disk
+    testing.eq(failed, {})
+    testing.ok(fs.is_file(`{root}/.dev/types/os.luau`), "os.luau was not written")
+    testing.ok(fs.is_file(`{root}/.dev/types/command.luau`), "command.luau was not written")
+
+    -- Remove the directory
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("analyze_findings drops a finding in a file of the generated folder", function()
+    local out = table.concat({
+        "/work/.dev/types/board/check.luau(4,1): TypeError: Cyclic dependencies",
+        "    more",
+        "/work/a.luau(3,1): TypeError: Real finding",
+        "",
+    }, "\n")
+    testing.eq(lintset.analyze_findings(out, "/work", "./.dev/types"), {
+        "/work/a.luau(3,1): TypeError: Real finding",
+    })
+    testing.eq(#lintset.analyze_findings(out, "/work"), 2)
 end)

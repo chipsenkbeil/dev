@@ -9,13 +9,13 @@ local function aliases_of(root)
     return json.decode(assert(fs.read(root .. "/.luaurc"))).aliases
 end
 
-testing.test("init writes a .luaurc that aliases lib to .dev/lib", function()
+testing.test("init writes a .luaurc that aliases lib and dev", function()
     -- Write the file into an empty directory
     local root = support.tempdir()
     testing.eq(init.write_luaurc(root, false), "created")
 
     -- Alias lib to .dev/lib
-    testing.eq(aliases_of(root), { lib = ".dev/lib" })
+    testing.eq(aliases_of(root), { lib = ".dev/lib", dev = "./.dev/types" })
 
     -- Remove the directory
     fs.remove(root, { recursive = true })
@@ -33,7 +33,7 @@ testing.test("init writes nothing on a dry run", function()
     fs.remove(root, { recursive = true })
 end)
 
-testing.test("init merges the lib alias into an existing .luaurc", function()
+testing.test("init merges the lib and dev aliases into an existing .luaurc", function()
     -- Start from a file with its own globals and aliases
     local root = support.tempdir()
     assert(fs.write(root .. "/.luaurc", '{ "globals": ["arg"], "aliases": { "other": "x" } }\n'))
@@ -41,19 +41,34 @@ testing.test("init merges the lib alias into an existing .luaurc", function()
     -- Write the file
     testing.eq(init.write_luaurc(root, false), "created")
 
-    -- Keep what was there and add the lib alias
+    -- Keep what was there and add the two aliases
     local doc = json.decode(assert(fs.read(root .. "/.luaurc")))
     testing.eq(doc.globals, { "arg" })
-    testing.eq(doc.aliases, { other = "x", lib = ".dev/lib" })
+    testing.eq(doc.aliases, { other = "x", lib = ".dev/lib", dev = "./.dev/types" })
 
     -- Remove the directory
     fs.remove(root, { recursive = true })
 end)
 
-testing.test("init keeps a lib alias a project already set", function()
+testing.test("init keeps a lib alias a project already set and adds dev", function()
     -- Start from a file that sets the lib alias
     local root = support.tempdir()
-    local text = '{ "aliases": { "lib": "src" } }\n'
+    assert(fs.write(root .. "/.luaurc", '{ "aliases": { "lib": "src" } }\n'))
+
+    -- Write the file
+    testing.eq(init.write_luaurc(root, false), "created")
+
+    -- Keep the lib alias as it was
+    testing.eq(aliases_of(root), { lib = "src", dev = "./.dev/types" })
+
+    -- Remove the directory
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("init skips a .luaurc that sets both aliases", function()
+    -- Start from a file that sets both aliases
+    local root = support.tempdir()
+    local text = '{ "aliases": { "lib": "src", "dev": "types" } }\n'
     assert(fs.write(root .. "/.luaurc", text))
 
     -- Write the file and skip it

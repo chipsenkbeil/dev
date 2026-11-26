@@ -12,7 +12,7 @@ use crossterm::terminal;
 use mlua::{Function, Lua, LuaString, Table};
 
 use crate::native::pager;
-use crate::{native_fn, runtime};
+use crate::{luau, native_fn, runtime};
 
 /// Name of this module under `dev`.
 pub const NAME: &str = "term";
@@ -743,12 +743,30 @@ native_fn! {
 pub fn register(lua: &Lua) -> mlua::Result<Table> {
     let table = lua.create_table()?;
     table.set("TTY_PATH", TTY_PATH)?;
+    luau::value(
+        NAME,
+        "TTY_PATH",
+        "string".to_owned(),
+        "Path of the controlling terminal.",
+    );
     table.set("DEFAULT_COLS", DEFAULT_COLS)?;
+    luau::value(
+        NAME,
+        "DEFAULT_COLS",
+        "number".to_owned(),
+        "Columns `size` reports when the terminal gives none.",
+    );
     let keys = lua.create_table()?;
     for (constant, name) in KEYS {
         keys.set(constant, name)?;
     }
     table.set("Key", keys)?;
+    luau::value(
+        NAME,
+        "Key",
+        luau::constants(KEYS),
+        "The key names `read_key` and `decode` return.",
+    );
     open_tty::register(lua, NAME, &table)?;
     close::register(lua, NAME, &table)?;
     write::register(lua, NAME, &table)?;

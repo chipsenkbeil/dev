@@ -4,6 +4,7 @@ local dev_os = require("@dev/os")
 local fs = require("@dev/fs")
 local http = require("@dev/http")
 local json = require("@dev/json")
+local luautypes = require("@dev/luautypes")
 local vcs = require("@dev/vcs")
 local dev_command = require("@dev/command")
 local dev_text = require("@dev/text")
@@ -91,10 +92,11 @@ local function init_vcs(run)
     end
 end
 
----Add the alias `lib` for `.dev/lib` to a project's `.luaurc`, keeping every key already there.
+---Add the aliases `lib` for `.dev/lib` and `dev` for the declarations folder to a project's
+---`.luaurc`, keeping every key already there.
 ---
 ---An existing file is read as plain JSON and written back as compact JSON. A file that holds
----comments or another alias `lib` is left as it is.
+---comments is left as it is, and so is an alias the file already sets.
 ---@param root string the project root
 ---@param dry boolean whether nothing may be written
 ---@return "created"|"skipped"|"left" outcome what happened
@@ -108,12 +110,20 @@ function M.write_luaurc(root, dry)
             return "left", ".luaurc is not plain JSON with an aliases object"
         end
         doc = decoded
-        if doc.aliases and doc.aliases.lib ~= nil then
-            return "skipped"
-        end
     end
     doc.aliases = doc.aliases or {}
-    doc.aliases.lib = LIB_FOLDER
+
+    -- Add each alias the file does not set
+    local added = false
+    for alias, folder in pairs({ lib = LIB_FOLDER, dev = luautypes.ALIAS }) do
+        if doc.aliases[alias] == nil then
+            doc.aliases[alias] = folder
+            added = true
+        end
+    end
+    if not added then
+        return "skipped"
+    end
     if not dry then
         local ok, message = fs.write(path, assert(json.encode(doc)) .. "\n")
         if not ok then
@@ -126,13 +136,21 @@ end
 local function init_luaurc(run)
     local outcome, message = M.write_luaurc(run.root, run.dry)
     if outcome == "created" then
-        created(run, ".luaurc (aliases lib = " .. LIB_FOLDER .. ")")
+        created(
+            run,
+            ".luaurc (aliases lib = " .. LIB_FOLDER .. ", dev = " .. luautypes.ALIAS .. ")"
+        )
     elseif outcome == "skipped" then
-        skipped(run, ".luaurc aliases lib exists")
+        skipped(run, ".luaurc aliases lib and dev exist")
     else
         leave(
             run,
-            "add the alias lib = " .. LIB_FOLDER .. " to .luaurc, since " .. tostring(message)
+            "add the aliases lib = "
+                .. LIB_FOLDER
+                .. " and dev = "
+                .. luautypes.ALIAS
+                .. " to .luaurc, since "
+                .. tostring(message)
         )
     end
 end

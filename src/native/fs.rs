@@ -9,7 +9,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use mlua::{IntoLuaMulti, Lua, LuaString, MultiValue, Nil, Table, Variadic};
 
 use crate::native::mode;
-use crate::{native_fn, native_struct, overlay};
+use crate::{luau, native_fn, native_struct, overlay};
 
 /// Name of this module under `dev`.
 pub const NAME: &str = "fs";
@@ -61,6 +61,23 @@ const REASON_NOT_LINK: &str = "not_link";
 
 /// Reason of a temporary path that cannot be made.
 const REASON_TEMP: &str = "temp";
+
+/// The kind names of `dev.fs.Kind`, as `(constant, name)` pairs.
+const KINDS: [(&str, &str); 4] = [
+    ("FILE", "file"),
+    ("DIR", "dir"),
+    ("LINK", "link"),
+    ("OTHER", "other"),
+];
+
+/// The reasons of `dev.fs.Reason`, as `(constant, reason)` pairs.
+const REASONS: [(&str, &str); 5] = [
+    ("EXISTS", REASON_EXISTS),
+    ("LIST", REASON_LIST),
+    ("RESOLVE", REASON_RESOLVE),
+    ("NOT_LINK", REASON_NOT_LINK),
+    ("TEMP", REASON_TEMP),
+];
 
 /// Counter that keeps temporary names of one process apart.
 static COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -130,18 +147,27 @@ native_struct! {
 pub fn register(lua: &Lua) -> mlua::Result<Table> {
     let table = lua.create_table()?;
     let kinds = lua.create_table()?;
-    kinds.set("FILE", "file")?;
-    kinds.set("DIR", "dir")?;
-    kinds.set("LINK", "link")?;
-    kinds.set("OTHER", "other")?;
+    for (name, text) in KINDS {
+        kinds.set(name, text)?;
+    }
     table.set("Kind", kinds)?;
+    luau::value(
+        NAME,
+        "Kind",
+        luau::constants(KINDS),
+        "The kind names of a file, as `stat` reports them.",
+    );
     let reasons = lua.create_table()?;
-    reasons.set("EXISTS", REASON_EXISTS)?;
-    reasons.set("LIST", REASON_LIST)?;
-    reasons.set("RESOLVE", REASON_RESOLVE)?;
-    reasons.set("NOT_LINK", REASON_NOT_LINK)?;
-    reasons.set("TEMP", REASON_TEMP)?;
+    for (name, text) in REASONS {
+        reasons.set(name, text)?;
+    }
     table.set("Reason", reasons)?;
+    luau::value(
+        NAME,
+        "Reason",
+        luau::constants(REASONS),
+        "The reasons a failed call returns after its text.",
+    );
     exists::register(lua, NAME, &table)?;
     is_dir::register(lua, NAME, &table)?;
     is_file::register(lua, NAME, &table)?;

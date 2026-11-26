@@ -196,6 +196,30 @@ file. A command in `~/.config/dev/commands` finds its own library through a
 `.luaurc` in `~/.config/dev`. dev reads the file as plain JSON, so keep
 comments out of it.
 
+### Type-checking dev modules
+
+The dev modules are built in, so luau-analyze has no file to read for
+`require("@dev/os")` and reports an unknown require. `dev luautypes` writes
+the declarations into `.dev/types`: the embedded Luau modules as they are,
+and one file per native module (`os`, `fs`, `json` and the rest) written from
+the Luau signature beside each Rust function. The folder holds its own
+`.gitignore` (`*`) and a `.luaurc` that turns the style lints off, so nothing
+in it is committed. The command refuses a folder that holds files of its own.
+
+The `dev` alias in the project's `.luaurc` points luau-analyze at the folder.
+`dev init` adds it beside `lib`, and a project that already has a `.luaurc`
+adds it by hand (the value starts with `./`, which luau-analyze requires):
+
+```json
+{ "aliases": { "lib": ".dev/lib", "dev": "./.dev/types" } }
+```
+
+Run `dev luautypes` once to write the folder, then `luau-analyze FILE`
+checks a `--!strict` file that requires `@dev/os` and `@dev/command`. The
+lint step of a project that sets the alias writes the folder first when it is
+missing or older than the running dev. dev ignores the `dev` alias when it
+runs a file, as `@dev/NAME` is always built in.
+
 `runtime.add_path` is gone, and a `.luaurc` alias replaces it. A command
 that called `runtime.add_path(root .. "/.dev/lib")` before a dotted
 `require` now declares the folder once as the `lib` alias in `.luaurc`:

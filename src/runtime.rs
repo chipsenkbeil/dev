@@ -31,7 +31,7 @@ pub const FAILURE_EXIT: i32 = 1;
 const LOADED_KEY: &str = "dev.loaded";
 
 /// Named registry slot of the native module tables, keyed by module name.
-const NATIVES_KEY: &str = "dev.natives";
+pub(crate) const NATIVES_KEY: &str = "dev.natives";
 
 /// Named registry slot of the cleanup functions, oldest first.
 const CLEANUPS_KEY: &str = "dev.cleanups";

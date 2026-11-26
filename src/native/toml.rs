@@ -5,7 +5,7 @@ use mlua::{Lua, LuaString, Table, Value};
 
 use super::json::{OnLua, as_double};
 use super::manifest::is_space;
-use crate::{Error, native_fn};
+use crate::{Error, luau, native_fn};
 
 /// Name of this module under `dev`.
 pub const NAME: &str = "toml";
@@ -34,6 +34,12 @@ pub fn register(lua: &Lua) -> mlua::Result<Table> {
         refusals.set(name, text)?;
     }
     table.set("SetRefusal", refusals)?;
+    luau::value(
+        NAME,
+        "SetRefusal",
+        luau::constants(REFUSALS),
+        "The reasons `set` refuses to write, as the string it returns.",
+    );
     parse::register(lua, NAME, &table)?;
     set::register(lua, NAME, &table)?;
     encode::register(lua, NAME, &table)?;

@@ -21,6 +21,7 @@ Set up a machine or project
   completion              Print the shell completion script for bash, zsh, fish or powershell
   config                  Ask for the user config keys that are unset and write them
   init                    Set up a project's version control and remotes
+  luautypes               Write the declarations luau-analyze reads for the dev modules
   tools                   Install and check the tools in .dev/tools.tsv
   ws                      Make, list and remove workspaces under one central root
 

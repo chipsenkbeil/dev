@@ -25,7 +25,11 @@ to standard error.
 - `assets(path)`: the sorted names of the direct children of an embedded
   folder, `{}` for anything else.
 - `signatures()`: every registered native function as `{ module, name,
-  signature, docs }`.
+  signature, docs, value }`. A non-function member (`os.Kind`, `fs.Reason`,
+  `runtime.exe`) has `value` true and its type as `signature`. A module name
+  that starts with an uppercase letter (`Process`, `Writer`, `Reader`, `Lock`)
+  names a handle type, whose entries are its fields and methods, and one that
+  starts with `_` is internal.
 - `parse_globals(words)`: read dev's global flags from `words`, the command
   line after the program name, with the code the binary starts with. It
   applies them (`-C`, `--agent`, verbosity) and returns a table shaped like

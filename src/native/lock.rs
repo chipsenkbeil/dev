@@ -6,7 +6,7 @@ use fs4::fs_std::FileExt;
 use mlua::{Lua, MetaMethod, Table, UserData, UserDataMethods};
 
 use crate::native::mode;
-use crate::{luau_handle, native_fn, native_struct, runtime};
+use crate::{luau, luau_handle, native_fn, native_struct, runtime};
 
 /// Name of this module under `dev`.
 pub const NAME: &str = "lock";
@@ -59,6 +59,12 @@ pub fn register(lua: &Lua) -> mlua::Result<Table> {
     let table = lua.create_table()?;
     lock::register(lua, NAME, &table)?;
     try_lock::register(lua, NAME, &table)?;
+    luau::value(
+        "Lock",
+        "release",
+        "(self: Lock) -> ()".to_owned(),
+        "Releases the lock, and does nothing when it is already released.",
+    );
     Ok(table)
 }
 

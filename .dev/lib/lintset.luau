@@ -1,5 +1,6 @@
 local dev_os = require("@dev/os")
 local fs = require("@dev/fs")
+local json = require("@dev/json")
 local standalone = require("@dev/standalone")
 local dev_command = require("@dev/command")
 
@@ -753,15 +754,17 @@ local function binds_alias_require(text: string, name: string): boolean
 end
 
 ---Keep the luau-analyze findings that do not come from an `@` alias require, which it cannot
----resolve. An unknown type with a dotted name is dropped only when its file binds the prefix to
----such a require.
+---resolve, and none from a file under the generated declarations folder. An unknown type with a
+---dotted name is dropped only when its file binds the prefix to such a require.
 ---@param text the luau-analyze output
 ---@param root absolute project root, which the finding paths are relative to
+---@param generated the declarations folder as the `dev` alias gives it, when the project has one
 ---@return the finding blocks, each a header line with its continuation lines
-function M.analyze_findings(text: string, root: string): { string }
+function M.analyze_findings(text: string, root: string, generated: string?): { string }
     local found: { string } = {}
     local keep = false
     local sources: { [string]: string } = {}
+    local inside = generated and `/{(generated:gsub("^%./", ""))}/`
     for _, line in ipairs(lines_of(text)) do
         local file = line:match("^(%S+)%(%d+,%d+%): ")
         if file then
@@ -770,6 +773,9 @@ function M.analyze_findings(text: string, root: string): { string }
             if prefix then
                 sources[file] = sources[file] or fs.read(fs.join(root, file)) or ""
                 dropped = binds_alias_require(sources[file], prefix)
+            end
+            if inside and file:sub(1, 1) == "/" and file:find(inside, 1, true) then
+                dropped = true
             end
             keep = not dropped
             if keep then
@@ -782,11 +788,23 @@ function M.analyze_findings(text: string, root: string): { string }
     return found
 end
 
+---Read the folder the project's `.luaurc` gives the `dev` alias, or nil when it sets none.
+---@param root the project root
+---@return the alias value relative to the root, or nil
+function M.dev_alias(root: string): string?
+    local text = fs.read(`{root}/.luaurc`)
+    local doc = text and json.decode(text)
+    local aliases = type(doc) == "table" and doc.aliases
+    local folder = type(aliases) == "table" and aliases.dev
+    return type(folder) == "string" and folder or nil
+end
+
 ---Type-check the `.luau` files among the paths with luau-analyze in its default non-strict mode.
 ---
----A `.lua` file in the list is left to selene, and a list with no `.luau` file runs nothing. A
----finding about a module from an `@` alias require is dropped, as luau-analyze has no
----declarations for them.
+---A `.lua` file in the list is left to selene, and a list with no `.luau` file runs nothing. When
+---the project's `.luaurc` sets the `dev` alias, the dev declarations are written into its folder
+---first, so luau-analyze reads them for `@dev/NAME`. A finding about a module from an `@` alias
+---require it still cannot resolve is dropped.
 ---@param files paths of `.lua` and `.luau` files
 function Lint:luau_analyze(files: { string })
     local _, luau = M.split_lua(files)
@@ -794,13 +812,21 @@ function Lint:luau_analyze(files: { string })
         return
     end
     self:step("luau-analyze")
+    local folder = M.dev_alias(self.root)
+    if folder then
+        local changed, reason = require("@dev/luautypes").write(`{self.root}/{folder}`)
+        if not changed then
+            self:fail("luau-analyze", `The dev declarations were not written: {reason}`)
+            return
+        end
+    end
     local argv = M.with_files({ "luau-analyze" }, luau)
     local out, code = dev_os.capture(argv, { cwd = self.root, stderr = "stdout" })
     if code ~= 0 and not out:find("%(%d+,%d+%): ") then
         self:fail("luau-analyze", out)
         return
     end
-    for _, finding in ipairs(M.analyze_findings(out, self.root)) do
+    for _, finding in ipairs(M.analyze_findings(out, self.root, folder)) do
         self:fail("luau-analyze", finding)
     end
 end

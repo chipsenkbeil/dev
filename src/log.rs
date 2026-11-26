@@ -230,8 +230,16 @@ pub fn xtrace() -> bool {
 }
 
 /// Traces a call of native function `dev.MODULE.NAME`, from `-vvv`.
+///
+/// A handle type's record module (`Process`, `Writer` or `Reader`) traces under the module that
+/// owns the handle, as `os.proc` or `os.stream`.
 pub fn native_call(module: &str, name: &str) {
     if verbosity() >= NATIVE_CALL_VERBOSITY {
+        let module = match module {
+            "Process" | "_exit" => "os.proc",
+            "Writer" | "Reader" => "os.stream",
+            other => other,
+        };
         write_err(format!("+ dev.{module}.{name}\n").as_bytes());
     }
 }

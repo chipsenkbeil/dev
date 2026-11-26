@@ -127,6 +127,7 @@ native_fn! {
     /// # Errors
     ///
     /// Returns the Lua error when a table cannot be built.
+    #[luau = "(text: string) -> { [number]: { name: string, binary: string, fields: { string }, groups: { string } }, header: { string }, defaults: { [string]: string } }"]
     pub fn parse(lua: &Lua, text: LuaString) -> mlua::Result<Table> {
         let text = text.to_string_lossy();
         let rows = lua.create_table()?;
@@ -175,6 +176,7 @@ native_fn! {
     /// # Errors
     ///
     /// Returns the Lua error when the header cannot be read.
+    #[luau = "(rows: { header: { string } }, manager: string) -> number?"]
     pub fn column(_lua: &Lua, rows: Table, manager: String) -> mlua::Result<Option<usize>> {
         if manager == GROUPS_COLUMN {
             return Ok(None);
@@ -295,6 +297,7 @@ native_fn! {
     /// # Errors
     ///
     /// Returns the Lua error when the rows cannot be read.
+    #[luau = "(rows: { [number]: { name: string, binary: string, fields: { string }, groups: { string } }, defaults: { [string]: string } }, opts: { column: number, group: string? }) -> ({ { name: string, binary: string, cell: string } }?, string?)"]
     pub fn select(
         _lua: &Lua,
         rows: Table,

@@ -19,16 +19,18 @@ const DEFAULT_CHUNKNAME: &str = "=(load)";
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 native_struct! {
-    /// Signature of one native function, as the type files will be written from.
+    /// Signature of one native function or member, as the type files will be written from.
     pub struct RuntimeSignature {
         /// Module name under `dev`, such as `os`.
         pub module: String,
-        /// Function name inside the module.
+        /// Function or member name inside the module.
         pub name: String,
-        /// Luau function type.
+        /// Luau function type, or the member's type when `value` is set.
         pub signature: String,
         /// Doc comment lines.
         pub docs: Vec<String>,
+        /// True for a non-function member, whose `signature` is then its type.
+        pub value: bool,
     }
 }
 
@@ -39,6 +41,7 @@ impl From<LuauFnRecord> for RuntimeSignature {
             name: record.name.to_owned(),
             signature: record.signature(),
             docs: record.docs.iter().map(|line| (*line).to_owned()).collect(),
+            value: record.value,
         }
     }
 }
@@ -99,7 +102,7 @@ native_fn! {
 }
 
 native_fn! {
-    /// Returns the signature of every native function registered so far.
+    /// Returns the signature of every native function and member registered so far.
     ///
     /// # Errors
     ///
@@ -201,8 +204,26 @@ pub fn register(lua: &Lua) -> mlua::Result<Table> {
     signatures::register(lua, NAME, &table)?;
     parse_globals::register(lua, NAME, &table)?;
     table.set("exe", exe())?;
+    luau::value(
+        NAME,
+        "exe",
+        "string".to_owned(),
+        "Canonical path of the running binary, empty when it is unknown.",
+    );
     table.set("version", VERSION)?;
+    luau::value(
+        NAME,
+        "version",
+        "string".to_owned(),
+        "Version of this dev, from the crate version.",
+    );
     table.set("loaded", runtime::loaded(lua)?)?;
+    luau::value(
+        NAME,
+        "loaded",
+        "{ [string]: any }".to_owned(),
+        "The table `require` caches modules in, keyed by module name.",
+    );
     Ok(table)
 }
 
@@ -217,7 +238,20 @@ pub fn register_exit(lua: &Lua, os_table: &Table) -> mlua::Result<()> {
     run_cleanups::register(lua, os::NAME, os_table)?;
     interrupt_code::register(lua, os::NAME, os_table)?;
     os_table.set("SIGNAL_EXIT_BASE", SIGNAL_EXIT_BASE)?;
-    os_table.set("EXEC_FAILED", EXEC_FAILED)
+    luau::value(
+        os::NAME,
+        "SIGNAL_EXIT_BASE",
+        "number".to_owned(),
+        "Exit status of a process killed by signal n, which is this plus n.",
+    );
+    os_table.set("EXEC_FAILED", EXEC_FAILED)?;
+    luau::value(
+        os::NAME,
+        "EXEC_FAILED",
+        "number".to_owned(),
+        "Exit status when a command cannot be started.",
+    );
+    Ok(())
 }
 
 /// Returns the canonical path of the running binary, or an empty string when it is unknown.

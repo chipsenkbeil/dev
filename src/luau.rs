@@ -155,22 +155,24 @@ pub struct LuauFnRecord {
     pub returns: String,
     /// Doc comment lines, trimmed.
     pub docs: Vec<&'static str>,
-    /// Hand-written signature that replaces the derived one.
-    pub luau: Option<&'static str>,
+    /// Hand-written signature that replaces the derived one, or the type of a value member.
+    pub luau: Option<String>,
+    /// Whether this records a non-function member, whose `luau` is then its type.
+    pub value: bool,
 }
 
 impl LuauFnRecord {
-    /// Returns the Luau function type, the override when one is given.
+    /// Returns the Luau function type, the override when one is given, or a member's type.
     #[must_use]
     pub fn signature(&self) -> String {
-        if let Some(text) = self.luau {
-            return text.to_owned();
+        if let Some(text) = &self.luau {
+            return text.clone();
         }
         let params: Vec<String> = self
             .params
             .iter()
             .map(|(name, ty)| match ty.strip_prefix("...") {
-                Some(rest) => format!("...: {rest}"),
+                Some(rest) => format!("...{rest}"),
                 None => format!("{name}: {ty}"),
             })
             .collect();
@@ -184,6 +186,39 @@ pub fn record(record: LuauFnRecord) {
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
         .push(record);
+}
+
+/// Adds a non-function member of a native module, or a field of a handle type, to the list.
+///
+/// `luau_type` is the member's Luau type. A member recorded again under the same module and
+/// name replaces the earlier one, so a table built on every call is listed once.
+pub fn value(module: &'static str, name: &'static str, luau_type: String, doc: &'static str) {
+    let member = LuauFnRecord {
+        module,
+        name,
+        params: Vec::new(),
+        returns: String::new(),
+        docs: vec![doc],
+        luau: Some(luau_type),
+        value: true,
+    };
+    let mut records = RECORDS.lock().unwrap_or_else(PoisonError::into_inner);
+    let same =
+        |record: &LuauFnRecord| record.value && record.module == module && record.name == name;
+    match records.iter_mut().find(|record| same(record)) {
+        Some(slot) => *slot = member,
+        None => records.push(member),
+    }
+}
+
+/// Returns the Luau table type of a table of string constants, each key at its literal value.
+#[must_use]
+pub fn constants<'a>(pairs: impl IntoIterator<Item = (&'a str, &'a str)>) -> String {
+    let fields: Vec<String> = pairs
+        .into_iter()
+        .map(|(key, text)| format!("{key}: {text:?}"))
+        .collect();
+    format!("{{ {} }}", fields.join(", "))
 }
 
 /// Returns the signature of every native function registered so far.
@@ -287,7 +322,8 @@ macro_rules! native_fn {
                     ],
                     returns: <$ret as $crate::luau::LuauReturn>::luau_return(),
                     docs: vec![$($doc.trim(),)*],
-                    luau: $crate::luau_override!($($luau)?),
+                    luau: $crate::luau_override!($($luau)?).map(str::to_owned),
+                    value: false,
                 }
             }
         }
@@ -614,6 +650,30 @@ mod tests {
             .iter()
             .any(|record| record.module == "test" && record.name == "grow");
         assert!(found);
+    }
+
+    #[test]
+    fn value_should_record_a_member_with_its_type_and_replace_a_repeat() {
+        value("valuetest", "limit", "number".to_owned(), "Largest size.");
+        value("valuetest", "limit", "number?".to_owned(), "Largest size.");
+        let found: Vec<LuauFnRecord> = records()
+            .into_iter()
+            .filter(|record| record.module == "valuetest")
+            .collect();
+        assert_eq!(found.len(), 1);
+        assert!(found[0].value);
+        assert!(found[0].params.is_empty());
+        assert_eq!(found[0].signature(), "number?");
+        assert_eq!(found[0].docs, vec!["Largest size."]);
+        assert!(!echo::record("test").value);
+    }
+
+    #[test]
+    fn constants_should_type_each_key_at_its_literal() {
+        assert_eq!(
+            constants([("UP", "up"), ("CTRL_C", "ctrl-c")]),
+            r#"{ UP: "up", CTRL_C: "ctrl-c" }"#
+        );
     }
 
     #[test]

@@ -12,16 +12,22 @@ use mlua::{Function, Lua, LuaString, Table, Value, Variadic};
 
 use crate::native::process::{self, Group, Sink, Spec};
 use crate::native::signals;
-use crate::{Error, Result, native_fn, overlay, runtime};
+use crate::{Error, Result, luau, native_fn, overlay, runtime};
 
 /// Name of this module under `dev`.
 pub const NAME: &str = "os";
 
-/// Name the stream methods are registered under.
-const STREAM: &str = "os.stream";
+/// Type name the methods of standard output and standard error are registered under.
+const WRITER: &str = "Writer";
 
-/// Name the process methods are registered under.
-const PROC: &str = "os.proc";
+/// Type name the methods of standard input are registered under.
+const READER: &str = "Reader";
+
+/// Type name the process methods are registered under.
+const PROC: &str = "Process";
+
+/// Module name the exit hook is registered under, which type files skip.
+const EXIT_HOOK: &str = "_exit";
 
 /// Registry slot of the `dev.os.defaults` table, which every spawn reads.
 const DEFAULTS_KEY: &str = "dev.os.defaults";
@@ -491,6 +497,7 @@ native_fn! {
     /// # Errors
     ///
     /// Raises when `argv` is empty or a word holds a NUL byte.
+    #[luau = "(argv: { string }) -> string"]
     pub fn command(lua: &Lua, argv: Value) -> mlua::Result<LuaString> {
         let Value::Table(table) = argv else {
             return Err(mlua::Error::runtime("command expects a non-empty argv list"));
@@ -752,7 +759,7 @@ native_fn! {
     /// # Errors
     ///
     /// Raises on a bad option or a NUL byte in a word.
-    #[luau = "(argv: { string }, opts: { [any]: any }?) -> number"]
+    #[luau = "(argv: { string }, opts: { env: { [string]: string | number }?, unset: { string }?, cwd: string?, stdin: \"null\"?, stdout: string?, stderr: string? }?) -> number"]
     pub fn run(lua: &Lua, argv: Table, opts: Option<Table>) -> mlua::Result<i32> {
         let spec = spec_of(lua, "run", &argv_of(&argv)?, opts.as_ref(), true)?;
         prepare(lua, &spec)?;
@@ -780,7 +787,7 @@ native_fn! {
     /// # Errors
     ///
     /// Raises on a bad option or a NUL byte in a word.
-    #[luau = "(argv: { string }, opts: { [any]: any }?) -> (string, number)"]
+    #[luau = "(argv: { string }, opts: { env: { [string]: string | number }?, unset: { string }?, cwd: string?, stdin: \"null\"?, stdout: string?, stderr: string? }?) -> (string, number)"]
     pub fn capture(lua: &Lua, argv: Table, opts: Option<Table>) -> mlua::Result<(LuaString, i32)> {
         let spec = spec_of(lua, "capture", &argv_of(&argv)?, opts.as_ref(), true)?;
         collect(lua, &spec, None)
@@ -795,7 +802,7 @@ native_fn! {
     /// # Errors
     ///
     /// Raises on a bad option, a NUL byte in a word, or when `opts` sets `stdin` or `stdout`.
-    #[luau = "(argv: { string }, input: string, opts: { [any]: any }?) -> (string, number)"]
+    #[luau = "(argv: { string }, input: string, opts: { env: { [string]: string | number }?, unset: { string }?, cwd: string?, stderr: string? }?) -> (string, number)"]
     pub fn capture_input(
         lua: &Lua,
         argv: Table,
@@ -825,7 +832,7 @@ native_fn! {
     ///
     /// Raises on a bad option, a NUL byte in a word, when the command cannot start, or with the
     /// error `on_text` raised.
-    #[luau = "(argv: { string }, secs: number, opts: { [any]: any }?) -> (string, number)"]
+    #[luau = "(argv: { string }, secs: number, opts: { env: { [string]: string | number }?, unset: { string }?, cwd: string?, input: string?, merge: boolean?, stderr: string?, reap: boolean?, on_text: ((string) -> ())? }?) -> (string, number)"]
     pub fn capture_timed(
         lua: &Lua,
         argv: Table,
@@ -871,7 +878,7 @@ native_fn! {
     /// # Errors
     ///
     /// Raises on a bad option or a NUL byte in a word.
-    #[luau = "(argv: { string }, opts: { [any]: any }?) -> (nil, string)"]
+    #[luau = "(argv: { string }, opts: { env: { [string]: string | number }?, unset: { string }?, cwd: string?, stdin: \"null\"?, stdout: string?, stderr: string? }?) -> (nil, string)"]
     pub fn exec(lua: &Lua, argv: Table, opts: Option<Table>) -> mlua::Result<(Option<bool>, String)> {
         let spec = spec_of(lua, "exec", &argv_of(&argv)?, opts.as_ref(), true)?;
         prepare(lua, &spec)?;
@@ -910,7 +917,7 @@ native_fn! {
     /// # Errors
     ///
     /// Raises on a bad option or a NUL byte in a word.
-    #[luau = "(argv: { string }, opts: { [any]: any }?) -> ({ pid: number, wait: (self: any, secs: number?) -> number?, kill: (self: any, signal: (number | string)?) -> boolean }?, string?)"]
+    #[luau = "(argv: { string }, opts: { env: { [string]: string | number }?, unset: { string }?, cwd: string?, detach: boolean?, stdin: \"null\"?, stdout: string?, stderr: string? }?) -> (Process?, string?)"]
     pub fn spawn(
         lua: &Lua,
         argv: Table,
@@ -963,6 +970,7 @@ native_fn! {
     /// # Errors
     ///
     /// Raises when `this` is not a process.
+    #[luau = "(self: Process, secs: number?) -> number?"]
     pub fn wait(_lua: &Lua, this: Table, secs: Option<f64>) -> mlua::Result<Option<i32>> {
         let pid: u32 = this.get("pid")?;
         Ok(process::wait(pid, secs).flatten())
@@ -1007,6 +1015,7 @@ native_fn! {
     /// # Errors
     ///
     /// Raises when `this` is not a process or the signal is not known.
+    #[luau = "(self: Process, signal: (number | string)?) -> boolean"]
     pub fn kill(_lua: &Lua, this: Table, signal: Option<Value>) -> mlua::Result<bool> {
         let pid: u32 = this.get("pid")?;
         Ok(process::kill(pid, signal_of(signal)?))
@@ -1032,6 +1041,7 @@ native_fn! {
     /// # Errors
     ///
     /// Raises for a value that is not a string or number, and when the write fails.
+    #[luau = "(self: Writer, ...(string | number)) -> Writer"]
     pub fn write(lua: &Lua, this: Table, parts: Variadic<Value>) -> mlua::Result<Table> {
         let mut bytes = Vec::new();
         for (index, part) in parts.iter().enumerate() {
@@ -1052,6 +1062,7 @@ native_fn! {
     /// # Errors
     ///
     /// Raises when the write fails.
+    #[luau = "(self: Writer) -> Writer"]
     pub fn flush(lua: &Lua, this: Table) -> mlua::Result<Table> {
         if this.get::<i32>("fd")? != 2 {
             runtime::flush_out(lua)?;
@@ -1069,6 +1080,7 @@ native_fn! {
     /// # Errors
     ///
     /// Raises for an unknown format or a failed read.
+    #[luau = "(self: Reader, format: string?) -> string?"]
     pub fn read(lua: &Lua, _this: Table, format: Option<String>) -> mlua::Result<Option<LuaString>> {
         let format = format.unwrap_or_else(|| "*l".to_owned());
         let mut stdin = io::stdin().lock();
@@ -1143,6 +1155,13 @@ pub fn register(lua: &Lua) -> mlua::Result<Table> {
     }
     kinds.set(OTHER_KIND.0, OTHER_KIND.1)?;
     table.set("Kind", kinds)?;
+    let kind_names = KINDS.iter().map(|(_, key, value)| (*key, *value));
+    luau::value(
+        NAME,
+        "Kind",
+        luau::constants(kind_names.chain([OTHER_KIND])),
+        "The kind names of a file, as `kind_of` returns them.",
+    );
 
     let defaults = lua.create_table()?;
     defaults.set("env", lua.create_table()?)?;
@@ -1150,23 +1169,50 @@ pub fn register(lua: &Lua) -> mlua::Result<Table> {
     defaults.set("show", false)?;
     lua.set_named_registry_value(DEFAULTS_KEY, defaults.clone())?;
     table.set("defaults", defaults)?;
+    luau::value(
+        NAME,
+        "defaults",
+        "{ env: { [string]: string | number }, unset: { string }, show: boolean }".to_owned(),
+        "Environment and echo settings every spawn starts from.",
+    );
 
     let proc_methods = lua.create_table()?;
     wait::register(lua, PROC, &proc_methods)?;
     kill::register(lua, PROC, &proc_methods)?;
+    luau::value(
+        PROC,
+        "pid",
+        "number".to_owned(),
+        "The process id of the spawned command.",
+    );
     lua.set_named_registry_value(PROC_METHODS_KEY, proc_methods)?;
     let exit_hook = lua.create_table()?;
-    stop_spawned::register(lua, PROC, &exit_hook)?;
+    stop_spawned::register(lua, EXIT_HOOK, &exit_hook)?;
     lua.set_named_registry_value(STOP_KEY, exit_hook.get::<Function>("stop_spawned")?)?;
 
     let writer = lua.create_table()?;
-    write::register(lua, STREAM, &writer)?;
-    flush::register(lua, STREAM, &writer)?;
+    write::register(lua, WRITER, &writer)?;
+    flush::register(lua, WRITER, &writer)?;
+    luau::value(
+        WRITER,
+        "fd",
+        "number".to_owned(),
+        "The descriptor the stream writes to.",
+    );
     table.set("stdout", stream(lua, &writer, 1)?)?;
+    luau::value(NAME, "stdout", WRITER.to_owned(), "Dev's standard output.");
     table.set("stderr", stream(lua, &writer, 2)?)?;
+    luau::value(NAME, "stderr", WRITER.to_owned(), "Dev's standard error.");
     let reader = lua.create_table()?;
-    read::register(lua, STREAM, &reader)?;
+    read::register(lua, READER, &reader)?;
+    luau::value(
+        READER,
+        "fd",
+        "number".to_owned(),
+        "The descriptor the stream reads from.",
+    );
     table.set("stdin", stream(lua, &reader, 0)?)?;
+    luau::value(NAME, "stdin", READER.to_owned(), "Dev's standard input.");
     Ok(table)
 }
 

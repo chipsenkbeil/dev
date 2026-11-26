@@ -2,7 +2,7 @@ use std::result::Result as StdResult;
 
 use mlua::{Lua, LuaString, MultiValue, Table, Value};
 
-use crate::{Error, native_fn};
+use crate::{Error, luau, native_fn};
 
 /// Name of this module under `dev`.
 pub const NAME: &str = "json";
@@ -39,6 +39,12 @@ pub fn register(lua: &Lua) -> mlua::Result<Table> {
     null.set_metatable(Some(null_meta))?;
     lua.set_named_registry_value(NULL_KEY, null.clone())?;
     table.set("null", null)?;
+    luau::value(
+        NAME,
+        "null",
+        "{}".to_owned(),
+        "The value `decode` gives for a JSON null and `encode` writes as one.",
+    );
 
     let object_meta = lua.create_table()?;
     object_meta.set(OBJECT_MARK, true)?;
@@ -567,6 +573,7 @@ native_fn! {
     /// # Errors
     ///
     /// Returns the Lua error when a table cannot be read.
+    #[luau = "(value: any, opts: { order: { string }? }?) -> (string?, string?)"]
     pub fn encode(
         lua: &Lua,
         value: Value,

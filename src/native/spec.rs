@@ -3,7 +3,7 @@ use std::result::Result as StdResult;
 
 use mlua::{Lua, MultiValue, Table, Value};
 
-use crate::{Error, Result, native_fn};
+use crate::{Error, Result, luau, native_fn};
 
 /// Name of this module under `dev`.
 pub const NAME: &str = "spec";
@@ -809,9 +809,21 @@ native_fn! {
 pub fn register(lua: &Lua) -> mlua::Result<Table> {
     let table = lua.create_table()?;
     table.set("SEE_ALSO_FIELD", SEE_ALSO_FIELD)?;
+    luau::value(
+        NAME,
+        "SEE_ALSO_FIELD",
+        "string".to_owned(),
+        "The spec field that lists the help pages `dev help` points at.",
+    );
     let reasons = lua.create_table()?;
     reasons.set("RESERVED_FLAG", RESERVED_FLAG)?;
     table.set("Reason", reasons)?;
+    luau::value(
+        NAME,
+        "Reason",
+        luau::constants([("RESERVED_FLAG", RESERVED_FLAG)]),
+        "The codes `validate` returns for a spec it refuses.",
+    );
     validate::register(lua, NAME, &table)?;
     parse::register(lua, NAME, &table)?;
     Ok(table)

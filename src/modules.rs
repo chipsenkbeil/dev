@@ -36,3 +36,38 @@ pub fn register(lua: &Lua, flags: &Flags) -> mlua::Result<()> {
 fn add(lua: &Lua, name: &str, table: Table) -> mlua::Result<()> {
     add_native(lua, &format!("{DEV_ALIAS}{name}"), table)
 }
+
+#[cfg(test)]
+mod tests {
+    use mlua::Value;
+
+    use super::*;
+    use crate::{luau, runtime};
+
+    #[test]
+    fn register_should_give_every_member_of_every_module_a_luau_signature() {
+        let lua = runtime::new().unwrap();
+        register(&lua, &Flags::default()).unwrap();
+        let records = luau::records();
+        let mut missing = Vec::new();
+        for pair in lua
+            .named_registry_value::<Table>(runtime::NATIVES_KEY)
+            .unwrap()
+            .pairs::<String, Table>()
+        {
+            let (key, table) = pair.unwrap();
+            let module = key.strip_prefix(DEV_ALIAS).unwrap();
+            for member in table.pairs::<String, Value>() {
+                let (name, value) = member.unwrap();
+                let is_function = matches!(value, Value::Function(_));
+                let found = records.iter().any(|record| {
+                    record.module == module && record.name == name && record.value != is_function
+                });
+                if !found {
+                    missing.push(format!("{module}.{name}"));
+                }
+            }
+        }
+        assert!(missing.is_empty(), "no Luau signature for {missing:?}");
+    }
+}
