@@ -1287,6 +1287,8 @@ local function seats_root()
     return root
 end
 
+local SEAT_TOKEN = "pomb_SECRETtoken0123456789"
+
 local function on_seats(root, run)
     -- Remember the token variables to restore
     local names = { "DEV_BOARD_TOKEN" }
@@ -1297,7 +1299,7 @@ local function on_seats(root, run)
 
     -- Sync the server and run against a backend that holds a token
     support.pomb_sync(root)
-    dev_os.setenv("DEV_BOARD_TOKEN", "pomb_SECRETtoken0123456789")
+    dev_os.setenv("DEV_BOARD_TOKEN", SEAT_TOKEN)
     local ok, err = pcall(function()
         run(assert(pomb.new({
             url = SERVERS[root].url,
@@ -1437,4 +1439,101 @@ testing.test("a reset without seats.manage is refused", function()
 
     -- Add no seat after the refused drop
     testing.eq(first_index(calls_of(root), posted_to_seats), nil)
+end)
+
+local function seat_reset_cli(root: string, args: { string }): (string, number?)
+    -- Point a project and a home at the fake Pomb with a stubbed pass helper
+    assert(
+        fs.write(
+            root .. "/.dev/config.toml",
+            table.concat({ "[board]", 'backend = "pomb"', 'name = "dotfiles"', "" }, "\n")
+        )
+    )
+    local home = support.tempdir()
+    assert(fs.mkdir(home .. "/.config/dev", { parents = true }))
+    assert(fs.write(
+        home .. "/.config/dev/config.toml",
+        table.concat({
+            "[board.pomb]",
+            `url = "{SERVERS[root].url}"`,
+            'token = "pass:secrets/worker/token/pomb"',
+            "",
+        }, "\n")
+    ))
+    for name, body in pairs({
+        security = table.concat({ "#!/bin/sh", "exit 1", "" }, "\n"),
+        pass = table.concat({ "#!/bin/sh", `echo "{SEAT_TOKEN}"`, "" }, "\n"),
+    }) do
+        assert(fs.write(root .. "/bin/" .. name, body))
+        assert(dev_os.run({ "chmod", "755", root .. "/bin/" .. name }) == 0, "chmod failed")
+    end
+
+    -- Run the command as an agent with no leftover token state
+    support.pomb_sync(root)
+    return support.dev(root, args, {
+        env = {
+            HOME = home,
+            XDG_STATE_HOME = home .. "/state",
+            XDG_RUNTIME_DIR = "",
+            CI = "",
+            DEV_AGENT = "",
+            DEV_PASS_LOCK = root .. "/pass.lock",
+        },
+    })
+end
+
+testing.test("seat reset says who held the seat and that it is open again", function()
+    local root = seats_root()
+    assert(fs.write(root .. "/task.seats.json", HELD_CODE_SEAT))
+
+    local out, code = seat_reset_cli(root, { "board", "seat", "reset", "11111111", "code" })
+
+    testing.eq(code, 0, out)
+    testing.ok(
+        out:find(
+            "Reset seat code on card 11111111. It was held by r with verdict changes_needed, "
+                .. "and is open again.",
+            1,
+            true
+        ),
+        out
+    )
+end)
+
+testing.test("seat reset adds a seat the card lacks", function()
+    local root = seats_root()
+
+    local out, code = seat_reset_cli(root, { "board", "seat", "reset", "11111111", "code" })
+
+    testing.eq(code, 0, out)
+    testing.ok(out:find("Added seat code to card 11111111, open.", 1, true), out)
+end)
+
+testing.test("seat reset names the seats.manage permission when Pomb refuses", function()
+    local root = seats_root()
+    assert(fs.write(root .. "/task.seats.json", HELD_CODE_SEAT))
+    assert(fs.write(root .. "/seat_drop_refused", ""))
+
+    local out, code = seat_reset_cli(root, { "board", "seat", "reset", "11111111", "code" })
+
+    testing.ok(code ~= 0, out)
+    testing.ok(out:find("needs the seats.manage permission", 1, true), out)
+end)
+
+testing.test("seat reset refuses a seat name outside the pattern with a usage error", function()
+    local root = seats_root()
+
+    local out, code = seat_reset_cli(root, { "board", "seat", "reset", "11111111", "bad seat" })
+
+    testing.eq(code, 2, out)
+    testing.ok(out:find("SEAT is a seat name such as code, style or recheck", 1, true), out)
+end)
+
+testing.test("seat reset refuses a local board", function()
+    local root, home = setup()
+
+    local out, code = dev(root, home, { "board", "seat", "reset", "11111111", "code" })
+
+    testing.ok(code ~= 0, out)
+    testing.ok(out:find("A local board has no seats to reset.", 1, true), out)
 end)
