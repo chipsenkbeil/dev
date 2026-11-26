@@ -2842,25 +2842,83 @@ if has_jj then
         }, "\n"))
     end
 
+    local function rebuilt_project(rev)
+        return jj_project(table.concat({
+            "",
+            "[sync]",
+            'templates = ["' .. TEMPLATE_DIR .. '"]',
+            'baked = ".dev/baked.txt"',
+            'baked_rev = "' .. rev .. '"',
+            "",
+        }, "\n"))
+    end
+
     testing.test(
         "land refuses a template change that calls a dev function the baked list lacks",
         function()
             local project = template_project()
             local id = template_ready(project, { template = CALLS_EXISTS, baked = "dev.fs\n" })
             refused(project, id, {
-                "The lint-set template calls dev.fs.exists, which .dev/baked.txt",
-                "rebuild the ci images, then land the template change",
+                "The lint-set template calls dev.fs, dev.fs.exists, which .dev/baked.txt",
+                "rebuild the ci images, set sync.baked_rev",
             })
         end
     )
+
+    testing.test("land refuses a template change whose commit adds the baked entries", function()
+        -- Add the template and the entries it calls in one commit
+        local project = template_project()
+        local id = template_ready(project, {
+            template = CALLS_EXISTS,
+            baked = table.concat({ "dev.fs", "dev.fs.exists", "" }, "\n"),
+        })
+
+        -- Expect the refusal to name both entries
+        refused(project, id, { "The lint-set template calls dev.fs, dev.fs.exists," })
+    end)
+
+    testing.test("land refuses entries added since the sync.baked_rev rebuild", function()
+        -- Name the rebuild rev, which holds no entries yet
+        local project = rebuilt_project("master@origin-")
+        local id = template_ready(project, { template = CALLS_EXISTS })
+
+        -- Put the entries on trunk after that rebuild
+        trunk_moves(project, { [".dev/baked.txt"] = "dev.fs\ndev.fs.exists\n" })
+        refused(project, id, { "The lint-set template calls dev.fs, dev.fs.exists," })
+    end)
+
+    testing.test(
+        "land lands a template change once the sync.baked_rev rev holds the entries",
+        function()
+            -- Rebuild after the entries reached trunk
+            local project = rebuilt_project("master@origin")
+            trunk_moves(project, { [".dev/baked.txt"] = "dev.fs\ndev.fs.exists\n" })
+            local id = template_ready(project, { template = CALLS_EXISTS })
+
+            -- Land it through the stub
+            local out, code = dev(
+                project,
+                { "board", "land", id },
+                { LAND_TRUNK = LAND_TRUNK_KEEP }
+            )
+            testing.eq(code, 0, out)
+            testing.eq(column_of(project.home), board.DEFAULT_NAMES.done)
+        end
+    )
+
+    testing.test("land refuses a template change when sync.baked_rev names no commit", function()
+        local project = rebuilt_project("nowhere")
+        local id = template_ready(project, { template = CALLS_EXISTS, baked = "dev.fs\n" })
+        refused(project, id, { "The rev nowhere that sync.baked_rev names is not a known commit." })
+    end)
 
     testing.test("land refuses a template change from a subdirectory", function()
         local project = template_project()
         local id = template_ready(project, { template = CALLS_EXISTS, baked = "dev.fs\n" })
         local subdirectory = project.root .. "/" .. TEMPLATE_DIR
         refused(project, id, {
-            "The lint-set template calls dev.fs.exists, which .dev/baked.txt",
-            "rebuild the ci images, then land the template change",
+            "The lint-set template calls dev.fs, dev.fs.exists, which .dev/baked.txt",
+            "rebuild the ci images, set sync.baked_rev",
         }, { cwd = subdirectory })
     end)
 
@@ -2892,12 +2950,10 @@ if has_jj then
     )
 
     testing.test("land lands a template change whose dev calls the baked list holds", function()
-        -- Add a template change whose calls the baked list holds
+        -- Put the baked list on trunk before the template change
         local project = template_project()
-        local id = template_ready(project, {
-            template = CALLS_EXISTS,
-            baked = table.concat({ "dev.fs", "dev.fs.exists", "" }, "\n"),
-        })
+        trunk_moves(project, { [".dev/baked.txt"] = "dev.fs\ndev.fs.exists\n" })
+        local id = template_ready(project, { template = CALLS_EXISTS })
 
         -- Land it through the stub
         local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })

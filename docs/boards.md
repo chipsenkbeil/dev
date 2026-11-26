@@ -3402,11 +3402,16 @@ lists each one that fails. A refusal can leave the change rebased onto trunk.
 - The commit adds no file under `.dev/standalone/` unless the card carries the
   `standalone-ok` label.
 - A commit that changes a synced Lua template file calls only the dev modules
-  and functions that the baked list lists. `sync.templates` in
+  and functions that the baked list lists as baked. `sync.templates` in
   `.dev/config.toml` is a list of path prefixes, the synced templates, and
   `sync.baked` is the baked list file, `.dev/baked.txt` here. With either key
-  unset the guard stays quiet. The refusal says to land the dev change first,
-  rebuild the ci images, then land the template change with the entries added.
+  unset the guard stays quiet. `sync.baked_rev` is the rev of the last ci
+  image rebuild, and only the entries the list holds at that rev count as
+  baked. With the key unset the list at the landing commit's parent counts, so
+  entries the landing commit adds are not yet baked, and a rev dev does not
+  know refuses the landing. The refusal says to land the dev change first,
+  rebuild the ci images, set `sync.baked_rev` to a rev that holds the entries,
+  then land the template change.
 - In a Gerrit project the ci change run of the landing commit has not failed.
   `land` reads `ci ps -a --json --repo PROJECT`, with PROJECT the name in the
   remote's `ssh://host/project` URL, and takes the newest run whose source

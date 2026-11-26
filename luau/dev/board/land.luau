@@ -1386,6 +1386,34 @@ function M.is_synced_template(prefixes, path)
     return false
 end
 
+---Read the baked list as the last image rebuild or the landing commit's parent holds it.
+---@param root the project root
+---@param backend the vcs backend of the project
+---@param baked_file the repo-relative path of the baked list
+---@param rebuilt_at the `sync.baked_rev` rev of the last image rebuild
+---@return text the list, empty when that rev holds no list, nil when the rev is unknown
+local function baked_text(
+    root: string,
+    backend: string,
+    baked_file: string,
+    rebuilt_at: string?
+): string?
+    if backend == vcs.GIT then
+        if
+            rebuilt_at
+            and not git_out(root, "rev-parse", "--verify", "--quiet", rebuilt_at .. "^{commit}")
+        then
+            return nil
+        end
+        return git_out(root, "show", (rebuilt_at or "HEAD^") .. ":" .. baked_file) or ""
+    end
+    if rebuilt_at and not jj_out(root, "log", "-r", rebuilt_at, "--no-graph", "-T", '""') then
+        return nil
+    end
+    return jj_out(root, "file", "show", "-r", rebuilt_at or "@-", 'root:"' .. baked_file .. '"')
+        or ""
+end
+
 ---Name why a synced Lua template file may not call a dev function the baked dev lacks.
 ---@param root string the project root, a jj project
 ---@param touched string[] the paths the landing commit touches
@@ -1429,8 +1457,16 @@ function M.template_problem(root, touched)
         end
         listed = listed .. part .. "\n"
     end
+    local rebuilt_at = config.get(root, "sync.baked_rev")
+    if type(rebuilt_at) ~= "string" then
+        rebuilt_at = nil
+    end
+    local text = baked_text(root, backend, baked_file, rebuilt_at)
+    if not text then
+        return `The rev {rebuilt_at} that sync.baked_rev names is not a known commit.`
+    end
     local baked = {}
-    for entry in (fs.read(root .. "/" .. baked_file) or ""):gmatch("[^\n]+") do
+    for entry in text:gmatch("[^\n]+") do
         baked[entry] = true
     end
     local lacking = {}
@@ -1455,11 +1491,11 @@ function M.template_problem(root, touched)
         .. table.concat(names, ", ")
         .. ", which "
         .. baked_file
-        .. " does not list as baked into ci's images. Land the dev change first,"
-        .. " rebuild the ci images,"
-        .. " then land the template change with the entries added to "
+        .. " does not list as baked into ci's images before this commit or the"
+        .. " sync.baked_rev rebuild. Land the dev change first, rebuild the ci images,"
+        .. " set sync.baked_rev to a rev that holds the entries in "
         .. baked_file
-        .. "."
+        .. ", then land the template change."
 end
 
 ---@class dev.board.land.Opts

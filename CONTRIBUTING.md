@@ -205,8 +205,11 @@ the ci images are rebuilt from a rev that holds it.
 `dev.board.land.dev_calls` reads the same entries from a template file's
 `require("@dev/x")` locals, skipping full-line comments. The `sync.templates`
 and `sync.baked` keys of `.dev/config.toml` name the template path prefixes
-and the list file. `dev board land` refuses a commit that changes a Lua
-template file calling an entry the list lacks, with the dev change in the same
-commit or an earlier one, so the dev change lands first and the template
-commit adds the entries after the rebuild. The runner blocks the template card
-on the card for that rebuild.
+and the list file, and `sync.baked_rev` names the rev of the last ci image
+rebuild. `dev board land` refuses a commit that changes a Lua template file
+calling an entry the list does not hold at `sync.baked_rev`, or at the
+landing commit's parent when the key is unset, so entries the landing commit
+adds count as not yet baked. The order is: land the dev change, rebuild the
+ci images, set `sync.baked_rev` to a rev that holds the entries, then land
+the template change. The runner blocks the template card on the card for that
+rebuild.

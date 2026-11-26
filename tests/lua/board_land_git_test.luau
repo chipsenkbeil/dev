@@ -257,6 +257,62 @@ testing.test("git template problem reads the template listing", function()
     testing.ok(problem and problem:find("calls dev.fs", 1, true), tostring(problem))
 end)
 
+testing.test("git template problem refuses entries the landing commit adds", function()
+    -- Configure a template folder and a baked list on trunk
+    local root = repo({
+        [".dev/config.toml"] = table.concat({
+            "[sync]",
+            'templates = ["tpl"]',
+            'baked = ".dev/baked.txt"',
+            "",
+        }, "\n"),
+        [".dev/baked.txt"] = "dev.fs\n",
+    })
+
+    -- Commit a template and the entry it calls together
+    write(root, "tpl/lint.lua", 'local fs = require("@dev/fs")\nreturn fs.exists(1)\n')
+    write(root, ".dev/baked.txt", "dev.fs\ndev.fs.exists\n")
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "feat: template")
+
+    -- Expect the problem to name the entry only the commit lists
+    local touched = assert(land.touched(root, head(root)))
+    local problem = land.template_problem(root, touched)
+    testing.ok(problem and problem:find("calls dev.fs.exists", 1, true), tostring(problem))
+end)
+
+local function rebuilt_config(rev)
+    return table.concat({
+        "[sync]",
+        'templates = ["tpl"]',
+        'baked = ".dev/baked.txt"',
+        'baked_rev = "' .. rev .. '"',
+        "",
+    }, "\n")
+end
+
+testing.test("git template problem follows the sync.baked_rev rebuild", function()
+    -- Land the baked entries first
+    local root = repo({})
+    write(root, ".dev/baked.txt", "dev.fs\ndev.fs.exists\n")
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "feat: dev change")
+    local rebuilt = head(root)
+
+    -- Point the config at that rebuild rev and commit the template
+    write(root, ".dev/config.toml", rebuilt_config(rebuilt))
+    write(root, "tpl/lint.lua", 'local fs = require("@dev/fs")\nreturn fs.exists(1)\n')
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "feat: template")
+
+    -- Expect no problem, and a problem for an unknown rev
+    local touched = assert(land.touched(root, head(root)))
+    testing.eq(land.template_problem(root, touched), nil)
+    write(root, ".dev/config.toml", rebuilt_config("nowhere"))
+    local problem = land.template_problem(root, touched)
+    testing.ok(problem and problem:find("names is not a known commit", 1, true), tostring(problem))
+end)
+
 testing.test("git template problem skips a synced file that is not Lua", function()
     -- Configure a template folder that syncs to other projects
     local root = repo({
