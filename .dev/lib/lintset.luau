@@ -733,16 +733,49 @@ function M.split_lua(files)
     return lua, luau
 end
 
+---Keep the luau-analyze findings that do not come from a `dev.*` require or type, which it cannot
+---resolve.
+---@param text the luau-analyze output
+---@return the finding blocks, each a header line with its continuation lines
+function M.analyze_findings(text: string): { string }
+    local found: { string } = {}
+    local keep = false
+    for _, line in ipairs(lines_of(text)) do
+        if line:match("^%S+%(%d+,%d+%): ") then
+            keep = not (
+                line:find("Unknown require: unsupported path", 1, true)
+                or line:match("Unknown type '[%w_]+%.[%w_]+'")
+            )
+            if keep then
+                found[#found + 1] = line
+            end
+        elseif keep and line ~= "" then
+            found[#found] = `{found[#found]}\n{line}`
+        end
+    end
+    return found
+end
+
 ---Type-check the `.luau` files among the paths with luau-analyze in its default non-strict mode.
 ---
----A `.lua` file in the list is left to selene, and a list with no `.luau` file runs nothing.
----@param files string[] paths of `.lua` and `.luau` files
-function Lint:luau_analyze(files)
+---A `.lua` file in the list is left to selene, and a list with no `.luau` file runs nothing. A
+---finding about a `dev.*` module is dropped, as luau-analyze has no declarations for them.
+---@param files paths of `.lua` and `.luau` files
+function Lint:luau_analyze(files: { string })
     local _, luau = M.split_lua(files)
     if #luau == 0 or not self:have("luau-analyze", "brew install luau") then
         return
     end
-    self:check("luau-analyze", M.with_files({ "luau-analyze" }, luau))
+    self:step("luau-analyze")
+    local argv = M.with_files({ "luau-analyze" }, luau)
+    local out, code = dev_os.capture(argv, { cwd = self.root, stderr = "stdout" })
+    if code ~= 0 and not out:find("%(%d+,%d+%): ") then
+        self:fail("luau-analyze", out)
+        return
+    end
+    for _, finding in ipairs(M.analyze_findings(out)) do
+        self:fail("luau-analyze", finding)
+    end
 end
 
 ---List the Lua files under the project's `.dev` and `.ci` directories, and no other Lua.

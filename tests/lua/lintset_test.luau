@@ -726,3 +726,60 @@ testing.test("stanza headers passes a three-stanza function with every stanza he
     local two = "local function f()\n    a()\n\n    b()\nend\n"
     testing.eq(lintset.unheaded(two), {})
 end)
+
+testing.test("analyze_findings drops a dev require and a dev type and keeps the rest", function()
+    local out = table.concat({
+        "a.luau(1,15): (W000) Unknown require: unsupported path",
+        "a.luau(2,10): (W000) Unknown type 'dev.Card'",
+        "a.luau(3,1): (W000) Unknown global 'nope'",
+        "    seen near here",
+        "",
+        "a.luau(4,1): (W000) Unknown type 'Card'",
+        "",
+    }, "\n")
+    testing.eq(lintset.analyze_findings(out), {
+        "a.luau(3,1): (W000) Unknown global 'nope'\n    seen near here",
+        "a.luau(4,1): (W000) Unknown type 'Card'",
+    })
+end)
+
+local function analyze_with(output: string): ({ string }, { string })
+    local root = support.tempdir()
+    local lint = lint_for(root)
+    local which, capture, say, note =
+        dev_os.which, dev_os.capture, dev_command.say, dev_command.note
+    local notes: { string } = {}
+    dev_os.which = function()
+        return true
+    end
+    dev_os.capture = function()
+        return output, 1
+    end
+    dev_command.say = function() end
+    dev_command.note = function(text)
+        notes[#notes + 1] = text
+    end
+    local ok, err = pcall(lint.luau_analyze, lint, { "a.luau" })
+    dev_os.which, dev_os.capture, dev_command.say, dev_command.note = which, capture, say, note
+    fs.remove(root, { recursive = true })
+    assert(ok, err)
+    return lint.failed, notes
+end
+
+testing.test(
+    "luau_analyze passes a stub analyzer that reports only an unresolved @dev require",
+    function()
+        local failed, notes =
+            analyze_with("a.luau(1,15): (W000) Unknown require: unsupported path\n")
+        testing.eq(failed, {})
+        testing.eq(notes, {})
+    end
+)
+
+testing.test("luau_analyze fails a stub analyzer that reports a real finding", function()
+    local failed = analyze_with(
+        "a.luau(1,15): (W000) Unknown require: unsupported path\n"
+            .. "a.luau(2,1): (W000) Unknown global 'nope'\n"
+    )
+    testing.eq(failed, { "luau-analyze" })
+end)
