@@ -398,12 +398,12 @@ end
 ---@field revision string? the commit the answer is about
 ---@field holder string? the credential that took the seat, nil when nobody did
 
----List the kinds whose newest recheck at a commit is clean or minor.
----@param comments {body: string}[] the card's comments, oldest first
----@param commit string the full commit id that would land
+---List the kinds whose newest recheck at a commit, or an identical earlier one, is clean or minor.
+---@param comments the card's comments, oldest first
+---@param same whether a commit holds the same patch as the one that would land
 ---@return table<string, boolean> met the kinds a recheck at the commit covers
 ---@return boolean refused true when the newest recheck of some kind at the commit says needs-work
-local function rechecked_kinds(comments, commit)
+local function rechecked_kinds(comments: { { body: string } }, same: (commit: string) -> boolean)
     local newest = {}
     for _, comment in ipairs(comments) do
         local record = review.parse(comment.body)
@@ -411,7 +411,8 @@ local function rechecked_kinds(comments, commit)
             record
             and record.kind == review.Kind.RECHECK
             and record.of
-            and record.commit == commit
+            and record.commit
+            and same(record.commit)
         then
             newest[record.of] = record
         end
@@ -437,17 +438,17 @@ end
 ---A seat that answered an earlier commit whose interdiff against the commit is empty (read only
 ---when `root` is given) is as current as one that answered the commit. A seat of the code or
 ---style kind that approved or asked for changes at any other earlier commit counts as met when
----a clean or minor recheck of its kind is recorded at the commit. A seat that asks for changes
----at the commit or at the carried one still refuses. The recheck seat counts as met when any
----clean or minor recheck is recorded at the commit, whoever recorded it, and no recheck at the
----commit says needs-work.
+---a clean or minor recheck of its kind is recorded at the commit or at an earlier commit with the
+---same patch. A seat that asks for changes at the commit or at the carried one still refuses.
+---The recheck seat counts as met when any clean or minor recheck is recorded there, whoever
+---recorded it, and no recheck there says needs-work.
 ---@param seats dev.board.land.Seat[] the card's seats
 ---@param commit string the full commit id that would land
 ---@param opts dev.board.land.seats_problem.Opts the carried commit, the card's comments and the project root
 ---@return string[] problems one reason per seat, empty when every seat approved
 function M.seats_problem(seats, commit, opts)
-    local rechecked, refused = rechecked_kinds(opts.comments, commit)
     local same = same_patch(opts.root, { commit = commit, change = "-" })
+    local rechecked, refused = rechecked_kinds(opts.comments, same)
     local problems = {}
     for _, seat in ipairs(seats) do
         local label = "reviewer seat " .. (seat.name or "?")

@@ -4414,6 +4414,71 @@ if has_jj then
         })
     end)
 
+    local function recheck_both(commit, verdict)
+        return {
+            rechecked_as(review.Kind.CODE, commit, verdict),
+            rechecked_as(review.Kind.STYLE, commit, verdict),
+        }
+    end
+
+    testing.test("a recheck on an identical earlier commit covers a stale seat", function()
+        -- Review one commit, recheck a wording fix, then land a trunk-only rebase of it
+        local project = jj_project()
+        local reviewed = head(project.root)
+        assert(fs.write(project.root .. "/more.txt", "more\n"), "write failed")
+        local rechecked = head(project.root)
+        jj(project.root, "describe", "-m", "feat: work again")
+        local landing = head(project.root)
+        local seats = {
+            seat(review.Kind.CODE, review.SeatVerdict.APPROVED, reviewed),
+            seat(review.Kind.STYLE, review.SeatVerdict.APPROVED, reviewed),
+        }
+        local opts = {
+            comments = recheck_both(rechecked, review.Verdict.CLEAN),
+            root = project.root,
+        }
+
+        -- Cover the seats through the identical earlier recheck
+        testing.eq(land.seats_problem(seats, landing, opts), {})
+
+        -- Leave the seats stale when no root lets the patch compare
+        opts.root = nil
+        testing.eq(#land.seats_problem(seats, landing, opts), 2)
+    end)
+
+    testing.test("a recheck on a commit with a different patch does not cover a seat", function()
+        local project = jj_project()
+        local reviewed = head(project.root)
+        assert(fs.write(project.root .. "/more.txt", "more\n"), "write failed")
+        local rechecked = head(project.root)
+        assert(fs.write(project.root .. "/again.txt", "again\n"), "write failed")
+        local landing = head(project.root)
+        local opts = {
+            comments = recheck_both(rechecked, review.Verdict.CLEAN),
+            root = project.root,
+        }
+        local seats = { seat(review.Kind.CODE, review.SeatVerdict.APPROVED, reviewed) }
+        testing.eq(land.seats_problem(seats, landing, opts), {
+            stale_line(review.Kind.CODE, reviewed, landing),
+        })
+    end)
+
+    testing.test("a newer needs-work recheck on an identical commit still refuses", function()
+        local project = jj_project()
+        local reviewed = head(project.root)
+        assert(fs.write(project.root .. "/more.txt", "more\n"), "write failed")
+        local rechecked = head(project.root)
+        jj(project.root, "describe", "-m", "feat: work again")
+        local landing = head(project.root)
+        local comments = recheck_both(rechecked, review.Verdict.CLEAN)
+        comments[#comments + 1] = rechecked_as(review.Kind.CODE, landing, review.Verdict.NEEDS_WORK)
+        local seats = { seat(review.Kind.CODE, review.SeatVerdict.APPROVED, reviewed) }
+        local opts = { comments = comments, root = project.root }
+        testing.eq(land.seats_problem(seats, landing, opts), {
+            stale_line(review.Kind.CODE, reviewed, landing),
+        })
+    end)
+
     local function checked_past_reviews(project)
         -- Bring a card to Verify with its reviews
         local id = new_card(project)
