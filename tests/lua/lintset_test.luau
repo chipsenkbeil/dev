@@ -787,26 +787,30 @@ testing.test("stanza headers judges a stanza under a multi-line signature by its
     testing.eq(lintset.unheaded(paren), { 11 })
 end)
 
-testing.test("analyze_findings drops a dev require and a dev type and keeps the rest", function()
-    local root = support.tempdir()
-    local source =
-        table.concat({ 'local dev = require("@dev/card")', "local x: dev.Card", "" }, "\n")
-    assert(fs.write(root .. "/a.luau", source))
-    local out = table.concat({
-        "a.luau(1,15): (W000) Unknown require: unsupported path",
-        "a.luau(2,10): (W000) Unknown type 'dev.Card'",
-        "a.luau(3,1): (W000) Unknown global 'nope'",
-        "    seen near here",
-        "",
-        "a.luau(4,1): (W000) Unknown type 'Card'",
-        "",
-    }, "\n")
-    testing.eq(lintset.analyze_findings(out, root), {
-        "a.luau(3,1): (W000) Unknown global 'nope'\n    seen near here",
-        "a.luau(4,1): (W000) Unknown type 'Card'",
-    })
-    fs.remove(root, { recursive = true })
-end)
+testing.test(
+    "analyze_findings drops a dev type and keeps an unresolved require and the rest",
+    function()
+        local root = support.tempdir()
+        local source =
+            table.concat({ 'local dev = require("@dev/card")', "local x: dev.Card", "" }, "\n")
+        assert(fs.write(root .. "/a.luau", source))
+        local out = table.concat({
+            "a.luau(1,15): (W000) Unknown require: unsupported path",
+            "a.luau(2,10): (W000) Unknown type 'dev.Card'",
+            "a.luau(3,1): (W000) Unknown global 'nope'",
+            "    seen near here",
+            "",
+            "a.luau(4,1): (W000) Unknown type 'Card'",
+            "",
+        }, "\n")
+        testing.eq(lintset.analyze_findings(out, root), {
+            "a.luau(1,15): (W000) Unknown require: unsupported path",
+            "a.luau(3,1): (W000) Unknown global 'nope'\n    seen near here",
+            "a.luau(4,1): (W000) Unknown type 'Card'",
+        })
+        fs.remove(root, { recursive = true })
+    end
+)
 
 testing.test("analyze_findings reports a misspelled alias and drops a bound one", function()
     local root = support.tempdir()
@@ -820,6 +824,7 @@ testing.test("analyze_findings reports a misspelled alias and drops a bound one"
         "",
     }, "\n")
     testing.eq(lintset.analyze_findings(out, root), {
+        "./a.luau(1,15): TypeError: Unknown require: unsupported path",
         "a.luau(2,10): TypeError: Unknown type 'tpyes.Ctx'",
     })
     fs.remove(root, { recursive = true })
@@ -854,12 +859,12 @@ local function analyze_with(output: string): ({ string }, { string })
 end
 
 testing.test(
-    "luau_analyze passes a stub analyzer that reports only an unresolved @dev require",
+    "luau_analyze fails a stub analyzer that reports an unresolved @lib require",
     function()
         local failed, notes =
             analyze_with("a.luau(1,15): (W000) Unknown require: unsupported path\n")
-        testing.eq(failed, {})
-        testing.eq(notes, {})
+        testing.eq(failed, { "luau-analyze" })
+        testing.eq(notes, { "a.luau(1,15): (W000) Unknown require: unsupported path" })
     end
 )
 

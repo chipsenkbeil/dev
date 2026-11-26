@@ -9,7 +9,7 @@ local REPO = dev_os.capture({ "pwd" }):gsub("\n$", "")
 local FIXTURES = REPO .. "/tests/lua/fixtures/commands/"
 
 local OUTSIDE_COMMANDS = { ["config.toml"] = true }
-local LUAURC = '{ "aliases": { "lib": ".dev/lib" } }\n'
+local LUAURC = '{ "aliases": { "lib": "./.dev/lib" } }\n'
 
 local function project(files)
     -- Make a project with a Luau alias for its lib folder

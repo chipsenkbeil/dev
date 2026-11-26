@@ -753,9 +753,9 @@ local function binds_alias_require(text: string, name: string): boolean
     return false
 end
 
----Keep the luau-analyze findings that do not come from an `@` alias require, which it cannot
----resolve, and none from a file under the generated declarations folder. An unknown type with a
----dotted name is dropped only when its file binds the prefix to such a require.
+---Keep the luau-analyze findings, an unresolved require among them, except those from a file
+---under the generated declarations folder. An unknown type with a dotted name is dropped when
+---its file binds the prefix to an `@` alias require.
 ---@param text the luau-analyze output
 ---@param root absolute project root, which the finding paths are relative to
 ---@param generated the declarations folder as the `dev` alias gives it, when the project has one
@@ -772,7 +772,7 @@ function M.analyze_findings(text: string, root: string, generated: string?): { s
                 then file
                 else fs.join(root, (file:gsub("^%./", "")))
             local prefix = line:match("Unknown type '([%w_]+)%.[%w_]+'")
-            local dropped = line:find("Unknown require: unsupported path", 1, true) ~= nil
+            local dropped = false
             if prefix then
                 sources[file] = sources[file] or fs.read(path) or ""
                 dropped = binds_alias_require(sources[file], prefix)
@@ -806,8 +806,7 @@ end
 ---
 ---A `.lua` file in the list is left to selene, and a list with no `.luau` file runs nothing. When
 ---the project's `.luaurc` sets the `dev` alias, the dev declarations are written into its folder
----first, so luau-analyze reads them for `@dev/NAME`. A finding about a module from an `@` alias
----require it still cannot resolve is dropped.
+---first, so luau-analyze reads them for `@dev/NAME`.
 ---@param files paths of `.lua` and `.luau` files
 function Lint:luau_analyze(files: { string })
     local _, luau = M.split_lua(files)

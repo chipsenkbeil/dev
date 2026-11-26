@@ -12,7 +12,7 @@ local setup = require("@dev/board/setup")
 
 local BOARD_SECONDS = 5
 local BOARD_REFUSED = 401
-local LIB_FOLDER = ".dev/lib"
+local LIB_FOLDER = "./.dev/lib"
 
 ---@class dev.cmd.init
 local M = {}

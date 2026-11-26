@@ -1,5 +1,5 @@
 {
     "lint": { "*": false },
     "globals": ["arg"],
-    "aliases": { "lib": ".dev/lib" }
+    "aliases": { "lib": "./.dev/lib" }
 }

@@ -184,10 +184,11 @@ A Luau file loads another with the same require-by-string rule that
   message that names the `./` or `@alias/` form to write.
 
 A project that keeps modules under `.dev/lib/` needs this `.luaurc` at its
-root, which `dev init` writes and merges into an existing file:
+root, which `dev init` writes and merges into an existing file. The value
+starts with `./`, which luau-analyze requires to resolve the alias:
 
 ```json
-{ "aliases": { "lib": ".dev/lib" } }
+{ "aliases": { "lib": "./.dev/lib" } }
 ```
 
 `.dev/lib/myproj/checks.luau` then loads with
@@ -211,7 +212,7 @@ The `dev` alias in the project's `.luaurc` points luau-analyze at the folder.
 adds it by hand (the value starts with `./`, which luau-analyze requires):
 
 ```json
-{ "aliases": { "lib": ".dev/lib", "dev": "./.dev/types" } }
+{ "aliases": { "lib": "./.dev/lib", "dev": "./.dev/types" } }
 ```
 
 Run `dev luautypes` once to write the folder, then `luau-analyze FILE`
@@ -229,7 +230,7 @@ that called `runtime.add_path(root .. "/.dev/lib")` before a dotted
 runtime.add_path(root .. "/.dev/lib")
 local checks = require("myproj.checks")
 
--- after, with { "aliases": { "lib": ".dev/lib" } } in `.luaurc`
+-- after, with { "aliases": { "lib": "./.dev/lib" } } in `.luaurc`
 local checks = require("@lib/myproj/checks")
 ```
 
@@ -241,7 +242,7 @@ write a `.luaurc` with the `lib` alias above the copy, in the folder that
 holds the copied `.dev`:
 
 ```json
-{ "aliases": { "lib": ".dev/lib" } }
+{ "aliases": { "lib": "./.dev/lib" } }
 ```
 
 Scripts that a command calls but that are not commands live in

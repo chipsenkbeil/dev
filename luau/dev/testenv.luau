@@ -27,7 +27,7 @@ end
 ---@return dir the new directory
 function M.project()
     local dir = M.tempdir()
-    local text = fs.read(project.root() .. "/.luaurc") or '{ "aliases": { "lib": ".dev/lib" } }\n'
+    local text = fs.read(project.root() .. "/.luaurc") or '{ "aliases": { "lib": "./.dev/lib" } }\n'
     assert(fs.write(dir .. "/.luaurc", text))
     return dir
 end
