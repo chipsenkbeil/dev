@@ -7,6 +7,7 @@ local role_clock = require("@dev/board/clock")
 local review = require("@dev/board/review")
 local board_wait = require("@dev/board/wait")
 local box = require("@dev/cmd/box")
+local dev_command = require("@dev/command")
 local cmd_board = require("@dev/cmd/board")
 local dev_os = require("@dev/os")
 local runtime = require("@dev/runtime")
@@ -20400,6 +20401,21 @@ for _, kind in ipairs({ "jj", "git" }) do
                 end
             )
 
+            testing.test(
+                "git a stacked worktree keeps its marker in its own git directory",
+                function()
+                    within(function(root)
+                        local _, b = stacked(root)
+                        testing.eq(fs.is_dir(b .. "/.git"), false)
+                        local out = dev_os.capture({ "git", "-C", b, "rev-parse", "--git-dir" })
+                        local git_dir = (out:gsub("\n$", ""))
+                        testing.eq(fs.read(git_dir .. "/dev-on"):match("on=([^\n]+)"), SHORT)
+                        testing.eq(fs.exists(b .. "/dev-on"), false)
+                        testing.eq(stack.read(b).on, SHORT)
+                    end)
+                end
+            )
+
             testing.test("git a detached stacked worktree is left alone", function()
                 within(function(root)
                     local a, b = stacked(root)
@@ -20553,6 +20569,65 @@ testing.test("take --on takes a card whose blocker is in progress or verify", fu
         })
         testing.eq(result.code, nil, result.message)
     end
+end)
+
+testing.test(
+    "take --on for a card that already has a workspace notes it and stacks nothing",
+    function()
+        local seen = {}
+        local original = dev_command.note
+        dev_command.note = function(text)
+            seen[#seen + 1] = text
+        end
+        local ok, result, backend = pcall(taken_on, {
+            column = support.COLUMN_NAME.REVIEW,
+            maker = function()
+                return "/w/dddddddd", nil, false
+            end,
+        })
+        dev_command.note = original
+        assert(ok, result)
+        testing.eq(result.code, nil, result.message)
+        testing.ok(result.output:find("\nworkspace /w/dddddddd", 1, true), result.output)
+        testing.eq(result.output:find("stacked on", 1, true), nil)
+        testing.eq(#notes_of(backend), 0)
+        testing.eq(seen, {
+            "Card dddddddd already had a workspace, so --on did not stack it on card cccccccc.",
+        })
+    end
+)
+
+testing.test(
+    "a gitdir pointer with a relative path resolves against the workspace folder",
+    function()
+        local base = support.tempdir()
+        assert(fs.mkdir(base .. "/ws", { parents = true }))
+        assert(fs.mkdir(base .. "/meta", { parents = true }))
+        assert(fs.write(base .. "/ws/.git", "gitdir: ../meta\n"))
+        stack.write(base .. "/ws", { on = "cccccccc", tip = "abc123" })
+        testing.eq(fs.read(base .. "/meta/dev-on"), "on=cccccccc\ntip=abc123\n")
+        testing.eq(stack.read(base .. "/ws"), { on = "cccccccc", tip = "abc123" })
+    end
+)
+
+testing.test(
+    "a gitdir pointer with a drive letter is not joined to the workspace folder",
+    function()
+        local base = support.tempdir()
+        assert(fs.mkdir(base .. "/ws/C:/meta", { parents = true }))
+        assert(fs.write(base .. "/ws/.git", "gitdir: C:/meta\n"))
+        assert(fs.write(base .. "/ws/C:/meta/dev-on", "on=cccccccc\n"))
+        testing.eq(stack.read(base .. "/ws"), nil)
+    end
+)
+
+testing.test("a .git file with no gitdir line holds no marker", function()
+    local base = support.tempdir()
+    assert(fs.mkdir(base .. "/ws", { parents = true }))
+    assert(fs.write(base .. "/ws/.git", "not a pointer\n"))
+    stack.write(base .. "/ws", { on = "cccccccc" })
+    testing.eq(stack.read(base .. "/ws"), nil)
+    testing.eq(fs.exists(base .. "/ws/dev-on"), false)
 end)
 
 testing.test("take --on refuses a card that is not in flight and makes no workspace", function()
