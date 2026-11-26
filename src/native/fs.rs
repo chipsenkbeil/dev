@@ -491,7 +491,7 @@ fn remove_tree(path: &Path) -> crate::Result<()> {
 native_fn! {
     /// Moves a path to one that does not exist yet, copying across filesystems. A failure
     /// returns nil and its text, and the reason `exists` as a third value when `to` is taken.
-    #[luau = "(from: string, to: string) -> (boolean?, string?, string?)"]
+    #[luau = "(from: string, to: string) -> (boolean?, string?, ...any)"]
     #[name = "move"]
     pub fn move_path(lua: &Lua, from: String, to: String) -> mlua::Result<MultiValue> {
         if fs::symlink_metadata(&to).is_ok() {
@@ -514,7 +514,7 @@ native_fn! {
 native_fn! {
     /// Lists the names in a directory, sorted, hidden names included. A failure returns nil,
     /// its text and the reason `list`.
-    #[luau = "(dir: string) -> ({ string }?, string?, string?)"]
+    #[luau = "(dir: string) -> ({ string }?, string?, ...any)"]
     pub fn list(lua: &Lua, dir: String) -> mlua::Result<MultiValue> {
         let Ok(entries) = fs::read_dir(&dir) else {
             return refused(lua, format!("cannot list {dir}"), REASON_LIST);
@@ -541,7 +541,7 @@ native_fn! {
 native_fn! {
     /// Resolves `path` to an absolute path with no links. A failure returns nil, its text and
     /// the reason `resolve`.
-    #[luau = "(path: string) -> (string?, string?, string?)"]
+    #[luau = "(path: string) -> (string?, string?, ...any)"]
     pub fn realpath(lua: &Lua, path: String) -> mlua::Result<MultiValue> {
         match canonical(Path::new(&path)) {
             Ok(real) => real.to_string_lossy().into_owned().into_lua_multi(lua),
@@ -553,7 +553,7 @@ native_fn! {
 native_fn! {
     /// Reads where a symbolic link points. A failure returns nil, its text and the reason
     /// `not_link`.
-    #[luau = "(path: string) -> (string?, string?, string?)"]
+    #[luau = "(path: string) -> (string?, string?, ...any)"]
     pub fn readlink(lua: &Lua, path: String) -> mlua::Result<MultiValue> {
         match fs::read_link(&path) {
             Ok(target) => target.to_string_lossy().into_owned().into_lua_multi(lua),
@@ -587,7 +587,7 @@ fn random_suffix(salt: u64) -> String {
 native_fn! {
     /// Makes a temporary file or directory named PREFIX.XXXXXX under TMPDIR, else /tmp. A
     /// failure returns nil, its text and the reason `temp`.
-    #[luau = "(opts: { prefix: string?, dir: boolean? }?) -> (string?, string?, string?)"]
+    #[luau = "(opts: { prefix: string?, dir: boolean? }?) -> (string?, string?, ...any)"]
     pub fn mktemp(lua: &Lua, opts: Option<MktempOptions>) -> mlua::Result<MultiValue> {
         let (prefix, dir) = opts.map_or((None, false), |opts| {
             (opts.prefix, opts.dir.unwrap_or(false))

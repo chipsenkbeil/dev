@@ -116,6 +116,21 @@ testing.test("the declarations write a missing folder, then change nothing", fun
     fs.remove(root, { recursive = true })
 end)
 
+testing.test("the written testing module annotates its parameters and returns", function()
+    local text = assert(luautypes.files()["testing.luau"])
+    for _, signature in
+        {
+            "function M.test(name: string, fn: () -> ())",
+            "function M.eq(got: any, want: any, message: string?)",
+            "function M.ok(value: any, message: string?)",
+            "function M.raises(fn: () -> (), pattern: string?)",
+            "function M.tests(): { Case }",
+        }
+    do
+        testing.ok(text:find(signature, 1, true), `no annotated {signature}`)
+    end
+end)
+
 local function project(): string
     local root = support.tempdir()
     assert(luautypes.write(`{root}/{luautypes.FOLDER}`))
@@ -141,6 +156,69 @@ if dev_os.which("luau-analyze") then
                 'local code: number = dev_os.run({ "true" })',
                 "dev_os.stdout:write(tostring(code))",
                 "return dev_command",
+                "",
+            }, "\n")
+            assert(fs.write(`{root}/ok.luau`, source))
+
+            -- Expect no finding
+            local out, code = analyze(root, "ok.luau")
+            testing.eq({ out, code }, { "", 0 })
+
+            -- Remove the directory
+            fs.remove(root, { recursive = true })
+        end
+    )
+
+    testing.test(
+        "a strict file that calls testing.test, testing.eq and testing.ok type-checks clean",
+        function()
+            -- Write a strict file that registers a case and checks values
+            local root = project()
+            local source = table.concat({
+                "--!strict",
+                'local testing = require("@dev/testing")',
+                'testing.test("adds", function()',
+                "    testing.eq(1 + 1, 2)",
+                '    testing.eq("a", "a", "same text")',
+                '    testing.ok(true, "truthy")',
+                "    testing.ok(1)",
+                '    testing.raises(function() error("x") end, "x")',
+                "end)",
+                "local cases: { testing.Case } = testing.tests()",
+                "print(#cases)",
+                "",
+            }, "\n")
+            assert(fs.write(`{root}/ok.luau`, source))
+
+            -- Expect no finding
+            local out, code = analyze(root, "ok.luau")
+            testing.eq({ out, code }, { "", 0 })
+
+            -- Remove the directory
+            fs.remove(root, { recursive = true })
+        end
+    )
+
+    testing.test(
+        "a strict file that asserts on each native with a failure triple type-checks clean",
+        function()
+            -- Write a strict file that passes each failure triple to assert
+            local root = project()
+            local source = table.concat({
+                "--!strict",
+                'local fs = require("@dev/fs")',
+                'local http = require("@dev/http")',
+                'local spec = require("@dev/spec")',
+                "local path: string = assert(fs.mktemp({ prefix = 'x' }))",
+                "local names = assert(fs.list(path))",
+                "local moved = assert(fs.move(path, path .. 'x'))",
+                "local real: string = assert(fs.realpath(path))",
+                "local target: string = assert(fs.readlink(path))",
+                'local reply = assert(http.request({ url = "http://localhost" }))',
+                'local saved = assert(http.download({ url = "http://localhost", path = path }))',
+                "local checked = assert(spec.validate({}))",
+                "local _, _, reason = fs.mktemp()",
+                "print(#names, moved, real, target, reply.status, saved.status, checked, reason)",
                 "",
             }, "\n")
             assert(fs.write(`{root}/ok.luau`, source))

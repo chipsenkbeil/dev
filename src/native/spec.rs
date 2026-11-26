@@ -759,7 +759,7 @@ native_fn! {
     /// # Errors
     ///
     /// Never fails. The result type is the one every native function shares.
-    #[luau = "(spec: { [any]: any }) -> ({ [any]: any }?, string?, string?)"]
+    #[luau = "(spec: { [any]: any }) -> ({ [any]: any }?, string?, ...any)"]
     pub fn validate(lua: &Lua, spec: Table) -> mlua::Result<MultiValue> {
         let Err(error) = read(&spec) else {
             return Ok(MultiValue::from_iter([Value::Table(spec)]));

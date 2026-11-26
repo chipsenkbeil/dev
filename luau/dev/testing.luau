@@ -1,12 +1,15 @@
----@class testing.Case
----@field name string sentence naming the behavior under test
----@field fn fun() test body, which raises to fail
+---A test case, named by a sentence about the behavior under test, whose body raises to fail
+export type Case = {
+    ---sentence naming the behavior under test
+    name: string,
+    ---test body, which raises to fail
+    fn: () -> (),
+}
 
 ---@class testing
 local M = {}
 
----@type testing.Case[]
-local registered = {}
+local registered: { Case } = {}
 
 local function render(value, seen)
     if type(value) == "string" then
@@ -59,17 +62,17 @@ local function same(a, b, seen)
 end
 
 ---Register a test case.
----@param name string sentence naming the behavior under test
----@param fn fun() test body, which raises to fail
-function M.test(name, fn)
+---@param name sentence naming the behavior under test
+---@param fn test body, which raises to fail
+function M.test(name: string, fn: () -> ())
     registered[#registered + 1] = { name = name, fn = fn }
 end
 
 ---Fail unless `got` deeply equals `want`.
----@param got any value under test
----@param want any expected value
----@param message string? text printed under the mismatch, such as the command's output
-function M.eq(got, want, message)
+---@param got value under test
+---@param want expected value
+---@param message text printed under the mismatch, such as the command's output
+function M.eq(got: any, want: any, message: string?)
     if not same(got, want) then
         local text = string.format("got %s, want %s", render(got), render(want))
         if message ~= nil then
@@ -80,18 +83,18 @@ function M.eq(got, want, message)
 end
 
 ---Fail unless `value` is truthy.
----@param value any value expected to be truthy
----@param message string? failure message
-function M.ok(value, message)
+---@param value value expected to be truthy
+---@param message failure message
+function M.ok(value: any, message: string?)
     if not value then
         error(message or "expected a truthy value", 2)
     end
 end
 
 ---Fail unless `fn` raises an error that matches `pattern`.
----@param fn fun() function expected to raise
----@param pattern string? pattern in Lua syntax the error message must match
-function M.raises(fn, pattern)
+---@param fn function expected to raise
+---@param pattern pattern in Lua syntax the error message must match
+function M.raises(fn: () -> (), pattern: string?)
     local ok, err = pcall(fn)
     if ok then
         error("expected an error, got none", 2)
@@ -102,8 +105,8 @@ function M.raises(fn, pattern)
 end
 
 ---List the registered test cases in registration order.
----@return testing.Case[] cases every case registered so far
-function M.tests()
+---@return every case registered so far
+function M.tests(): { Case }
     return registered
 end
 

@@ -581,7 +581,7 @@ fn header_pairs(headers: Option<HashMap<String, String>>) -> Vec<(String, String
 native_fn! {
     /// Sends one HTTP request. A non-2xx status is a normal result, and a transport failure
     /// returns nil, a reason naming the host and a kind: resolve, connect, timeout, tls or other.
-    #[luau = "(opts: { method: string?, url: string, headers: { [string]: string }?, body: string?, file: string?, timeout: number?, connect_timeout: number? }) -> ({ status: number, headers: { [string]: string }, body: string }?, string?, string?)"]
+    #[luau = "(opts: { method: string?, url: string, headers: { [string]: string }?, body: string?, file: string?, timeout: number?, connect_timeout: number? }) -> ({ status: number, headers: { [string]: string }, body: string }?, string?, ...any)"]
     pub fn request(lua: &Lua, opts: RequestOptions) -> mlua::Result<MultiValue> {
         if opts.body.is_some() && opts.file.is_some() {
             return Err(mlua::Error::runtime(
@@ -614,7 +614,7 @@ native_fn! {
     /// Streams a URL to a file, following redirects, and returns the status and headers. A
     /// `file://` URL copies the local file as status 200. The file is written only for a 2xx
     /// status. `progress(done, total?)` is called as it goes.
-    #[luau = "(opts: { url: string, path: string, headers: { [string]: string }?, timeout: number?, connect_timeout: number?, progress: ((number, number?) -> ())? }) -> ({ status: number, headers: { [string]: string } }?, string?, string?)"]
+    #[luau = "(opts: { url: string, path: string, headers: { [string]: string }?, timeout: number?, connect_timeout: number?, progress: ((number, number?) -> ())? }) -> ({ status: number, headers: { [string]: string } }?, string?, ...any)"]
     pub fn download(lua: &Lua, opts: DownloadOptions) -> mlua::Result<MultiValue> {
         let headers = header_pairs(opts.headers);
         let call = Call {
