@@ -7,7 +7,9 @@ local support = require("./support")
 local STYLE = ".dev/lib"
 local here = dev_os.capture({ "pwd" }):gsub("\n$", "")
 
-local lintset = require("@lib/lintset")
+local lintset = require("@dev/lintset")
+
+local FIX = `; write the alias in .luaurc with a leading ./, as "./.dev/lib"`
 
 local function lint_for(root)
     return lintset.new({ root = root, verbose = 0 })
@@ -567,7 +569,7 @@ end)
 testing.test("the closing note names each failed check once", function()
     -- Build a snippet that fails two checks, one of them twice
     local root = support.tempdir()
-    local code = "local lint = require('@lib/lintset').new({ root = %q, verbose = 0 }); "
+    local code = "local lint = require('@dev/lintset').new({ root = %q, verbose = 0 }); "
         .. "lint:fail('a', 'one'); lint:fail('b', 'two'); lint:fail('a', 'three'); "
         .. "require('@dev/os').exit(lint:finish())"
     local snippet = code:format(root)
@@ -649,7 +651,7 @@ testing.test("standalone writes each problem line to standard error", function()
     assert(fs.write(root .. "/.dev/y.sh", "#!/bin/sh\n"), "fixture setup failed")
 
     -- Run the standalone check and capture both output streams
-    local code = "require('@lib/lintset').new({ root = %q, verbose = 0 }):standalone()"
+    local code = "require('@dev/lintset').new({ root = %q, verbose = 0 }):standalone()"
     local snippet = code:format(root)
     local stderr_path = root .. "/stderr.txt"
     local out = dev_os.capture(
@@ -804,7 +806,7 @@ testing.test(
             "",
         }, "\n")
         testing.eq(lintset.analyze_findings(out, root), {
-            "a.luau(1,15): (W000) Unknown require: unsupported path",
+            "a.luau(1,15): (W000) Unknown require: unsupported path" .. FIX,
             "a.luau(3,1): (W000) Unknown global 'nope'\n    seen near here",
             "a.luau(4,1): (W000) Unknown type 'Card'",
         })
@@ -824,7 +826,7 @@ testing.test("analyze_findings reports a misspelled alias and drops a bound one"
         "",
     }, "\n")
     testing.eq(lintset.analyze_findings(out, root), {
-        "./a.luau(1,15): TypeError: Unknown require: unsupported path",
+        "./a.luau(1,15): TypeError: Unknown require: unsupported path" .. FIX,
         "a.luau(2,10): TypeError: Unknown type 'tpyes.Ctx'",
     })
     fs.remove(root, { recursive = true })
@@ -864,7 +866,7 @@ testing.test(
         local failed, notes =
             analyze_with("a.luau(1,15): (W000) Unknown require: unsupported path\n")
         testing.eq(failed, { "luau-analyze" })
-        testing.eq(notes, { "a.luau(1,15): (W000) Unknown require: unsupported path" })
+        testing.eq(notes, { "a.luau(1,15): (W000) Unknown require: unsupported path" .. FIX })
     end
 )
 

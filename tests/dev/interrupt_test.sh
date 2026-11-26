@@ -39,7 +39,6 @@ seed_project() {
     mkdir -p "$dir/.dev/lib/devrepo" "$dir/.dev/commands" "$dir/tests/a"
     sed 's/which("tmux")/which("tmux-not-installed")/' "$REPO/.dev/commands/test.luau" >"$dir/.dev/commands/test.luau"
     cp "$REPO/.dev/lib/devrepo/checks.luau" "$REPO/.dev/lib/devrepo/supervise.luau" "$dir/.dev/lib/devrepo/"
-    cp "$REPO/.dev/lib/lintset.luau" "$dir/.dev/lib/"
     cp "$REPO/.luaurc" "$dir/"
 }
 

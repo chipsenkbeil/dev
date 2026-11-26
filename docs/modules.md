@@ -480,6 +480,11 @@ card's bookmark.
   `DEV_FETCHED`. `fetch.apply(root, spec)` runs a patch job on its first listed
   target and applies the pulled patch at the project root (`dev help remote`).
 - `@dev/registry`: the registry of commands.
+- `@dev/lintset`: the lint set a repo's `.dev/commands/lint.luau` runs.
+  `new(ctx)` returns a `Lint` that runs the checks, and `spacing`, `runs`,
+  `unheaded`, `periods`, `fix_periods`, `fix_comment_periods`, `with_files`,
+  `analyze_findings`, `split_lua` and `dev_alias` are the helpers. A repo
+  requires it in place of a copy under `.dev/lib` (`dev help porting`).
 - `@dev/version`: `current` reads `dev.runtime.version`, and
   `compare` orders two `MAJOR.MINOR.PATCH` strings. `dev.cli` refuses a
   project whose `[dev] min_version` is newer (`dev help flags`).
@@ -592,6 +597,9 @@ fails when a listed module or function goes away.
 - `@dev/help`: `bad_argument`, `overview_text`, `page`, `topic_text`,
   `usage_error`.
 - `@dev/json`: `decode`, `encode`.
+- `@dev/lintset`: `analyze_findings`, `dev_alias`, `fix_comment_periods`,
+  `fix_periods`, `new`, `periods`, `runs`, `spacing`, `split_lua`, `unheaded`,
+  `with_files`.
 - `@dev/os`: `capture`, `capture_input`, `capture_timed`, `command`, `exec`,
   `getenv`, `getpid`, `getuid`, `isatty`, `name`, `nap`, `on_exit`, `quote`,
   `run`, `which`.

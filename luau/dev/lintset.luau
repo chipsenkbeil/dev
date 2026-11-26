@@ -782,7 +782,9 @@ function M.analyze_findings(text: string, root: string, generated: string?): { s
             end
             keep = not dropped
             if keep then
-                found[#found + 1] = line
+                found[#found + 1] = if line:find("Unknown require: unsupported path", 1, true)
+                    then `{line}; write the alias in .luaurc with a leading ./, as "./.dev/lib"`
+                    else line
             end
         elseif keep and line ~= "" then
             found[#found] = `{found[#found]}\n{line}`

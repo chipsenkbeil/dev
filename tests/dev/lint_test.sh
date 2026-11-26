@@ -12,7 +12,6 @@ mkdir -p "$TMP/.dev/lib/devrepo" "$TMP/.dev/commands" "$TMP/scripts" "$TMP/tests
 cp "$REPO/.dev/commands/lint.luau" "$TMP/.dev/commands/"
 cp "$REPO/stylua.toml" "$REPO/selene.toml" "$REPO/sgconfig.yml" "$REPO/ci.yml" "$REPO/.luaurc" "$TMP/"
 cp "$REPO/.dev/lib/devrepo/checks.luau" "$TMP/.dev/lib/devrepo/"
-cp "$REPO/.dev/lib/lintset.luau" "$TMP/.dev/lib/"
 cp -R "$REPO/.dev/ast-grep" "$TMP/.dev/"
 printf '#!/usr/bin/env bash\nset -euo pipefail\n\nif true; then\n    echo ok\nfi\n' >"$TMP/scripts/clean.sh"
 

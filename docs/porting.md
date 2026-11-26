@@ -197,6 +197,23 @@ file. A command in `~/.config/dev/commands` finds its own library through a
 `.luaurc` in `~/.config/dev`. dev reads the file as plain JSON, so keep
 comments out of it.
 
+### Dropping a copied lint set
+
+A repo that keeps a copy of the lint set at `.dev/lib/lintset.luau` deletes the
+copy and requires the module dev ships:
+
+```lua
+local lintset = require("@dev/lintset")
+```
+
+Set `[dev] min_version` in `.dev/config.toml` to the first dev release after
+0.1.4, which is the first one that carries `@dev/lintset`, to make an older
+dev refuse the repo with a clear message in place of a missing module. A repo
+whose `.luaurc` sets `"lib": ".dev/lib"` writes it as `"./.dev/lib"`. The
+`./` is required: luau-analyze resolves an alias only when its value starts
+with it, and without it every `@lib` require comes back as `Unknown require:
+unsupported path`.
+
 ### Type-checking dev modules
 
 The dev modules are built in, so luau-analyze has no file to read for
