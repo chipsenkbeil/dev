@@ -313,7 +313,8 @@ The flags `--local` and `--remote` cannot be used together.
 
 ## The minimum dev version
 
-dev's own version is `dev.runtime.version`, the version of the crate.
+dev's own version is `dev.runtime.version`, the `MAJOR.MINOR.PATCH` core of
+the release tag, else the crate version.
 A project names the
 oldest dev it works with as `[dev] min_version = "MAJOR.MINOR.PATCH"` in
 `.dev/config.toml`. When this dev is older, dev exits 1 before it runs

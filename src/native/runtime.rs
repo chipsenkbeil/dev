@@ -15,8 +15,16 @@ pub const NAME: &str = "runtime";
 /// Chunk name a `load` without one gets, as Lua's `load` gives.
 const DEFAULT_CHUNKNAME: &str = "=(load)";
 
-/// Version of this dev, from the crate version.
-pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+/// Returns the `MAJOR.MINOR.PATCH` core of a release tag, or the crate version when it is empty.
+fn release_core(tag: &str) -> &str {
+    let tag = tag.strip_prefix('v').unwrap_or(tag);
+    let core = tag.split(['-', '+']).next().unwrap_or_default();
+    if core.is_empty() {
+        env!("CARGO_PKG_VERSION")
+    } else {
+        core
+    }
+}
 
 native_struct! {
     /// Signature of one native function or member, as the type files will be written from.
@@ -210,7 +218,7 @@ pub fn register(lua: &Lua) -> mlua::Result<Table> {
         "string".to_owned(),
         "Canonical path of the running binary, empty when it is unknown.",
     );
-    table.set("version", VERSION)?;
+    table.set("version", release_core(flags::VERSION))?;
     luau::value(
         NAME,
         "version",
@@ -261,4 +269,23 @@ fn exe() -> String {
         .and_then(|path| fs::canonical(&path))
         .map(|path| path.display().to_string())
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn release_core_should_drop_the_v_and_any_pre_release_suffix() {
+        assert_eq!(release_core("v0.1.2"), "0.1.2");
+        assert_eq!(release_core("0.1.2"), "0.1.2");
+        assert_eq!(release_core("v0.1.0-pre.9"), "0.1.0");
+        assert_eq!(release_core("v0.1.0+build.5"), "0.1.0");
+    }
+
+    #[test]
+    fn release_core_should_fall_back_to_the_crate_version_for_an_empty_tag() {
+        assert_eq!(release_core(""), env!("CARGO_PKG_VERSION"));
+        assert_eq!(release_core("v"), env!("CARGO_PKG_VERSION"));
+    }
 }

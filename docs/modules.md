@@ -37,7 +37,7 @@ to standard error.
   `dev.cli.main` on its own words calls it, so it reads the flags exactly as
   the binary does.
 - `exe`: the canonical path of the running binary.
-- `version`: the crate version, which `dev.version` reads.
+- `version`: the release version, which `dev.version` reads.
 - `loaded`: the `require` cache, keyed by `@dev/NAME` for a dev module and by
   the file's real path for any other.
 
