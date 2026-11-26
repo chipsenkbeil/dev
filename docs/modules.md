@@ -579,7 +579,7 @@ today, and the test `tests/lua/modules_contract_test.luau` reads it, so it
 fails when a listed module or function goes away.
 
 - `@dev/command`: `die`, `need`, `no_args`, `note`, `say`, `show`,
-  `usage_error`.
+  `usage_error`, `vcs_sentence`.
 - `@dev/config`: `get`, `user`.
 - `@dev/forge`: `resolve`.
 - `@dev/fs`: `basename`, `dirname`, `exists`, `is_dir`, `is_exec`, `is_file`,
@@ -605,13 +605,20 @@ fails when a listed module or function goes away.
 - `@dev/text`: `fit`, `trim`, `words`, `wrap`.
 - `@dev/ui`: `confirm`, `context`, `table`.
 - `@dev/ui/picker`: `run`.
-- `@dev/vcs`: `backend`, `base`, `branches`, `files`, `remotes`, `require`,
-  `with`.
+- `@dev/vcs`: `Reason`, `backend`, `base`, `branches`, `files`, `remotes`,
+  `require`, `with`.
 - `@dev/xdg`: `state_home`.
 
 `@dev/forge` field `Kind` is a table, not a function: the forges dev knows
 (`gerrit`, `github` and `plain`). `resolve(root)` returns the forge, with its
-`kind`, `remote`, `why` and `remotes`, or nil and the reason.
+`kind`, `remote`, `why` and `remotes`, or nil and the reason. The reason can be
+a `@dev/vcs` `Reason`, as the next paragraph describes.
+
+`@dev/vcs` field `Reason` is a table, not a function: `NO_CHECKOUT` and
+`NO_JJ`. `backend(root)` and `require(root)` return the backend, or nil and a
+`Reason` code, not a sentence. A command that shows the error calls
+`require("@dev/command").vcs_sentence(err, root)`, which turns a `Reason` into
+the sentence to print and passes any other error through as a sentence.
 
 `@dev/runtime` field `exe` is a string, not a function: the path of the
 running dev binary, which a command passes to `@dev/os` `run` to start dev

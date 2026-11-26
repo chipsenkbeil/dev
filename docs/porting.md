@@ -61,9 +61,9 @@ return dev_command({
 `run` returns the exit code as an integer, and nothing means 0. dev takes the
 code modulo 256.
 
-Any other return value, a Luau error or a syntax error ends the run with
-`dev <name>: <message>` and exit 1, with no traceback. To stop early with
-another code, return it, or call `dev_os.exit`.
+Any other return value, a Luau error or a syntax error ends the run with its
+message and exit 1, with no traceback. To stop early with another code, return
+it, or call `dev_os.exit`.
 
 ### The command helpers
 
@@ -231,6 +231,31 @@ A project that kept its overview in `.dev/topics/overview.md` moves it to
 `.dev/help/overview.md`, with the first line `# overview: <summary>`.
 `dev help overview` prints dev's overview and then that page, and so does a
 command that shows the overview through `@dev/help`'s `topic_text`.
+
+## What changed in v0.1.1
+
+A port from v0.1.0 fixes its tests for these changes in what a command sees.
+
+Some errors are now codes. `@dev/vcs` `backend` and `require` return nil and a
+`vcs.Reason`, `no_checkout` or `no_jj`, where v0.1.0 returned a sentence.
+`@dev/forge` `resolve` can return the same code as its error. A command that
+shows the error calls `require("@dev/command").vcs_sentence(err, root)`, which
+turns a code into its sentence and passes any other error through. A command
+that printed the error as it came now prints the bare code.
+
+`@dev/fs` `list`, `realpath`, `readlink` and `mktemp` return a third value on
+failure, an `fs.Reason` code: `list`, `resolve`, `not_link` or `temp`. `move`
+returns the code `exists` when the target is taken, and only nil and the text
+for any other failure. The first two values are still nil and the text.
+
+The notes that dev writes for a command's run no longer start with
+`dev <name>: `. A Luau error from `run` prints its message alone, and a result
+that is no exit code prints `The script returned X, not an exit code.` A usage
+error keeps the prefix, `dev <name>: <message>`, then the usage line.
+
+A command that fails to load prints `The command NAME did not load: REASON.`,
+with the final period of the reason dropped, where v0.1.0 printed
+`dev <name>: <reason>`. A test that pinned an old sentence pins the new one.
 
 ## Headless rules
 
