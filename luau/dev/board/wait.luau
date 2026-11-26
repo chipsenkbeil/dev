@@ -272,7 +272,8 @@ local function sitting(backend, stages)
     end
     local sat = {}
     for _, card in ipairs(cards) do
-        if card.column == stages.blocked or card.column == stages.icebox then
+        local held = card.column == stages.blocked or card.column == stages.icebox
+        if held and not board.is_turn_card(card) then
             sat[card.id] = card.column
         end
     end

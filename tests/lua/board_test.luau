@@ -16528,6 +16528,35 @@ testing.test("wait --for human reports an Icebox card that left on a trimmed str
     testing.eq(result.output, MOVED_B .. TRIMMED_NOTICE)
 end)
 
+testing.test(
+    "wait --for human ignores the landing turn card leaving Icebox on a trimmed stream",
+    function()
+        local name = board.TURN_NAME
+        local before = {
+            { id = ID_A, column = board.DEFAULT_NAMES.blocked, labels = {}, done = false },
+            {
+                id = ID_B,
+                name = name,
+                column = board.DEFAULT_NAMES.icebox,
+                labels = {},
+                done = false,
+            },
+        }
+        local after = {
+            { id = ID_A, column = support.COLUMN_NAME.READY, labels = {}, done = false },
+            {
+                id = ID_B,
+                name = name,
+                column = support.COLUMN_NAME.READY,
+                labels = {},
+                done = false,
+            },
+        }
+        local result = trimmed_wait(before, after)
+        testing.eq(result.output, MOVED_A .. TRIMMED_NOTICE)
+    end
+)
+
 testing.test("wait --for lead wakes once on a needs:lead card in Blocked", function()
     -- Hold lead cards that are wanted, owned, claimed or not in Blocked
     local cards = {
