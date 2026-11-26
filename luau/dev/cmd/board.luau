@@ -775,7 +775,7 @@ local function add_card(backend, opts, args, held)
             return usage(
                 "A card outside "
                     .. stages.icebox
-                    .. " needs a size, card format v3 and Done when outcomes, and this one lacks "
+                    .. " needs a size, card format v4 and Done when outcomes, and this one lacks "
                     .. table.concat(missing, ", ")
                     .. ". Pass --size, --problem and --done-when, or add it to "
                     .. stages.icebox
@@ -787,7 +787,7 @@ local function add_card(backend, opts, args, held)
         local missing = board.missing(description, #outcomes, 0, opts.epic)
         if #missing > 0 then
             return usage(
-                "A card needs card format v3 before it enters Ready, and this one lacks "
+                "A card needs card format v4 before it enters Ready, and this one lacks "
                     .. table.concat(missing, ", ")
                     .. ". Add it to Backlog or pass --problem, --change, "
                     .. "--out-of-scope and --done-when."
@@ -1760,7 +1760,7 @@ local function ready_refusal(backend, card, shape)
         return failure(
             "Card "
                 .. card.id:sub(1, board.MIN_PREFIX)
-                .. " is not in card format v3 and cannot enter Ready. It lacks "
+                .. " is not in card format v4 and cannot enter Ready. It lacks "
                 .. table.concat(missing, ", ")
                 .. ". Add outcomes with `dev board outcome` and fix the description with `dev board edit`."
         )
@@ -3484,7 +3484,7 @@ function commands.edit(backend, opts, args)
                     .. card.id:sub(1, board.MIN_PREFIX)
                     .. " is outside "
                     .. backend.stages.icebox
-                    .. " and keeps card format v3. That text lacks "
+                    .. " and keeps card format v4. That text lacks "
                     .. table.concat(missing, ", ")
                     .. "."
             )

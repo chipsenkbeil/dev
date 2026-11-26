@@ -2052,7 +2052,7 @@ testing.test(
         out, code =
             dev(root, home, { "board", "add", "Direct", "--column", Column.READY, "--size", "1" })
         testing.eq(code, 2)
-        testing.ok(out:find("card format v3", 1, true), out)
+        testing.ok(out:find("card format v4", 1, true), out)
 
         -- Show an Icebox card that has no description
         local ice =

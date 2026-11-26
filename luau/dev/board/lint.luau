@@ -11,7 +11,7 @@ M.MAX_WORDS = 400
 ---@class dev.board.lint.Opts
 ---@field stages dev.board.Stages the board's columns
 ---@field facts dev.board.lint.Facts lazy readers of the card's comments, links and children
----@field strict boolean? whether a Done card is held to the v3 sections and its outcomes too
+---@field strict boolean? whether a Done card is held to the v4 sections and its outcomes too
 ---@field required string[]? the checks rows every open card must hold, none when nil
 ---@field bare string[]? the rows an open card's checks must hold exactly, none when nil
 
@@ -140,7 +140,7 @@ end
 ---List the rules a card breaks.
 ---@param card dev.board.Card the card
 ---@param opts dev.board.lint.Opts the board's columns, the lazy reads and whether Done cards are
----   held to the v3 sections too
+---   held to the v4 sections too
 ---@return string[]? rules what is wrong with the card, empty when it follows every rule
 ---@return string? message why a read failed
 ---@return table<integer, true>? owned the indexes of the rules only the owner can fix

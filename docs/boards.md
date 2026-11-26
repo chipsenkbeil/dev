@@ -2287,7 +2287,7 @@ Ready and the card format:
 - So is any other column but Icebox (Backlog by default) for a card with no
   size, a description that lacks a heading or text under Problem, or no
   `--done-when` outcome. The message reads
-  `a card outside Icebox needs a size, card format v3 and Done when outcomes,
+  `a card outside Icebox needs a size, card format v4 and Done when outcomes,
   and this one lacks ...` and is checked before the backend adds anything.
 - A `--column ready` whose description lacks a heading or text under one is a
   usage error too.
@@ -4367,7 +4367,7 @@ A move into Ready:
   before the backend is called. A `## Done when` checklist in the description
   does not count.
 - The refusal reads
-  ``Card <id prefix> is not in card format v3 and cannot enter Ready. It lacks
+  ``Card <id prefix> is not in card format v4 and cannot enter Ready. It lacks
   <what>. Add outcomes with `dev board outcome` and fix the description with
   `dev board edit`.``
   (exit 1, on both backends, size checked first).

@@ -4812,7 +4812,7 @@ testing.test("move to Ready counts 3 to 7 outcomes and refuses a card with none"
         local backend = fake({ card })
         local result = cmd_board.run("move", { "cccccccc", support.Column.READY }, backend)
         testing.eq(result.code, 1)
-        testing.ok(result.message:find("card format v3", 1, true), result.message)
+        testing.ok(result.message:find("card format v4", 1, true), result.message)
         testing.ok(result.message:find("3 to 7 Done when outcomes", 1, true), result.message)
         testing.eq(#backend.calls, 0)
     end

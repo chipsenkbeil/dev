@@ -1379,8 +1379,8 @@ local function heading_of(line)
     return line:match("^##%s+(.-)%s*$")
 end
 
----Give a description the three v3 headings, filling Problem from the text given. A text that
----already holds a v3 heading or the v1 Done when heading is kept as it is.
+---Give a description the three v4 headings, filling Problem from the text given. A text that
+---already holds a v4 heading or the v1 Done when heading is kept as it is.
 ---@param description string? the text the caller gave, if any
 ---@return string description the text with the headings
 function M.scaffold(description)
@@ -1618,7 +1618,7 @@ function M.rendered_blocks(description)
     return nil
 end
 
----List what a card lacks of card format v3 outside Icebox: each missing heading, and Problem text.
+---List what a card lacks of card format v4 outside Icebox: each missing heading, and Problem text.
 ---@param description string? the card's description
 ---@return string[] missing the problems, empty when the card follows the format outside Icebox
 function M.backlog_missing(description)
@@ -1636,7 +1636,7 @@ function M.backlog_missing(description)
     return missing
 end
 
----List the shapes card format v3 refuses outside Icebox: a Change or Out of scope section with no
+---List the shapes card format v4 refuses outside Icebox: a Change or Out of scope section with no
 ---text under it, and a Problem text with a line that starts `Change:` or `Out of scope:`.
 ---@param description string? the card's description
 ---@return string[] shapes the problems, empty when the sections have the right shape
@@ -1673,7 +1673,7 @@ end
 ---@field closing boolean? whether an epic with every child Done is closing
 ---@field children integer how many children it has, 0 for a card that is no epic
 ---@field epic boolean? whether it is an epic even with no children
----@field sections boolean? whether the v3 sections are checked, true when nil
+---@field sections boolean? whether the v4 sections are checked, true when nil
 ---@field shapes boolean? whether an empty section and a misplaced line are checked with the
 ---   sections, true when nil
 
@@ -1691,7 +1691,7 @@ local function epic_outcomes_text(outcomes)
     return rule .. ", not " .. outcomes
 end
 
----List what a card outside Icebox lacks: a size of 1, 2, 3 or 3+, each v3 section with text under
+---List what a card outside Icebox lacks: a size of 1, 2, 3 or 3+, each v4 section with text under
 ---Problem, no empty Change or Out of scope section and no misplaced line under Problem, and, when
 ---asked, at least one Done when outcome. An epic, a card with children, needs 1 to 3 outcomes as
 ---its final check, unless it is closing with every child Done.
@@ -1832,7 +1832,7 @@ function M.unnamed_checks(outcomes, checks)
     return unnamed
 end
 
----List what a card lacks of card format v3 to enter Ready: each missing or empty section, and
+---List what a card lacks of card format v4 to enter Ready: each missing or empty section, and
 ---Done when outcomes. The outcomes are 3 to 7 subtasks, or 1 to 3 for an epic.
 ---@param description string? the card's description
 ---@param outcomes integer how many outcomes the card has
