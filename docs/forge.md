@@ -73,8 +73,8 @@ short commit id (git). It never uses `refs/tags`, which jj treats as immutable
 heads that would freeze the archived commits. Then it reads each remote with
 `git ls-remote` and exits 1 naming a remote that lacks the ref.
 
-The flag --to NAME pushes to the one remote NAME and reads only that remote
-back. A NAME the project has no remote for refuses before anything is pushed.
+The flag `--to NAME` pushes to the one remote `NAME` and reads only that remote
+back. A `NAME` the project has no remote for refuses before anything is pushed.
 
 `dev branch prune NAME` deletes the local branch and the remote branches named
 `NAME`. It refuses, deleting nothing, while any of them is neither landed by
