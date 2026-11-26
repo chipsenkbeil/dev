@@ -3173,20 +3173,24 @@ testing.test("note and show --board refuse a crossboard board that is not there"
     testing.eq(#backend.calls, 2)
 end)
 
-testing.test(
-    "note --board refuses crossboard --edit and --delete before it looks anything up",
-    function()
-        local backend = fake(sample())
-        for _, args in ipairs({
-            { "11111111-a", "--board", "ci", "--edit", "aaaaaaaa", "x" },
-            { "11111111-a", "--board", "ci", "--delete", "aaaaaaaa" },
-        }) do
-            local result = cmd_board.run("note", args, backend)
-            testing.eq(result.code, 2)
-        end
-        testing.eq(#backend.calls, 0)
-    end
-)
+testing.test("note --board edits and deletes a comment on the named board", function()
+    local backend = fake(sample())
+    local sibling = with_comments()
+    backend.sibling = sibling
+    local result = cmd_board.run(
+        "note",
+        { "11111111-a", "--board", "ci", "--edit", "bbbbbbbb", "fixed", "it" },
+        backend
+    )
+    testing.eq(result.code, nil)
+    testing.eq(result.output, "edited 11111111 bbbbbbbb")
+    testing.eq(sibling.calls[2], { "edit_note", ID_A, COMMENT_2, "fixed it" })
+    result =
+        cmd_board.run("note", { "11111111-a", "--board", "ci", "--delete", "aaaaaaaa-1" }, backend)
+    testing.eq(result.output, "deleted 11111111 aaaaaaaa")
+    testing.eq(sibling.calls[4], { "delete_note", ID_A, COMMENT_1 })
+    testing.eq(backend.calls, { { "other_board", "ci" }, { "other_board", "ci" } })
+end)
 
 testing.test("note --kind question names dev board ask", function()
     -- Count the calls before any note

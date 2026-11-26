@@ -1375,9 +1375,6 @@ local function note_opts(opts)
 end
 
 function commands.note(backend, opts, args)
-    if opts.board and (opts.edit or opts.delete) then
-        return usage("The --board flag takes no " .. EDIT_FLAG .. " or " .. DELETE_FLAG .. ".")
-    end
     if opts.edit and opts.delete then
         return usage("The " .. EDIT_FLAG .. " flag cannot go with " .. DELETE_FLAG .. ".")
     end

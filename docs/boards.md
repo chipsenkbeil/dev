@@ -4192,8 +4192,7 @@ The options:
   characters.
 - `--board B`, right after `CARD`, comments on the card on the Pomb board named
   `B` from any repo, looked up as `add --board` looks it up.
-- A local board refuses `--board` (exit 1), and it takes no `--edit` or
-  `--delete` (exit 2).
+- A local board refuses `--board` (exit 1).
 
 Where it shows:
 
@@ -4207,6 +4206,8 @@ Where it shows:
 `dev board note CARD --edit COMMENT TEXT` replaces the body of one of the
 agent's own comments. `dev board note CARD --delete COMMENT` deletes it. Each
 prints `edited` or `deleted` with the card's and the comment's id prefixes.
+`--board B` goes with either flag and acts on the card of that Pomb board, as
+`BOARD:PREFIX` in place of the card does.
 
 The calls:
 
