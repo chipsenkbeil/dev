@@ -3756,6 +3756,9 @@ Following trunk:
 - A project `.dev/commands/follow.luau` or `follow.sh` replaces the built-in for
   `land` and `ship` alike. `dev help follow` and `docs/dev/flags.md`
   describe the command.
+- A caller whose `DEV_AGENT` has a workspace role, such as `implementer`, never
+  moves the main checkout. `land` and `ship` then print one line naming the
+  landed commit for the lead to follow.
 - It never changes the exit code or the card's column.
 
 ### turn

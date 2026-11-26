@@ -81,10 +81,6 @@ local function refuse_agent_local(project_root, words, never_remote)
     end
 end
 
----Agent roles that work in a workspace, never the primary checkout
-local WORKSPACE_ROLES =
-    { runner = true, implementer = true, planner = true, reviewer = true, verifier = true }
-
 ---Mutating commands the lead role never runs in the primary checkout, by command name
 local LEAD_GUARDED = {}
 for _, name in ipairs({
@@ -139,7 +135,7 @@ local function refuse_agent_primary(project_root, words, requires)
     if role == "lead" then
         guarded = LEAD_GUARDED[words[1]] or LEAD_GUARDED[name]
         who = "lead role"
-    elseif role and WORKSPACE_ROLES[role] then
+    elseif role and command.WORKSPACE_ROLES[role] then
         guarded = requires_workspace(requires)
         who = "workspace role " .. role
     end

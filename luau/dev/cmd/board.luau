@@ -4193,7 +4193,9 @@ function commands.land(backend, opts, args)
             end
             turn.release(backend, hold)
             if main and not result.code then
-                result.output = result.output .. "\n" .. follow.launch(main)
+                result.output = result.output
+                    .. "\n"
+                    .. follow.launch(main, nil, result.output:match(" at commit (%x+)"))
             end
             return result
         end

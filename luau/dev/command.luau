@@ -68,7 +68,22 @@ local REFUSAL = {
 ---@field run fun(opts: table<string, any>, args: table<string, any>, ctx: dev.Ctx): integer? runs the command
 
 ---@class dev.command
-local M = {}
+local M = {
+    ---Agent roles that work in a workspace, never the primary checkout
+    WORKSPACE_ROLES = {
+        runner = true,
+        implementer = true,
+        planner = true,
+        reviewer = true,
+        verifier = true,
+    },
+}
+
+---Name the role of the caller's `DEV_AGENT`, the middle part of `repo/role/card`.
+---@return nil when `DEV_AGENT` is unset or names no role
+function M.agent_role(): string?
+    return (dev_os.getenv("DEV_AGENT") or ""):match("^[^/]*/([^/]*)")
+end
 
 local PLACEHOLDERS = { string = "NAME", integer = "N", number = "N" }
 

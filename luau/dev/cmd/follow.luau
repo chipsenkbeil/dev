@@ -292,10 +292,18 @@ end
 ---Run `dev follow` for a main checkout through the launcher to let a project `.dev/follow`
 ---script replace the built-in.
 ---With a commit the launcher gets it in `DEV_FOLLOW_REV`, which a project script reads too.
----@param main string absolute path of the main checkout
----@param rev string? full commit id the checkout moves onto in place of trunk
----@return string line what it printed, or why it did not run
-function M.launch(main, rev)
+---A workspace role never runs it in the primary checkout, so it gets a line naming the commit.
+---@param main absolute path of the main checkout
+---@param rev full commit id the checkout moves onto in place of trunk
+---@param landed commit the line names when the role leaves the checkout alone
+---@return line what it printed, or why it did not run
+function M.launch(main: string, rev: string?, landed: string?): string
+    local role = dev_command.agent_role()
+    if role and dev_command.WORKSPACE_ROLES[role] then
+        local commit = rev or landed
+        local onto = commit and short(commit) or "trunk"
+        return `The primary checkout {main} was left for the lead to follow onto {onto}.`
+    end
     local launcher = dev_os.getenv("DEV_SELF") or ""
     if launcher:sub(1, 1) ~= "/" or not fs.is_exec(launcher) then
         return "DEV_SELF is not the dev launcher. " .. main .. " was not moved."

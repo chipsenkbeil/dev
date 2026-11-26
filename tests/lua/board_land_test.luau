@@ -6213,6 +6213,52 @@ if has_jj then
         testing.ok(out:find("followed " .. project.root, 1, true), out)
     end)
 
+    testing.test("land.by.a.workspace.role.leaves.the.main.checkout.for.the.lead", function()
+        -- Verify a card in its central workspace and add a follow script
+        local project, id, _, base, inside = central_project()
+        follow_script(project)
+
+        -- Land it from inside as an implementer
+        local out, code = dev(inside, { "board", "land", id }, {
+            DEV_AGENT = "dev/implementer/" .. id:sub(1, 8),
+            LAND_TRUNK = LAND_TRUNK_KEEP,
+            LAND_NEW = "1",
+            DEV_WS_ROOT = base,
+        })
+        testing.eq(code, 0, out)
+
+        -- See no refusal and no script run, and the commit named for the lead
+        local commit = out:match(" at commit (%x+)")
+        testing.ok(commit, out)
+        local left = "The primary checkout "
+            .. project.root
+            .. " was left for the lead to follow onto "
+            .. commit:sub(1, 12)
+            .. "."
+        testing.ok(out:find(left, 1, true), out)
+        testing.eq(out:find("followed", 1, true), nil, out)
+        testing.eq(out:find("never runs it", 1, true), nil, out)
+    end)
+
+    testing.test("land.by.the.lead.still.follows.the.main.checkout", function()
+        -- Verify a card in its central workspace and add a follow script
+        local project, id, _, base, inside = central_project()
+        follow_script(project)
+
+        -- Land it from inside as the lead
+        local out, code = dev(inside, { "board", "land", id }, {
+            DEV_AGENT = "dev/lead/main",
+            LAND_TRUNK = LAND_TRUNK_KEEP,
+            LAND_NEW = "1",
+            DEV_WS_ROOT = base,
+        })
+        testing.eq(code, 0, out)
+
+        -- See the script run in the main checkout
+        testing.ok(out:find("followed " .. project.root, 1, true), out)
+        testing.eq(out:find("was left for the lead", 1, true), nil, out)
+    end)
+
     testing.test("land.leaves.a.main.checkout.with.edits.alone.and.says.why", function()
         -- Verify a card in its central workspace
         local project, id, _, base, inside = central_project()
