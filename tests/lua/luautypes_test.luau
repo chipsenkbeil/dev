@@ -131,6 +131,13 @@ testing.test("the written testing module annotates its parameters and returns", 
     end
 end)
 
+testing.test("the written spec module declares parse with an assert-safe return list", function()
+    local text = assert(luautypes.files()["spec.luau"])
+    local signature =
+        "parse: (spec: { [any]: any }, argv: { string }) -> ({ [any]: any }?, any, ...any),"
+    testing.ok(text:find(signature, 1, true), "no assert-safe parse signature")
+end)
+
 local function project(): string
     local root = support.tempdir()
     assert(luautypes.write(`{root}/{luautypes.FOLDER}`))
@@ -219,6 +226,32 @@ if dev_os.which("luau-analyze") then
                 "local checked = assert(spec.validate({}))",
                 "local _, _, reason = fs.mktemp()",
                 "print(#names, moved, real, target, reply.status, saved.status, checked, reason)",
+                "",
+            }, "\n")
+            assert(fs.write(`{root}/ok.luau`, source))
+
+            -- Expect no finding
+            local out, code = analyze(root, "ok.luau")
+            testing.eq({ out, code }, { "", 0 })
+
+            -- Remove the directory
+            fs.remove(root, { recursive = true })
+        end
+    )
+
+    testing.test(
+        "a strict file that asserts on spec.parse and reads its failure message type-checks clean",
+        function()
+            -- Write a strict file that asserts on spec.parse and reads the failure as a string
+            local root = project()
+            local source = table.concat({
+                "--!strict",
+                'local spec = require("@dev/spec")',
+                "local opts, args, pass = spec.parse({}, {})",
+                "local parsed = assert(spec.parse({}, {}))",
+                "local _, message = spec.parse({}, { '--nope' })",
+                "local text: string = message",
+                "print(opts, args, pass, parsed, text)",
                 "",
             }, "\n")
             assert(fs.write(`{root}/ok.luau`, source))

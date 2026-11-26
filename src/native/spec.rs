@@ -784,7 +784,7 @@ native_fn! {
     /// # Errors
     ///
     /// Raises when the spec is not valid, which `validate` reports first.
-    #[luau = "(spec: { [any]: any }, argv: { string }) -> ({ [any]: any }?, { [any]: any }?, { string }?)"]
+    #[luau = "(spec: { [any]: any }, argv: { string }) -> ({ [any]: any }?, any, ...any)"]
     pub fn parse(lua: &Lua, spec: Table, argv: Vec<String>) -> mlua::Result<MultiValue> {
         let def = read(&spec).map_err(mlua::Error::from)?;
         Ok(match parse_with(lua, &def, &argv)? {
