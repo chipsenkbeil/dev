@@ -225,6 +225,13 @@ Scripts that a command calls but that are not commands live in
 command. dev never lists `lib`, `helpers` or `help` as a command with
 subcommands.
 
+## Project overview
+
+A project that kept its overview in `.dev/topics/overview.md` moves it to
+`.dev/help/overview.md`, with the first line `# overview: <summary>`.
+`dev help overview` prints dev's overview and then that page, and so does a
+command that shows the overview through `@dev/help`'s `topic_text`.
+
 ## Headless rules
 
 A command runs under CI, in a box and from agents, where no terminal is

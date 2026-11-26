@@ -242,8 +242,10 @@ the text prints directly without the filter line.
 
 Topics are Markdown files whose first line is `# <name>: <summary>`.
 Built-in ones are the `docs/` folder baked into the binary, and project ones
-live in `.dev/help/`. A help page may not share a name with a command or a
-built-in topic.
+live in `.dev/help/`. A help page may not share a name with a top-level command
+or a built-in topic, except that a project's `overview` page is printed after
+dev's own. Nested command words such as `gerrit listen-build` never collide
+with a page.
 
 `dev help --check-topics` checks the built-in help pages from `docs/` on disk
 when the project is dev itself (`luau/dev/cli.luau` exists), and the project's

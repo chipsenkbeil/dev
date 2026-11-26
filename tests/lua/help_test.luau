@@ -145,6 +145,35 @@ testing.test("dev help takes a source prefix and names a bad one", function()
     testing.eq(code, 2)
 end)
 
+testing.test("a project overview page follows dev's overview", function()
+    local builtin = assert(runtime.asset("docs/overview.md"))
+    local env = { NO_COLOR = "1" }
+
+    local out, code = dev(project({}), { "help", "overview" }, env)
+    testing.eq(out, builtin)
+    testing.eq(code, 0)
+
+    local page = "# overview: What this project is for\n\nIt builds the thing.\n"
+    local root = project({ ["help/overview.md"] = page })
+    out, code = dev(root, { "help", "overview" }, env)
+    testing.eq(out, builtin .. "\n" .. page)
+    testing.eq(code, 0)
+
+    out, code = dev(root, { "help", "--check-topics" }, env)
+    testing.eq(code, 0, out)
+    testing.eq(
+        dev(root, { "help", "--topics" }, env):find("overview\tWhat dev is", 1, true) ~= nil,
+        true
+    )
+end)
+
+testing.test("a project page named like another built-in page is still refused", function()
+    local root = project({ ["help/flags.md"] = "# flags: Clash\n" })
+    local out, code = dev(root, { "help", "--check-topics" })
+    testing.eq(code, 1)
+    testing.ok(out:find("help page flags is also a built-in help page", 1, true), out)
+end)
+
 testing.test("a source prefix is refused with --remote", function()
     local env = { CI = "", DEV_BOX_MARKER = "/nonexistent/box-marker" }
     local out, code = dev(project({}), { "--remote", "builtin:lint" }, env)

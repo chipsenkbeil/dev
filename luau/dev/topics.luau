@@ -15,6 +15,7 @@ end
 local COMMAND_END = { ["|"] = true, ["||"] = true, ["&&"] = true, [";"] = true, [">"] = true }
 local RESERVED_FLAGS_MESSAGE = "the spec declares -h or --help, which dev reserves before --"
 local DOCS = "docs"
+local OVERVIEW = "overview"
 
 ---@class dev.topics.File
 ---@field name string the topic's name
@@ -28,6 +29,8 @@ local DOCS = "docs"
 
 ---@class dev.topics
 local M = {}
+
+M.OVERVIEW = OVERVIEW
 
 local function is_own(root)
     return fs.is_file(root .. "/luau/dev/cli.luau")
@@ -174,7 +177,11 @@ local function check_file(reg, file, out)
     if not (first:sub(1, #prefix) == prefix and #first > #prefix) then
         problem(1, 'the first line must be "# ' .. file.name .. ': <summary>"')
     end
-    if not file.builtin and runtime.asset(DOCS .. "/" .. file.name .. ".md") then
+    if
+        not file.builtin
+        and file.name ~= OVERVIEW
+        and runtime.asset(DOCS .. "/" .. file.name .. ".md")
+    then
         problem(1, "help page " .. file.name .. " is also a built-in help page")
     end
     if reg:find({ file.name }) then

@@ -170,9 +170,18 @@ local function render_markdown(source)
     return source
 end
 
-local function topic_source(file)
-    return render_markdown(topics.text(file))
+local function topic_source(ctx, file)
+    local text = topics.text(file)
+    if file.builtin and file.name == topics.OVERVIEW then
+        for _, other in ipairs(topics.files(ctx.root)) do
+            if not other.builtin and other.name == topics.OVERVIEW then
+                text = text .. "\n" .. topics.text(other)
+            end
+        end
+    end
+    return render_markdown(text)
 end
+
 local function page(content, opts)
     local plan = M.page_plan(opts, dev_os.getenv("PAGER"), dev_os.getenv("DEV_PAGER"))
     if plan.hint and ui.should_page(content, plan.page) then
@@ -187,7 +196,7 @@ local function print_topic(ctx, name, opts)
     if not file then
         fail("Unknown help page " .. name .. ". Run `dev help --topics` to list them.")
     end
-    page(topic_source(file), opts)
+    page(topic_source(ctx, file), opts)
 end
 
 local function project_type(ctx)
@@ -604,7 +613,7 @@ end
 ---@return string? text the topic, or nil when the project and dev have none
 function M.topic_text(ctx, name)
     local file = topic_file(ctx, name)
-    return file and topic_source(file)
+    return file and topic_source(ctx, file)
 end
 
 ---Return the curated view as `dev help` prints it.

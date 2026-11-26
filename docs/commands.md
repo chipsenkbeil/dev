@@ -309,6 +309,17 @@ A `.md` file in `.dev/help/` is a help page, shown by `dev help <page>`. Its
 first line is `# <name>: <summary>`, where the name is the file name. The
 built-in help pages are baked into dev.
 
+A help page may not share a name with a top-level command or a built-in help
+page, and `dev help --check-topics` reports a clash. The words of a nested
+command such as `gerrit listen-build` never collide with a page name, which is
+one word.
+
+The one built-in name a project may reuse is `overview`. A project that has
+`.dev/help/overview.md` says what it is for there, and `dev help overview` and
+the `topic_text` function of `@dev/help` print dev's overview followed by that
+page, which keeps its own `# overview: <summary>` heading. A project without
+the file sees dev's overview alone, and the page cannot replace it.
+
 Run `dev help --check-topics` to check the format, the names and every quoted
 `dev` line. It also flags a prose line wider than 80 columns that has a space
 past column 80. Fenced lines and table rows may run longer. In the dev repo
