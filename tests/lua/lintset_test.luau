@@ -911,3 +911,28 @@ testing.test("analyze_findings drops a finding in a file of the generated folder
     })
     testing.eq(#lintset.analyze_findings(out, "/work"), 2)
 end)
+
+testing.test("analyze_findings keeps a finding in a project folder named like the alias", function()
+    local out = table.concat({
+        "lib/types/x.luau(2,1): TypeError: Real finding",
+        "/work/lib/types/y.luau(3,1): TypeError: Another finding",
+        "/work/types/z.luau(4,1): TypeError: Generated",
+        "",
+    }, "\n")
+    testing.eq(lintset.analyze_findings(out, "/work", "./types"), {
+        "lib/types/x.luau(2,1): TypeError: Real finding",
+        "/work/lib/types/y.luau(3,1): TypeError: Another finding",
+    })
+end)
+
+testing.test("analyze_findings resolves a relative finding path against the root", function()
+    local out = table.concat({
+        "types/board/check.luau(4,1): TypeError: Generated",
+        "./types/x.luau(5,1): TypeError: Generated too",
+        "a.luau(3,1): TypeError: Real finding",
+        "",
+    }, "\n")
+    testing.eq(lintset.analyze_findings(out, "/work", "./types"), {
+        "a.luau(3,1): TypeError: Real finding",
+    })
+end)

@@ -764,17 +764,20 @@ function M.analyze_findings(text: string, root: string, generated: string?): { s
     local found: { string } = {}
     local keep = false
     local sources: { [string]: string } = {}
-    local inside = generated and `/{(generated:gsub("^%./", ""))}/`
+    local inside = generated and fs.join(root, (generated:gsub("^%./", "")), "/")
     for _, line in ipairs(lines_of(text)) do
         local file = line:match("^(%S+)%(%d+,%d+%): ")
         if file then
+            local path = if file:sub(1, 1) == "/"
+                then file
+                else fs.join(root, (file:gsub("^%./", "")))
             local prefix = line:match("Unknown type '([%w_]+)%.[%w_]+'")
             local dropped = line:find("Unknown require: unsupported path", 1, true) ~= nil
             if prefix then
-                sources[file] = sources[file] or fs.read(fs.join(root, file)) or ""
+                sources[file] = sources[file] or fs.read(path) or ""
                 dropped = binds_alias_require(sources[file], prefix)
             end
-            if inside and file:sub(1, 1) == "/" and file:find(inside, 1, true) then
+            if inside and path:sub(1, #inside) == inside then
                 dropped = true
             end
             keep = not dropped
