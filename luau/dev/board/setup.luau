@@ -19,6 +19,16 @@ function M.has_section(root)
     return type(tree) == "table" and tree.board ~= nil
 end
 
+---Report whether a name can name a board.
+---@param name the candidate
+---@return true when it is 1 to 100 characters, with no control character, quote or backslash
+function M.valid_name(name: unknown): boolean
+    return type(name) == "string"
+        and #name > 0
+        and #name <= M.NAME_CHARS
+        and name:find(M.NAME_PATTERN) ~= nil
+end
+
 ---Read the board's name from the config and the `--name` flag, or die.
 ---@param ctx dev.Ctx the command context
 ---@param flags table<string, string> the parsed flags
@@ -52,12 +62,7 @@ function M.board_name(ctx, flags)
             )
         end
     end
-    if
-        type(name) ~= "string"
-        or #name == 0
-        or #name > M.NAME_CHARS
-        or not name:find(M.NAME_PATTERN)
-    then
+    if not M.valid_name(name) then
         dev_command.die("The board's name must be 1 to 100 characters with no quote or backslash.")
     end
     return name, backend == nil

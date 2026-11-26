@@ -1,4 +1,5 @@
 local testing = require("@dev/testing")
+local dev_os = require("@dev/os")
 local fs = require("@dev/fs")
 local json = require("@dev/json")
 local init = require("@dev/cmd/init")
@@ -78,6 +79,30 @@ testing.test("init leaves a .luaurc it cannot read as plain JSON", function()
 
     -- Leave the file as it was
     testing.eq(assert(fs.read(root .. "/.luaurc")), text)
+
+    -- Remove the directory
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("init dies when the config it would add a board section to does not parse", function()
+    -- Start from a jj project whose config is not TOML
+    local root = support.tempdir()
+    assert(fs.mkdir(root .. "/.jj"))
+    assert(fs.mkdir(root .. "/.dev"))
+    local text = "[board\n"
+    assert(fs.write(root .. "/.dev/config.toml", text))
+
+    -- Run init on it
+    local script = string.format(
+        "require('@dev/cmd/init').run({ name = 'demo' }, { root = %q, verbose = 0 })",
+        root
+    )
+    local out, code = dev_os.capture(support.eval(script), { stderr = "stdout" })
+
+    -- Expect the failure and a config left as it was
+    testing.eq(code, 1)
+    testing.ok(out:find("Cannot write .dev/config.toml.", 1, true), out)
+    testing.eq(assert(fs.read(root .. "/.dev/config.toml")), text)
 
     -- Remove the directory
     fs.remove(root, { recursive = true })

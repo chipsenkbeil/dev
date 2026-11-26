@@ -142,15 +142,11 @@ local function init_board_section(run)
         skipped(run, ".dev/config.toml [board] exists")
         return
     end
-    local valid = #run.name > 0
-        and #run.name <= setup.NAME_CHARS
-        and run.name:find(setup.NAME_PATTERN)
-    if not valid then
+    if not setup.valid_name(run.name) then
         leave(
             run,
-            "add a [board] section to .dev/config.toml, since "
-                .. run.name
-                .. " is not a board name"
+            `{run.name} is not a board name, so init wrote no [board] section. `
+                .. "Add one to .dev/config.toml with a name of 1 to 100 characters."
         )
         return
     end
