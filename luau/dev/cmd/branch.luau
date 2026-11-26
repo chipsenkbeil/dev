@@ -416,13 +416,13 @@ function M.prune(name, ctx)
         dev_os.capture(vcs.with(base, "git", "import"), { stderr = "null" })
     end
     if mine and status == 0 then
-        local deleted, why = vcs.delete_branch(repo.root, repo.backend, name)
-        if deleted ~= nil then
-            dev_command.say("Deleted local " .. name .. ".")
-        else
+        local _, why = vcs.delete_branch(repo.root, repo.backend, name)
+        if why ~= nil then
             dev_command.say("The delete of local " .. name .. " failed.")
-            indent(why or "There is no such branch.")
+            indent(why)
             status = 1
+        else
+            dev_command.say("Deleted local " .. name .. ".")
         end
     end
     return status
