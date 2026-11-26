@@ -250,7 +250,9 @@ end
 local function capture_ci(argv)
     local errfile = fs.mktemp({ prefix = "dev-connect" })
     if not errfile then
-        dev_command.note("Cannot make a temporary path for the standard error of ci.")
+        dev_command.note(
+            "Cannot make a temporary path for the standard error of ci. Ci will write it to the terminal."
+        )
         return dev_os.capture(argv)
     end
     local ok, out, code = pcall(dev_os.capture, argv, { stderr = errfile })

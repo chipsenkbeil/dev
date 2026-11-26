@@ -18167,6 +18167,20 @@ do
         testing.eq(fs.read(saved), "bytes of the file")
     end)
 
+    testing.test("download says so when it cannot make a temporary folder", function()
+        -- Download into the default folder with a TMPDIR that does not exist
+        local root, home = sandbox()
+        attach_files(root)
+        local out, code = dev(
+            root,
+            home,
+            { "board", "download", "11111111-a", "old.png" },
+            { env = { TMPDIR = root .. "/missing" } }
+        )
+        testing.eq(code, 1)
+        testing.ok(out:find("Cannot make a temporary folder for the download.", 1, true), out)
+    end)
+
     testing.test("download refuses an unknown or ambiguous attachment and a bad out dir", function()
         -- Hold a card with two attachments that share an id prefix
         local root, home = sandbox()

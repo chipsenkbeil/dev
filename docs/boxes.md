@@ -504,8 +504,8 @@ standard error that starts with `error:`, else the first line) as one line,
 "Ci said: <message>". The picker then still offers the boxes, and a name that
 is no box exits with ci's code. On success ci's standard error goes through to
 the terminal unchanged. When dev cannot make a temporary file for that standard
-error, it prints "Cannot make a temporary path for the standard error of ci."
-and runs ci anyway.
+error, it prints "Cannot make a temporary path for the standard error of ci. Ci
+will write it to the terminal." and runs ci anyway.
 
 `tests/lua/connect_test.lua` and `tests/dev/box_test.sh` run all of it against
 a fake `ci` and `ssh`.

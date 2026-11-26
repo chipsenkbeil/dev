@@ -189,8 +189,11 @@ function M.stop(backend, card, note, at: number?)
         ok, message = backend:log_time(card.id, minutes, running.role, note)
     end
     if not ok then
-        local restored, why = fs.move(claimed, M.path(card.id))
+        local restored, why, reason = fs.move(claimed, M.path(card.id))
         if not restored then
+            if reason == fs.Reason.EXISTS then
+                why = "Another clock was started for the card meanwhile."
+            end
             return guards.failure(message .. " The clock could not be put back: " .. why)
         end
         return guards.failure(message)

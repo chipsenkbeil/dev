@@ -4861,8 +4861,12 @@ function commands.download(backend, opts, args)
         return failure(dir .. " is not a directory.")
     end
     if not dir then
-        dir, message = fs.mktemp({ prefix = "dev-board-download", dir = true })
+        local reason
+        dir, message, reason = fs.mktemp({ prefix = "dev-board-download", dir = true })
         if not dir then
+            if reason == fs.Reason.TEMP then
+                return failure("Cannot make a temporary folder for the download.")
+            end
             return failure(message)
         end
     end

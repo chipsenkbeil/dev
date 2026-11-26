@@ -61,9 +61,12 @@ function M.run(root)
         print("SKIP .dev/tests (none)")
         return 0
     end
-    local names, message = fs.list(dir)
+    local names, message, reason = fs.list(dir)
     if not names then
         print("not ok - list .dev/tests")
+        if reason == fs.Reason.LIST then
+            message = "Cannot list " .. dir .. "."
+        end
         print("    " .. tostring(message))
         return 1
     end

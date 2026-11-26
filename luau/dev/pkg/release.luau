@@ -309,9 +309,12 @@ local function steps(job, opts)
 end
 
 local function download_and_install(row, pin, dest, opts)
-    local dir, why = fs.mktemp({ prefix = "release", dir = true })
+    local dir, why, reason = fs.mktemp({ prefix = "release", dir = true })
     if not dir then
-        return fail(row, why or "Cannot make a temporary directory.")
+        if reason == fs.Reason.TEMP then
+            why = "Cannot make a temporary directory."
+        end
+        return fail(row, why)
     end
     local work = { download = fs.join(dir, "download"), extract = fs.join(dir, "extract") }
     local code = steps({ row = row, pin = pin, dest = dest, work = work }, opts)

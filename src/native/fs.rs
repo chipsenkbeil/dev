@@ -6,10 +6,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, PoisonError};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use mlua::{Lua, LuaString, Table, Variadic};
+use mlua::{IntoLuaMulti, Lua, LuaString, MultiValue, Nil, Table, Variadic};
 
 use crate::native::mode;
-use crate::{native_fn, native_struct};
+use crate::{native_fn, native_struct, overlay};
 
 /// Name of this module under `dev`.
 pub const NAME: &str = "fs";
@@ -46,6 +46,21 @@ const TEMP_DIR_MODE: u32 = 0o700;
 
 /// Permission bits of a file made without a given mode, before the umask.
 const DEFAULT_FILE_MODE: u32 = 0o666;
+
+/// Reason of a move onto a path that is taken.
+const REASON_EXISTS: &str = "exists";
+
+/// Reason of a directory that cannot be listed.
+const REASON_LIST: &str = "list";
+
+/// Reason of a path that cannot be resolved.
+const REASON_RESOLVE: &str = "resolve";
+
+/// Reason of a path that is not a symbolic link.
+const REASON_NOT_LINK: &str = "not_link";
+
+/// Reason of a temporary path that cannot be made.
+const REASON_TEMP: &str = "temp";
 
 /// Counter that keeps temporary names of one process apart.
 static COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -120,6 +135,13 @@ pub fn register(lua: &Lua) -> mlua::Result<Table> {
     kinds.set("LINK", "link")?;
     kinds.set("OTHER", "other")?;
     table.set("Kind", kinds)?;
+    let reasons = lua.create_table()?;
+    reasons.set("EXISTS", REASON_EXISTS)?;
+    reasons.set("LIST", REASON_LIST)?;
+    reasons.set("RESOLVE", REASON_RESOLVE)?;
+    reasons.set("NOT_LINK", REASON_NOT_LINK)?;
+    reasons.set("TEMP", REASON_TEMP)?;
+    table.set("Reason", reasons)?;
     exists::register(lua, NAME, &table)?;
     is_dir::register(lua, NAME, &table)?;
     is_file::register(lua, NAME, &table)?;
@@ -160,6 +182,11 @@ fn message(error: &io::Error) -> String {
 /// Words a failure on `path` the way `io.open` did, as `PATH: MESSAGE`.
 fn reason(path: &str, error: &io::Error) -> String {
     format!("{path}: {}", message(error))
+}
+
+/// Turns a failure into the Luau triple `nil, text, reason`.
+fn refused(lua: &Lua, text: String, reason: &str) -> mlua::Result<MultiValue> {
+    (Nil, text, reason).into_lua_multi(lua)
 }
 
 /// Returns the kind name of a raw `st_mode`.
@@ -436,11 +463,13 @@ fn remove_tree(path: &Path) -> crate::Result<()> {
 }
 
 native_fn! {
-    /// Moves a path to one that does not exist yet, copying across filesystems.
+    /// Moves a path to one that does not exist yet, copying across filesystems. A failure
+    /// returns nil and its text, and the reason `exists` as a third value when `to` is taken.
+    #[luau = "(from: string, to: string) -> (boolean?, string?, string?)"]
     #[name = "move"]
-    pub fn move_path(_lua: &Lua, from: String, to: String) -> mlua::Result<Result<bool, String>> {
+    pub fn move_path(lua: &Lua, from: String, to: String) -> mlua::Result<MultiValue> {
         if fs::symlink_metadata(&to).is_ok() {
-            return Ok(Err(format!("{to} already exists")));
+            return refused(lua, format!("{to} already exists"), REASON_EXISTS);
         }
         let (source, target) = (Path::new(&from), Path::new(&to));
         let outcome = match fs::rename(source, target) {
@@ -449,25 +478,30 @@ native_fn! {
             }
             other => other.map_err(at(source)),
         };
-        Ok(outcome.map(|()| true).map_err(|error| error.to_string()))
+        match outcome {
+            Ok(()) => true.into_lua_multi(lua),
+            Err(error) => (Nil, error.to_string()).into_lua_multi(lua),
+        }
     }
 }
 
 native_fn! {
-    /// Lists the names in a directory, sorted, hidden names included.
-    pub fn list(_lua: &Lua, dir: String) -> mlua::Result<Result<Vec<String>, String>> {
+    /// Lists the names in a directory, sorted, hidden names included. A failure returns nil,
+    /// its text and the reason `list`.
+    #[luau = "(dir: string) -> ({ string }?, string?, string?)"]
+    pub fn list(lua: &Lua, dir: String) -> mlua::Result<MultiValue> {
         let Ok(entries) = fs::read_dir(&dir) else {
-            return Ok(Err(format!("cannot list {dir}")));
+            return refused(lua, format!("cannot list {dir}"), REASON_LIST);
         };
         let mut names = Vec::new();
         for entry in entries {
             match entry {
                 Ok(entry) => names.push(entry.file_name().to_string_lossy().into_owned()),
-                Err(_) => return Ok(Err(format!("cannot list {dir}"))),
+                Err(_) => return refused(lua, format!("cannot list {dir}"), REASON_LIST),
             }
         }
         names.sort();
-        Ok(Ok(names))
+        names.into_lua_multi(lua)
     }
 }
 
@@ -479,21 +513,25 @@ native_fn! {
 }
 
 native_fn! {
-    /// Resolves `path` to an absolute path with no links.
-    pub fn realpath(_lua: &Lua, path: String) -> mlua::Result<Result<String, String>> {
+    /// Resolves `path` to an absolute path with no links. A failure returns nil, its text and
+    /// the reason `resolve`.
+    #[luau = "(path: string) -> (string?, string?, string?)"]
+    pub fn realpath(lua: &Lua, path: String) -> mlua::Result<MultiValue> {
         match canonical(Path::new(&path)) {
-            Ok(real) => Ok(Ok(real.to_string_lossy().into_owned())),
-            Err(_) => Ok(Err(format!("cannot resolve {path}"))),
+            Ok(real) => real.to_string_lossy().into_owned().into_lua_multi(lua),
+            Err(_) => refused(lua, format!("cannot resolve {path}"), REASON_RESOLVE),
         }
     }
 }
 
 native_fn! {
-    /// Reads where a symbolic link points.
-    pub fn readlink(_lua: &Lua, path: String) -> mlua::Result<Result<String, String>> {
+    /// Reads where a symbolic link points. A failure returns nil, its text and the reason
+    /// `not_link`.
+    #[luau = "(path: string) -> (string?, string?, string?)"]
+    pub fn readlink(lua: &Lua, path: String) -> mlua::Result<MultiValue> {
         match fs::read_link(&path) {
-            Ok(target) => Ok(Ok(target.to_string_lossy().into_owned())),
-            Err(_) => Ok(Err(format!("{path} is not a link"))),
+            Ok(target) => target.to_string_lossy().into_owned().into_lua_multi(lua),
+            Err(_) => refused(lua, format!("{path} is not a link"), REASON_NOT_LINK),
         }
     }
 }
@@ -521,16 +559,15 @@ fn random_suffix(salt: u64) -> String {
 }
 
 native_fn! {
-    /// Makes a temporary file or directory named PREFIX.XXXXXX under TMPDIR, else /tmp.
-    pub fn mktemp(
-        _lua: &Lua,
-        opts: Option<MktempOptions>,
-    ) -> mlua::Result<Result<String, String>> {
+    /// Makes a temporary file or directory named PREFIX.XXXXXX under TMPDIR, else /tmp. A
+    /// failure returns nil, its text and the reason `temp`.
+    #[luau = "(opts: { prefix: string?, dir: boolean? }?) -> (string?, string?, string?)"]
+    pub fn mktemp(lua: &Lua, opts: Option<MktempOptions>) -> mlua::Result<MultiValue> {
         let (prefix, dir) = opts.map_or((None, false), |opts| {
             (opts.prefix, opts.dir.unwrap_or(false))
         });
         let prefix = prefix.unwrap_or_else(|| "dev".to_owned());
-        let tmpdir = std::env::var("TMPDIR").unwrap_or_else(|_| default_tmpdir());
+        let tmpdir = overlay::get("TMPDIR").unwrap_or_else(default_tmpdir);
         let base = tmpdir.trim_end_matches('/').to_owned();
         for _ in 0..NAME_ATTEMPTS {
             let count = COUNTER.fetch_add(1, Ordering::Relaxed);
@@ -545,12 +582,16 @@ native_fn! {
                     .map(drop)
             };
             match made {
-                Ok(()) => return Ok(Ok(path)),
+                Ok(()) => return path.into_lua_multi(lua),
                 Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
                 Err(_) => break,
             }
         }
-        Ok(Err(format!("cannot make a temporary path under {base}")))
+        refused(
+            lua,
+            format!("cannot make a temporary path under {base}"),
+            REASON_TEMP,
+        )
     }
 }
 

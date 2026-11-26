@@ -997,8 +997,11 @@ local function move_to_trash(anchor, name, opts)
     if not made then
         return refused({ reason = Refusal.FILESYSTEM, detail = why })
     end
-    local moved, err = fs.move(opts.path, target)
+    local moved, err, why_moved = fs.move(opts.path, target)
     if not moved then
+        if why_moved == fs.Reason.EXISTS then
+            err = "The trash path " .. target .. " already exists."
+        end
         return refused({ reason = Refusal.FILESYSTEM, detail = err })
     end
     local ok, stopped = detach(anchor, name, {
@@ -1008,8 +1011,11 @@ local function move_to_trash(anchor, name, opts)
         moved = true,
     })
     if not ok then
-        local back, back_err = fs.move(target, opts.path)
+        local back, back_err, why_back = fs.move(target, opts.path)
         if not back then
+            if why_back == fs.Reason.EXISTS then
+                back_err = opts.path .. " already exists again."
+            end
             stopped.stayed = target
             stopped.detail = back_err
         end

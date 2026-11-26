@@ -379,7 +379,14 @@ testing.test("a temporary file that cannot be made still lets the picker list bo
     testing.eq(code, 0)
 
     -- Say what failed and attach the box
-    testing.ok(out:find("Cannot make a temporary path", 1, true), out)
+    testing.ok(
+        out:find(
+            "Cannot make a temporary path for the standard error of ci. Ci will write it to the terminal.",
+            1,
+            true
+        ),
+        out
+    )
     testing.ok(calls(root):find("ci ssh b1", 1, true), calls(root))
 
     -- Remove the project

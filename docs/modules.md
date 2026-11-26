@@ -112,6 +112,10 @@ A table of the parsed global flags: `args`, `after`, `dashed`, `remote`,
 - `open_nofollow`, `fstat`, `read_fd` and `close` read a file without
   following a link.
 - `Kind` names the kinds of a path.
+- `Reason` names why `move`, `list`, `realpath`, `readlink` and `mktemp` failed:
+  `EXISTS`, `LIST`, `RESOLVE`, `NOT_LINK` and `TEMP`. A failure returns nil, the
+  text and the reason, so a caller matches the reason and writes its own
+  sentence.
 
 ### @dev/lock
 
