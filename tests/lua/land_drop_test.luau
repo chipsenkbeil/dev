@@ -10,28 +10,32 @@ local git = support.git
 local rev = support.rev
 
 local TRAILER = "Change-Id: I0a1b2c3d4e5f60718293a4b5c6d7e8f901234567"
-local STUB = [[#!/bin/sh
-real() {
-    "$REAL_JJ" --no-pager -R "$ROOT" "$@" >/dev/null 2>&1
-}
-for word in "$@"; do
-    if [ "$word" = land ]; then
-        cur=$("$REAL_JJ" --no-pager -R "$ROOT" log -r @ --no-graph -T commit_id)
-        if [ "$LAND_MODE" = copy ]; then
-            for orig in $("$REAL_JJ" --no-pager -R "$ROOT" log -r "master..$LAND_REV" --reversed --no-graph -T 'commit_id ++ " "'); do
-                msg=$("$REAL_JJ" --no-pager -R "$ROOT" log -r "$orig" --no-graph -T description)
-                real new master -m "$msg"
-                real restore --from "$orig"
-                real bookmark set master -r @
-            done
-            real git push --remote origin --bookmark master
-            real edit "$cur"
-        fi
-        exit 0
-    fi
-done
-exec "$REAL_JJ" "$@"
-]]
+local COPY = "copy"
+local NONE = "none"
+local STUB = table.concat({
+    [[#!/bin/sh]],
+    [[real() {]],
+    [[    "$REAL_JJ" --no-pager -R "$ROOT" "$@" >/dev/null 2>&1]],
+    [[}]],
+    [[for word in "$@"; do]],
+    [[    if [ "$word" = land ]; then]],
+    [[        cur=$("$REAL_JJ" --no-pager -R "$ROOT" log -r @ --no-graph -T commit_id)]],
+    `        if [ "$LAND_MODE" = {COPY} ]; then`,
+    [[            for orig in $("$REAL_JJ" --no-pager -R "$ROOT" log -r "master..$LAND_REV" --reversed --no-graph -T 'commit_id ++ " "'); do]],
+    [[                msg=$("$REAL_JJ" --no-pager -R "$ROOT" log -r "$orig" --no-graph -T description)]],
+    [[                real new master -m "$msg"]],
+    [[                real restore --from "$orig"]],
+    [[                real bookmark set master -r @]],
+    [[            done]],
+    [[            real git push --remote origin --bookmark master]],
+    [[            real edit "$cur"]],
+    [[        fi]],
+    [[        exit 0]],
+    [[    fi]],
+    [[done]],
+    [[exec "$REAL_JJ" "$@"]],
+    "",
+}, "\n")
 
 local function git_project()
     local root = support.sandbox({ [".dev/config.toml"] = "" }, {})
@@ -161,7 +165,7 @@ if dev_os.which("jj") then
     testing.test("land.drop.jj.abandons.the.original.of.a.landed.change", function()
         local root = jj_project()
         local original = ids(root, "@"):gsub("\n", "")
-        local lines = land(root, "copy", "@")
+        local lines = land(root, COPY, "@")
         testing.ok(lines:find("Abandoned change", 1, true), lines)
         testing.eq(ids(root, "all()"):find(original, 1, true), nil)
         testing.eq(ids(root, "description(substring:'feat: work') ~ ::trunk()"), "")
@@ -172,7 +176,7 @@ if dev_os.which("jj") then
     testing.test("land.drop.jj.never.abandons.a.change.trunk.does.not.hold", function()
         local root = jj_project()
         local original = ids(root, "@")
-        local lines = land(root, "none", "@")
+        local lines = land(root, NONE, "@")
         testing.ok(lines:find("Kept change", 1, true), lines)
         testing.ok(lines:find("trunk does not hold", 1, true), lines)
         testing.eq(ids(root, "@"), original)
@@ -183,7 +187,7 @@ if dev_os.which("jj") then
         local second = "Change-Id: I1111111111111111111111111111111111111111"
         jj(root, "new", "-m", "feat: second\n\n" .. second)
         assert(fs.write(root .. "/second.txt", "two\n"), "write failed")
-        local lines = land(root, "copy", "@")
+        local lines = land(root, COPY, "@")
         testing.eq(select(2, lines:gsub("Abandoned change", "")), 2, lines)
         testing.eq(ids(root, "description(substring:'feat:') ~ ::trunk()"), "")
         testing.eq(ids(root, "heads(all() ~ ::trunk() ~ root())"), ids(root, "@"))
@@ -195,7 +199,7 @@ if dev_os.which("jj") then
         local root = jj_project()
         jj(root, "new", "-m", "feat: child")
         assert(fs.write(root .. "/child.txt", "child\n"), "write failed")
-        local lines = land(root, "copy", "@-")
+        local lines = land(root, COPY, "@-")
         testing.ok(lines:find("Abandoned change", 1, true), lines)
         testing.ok(lines:find("Kept change", 1, true), lines)
         testing.eq(ids(root, "description(substring:'feat: work') ~ ::trunk()"), "")

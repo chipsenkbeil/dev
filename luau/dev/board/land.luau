@@ -2132,13 +2132,25 @@ local function git_branch(root)
     return out and out:match("^(%S+)")
 end
 
-local function drop_remote_branch(root, remote, branch, lines)
-    local out, code =
-        dev_os.capture(vcs.git_push(remote, { ":" .. branch }), { stderr = "stdout", cwd = root })
+type DropRemoteBranchOpts = {
+    --- The remote to delete the branch from.
+    remote: string,
+    --- The branch to delete.
+    branch: string,
+    --- The report lines, appended to.
+    lines: { string },
+}
+
+local function drop_remote_branch(root: string, opts: DropRemoteBranchOpts)
+    local out, code = dev_os.capture(
+        vcs.git_push(opts.remote, { ":" .. opts.branch }),
+        { stderr = "stdout", cwd = root }
+    )
     if code == 0 then
-        lines[#lines + 1] = `Deleted remote branch {branch}.`
+        opts.lines[#opts.lines + 1] = `Deleted remote branch {opts.branch}.`
     else
-        lines[#lines + 1] = "Kept remote branch " .. branch .. ". " .. out:gsub("\n$", "")
+        local detail = out:gsub("\n$", "")
+        opts.lines[#opts.lines + 1] = `Kept remote branch {opts.branch}. {detail}`
     end
 end
 
@@ -2156,7 +2168,7 @@ local function drop_git(root, branch, lines)
         git_out(root, "rev-parse", "--verify", "-q", remote_ref)
         and git_out(root, "merge-base", "--is-ancestor", remote_ref, ref)
     then
-        drop_remote_branch(root, found.remote, branch, lines)
+        drop_remote_branch(root, { remote = found.remote, branch = branch, lines = lines })
     end
     if not git_out(root, "show-ref", "--verify", "-q", "refs/heads/" .. branch) then
         return
