@@ -10392,6 +10392,54 @@ testing.test("move to board refuses the flags that only apply to one board", fun
     testing.eq(requests(root):find("/move", 1, true), nil)
 end)
 
+testing.test("move to board of a claimed card sends the claim fence", function()
+    -- Claim the card, which holds fence 7
+    local root, home = across_sandbox({ export = PLANNED_EXPORT })
+    local out, code = dev(root, home, { "board", "take", "11111111-a" })
+    testing.eq(code, 0, out)
+    local taken = #requests(root)
+
+    -- Move the card to the other board
+    out, code = move_across(root, home, "Backlog")
+    testing.eq(code, 0, out)
+    testing.eq(out, "moved 11111111 to Backlog on board General\n")
+
+    -- Check the move request carried the fence
+    local moved = block_with(requests(root):sub(taken + 1), "/move")
+    testing.ok(moved and moved:find("If-Owner-Fence: 7", 1, true), moved)
+
+    -- Give the claim back
+    dev(root, home, { "board", "release", "11111111-a" })
+end)
+
+testing.test("move to board of a claimed card prints Pomb's stale fence refusal", function()
+    -- Claim the card, then make Pomb refuse the move
+    local root, home = across_sandbox({ export = PLANNED_EXPORT })
+    local out, code = dev(root, home, { "board", "take", "11111111-a" })
+    testing.eq(code, 0, out)
+    local taken = #requests(root)
+    override(root, {
+        { path = "*/move", status = 409, body = '{"message":"the fence is stale"}' },
+    })
+
+    -- Move the card to the other board
+    out, code = move_across(root, home, "Backlog")
+    testing.eq(code, 1, out)
+    testing.ok(out:find("the fence is stale", 1, true), out)
+
+    -- Check the move carried the fence and the only other write was a renew of the claim
+    local log = requests(root):sub(taken + 1)
+    testing.ok(block_with(log, "/move"):find("If-Owner-Fence: 7", 1, true), log)
+    for line in log:gmatch("[^\n]+") do
+        if line:find("^[A-Z]+ ") and not line:find("^GET ") then
+            testing.ok(line:find("/move ", 1, true) or line:find("/owner/renew ", 1, true), line)
+        end
+    end
+
+    -- Give the claim back
+    dev(root, home, { "board", "release", "11111111-a" })
+end)
+
 testing.test("the lead's close of an epic names the open children", function()
     -- Seed an epic with an open child
     local root, home = epic_sandbox(1, true)
