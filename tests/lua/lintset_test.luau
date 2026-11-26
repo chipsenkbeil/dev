@@ -727,6 +727,30 @@ testing.test("stanza headers passes a three-stanza function with every stanza he
     testing.eq(lintset.unheaded(two), {})
 end)
 
+testing.test(
+    "stanza headers counts a line opening with a closing bracket as a continuation",
+    function()
+        for _, closer in ipairs({ ")", "]", "}" }) do
+            local text = table.concat({
+                "local function f()",
+                "    -- Make a",
+                "    local a = 1",
+                "",
+                "    -- Run a",
+                "    run(a",
+                "",
+                "    " .. closer,
+                "",
+                "    -- Check a",
+                "    check(a)",
+                "end",
+                "",
+            }, "\n")
+            testing.eq(lintset.unheaded(text), {})
+        end
+    end
+)
+
 testing.test("stanza headers judges a stanza under a multi-line signature by its body", function()
     local spread = table.concat({
         "local function f(",

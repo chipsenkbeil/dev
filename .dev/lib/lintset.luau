@@ -314,7 +314,7 @@ local function continues_block(body: string): boolean
     return closes_block(body)
         or body:find("^else%f[^%w_]") ~= nil
         or body:find("^until%f[^%w_]") ~= nil
-        or body:find("^[%)%}%]]") ~= nil
+        or body:find("^[%)}%]]") ~= nil
 end
 
 ---Collect the stanzas of one function body, each as the line number of its first line.
