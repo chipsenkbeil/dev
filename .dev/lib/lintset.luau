@@ -380,7 +380,17 @@ function M.unheaded(text: string): { number }
 
             -- Flag each stanza that has no comment first, in a function with enough stanzas
             if last then
-                local starts_at = stanza_starts(lines, number + 1, last)
+                local first = number + 1
+                if body:sub(-1) == "(" then
+                    for after = number + 1, last do
+                        local closing = lines[after]:gsub("^%s+", "")
+                        if indent_of(lines[after]) == indent and closing:find("^%)") then
+                            first = after + 1
+                            break
+                        end
+                    end
+                end
+                local starts_at = stanza_starts(lines, first, last)
                 if #starts_at >= STANZA_MIN then
                     for _, start in ipairs(starts_at) do
                         if not starts(lines[start]:gsub("^%s+", ""), Marker.DASH) then

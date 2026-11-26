@@ -727,6 +727,42 @@ testing.test("stanza headers passes a three-stanza function with every stanza he
     testing.eq(lintset.unheaded(two), {})
 end)
 
+testing.test("stanza headers judges a stanza under a multi-line signature by its body", function()
+    local spread = table.concat({
+        "local function f(",
+        "    a: number,",
+        "    b: number",
+        "): number",
+        "    -- Make a",
+        "    local c = a + b",
+        "",
+        "    -- Return c",
+        "    return c",
+        "",
+        "    -- Done",
+        "    done()",
+        "end",
+        "",
+    }, "\n")
+    testing.eq(lintset.unheaded(spread), {})
+    local paren = table.concat({
+        "local function f(",
+        "    a: number,",
+        "    b: number",
+        ")",
+        "    -- Make a",
+        "    local c = a + b",
+        "",
+        "    -- Check c",
+        "    check(c)",
+        "",
+        "    run(c)",
+        "end",
+        "",
+    }, "\n")
+    testing.eq(lintset.unheaded(paren), { 11 })
+end)
+
 testing.test("analyze_findings drops a dev require and a dev type and keeps the rest", function()
     local out = table.concat({
         "a.luau(1,15): (W000) Unknown require: unsupported path",
