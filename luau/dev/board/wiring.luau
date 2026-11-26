@@ -769,9 +769,12 @@ local function failed_change_run(root, commit, ignore)
     if ignore then
         return nil
     end
-    return noted_run_problem(land.change_run_problem(root, commit, {
-        require_run = config.get(root, REQUIRE_CHANGE_RUN) == true,
-    }))
+    local required = config.get(root, REQUIRE_CHANGE_RUN) == true
+    local problem, seen, found = land.change_run_problem(root, commit, { require_run = required })
+    if found == false and not required then
+        seen = nil
+    end
+    return noted_run_problem(problem, seen)
 end
 
 ---Name why the change run of a commit the rebase rewrote stops the landing, when the project

@@ -1782,9 +1782,9 @@ if has_jj then
         end)
     end)
 
-    testing.test("dev land prints the no change run line once", function()
+    local function land_without_run(extra)
         -- Verify a card and leave its stub with no runs
-        local project, id = gerrit_project()
+        local project, id = gerrit_project(extra)
         local stubs = project.env.PATH:match("^([^:]+)")
         assert(fs.write(stubs .. "/runs.json", '{"runs":[]}'), "write failed")
 
@@ -1795,13 +1795,28 @@ if has_jj then
             { LAND_TRUNK = LAND_TRUNK_KEEP, FETCH_SKIP = "1", PATH = project.env.PATH }
         )
         testing.eq(code, 0, out)
+        return out
+    end
 
-        -- Print the no-change-run line once
-        local line = "No change run of commit"
-        local first = out:find(line, 1, true)
-        testing.ok(first, out)
-        testing.eq(out:find(line, first + 1, true), nil, out)
-    end)
+    testing.test(
+        "dev land prints no change run line when the project does not require one",
+        function()
+            testing.eq(land_without_run():find("No change run of commit", 1, true), nil)
+        end
+    )
+
+    testing.test(
+        "dev land prints the no change run line once when the project requires one",
+        function()
+            local out = land_without_run(REQUIRE_RUN)
+
+            -- Print the no-change-run line once
+            local line = "No change run of commit"
+            local first = out:find(line, 1, true)
+            testing.ok(first, out)
+            testing.eq(out:find(line, first + 1, true), nil, out)
+        end
+    )
 
     local function second_card(project)
         -- Spell out the fields a card needs, outcomes included
