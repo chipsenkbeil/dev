@@ -743,19 +743,35 @@ function M.split_lua(files)
     return lua, luau
 end
 
----Keep the luau-analyze findings that do not come from a `dev.*` require or type, which it cannot
----resolve.
+local function binds_alias_require(text: string, name: string): boolean
+    for _, line in ipairs(lines_of(text)) do
+        if line:match(`^%s*local%s+{name}%s*=%s*require%s*%(%s*["']@`) then
+            return true
+        end
+    end
+    return false
+end
+
+---Keep the luau-analyze findings that do not come from an `@` alias require, which it cannot
+---resolve. An unknown type with a dotted name is dropped only when its file binds the prefix to
+---such a require.
 ---@param text the luau-analyze output
+---@param root absolute project root, which the finding paths are relative to
 ---@return the finding blocks, each a header line with its continuation lines
-function M.analyze_findings(text: string): { string }
+function M.analyze_findings(text: string, root: string): { string }
     local found: { string } = {}
     local keep = false
+    local sources: { [string]: string } = {}
     for _, line in ipairs(lines_of(text)) do
-        if line:match("^%S+%(%d+,%d+%): ") then
-            keep = not (
-                line:find("Unknown require: unsupported path", 1, true)
-                or line:match("Unknown type '[%w_]+%.[%w_]+'")
-            )
+        local file = line:match("^(%S+)%(%d+,%d+%): ")
+        if file then
+            local prefix = line:match("Unknown type '([%w_]+)%.[%w_]+'")
+            local dropped = line:find("Unknown require: unsupported path", 1, true) ~= nil
+            if prefix then
+                sources[file] = sources[file] or fs.read(fs.join(root, file)) or ""
+                dropped = binds_alias_require(sources[file], prefix)
+            end
+            keep = not dropped
             if keep then
                 found[#found + 1] = line
             end
@@ -769,7 +785,8 @@ end
 ---Type-check the `.luau` files among the paths with luau-analyze in its default non-strict mode.
 ---
 ---A `.lua` file in the list is left to selene, and a list with no `.luau` file runs nothing. A
----finding about a `dev.*` module is dropped, as luau-analyze has no declarations for them.
+---finding about a module from an `@` alias require is dropped, as luau-analyze has no
+---declarations for them.
 ---@param files paths of `.lua` and `.luau` files
 function Lint:luau_analyze(files: { string })
     local _, luau = M.split_lua(files)
@@ -783,7 +800,7 @@ function Lint:luau_analyze(files: { string })
         self:fail("luau-analyze", out)
         return
     end
-    for _, finding in ipairs(M.analyze_findings(out)) do
+    for _, finding in ipairs(M.analyze_findings(out, self.root)) do
         self:fail("luau-analyze", finding)
     end
 end

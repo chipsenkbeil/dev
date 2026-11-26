@@ -764,6 +764,10 @@ testing.test("stanza headers judges a stanza under a multi-line signature by its
 end)
 
 testing.test("analyze_findings drops a dev require and a dev type and keeps the rest", function()
+    local root = support.tempdir()
+    local source =
+        table.concat({ 'local dev = require("@dev/card")', "local x: dev.Card", "" }, "\n")
+    assert(fs.write(root .. "/a.luau", source))
     local out = table.concat({
         "a.luau(1,15): (W000) Unknown require: unsupported path",
         "a.luau(2,10): (W000) Unknown type 'dev.Card'",
@@ -773,10 +777,28 @@ testing.test("analyze_findings drops a dev require and a dev type and keeps the 
         "a.luau(4,1): (W000) Unknown type 'Card'",
         "",
     }, "\n")
-    testing.eq(lintset.analyze_findings(out), {
+    testing.eq(lintset.analyze_findings(out, root), {
         "a.luau(3,1): (W000) Unknown global 'nope'\n    seen near here",
         "a.luau(4,1): (W000) Unknown type 'Card'",
     })
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("analyze_findings reports a misspelled alias and drops a bound one", function()
+    local root = support.tempdir()
+    local source =
+        table.concat({ 'local types = require("@lib/types")', "local x: tpyes.Ctx", "" }, "\n")
+    assert(fs.write(root .. "/a.luau", source))
+    local out = table.concat({
+        "./a.luau(1,15): TypeError: Unknown require: unsupported path",
+        "a.luau(2,10): TypeError: Unknown type 'types.Ctx'",
+        "a.luau(2,10): TypeError: Unknown type 'tpyes.Ctx'",
+        "",
+    }, "\n")
+    testing.eq(lintset.analyze_findings(out, root), {
+        "a.luau(2,10): TypeError: Unknown type 'tpyes.Ctx'",
+    })
+    fs.remove(root, { recursive = true })
 end)
 
 local function analyze_with(output: string): ({ string }, { string })
