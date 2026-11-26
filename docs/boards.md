@@ -375,8 +375,8 @@ A card delete is token policy, not something dev enforces on its own. Only
 the lead decides and does one, and Pomb refuses a `work` token with a 403
 naming `tasks.bin`. A restore from the bin needs only `tasks.edit`.
 
-The calls come from `board/pomb.lua`, a dispatcher's Pomb contract notes and
-Pomb's permission catalog.
+The calls come from `luau/dev/board/pomb.luau`, a dispatcher's Pomb contract
+notes and Pomb's permission catalog.
 
 The review found no preset to change. The outcome delete is a Pomb right with
 no dev call yet, and dev needs no token change for it.
@@ -5120,9 +5120,10 @@ answer is Pomb refusing the request, so it is `Board refused: Pomb answered
 
 The Pomb backend writes every refusal as a full sentence itself, through
 `text.sentence`. The other backend messages quoted in this doc are the raw text
-a backend returns. `failure()` in `board/guards.lua` turns a single-line message
-into a sentence before `dev board` prints it, with a closing period. A message
-with a newline, or one that ends in `?` or `!`, is printed as written.
+a backend returns. `failure()` in `luau/dev/board/guards.luau` turns a
+single-line message into a sentence before `dev board` prints it, with a closing
+period. A message with a newline, or one that ends in `?` or `!`, is printed as
+written.
 
 ### How init runs
 

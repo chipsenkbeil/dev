@@ -88,8 +88,10 @@ default. The base group needs no cargo on Intel macOS.
 ### bats and stow
 
 Neither has an x86_64 macOS binary release, and Homebrew is not there to build
-them. Their cells are `script:scripts/install-bats.lua,bin:-` and
-`script:scripts/install-stow.lua,bin:-`.
+them. In the dotfiles repo's `.dev/tools.tsv`, their cells are
+`script:scripts/install-bats.lua,bin:-` and
+`script:scripts/install-stow.lua,bin:-`. The scripts sit in that repo's
+`scripts/` folder, which this repo does not have.
 
 Both scripts are a few lines over `dev.pkg.source`. It takes `--check`,
 `[--dry-run]` and `PKG_FORCE`, and reads the pin named after the tool from
@@ -118,7 +120,8 @@ is on PATH, and keeps stow as it is when one is.
 
 ### The rust group
 
-Each rust row routes on its own:
+The rust rows and their scripts below are the dotfiles repo's. Each rust row
+routes on its own:
 
 - cargo-binstall, cargo-deny, cargo-nextest and sccache are `release:` pins
   (cargo-nextest ships one universal build).
@@ -140,6 +143,10 @@ executable or run. It runs `rustup-init` with
 `-y --no-modify-path --default-toolchain 1.99.1`, the toolchain the lint set
 pins, and skips when `rustup` is in `CARGO_HOME/bin` (else `~/.cargo/bin`) or
 on PATH. `--check` is that test.
+
+The dotfiles repo's `tests/lua/pkg_pins_rust_test.lua` covers every rust row,
+the dry run order and the script against a stub `curl` and a stub
+`rustup-init`.
 
 ## Ubuntu
 
@@ -168,7 +175,8 @@ and `selene`. The `yq` in apt is the Python wrapper, not mikefarah's. tokei is
 
 ### A fresh machine
 
-A fresh Ubuntu machine runs `bash scripts/prelude/ubuntu.sh`. It installs
+A fresh Ubuntu machine runs the dotfiles repo's
+`bash scripts/prelude/ubuntu.sh`. It installs
 `ca-certificates`, `curl`, `git`, `jq`, `stow`, `unzip` and `xz-utils`. Then run
 `dev tools install --group base`.
 
@@ -275,7 +283,8 @@ toolchain 1.99.1, the nightly rustfmt, cargo-sort and the pinned cargo tools.
 
 ### The archive
 
-The archive must hold these paths and keep the execute bit on `dev`:
+The dotfiles archive must hold these paths and keep the execute bit on `dev`.
+The manifest, prelude and scripts are the dotfiles repo's:
 
 - `dev`, the binary
 - `` (the whole directory)
@@ -284,7 +293,8 @@ The archive must hold these paths and keep the execute bit on `dev`:
 - `scripts/prelude/mac.sh`
 - every local `script:` source in the manifest, cut at the first comma
 
-List the script paths with this command after a manifest change.
+List the script paths with this command, run in the dotfiles repo, after a
+manifest change.
 
 ```
 rg -o --no-filename 'script:scripts/[^ ",]+' .dev/tools.tsv | sort -u
