@@ -121,6 +121,35 @@ testing.test("exec returns nil and a message on failure", function()
     testing.ok(type(err) == "string" and err ~= "", "expected an error message")
 end)
 
+local function feed_after_failed_execs(count)
+    -- Fail the execs, then feed a large input to a command that quits without reading it
+    local snippet = "local dev_os = require('@dev/os'); "
+        .. ("for _ = 1, %d do dev_os.exec({ 'no-such-tool-xyz' }) end; "):format(count)
+        .. "local input = string.rep('x', 1048576); "
+        .. "local _, code = dev_os.capture_timed({ 'true' }, 10, { input = input }); "
+        .. "dev_os.stdout:write('alive ', code)"
+    return dev_os.capture(support.eval(snippet))
+end
+
+testing.test("a failed exec leaves dev getting EPIPE from a closed pipe", function()
+    testing.eq(feed_after_failed_execs(1), "alive 0")
+end)
+
+testing.test("a second failed exec still leaves dev getting EPIPE from a closed pipe", function()
+    testing.eq(feed_after_failed_execs(2), "alive 0")
+end)
+
+testing.test("an exec after a failed one runs its command and exits with its status", function()
+    -- Fail an exec, then exec a command that exits with a status
+    local snippet = "local dev_os = require('@dev/os'); dev_os.exec({ 'no-such-tool-xyz' }); "
+        .. "dev_os.exec({ 'sh', '-c', 'echo hi; exit 7' })"
+    local out, code = dev_os.capture_timed(support.eval(snippet), 10)
+
+    -- Check the command's output and status came through
+    testing.eq(out, "hi\n")
+    testing.eq(code, 7)
+end)
+
 testing.test("run returns 127 for a missing tool", function()
     testing.eq(dev_os.run({ "no-such-tool-xyz" }), 127)
 end)

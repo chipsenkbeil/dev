@@ -875,6 +875,8 @@ native_fn! {
 native_fn! {
     /// Replaces dev with `argv`, and returns `nil` and a reason only when that fails.
     ///
+    /// Once a call has failed, later calls run the command to the end and exit with its status.
+    ///
     /// # Errors
     ///
     /// Raises on a bad option or a NUL byte in a word.
@@ -882,20 +884,35 @@ native_fn! {
     pub fn exec(lua: &Lua, argv: Table, opts: Option<Table>) -> mlua::Result<(Option<bool>, String)> {
         let spec = spec_of(lua, "exec", &argv_of(&argv)?, opts.as_ref(), true)?;
         prepare(lua, &spec)?;
-        let error = match spec.command(spec.input(), None) {
-            Ok(mut command) => Error::io("start the command", replace_with(&mut command)),
-            Err(error) => error,
+        let error = if EXEC_FAILED.load(Ordering::SeqCst) {
+            match process::run(&spec) {
+                Ok(code) => std::process::exit(code),
+                Err(error @ Error::Io { .. }) => error,
+                Err(error) => return Err(error.into()),
+            }
+        } else {
+            match spec.command(spec.input(), None) {
+                Ok(mut command) => Error::io("start the command", replace_with(&mut command)),
+                Err(error) => error,
+            }
         };
         Ok((None, process::reason(&error)))
     }
 }
 
+/// Whether an earlier `exec` failed.
+static EXEC_FAILED: AtomicBool = AtomicBool::new(false);
+
 /// Replaces dev with `command`, returning the error when it cannot start.
 #[cfg(unix)]
 fn replace_with(command: &mut std::process::Command) -> io::Error {
     use std::os::unix::process::CommandExt;
+    use std::sync::Arc;
 
-    command.exec()
+    let error = command.exec();
+    EXEC_FAILED.store(true, Ordering::SeqCst);
+    let _ = signal_hook::flag::register(signals::PIPE, Arc::new(AtomicBool::new(false)));
+    error
 }
 
 /// Runs `command` to the end and exits with its status, since Windows cannot replace a process.
