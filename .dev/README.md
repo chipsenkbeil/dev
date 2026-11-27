@@ -285,7 +285,7 @@ never lists `lib`, `helpers` or `help` as a command.
 ## Commands in this repo
 
 These are the project commands in `.dev/`. Each lists the flags and
-`KEY=value` arguments its header declares.
+`KEY=value` arguments it declares.
 
 ### Check your work
 
