@@ -3375,6 +3375,14 @@ card, and it runs no land and pushes nothing. When trunk does not hold the
 change, it refuses and names the checked commit that trunk lacks. When the
 records fall short, it refuses as before.
 
+A land can also stop after its push, before it writes its note, while the
+workspace still holds the copy from before the rebase. In a jj project, a rerun
+of `dev board land CARD` then finds the commit on the local trunk that holds the
+working copy's change id with an empty interdiff, with no fetch. It settles the
+card as above with that trunk commit, pushes nothing, and abandons the old
+copy. A change id on trunk whose patch differs is not matched, and the card
+still refuses as unlanded work.
+
 After the move, dev board land removes the card's workspace and bookmark.
 A workspace or bookmark it cannot remove is kept, and the output says why.
 

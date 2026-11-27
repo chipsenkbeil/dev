@@ -1895,7 +1895,8 @@ local function unlanded_refusal(backend, card, verb, opts)
     return failure(
         string.format(
             "Card %s cannot %s. Its workspace %s holds unlanded work: %s. "
-                .. "Land it with `dev board land %s`, or abandon it first.",
+                .. "Land it with `dev board land %s`, which also finishes a land that stopped "
+                .. "after its push, or abandon it first.",
             short,
             verb,
             path,
@@ -4085,14 +4086,20 @@ function commands.land(backend, opts, args)
                 .. (kept and wiring.kept_note(short) or "")
         )
     end
-    local _, empty = land.state(backend.root)
-    if #words == 1 and (vcs.backend(backend.root) == vcs.GIT or empty) then
+    local state, empty = land.state(backend.root)
+    local pushed
+    local on_trunk = if state and #words == 1 then land.pushed_commit(backend.root, state) else nil
+    if on_trunk then
+        pushed = { change = state.change, commit = on_trunk, local_commit = state.commit }
+    end
+    if #words == 1 and (vcs.backend(backend.root) == vcs.GIT or empty or pushed) then
         local settled = wiring.settle({
             backend = backend,
             card = card,
             comments = list,
             name = name,
             empty = empty,
+            pushed = pushed,
             move = function(home, move_words)
                 return move_card(home, move_words, { landed = true })
             end,

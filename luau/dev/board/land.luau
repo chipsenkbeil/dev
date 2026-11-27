@@ -1868,6 +1868,28 @@ function M.trunk_commit(root, change)
     return M.fetched_commit(root, change .. " & ::trunk()")
 end
 
+---Read the commit on trunk that already holds the working copy's change with the same patch.
+---
+---It reads the local trunk with no fetch. It finds a land that stopped after its push, where trunk
+---holds a rewrite of the change and the workspace still holds the copy from before. A change id on
+---trunk with another patch finds none.
+---Git has no change id, so a git project finds none.
+---@param root string the project root
+---@param state dev.board.check.State the working-copy commit and its change
+---@return string? commit the full commit id on trunk, nil when trunk holds no such copy
+function M.pushed_commit(root, state)
+    if vcs.backend(root) == vcs.GIT then
+        return nil
+    end
+    local revset = `change_id({state.change}) & ::trunk()`
+    local out = jj_out(root, "log", "-r", revset, "--no-graph", "-T", COMMIT_TEMPLATE)
+    local commit = out and out:match("^(%x+)\n$")
+    if commit and identical(root, commit, state) then
+        return commit
+    end
+    return nil
+end
+
 ---Read the one commit a revision names once the remote of record is fetched.
 ---@param root string the project root
 ---@param revset string the jj revset, or in git a revision where the default trunk revset names
@@ -2223,6 +2245,37 @@ local function drop_git(root, branch, lines)
     elseif deleted == nil then
         lines[#lines + 1] = "Kept branch " .. branch .. ". " .. why
     end
+end
+
+---Abandon the working copy's commit once trunk holds a copy of it, as a land does after its push.
+---
+---The unlanded children of the commit move onto the trunk copy first, and the working copy moves to
+---a fresh commit on trunk. Commits are named by id because the change is divergent while both
+---copies are visible.
+---@param root string the project root
+---@param commit string the working-copy commit to abandon
+---@param copy string the trunk commit that holds its change
+---@return string line what happened, a kept line when a step failed
+function M.drop_pushed(root, commit, copy)
+    local name = M.short(commit)
+    local children = `children({commit})`
+    if #jj_ids(root, children) > 0 then
+        local out, code =
+            dev_os.capture(jj(root, "rebase", "-s", children, "-d", copy), { stderr = "stdout" })
+        if code ~= 0 then
+            return `Kept commit {name}. The rebase of its unlanded children failed. `
+                .. out:gsub("\n$", "")
+        end
+    end
+    local _, new_code = dev_os.capture(jj(root, "new", copy), { stderr = "null" })
+    if new_code ~= 0 then
+        return `Kept commit {name}. A fresh working copy on trunk failed.`
+    end
+    local out, code = dev_os.capture(jj(root, "abandon", commit), { stderr = "stdout" })
+    if code ~= 0 then
+        return `Kept commit {name}. The abandon failed. ` .. out:gsub("\n$", "")
+    end
+    return `Abandoned commit {name}, landed on trunk as {M.short(copy)}.`
 end
 
 ---Land the working-copy change with `jj land`, or push the HEAD commit to trunk in git.

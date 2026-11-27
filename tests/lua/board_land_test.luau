@@ -5276,6 +5276,90 @@ if has_jj then
         testing.eq(column_of(project.home, id), support.COLUMN_NAME.DONE)
     end)
 
+    local function pushed_copy(project, edit)
+        -- Move trunk and note the operation where the working copy still holds the old copy
+        trunk_moves(project, { ["lib/other.txt"] = "other\n" })
+        local old = head(project.root)
+
+        -- Rebase the change onto trunk, edit it when asked and push that copy
+        jj(project.root, "rebase", "-r", "@", "-d", "master@origin")
+        if edit then
+            assert(fs.write(project.root .. "/work.txt", "two\n"), "write failed")
+        end
+        jj(project.root, "bookmark", "set", "master", "-r", "@")
+        jj(project.root, "git", "push", "--remote", "origin", "--bookmark", "master")
+        local pushed = jj(project.root, "log", "-r", "master", "--no-graph", "-T", "commit_id")
+
+        -- Bring the old copy back as the working copy
+        jj(project.root, "edit", old)
+        return pushed
+    end
+
+    testing.test(
+        "a rerun of land finishes a card whose pushed copy sits on a newer trunk",
+        function()
+            -- Verify a card and push a rebased copy of its change, leaving the old copy in the workspace
+            local project = jj_project()
+            local id = verified_card(project)
+            local old = head(project.root)
+            local change = jj(project.root, "log", "-r", "@", "--no-graph", "-T", "change_id")
+            local pushed = pushed_copy(project)
+            testing.ok(pushed ~= old, "the copy was not rewritten")
+            testing.eq(support.rev(project.bare, "refs/heads/master"), pushed)
+
+            -- Rerun land and settle with no second push
+            local out, code = dev(project, { "board", "land", id })
+            testing.eq(code, 0, out)
+            testing.ok(out:find(`settled {id}`, 1, true), out)
+            testing.ok(out:find(`at commit {pushed:sub(1, 12)}`, 1, true), out)
+            testing.ok(out:find(`Abandoned commit {old:sub(1, 12)}`, 1, true), out)
+            testing.eq(landed_calls(project.log), "")
+            testing.eq(support.rev(project.bare, "refs/heads/master"), pushed)
+
+            -- Leave the trunk commit as the only visible copy of the change
+            local copies = jj(
+                project.root,
+                "log",
+                "-r",
+                `change_id({change})`,
+                "--no-graph",
+                "-T",
+                'commit_id ++ "\\n"'
+            )
+            testing.eq(copies, pushed .. "\n")
+
+            -- Note the trunk commit on the card and move it to Done
+            local list = comments(project.home, id)
+            local last = list[#list]
+            testing.eq(last.kind, KIND_DONE)
+            testing.ok(last.body:find(`Landed commit {pushed:sub(1, 12)}`, 1, true), last.body)
+            testing.eq(column_of(project.home, id), support.COLUMN_NAME.DONE)
+        end
+    )
+
+    testing.test("a change id on trunk with another patch is not a pushed copy", function()
+        -- Push a rebased copy of the change with an edit the workspace lacks
+        local project = jj_project()
+        verified_card(project)
+        local pushed = pushed_copy(project, true)
+
+        -- Find no pushed copy for the old working copy
+        local state = assert(land.state(project.root))
+        testing.eq(land.pushed_commit(project.root, state), nil)
+        testing.eq(support.rev(project.bare, "refs/heads/master"), pushed)
+    end)
+
+    testing.test("a pushed copy is found for the working copy that holds the same patch", function()
+        -- Push a rebased copy and keep the old one in the workspace
+        local project = jj_project()
+        verified_card(project)
+        local pushed = pushed_copy(project)
+
+        -- Find the trunk commit for the old working copy
+        local state = assert(land.state(project.root))
+        testing.eq(land.pushed_commit(project.root, state), pushed)
+    end)
+
     testing.test("a rerun of land names a check that did not pass at the landed commit", function()
         -- Bring a card to Verify with a check that fails
         local project = jj_project()

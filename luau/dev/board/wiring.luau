@@ -1485,14 +1485,18 @@ end
 ---@field comments {body: string}[] the card's comments, oldest first
 ---@field name string the caller's agent name
 ---@field empty string? why the working copy holds nothing to land
+---@field pushed {change: string, commit: string, local_commit: string}? the working copy's change,
+---   the trunk commit that holds it with the same patch and the working-copy commit, as after a
+---   land that stopped following its push
 ---@field move dev.board.wiring.MoveFn moves the card to its column
 ---@field clean_up fun(root: string, short: string): string removes its bookmark and workspace
 
 ---Finish the board half of a landing whose change already reached trunk.
 ---
 ---It runs when the working copy holds nothing to land, as after a land whose done note or move
----failed. The reviews, the check and the checks rows must back the newest checked commit, and
----trunk must hold that change. No land runs.
+---failed, or when trunk holds the working copy's change with the same patch, as after a land that
+---stopped following its push. The reviews, the check and the checks rows must back the newest
+---checked commit, and trunk must hold that change. No land runs.
 ---@param opts dev.board.wiring.settle.Opts the card and its comments
 ---@return dev.cmd.board.Result? result nil when no checked change of the card is on trunk
 local function settle(opts)
@@ -1514,7 +1518,15 @@ local function settle(opts)
                 .. " No run of `dev board check` is recorded on the card, so a change already on trunk cannot be matched to it."
         )
     end
-    local on_trunk = record and land.settled_commit(backend.root, record)
+    local pushed = opts.pushed
+    local on_trunk
+    if record and pushed then
+        if record.change == pushed.change then
+            on_trunk = pushed.commit
+        end
+    else
+        on_trunk = record and land.settled_commit(backend.root, record)
+    end
     if not on_trunk then
         if record and opts.empty then
             return failure(
@@ -1558,7 +1570,8 @@ local function settle(opts)
             opts.name
         )
     end
-    text = text .. " A rerun of land finished the card after the first land's board call failed."
+    local stopped = if pushed then "stopped following its push" else "board call failed"
+    text = text .. ` A rerun of land finished the card after the first land {stopped}.`
     local deploys = config.get(backend.root, "board.land.deploys") == true
     local deployed = config.get(backend.root, "board.land.deployed")
     if deploys and type(deployed) == "table" and #deployed > 0 then
@@ -1599,8 +1612,12 @@ local function settle(opts)
     if left and left.claimant then
         release_landed(backend, left, held)
     end
+    local dropped = if pushed
+        then "\n" .. land.drop_pushed(backend.root, pushed.local_commit, pushed.commit)
+        else ""
     return {
         output = string.format("settled %s at commit %s and moved it to %s", short, commit, target)
+            .. dropped
             .. opts.clean_up(backend.root, short),
     }
 end

@@ -19538,7 +19538,8 @@ do
             result.message,
             "Card cccccccc cannot move to Done. Its workspace /w/cccccccc holds unlanded work: "
                 .. "abc123 feat: x, uncommitted changes. "
-                .. "Land it with `dev board land cccccccc`, or abandon it first."
+                .. "Land it with `dev board land cccccccc`, which also finishes a land that stopped "
+                .. "after its push, or abandon it first."
         )
         for _, call in ipairs(backend.calls) do
             testing.ok(call[1] ~= "move", "the card moved")
