@@ -5273,6 +5273,7 @@ if has_jj then
         local last = list[#list]
         testing.eq(last.kind, KIND_DONE)
         testing.ok(last.body:find("Landed commit " .. commit:sub(1, 12), 1, true), last.body)
+        testing.ok(last.body:find("after the first land's board call failed.", 1, true), last.body)
         testing.eq(column_of(project.home, id), support.COLUMN_NAME.DONE)
     end)
 
@@ -5333,6 +5334,10 @@ if has_jj then
             local last = list[#list]
             testing.eq(last.kind, KIND_DONE)
             testing.ok(last.body:find(`Landed commit {pushed:sub(1, 12)}`, 1, true), last.body)
+            testing.ok(
+                last.body:find("after the first land stopped following its push.", 1, true),
+                last.body
+            )
             testing.eq(column_of(project.home, id), support.COLUMN_NAME.DONE)
         end
     )

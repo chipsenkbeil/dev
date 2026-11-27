@@ -1570,8 +1570,8 @@ local function settle(opts)
             opts.name
         )
     end
-    local stopped = if pushed then "stopped following its push" else "board call failed"
-    text = text .. ` A rerun of land finished the card after the first land {stopped}.`
+    local stopped = if pushed then " stopped following its push" else "'s board call failed"
+    text = text .. ` A rerun of land finished the card after the first land{stopped}.`
     local deploys = config.get(backend.root, "board.land.deploys") == true
     local deployed = config.get(backend.root, "board.land.deployed")
     if deploys and type(deployed) == "table" and #deployed > 0 then
