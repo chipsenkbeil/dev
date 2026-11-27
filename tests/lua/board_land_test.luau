@@ -5337,6 +5337,42 @@ if has_jj then
         end
     )
 
+    local function rerun_with_stale_trunk(fetched)
+        -- Push a rebased copy, then leave local trunk on the old copy while the remote moves on
+        local project = jj_project()
+        local id = verified_card(project)
+        local old = head(project.root)
+        local pushed = pushed_copy(project)
+        jj(project.root, "bookmark", "set", "master", "--allow-backwards", "-r", old)
+        push_trunk(project, { ["lib/later.txt"] = "later\n" })
+        if fetched then
+            jj(project.root, "git", "fetch", "--remote", "origin")
+            local before =
+                jj(project.root, "bookmark", "list", "--conflicted", "-T", 'name ++ "\\n"')
+            testing.ok(before:find("master", 1, true), before)
+        end
+
+        -- Rerun land and find local trunk at the remote trunk with no conflict
+        local out, code = dev(project, { "board", "land", id })
+        testing.eq(code, 0, out)
+        testing.ok(out:find("Pointed master at master@origin", 1, true), out)
+        local after = jj(project.root, "bookmark", "list", "--conflicted", "-T", 'name ++ "\\n"')
+        testing.eq(after, "")
+        local local_trunk = jj(project.root, "log", "-r", "master", "--no-graph", "-T", "commit_id")
+        local remote_trunk =
+            jj(project.root, "log", "-r", "master@origin", "--no-graph", "-T", "commit_id")
+        testing.eq(local_trunk, remote_trunk)
+        testing.ok(local_trunk ~= pushed, "the remote did not move past the pushed copy")
+    end
+
+    testing.test("a rerun of land points a conflicted local trunk at the remote trunk", function()
+        rerun_with_stale_trunk(true)
+    end)
+
+    testing.test("a rerun of land fetches before it points a stale local trunk", function()
+        rerun_with_stale_trunk(false)
+    end)
+
     testing.test("a change id on trunk with another patch is not a pushed copy", function()
         -- Push a rebased copy of the change with an edit the workspace lacks
         local project = jj_project()

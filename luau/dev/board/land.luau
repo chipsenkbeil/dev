@@ -2247,11 +2247,58 @@ local function drop_git(root, branch, lines)
     end
 end
 
+local function lines_of(text: string): { string }
+    local lines = {}
+    for line in text:gmatch("[^\n]+") do
+        lines[#lines + 1] = line
+    end
+    return lines
+end
+
+---Point a conflicted or missing local trunk bookmark at the remote of record's trunk.
+---
+---A land that stops after its push leaves the local trunk bookmark on the commit it moved there,
+---while the remote holds another copy of the change. The next fetch reads both moves as a
+---conflict, and abandoning the commit that the bookmark names deletes the bookmark. The remote of
+---record is the one that landed, so the remote is fetched first and a bookmark ahead of it stays.
+---@param root the project root, a jj project
+---@return nil when the trunk bookmark is fine, else what happened
+local function repair_trunk(root: string): string?
+    local found = forge.resolve(root)
+    local names = jj_out(root, "bookmark", "list", "--all-remotes", "-T", 'name ++ "\\n"')
+    local trunk = vcs.trunk(lines_of(names or ""))
+    if not found or not trunk then
+        return nil
+    end
+    local target = `{trunk}@{found.remote}`
+    local repair = `jj bookmark set {trunk} -r {target}`
+    local fetched, code = fetch(root, found.remote)
+    if code ~= 0 then
+        return `Could not fetch {found.remote}. Run \`jj git fetch\` and then \`{repair}\` if {trunk} is conflicted or missing. `
+            .. fetched:gsub("\n$", "")
+    end
+    local listed = jj_out(root, "bookmark", "list", "--conflicted", "-T", 'name ++ "\\n"')
+    local broken = not vcs.trunk(vcs.branches(root, vcs.JJ))
+    for _, line in ipairs(lines_of(listed or "")) do
+        broken = broken or line == trunk
+    end
+    if not broken then
+        return nil
+    end
+    local out, set_code =
+        dev_os.capture(jj(root, "bookmark", "set", trunk, "-r", target), { stderr = "stdout" })
+    if set_code ~= 0 then
+        return `Kept {trunk} broken. Repair it with \`{repair}\`. ` .. out:gsub("\n$", "")
+    end
+    return `Pointed {trunk} at {target}, where the stopped land left it.`
+end
+
 ---Abandon the working copy's commit once trunk holds a copy of it, as a land does after its push.
 ---
 ---The unlanded children of the commit move onto the trunk copy first, and the working copy moves to
 ---a fresh commit on trunk. Commits are named by id because the change is divergent while both
----copies are visible.
+---copies are visible. A trunk bookmark that the stopped land left conflicted is pointed at the
+---remote's trunk.
 ---@param root string the project root
 ---@param commit string the working-copy commit to abandon
 ---@param copy string the trunk commit that holds its change
@@ -2275,7 +2322,9 @@ function M.drop_pushed(root, commit, copy)
     if code ~= 0 then
         return `Kept commit {name}. The abandon failed. ` .. out:gsub("\n$", "")
     end
-    return `Abandoned commit {name}, landed on trunk as {M.short(copy)}.`
+    local line = `Abandoned commit {name}, landed on trunk as {M.short(copy)}.`
+    local repaired = repair_trunk(root)
+    return if repaired then line .. "\n" .. repaired else line
 end
 
 ---Land the working-copy change with `jj land`, or push the HEAD commit to trunk in git.
