@@ -624,6 +624,23 @@ testing.test("capture_timed with reap kills what a finished command left running
     testing.eq(left, "")
 end)
 
+testing.test("capture_timed survives a watcher that ended before its release", function()
+    -- Have the command kill the watcher that leads its group and wait until it is defunct
+    local command = 'w=$(ps -o pgid= -p $$ | tr -d " "); [ "$w" != "$$" ] || exit 3; '
+        .. 'kill -KILL "$w"; until ps -o stat= -p "$w" | grep -q Z; do sleep 0.05; done; '
+        .. "echo done"
+
+    -- Run it in a dev whose failed exec left SIGPIPE at its default
+    local snippet = "local dev_os = require('@dev/os'); dev_os.exec({ 'no-such-tool-xyz' }); "
+        .. ("local out, code = dev_os.capture_timed({ 'sh', '-c', %q }, 10); "):format(command)
+        .. "dev_os.stdout:write(out, code)"
+    local out, code = dev_os.capture(support.eval(snippet))
+
+    -- Check dev returned the command's output and status
+    testing.eq(code, 0)
+    testing.eq(out, "done\n0")
+end)
+
 testing.test("capture_timed reports a command killed by a signal as 124", function()
     local _, code = dev_os.capture_timed({ "sh", "-c", "exec kill -TERM $$" }, 10)
     testing.eq(code, 124)

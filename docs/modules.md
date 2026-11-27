@@ -79,8 +79,9 @@ A table of the parsed global flags: `args`, `after`, `dashed`, `remote`,
     it to dev's pid alone, such as `kill -INT PID`. A terminal's Ctrl-C or
     hangup already reaches it through the group, so dev adds no second copy.
     A signal that another process sends to dev's whole group reaches it twice.
-  - A `capture_timed` child leads its own group, and dev signals that whole
-    group with the same signal.
+  - A `capture_timed` child joins a group that a watcher process leads, and
+    dev signals that whole group with the same signal. The child is not its
+    group's leader, so `kill -- -$$` in it finds no group.
   - A `spawn` child is not a foreground child. It is stopped with SIGTERM when
     dev exits, except with `opts.detach`, which outlives dev.
   - SIGKILL to dev runs no cleanup and reaches no child. A caller kills dev's

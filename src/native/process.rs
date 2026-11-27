@@ -279,7 +279,7 @@ pub fn run(spec: &Spec) -> Result<i32> {
     let pending = runtime::interrupted();
     let started = Instant::now();
     let mut child = start(&mut command, spec)?;
-    let foreground = enter_foreground(&child, spec.group, pending);
+    let foreground = enter_foreground(pid_of(&child), spec.group, pending);
     let status = child
         .wait()
         .map_err(|error| Error::io("wait for the command", error))?;
@@ -313,9 +313,9 @@ fn raise_interrupt() -> Result<()> {
     runtime::check_interrupt().map_err(|error| Error::Message(runtime::message(&error)))
 }
 
-/// Makes `child` the foreground child, and forwards a signal that arrived while it started.
-fn enter_foreground(child: &Child, group: Group, pending_before: bool) -> Foreground {
-    let pid = pid_of(child);
+/// Makes child `pid`, or the group it leads, the foreground, and forwards a signal that arrived
+/// while it started.
+fn enter_foreground(pid: i32, group: Group, pending_before: bool) -> Foreground {
     Foreground::enter(pid, group == Group::Own, Start::from(pending_before))
 }
 
@@ -336,7 +336,7 @@ pub fn capture(spec: &Spec, input: Option<&[u8]>) -> Result<(Vec<u8>, i32)> {
     let mut child = start(&mut command, spec)?;
     drop(command);
     let feeder = feed(&mut child, input);
-    let foreground = enter_foreground(&child, spec.group, pending);
+    let foreground = enter_foreground(pid_of(&child), spec.group, pending);
     let mut out = Vec::new();
     let read = reader.read_to_end(&mut out);
     let status = child.wait();
@@ -406,10 +406,10 @@ fn stop_group(child: &mut Child, pgid: i32) -> Result<()> {
 #[cfg(unix)]
 const WATCHER_SHELL: &str = "/bin/sh";
 
-/// Script of the watcher: kills group `$1` when its input ends before dev wrote the release line.
+/// Script of the watcher: says `r` once it ignores `INT`, `TERM` and `HUP`, then kills its own
+/// group when its input ends.
 #[cfg(unix)]
-const WATCHER_SCRIPT: &str =
-    r#"IFS= read -r released; [ -n "$released" ] || kill -KILL "-$1" 2>/dev/null"#;
+const WATCHER_SCRIPT: &str = "trap '' INT TERM HUP; echo r; read -r _; kill -KILL 0 2>/dev/null";
 
 /// Stands in for the watcher on Windows, which has no process group to kill.
 #[cfg(windows)]
@@ -419,7 +419,7 @@ struct Watcher;
 #[cfg(windows)]
 impl Watcher {
     /// Starts nothing.
-    fn start(_pgid: i32) -> Result<Self> {
+    fn start() -> Result<Self> {
         Ok(Self)
     }
 
@@ -428,6 +428,9 @@ impl Watcher {
 }
 
 /// A process that kills a timed command's group when dev dies before it released the watcher.
+///
+/// The watcher leads the group and the command joins it, so the group has its killer before
+/// the command starts.
 #[cfg(unix)]
 #[derive(Debug)]
 struct Watcher {
@@ -439,21 +442,24 @@ struct Watcher {
 
 #[cfg(unix)]
 impl Watcher {
-    /// Starts a watcher for process group `pgid`.
-    fn start(pgid: i32) -> Result<Self> {
+    /// Starts a watcher that leads a new process group.
+    fn start() -> Result<Self> {
         use std::os::unix::process::CommandExt;
 
         let mut command = Command::new(WATCHER_SHELL);
         command
-            .args(["-c", WATCHER_SCRIPT, "sh", &pgid.to_string()])
+            .args(["-c", WATCHER_SCRIPT])
             .stdin(Stdio::piped())
-            .stdout(Stdio::null())
+            .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .process_group(0);
         overlay::apply(&mut command);
         let mut child = command
             .spawn()
             .map_err(|error| Error::io("start the watcher", error))?;
+        if let Some(mut ready) = child.stdout.take() {
+            drop(ready.read(&mut [0u8; 1]));
+        }
         let stdin = child
             .stdin
             .take()
@@ -461,13 +467,19 @@ impl Watcher {
         Ok(Self { child, stdin })
     }
 
-    /// Tells the watcher dev is done, so it leaves the group alone, and waits for it to end.
+    /// Returns the process group the watcher leads.
+    #[must_use]
+    fn group(&self) -> i32 {
+        pid_of(&self.child)
+    }
+
+    /// Kills the watcher before its input closes, so it leaves the group alone, and waits for it.
+    ///
+    /// A write would kill dev with SIGPIPE when the group's KILL already ended the watcher after a
+    /// failed `exec` left SIGPIPE at its default.
     fn release(self) {
-        let Self {
-            mut child,
-            mut stdin,
-        } = self;
-        drop(stdin.write_all(b"x\n"));
+        let Self { mut child, stdin } = self;
+        drop(child.kill());
         drop(stdin);
         drop(child.wait());
     }
@@ -517,20 +529,28 @@ pub fn capture_timed(
         Input::Null
     };
     let mut command = spec.command(mode, Some(writer))?;
+    let watcher = Watcher::start()?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+
+        command.process_group(watcher.group());
+    }
     let pending = runtime::interrupted();
     let started = Instant::now();
-    let mut child = start(&mut command, spec)?;
-    drop(command);
-    let pgid = pid_of(&child);
-    let foreground = enter_foreground(&child, Group::Own, pending);
-    let watcher = match Watcher::start(pgid) {
-        Ok(watcher) => watcher,
+    let mut child = match start(&mut command, spec) {
+        Ok(child) => child,
         Err(error) => {
-            let _ = signal_group(&mut child, pgid, signals::KILL);
-            drop(child.wait());
+            watcher.release();
             return Err(error);
         }
     };
+    drop(command);
+    #[cfg(unix)]
+    let pgid = watcher.group();
+    #[cfg(windows)]
+    let pgid = pid_of(&child);
+    let foreground = enter_foreground(pgid, Group::Own, pending);
     let feeder = feed(&mut child, input);
     let result = watch_output(&mut child, pgid, secs, reap, &pump(reader), on_text);
     if result.is_err() {
@@ -720,9 +740,11 @@ pub fn stop_spawned() {
 #[cfg(all(test, unix))]
 mod tests {
     use std::ffi::OsString;
-    use std::io;
+    use std::io::{self, Read};
     use std::os::unix::process::CommandExt;
-    use std::process::{Command, Stdio};
+    use std::process::{Child, Command, Stdio};
+    use std::thread;
+    use std::time::Duration;
 
     use super::{
         Error, Group, NOT_EXECUTABLE_EXIT, NOT_FOUND_EXIT, SIGNAL_EXIT_BASE, Sink, Spec,
@@ -752,26 +774,79 @@ mod tests {
         assert_eq!(failed_code(&io_error(13)), NOT_EXECUTABLE_EXIT);
     }
 
+    /// Kills and reaps its child when the test ends, whether it passed or failed.
+    struct Reaped(Child);
+
+    impl Drop for Reaped {
+        fn drop(&mut self) {
+            drop(self.0.kill());
+            drop(self.0.wait());
+        }
+    }
+
     #[test]
     fn watcher_script_should_kill_the_group_under_dash_when_its_input_ends() {
         if Command::new("dash").args(["-c", "exit"]).status().is_err() {
             return;
         }
-        let mut sleeper = Command::new("sleep")
-            .arg("30")
-            .process_group(0)
-            .spawn()
-            .unwrap();
-        let pgid = sleeper.id().to_string();
-        let mut dash = Command::new("dash")
-            .args(["-c", WATCHER_SCRIPT, "dash", &pgid])
-            .stdin(Stdio::piped())
-            .spawn()
-            .unwrap();
-        drop(dash.stdin.take());
-        assert!(dash.wait().unwrap().success());
-        let status = sleeper.wait().unwrap();
+        let mut dash = Reaped(
+            Command::new("dash")
+                .args(["-c", WATCHER_SCRIPT])
+                .stdin(Stdio::piped())
+                .stdout(Stdio::null())
+                .process_group(0)
+                .spawn()
+                .unwrap(),
+        );
+        let pgid = i32::try_from(dash.0.id()).unwrap();
+        let mut sleeper = Reaped(
+            Command::new("sleep")
+                .arg("30")
+                .process_group(pgid)
+                .spawn()
+                .unwrap(),
+        );
+        drop(dash.0.stdin.take());
+        assert_eq!(
+            decode(dash.0.wait().unwrap()),
+            SIGNAL_EXIT_BASE + signals::KILL
+        );
+        let status = sleeper.0.wait().unwrap();
         assert_eq!(decode(status), SIGNAL_EXIT_BASE + signals::KILL);
+    }
+
+    #[test]
+    fn watcher_script_should_outlast_an_int_a_term_and_a_hup_to_its_group_under_dash() {
+        if Command::new("dash").args(["-c", "exit"]).status().is_err() {
+            return;
+        }
+        let mut dash = Reaped(
+            Command::new("dash")
+                .args(["-c", WATCHER_SCRIPT])
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .process_group(0)
+                .spawn()
+                .unwrap(),
+        );
+        let pgid = i32::try_from(dash.0.id()).unwrap();
+        let mut ready = [0u8; 1];
+        dash.0
+            .stdout
+            .take()
+            .unwrap()
+            .read_exact(&mut ready)
+            .unwrap();
+        for signal in [signals::INT, signals::TERM, signals::HUP] {
+            assert!(signals::send(-pgid, signal));
+        }
+        thread::sleep(Duration::from_millis(300));
+        assert!(dash.0.try_wait().unwrap().is_none());
+        drop(dash.0.stdin.take());
+        assert_eq!(
+            decode(dash.0.wait().unwrap()),
+            SIGNAL_EXIT_BASE + signals::KILL
+        );
     }
 
     #[test]
@@ -810,6 +885,25 @@ mod tests {
         assert_eq!(code, TIMEOUT_EXIT);
         assert_eq!(out, b"before\n");
         assert_eq!(seen, out);
+    }
+
+    #[test]
+    fn capture_timed_should_start_the_command_in_the_group_its_watcher_leads() {
+        let mut own = spec(&["sh", "-c", "ps -o pgid= -p $$; ps -ax -ww -o pgid=,args="]);
+        own.group = Group::Own;
+        let (out, code) = capture_timed(&own, 10.0, None, false, &mut |_| Ok(())).unwrap();
+        assert_eq!(code, 0);
+        let text = String::from_utf8(out).unwrap();
+        let mut lines = text.lines();
+        let group = lines.next().unwrap().trim();
+        let watchers = lines
+            .filter(|line| {
+                line.trim_start()
+                    .split_once(' ')
+                    .is_some_and(|(pgid, args)| pgid == group && args.contains(WATCHER_SCRIPT))
+            })
+            .count();
+        assert_eq!(watchers, 1, "{text}");
     }
 
     #[test]
