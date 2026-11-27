@@ -13271,8 +13271,13 @@ testing.test("release ends the owner lease and stops the loop", function()
 
     -- Release the claim
     local pid = loop_pid(home)
-    local out, code = dev(root, home, { "board", "release", "11111111-a" })
-    testing.eq(code, 0)
+    local out, code, errors = dev(
+        root,
+        home,
+        { "board", "release", "11111111-a" },
+        { split = true }
+    )
+    testing.eq(code, 0, out .. errors)
     testing.eq(out, "released 11111111, fence 7\n")
 
     -- Check the release carried the fence and the name
@@ -13398,7 +13403,7 @@ testing.test("release without a taken claim is a plain error", function()
     local out, code = dev(root, home, { "board", "release", "11111111-a" })
 
     -- Check the release was refused and sent nothing
-    testing.eq(code, 1)
+    testing.eq(code, 1, out)
     testing.ok(out:find("No claim was taken", 1, true), out)
     testing.eq(requests(root):find("/owner/release", 1, true), nil)
 end)
@@ -15300,14 +15305,15 @@ testing.test("a release the server refuses keeps the state so it can be retried"
 
     -- Release the card and check the refusal kept the state
     local out, code = dev(root, home, { "board", "release", "11111111-a" })
-    testing.eq(code, 1)
+    testing.eq(code, 1, out)
     testing.ok(out:find("Pomb answered 503", 1, true), out)
     testing.eq(fs.exists(state_file(home)), true)
 
     -- Release again once the server answers
     override(root, nil)
-    _, code = dev(root, home, { "board", "release", "11111111-a" })
-    testing.eq(code, 0)
+    local again: string
+    again, code, errors = dev(root, home, { "board", "release", "11111111-a" }, { split = true })
+    testing.eq(code, 0, again .. errors)
 end)
 
 testing.test("stale reads column_entered_at from every page of the tasks view", function()
