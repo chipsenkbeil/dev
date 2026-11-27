@@ -19682,10 +19682,13 @@ do
         testing.eq(result.output, "moved cccccccc to Review")
     end)
 
-    local function leaving()
+    local function leaving(opts)
+        opts = opts or {}
         local card = colored("green")
-        card.column = support.COLUMN_NAME.PROGRESS
-        card.outcomes = outcomes(1, 1)
+        card.column = opts.from or support.COLUMN_NAME.PROGRESS
+        if not opts.planned then
+            card.outcomes = outcomes(1, 1)
+        end
         local backend = fake({ card })
         backend.root = "/proof"
         return backend
@@ -19733,6 +19736,37 @@ do
             testing.eq(backend.calls[#backend.calls], { "move", ID_C, column })
         end)
     end
+
+    testing.test("a move from In Progress to Ready removes an empty workspace", function()
+        local backend = leaving({ planned = true })
+        local removed = {}
+        local result = cmd_board.move(backend, { "cccccccc", support.COLUMN_NAME.READY }, {
+            workspace_work = function()
+                return WORKSPACE, {}
+            end,
+            clean_up = function(root, short)
+                removed[#removed + 1] = { root, short }
+                return "\nThe workspace is gone."
+            end,
+        })
+        testing.eq(result.code, nil)
+        testing.eq(result.output, "moved cccccccc to Ready\nThe workspace is gone.")
+        testing.eq(removed, { { "/proof", "cccccccc" } })
+    end)
+
+    testing.test("a move from Icebox to Ready keeps an empty workspace", function()
+        local backend = leaving({ from = support.COLUMN_NAME.ICEBOX, planned = true })
+        local result = cmd_board.move(backend, { "cccccccc", support.COLUMN_NAME.READY }, {
+            workspace_work = function()
+                error("the workspace was read")
+            end,
+            clean_up = function()
+                error("a workspace was removed")
+            end,
+        })
+        testing.eq(result.code, nil)
+        testing.eq(result.output, "moved cccccccc to Ready")
+    end)
 
     testing.test("a move to Blocked keeps a workspace it cannot read and says so", function()
         local backend = leaving()

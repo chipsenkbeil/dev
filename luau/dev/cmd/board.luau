@@ -1907,16 +1907,22 @@ local function unlanded_refusal(backend, card, verb, opts)
     )
 end
 
----Remove the workspace of a card that left In Progress, Review and Verify, when it is empty.
+---Remove the workspace of a card that moved from In Progress, Review or Verify into a column that
+---keeps none, when it is empty.
 ---
----A workspace that holds work stays, and one line names it.
+---A move between columns that keep none leaves the workspace alone, and a workspace that holds
+---work stays, with one line naming it.
 ---@param backend dev.board.Backend the board
 ---@param card dev.board.Card the card, still in the column it left
 ---@param column string the column it moved to
 ---@param opts dev.cmd.board.move.Opts? the read and the removal, injected by tests
 ---@return string lines the removal or the kept line behind a newline, empty when no workspace
 local function leave_workspace(backend, card, column, opts)
-    if card.column == column or keeps_workspace(backend.stages, column) then
+    if
+        card.column == column
+        or keeps_workspace(backend.stages, column)
+        or not keeps_workspace(backend.stages, card.column)
+    then
         return ""
     end
     local path, work, why = workspace_work(backend, card, opts)
