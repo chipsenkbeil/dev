@@ -5,10 +5,12 @@ local http = require("@dev/http")
 local lib = require("@dev/pkg/lib")
 local manifest = require("@dev/manifest")
 local note = require("@dev/command").note
+local xdg = require("@dev/xdg")
 
 local stdout = dev_os.stdout
 
 local NO_PATH = "-"
+local RECEIPTS_DIR = "dev/tools"
 local SHA256_LENGTH = 64
 
 ---@class dev.pkg.release.Pin
@@ -143,6 +145,36 @@ end
 
 local function target_name(row)
     return row.binary ~= NO_PATH and fs.basename(row.binary) or row.package
+end
+
+local function receipt_path(pin)
+    return fs.join(xdg.state_home(), RECEIPTS_DIR, pin.name)
+end
+
+local function read_receipt(pin)
+    local text = fs.read(receipt_path(pin))
+    local name, version, sha256 = (text or ""):match("^(%S+) (%S+) (%x+)\n$")
+    if name == pin.name then
+        return { version = version, sha256 = sha256:lower() }
+    end
+end
+
+local function write_receipt(pin)
+    local path = receipt_path(pin)
+    local made, why = fs.mkdir(fs.dirname(path), { parents = true })
+    if not made then
+        return nil, why
+    end
+    return fs.write(path, `{pin.name} {pin.version} {pin.sha256}\n`, { atomic = true })
+end
+
+local function same_file(a, b)
+    local real = fs.realpath(a)
+    return real ~= nil and real == fs.realpath(b)
+end
+
+local function matches(pin, receipt)
+    return receipt ~= nil and receipt.version == pin.version and receipt.sha256 == pin.sha256
 end
 
 local function sha256_of(file)
@@ -305,6 +337,10 @@ local function steps(job, opts)
     elseif not place(source, dest, opts) then
         return fail(row, "Failed to copy the binary to " .. dest .. ".")
     end
+    local recorded, receipt_why = write_receipt(pin)
+    if not recorded then
+        return fail(row, `Cannot record the install of {pin.name}. {tostring(receipt_why)}.`)
+    end
     return 0
 end
 
@@ -348,12 +384,37 @@ end
 ---@return string path where the pin's file would be, under `<extract>`
 M.plan = plan
 
----Print whether a release tool is present, as a line starting `[x]` or `[ ]`.
+local function drift(row, pin, dir)
+    local dest = fs.join(dir, target_name(row))
+    local found = lib.on_path(row.binary)
+    if (found and not same_file(found, dest)) or not fs.is_exec(dest) then
+        return nil
+    end
+    local receipt = read_receipt(pin)
+    if matches(pin, receipt) then
+        return nil
+    end
+    local installed = if receipt then `installed {receipt.version}` else "no receipt"
+    return `({installed}, pinned {pin.version})`
+end
+
+---Print whether a release tool is present, as a line starting `[x]`, `[!]` or `[ ]`.
 ---
----A tool on PATH counts, and so does one in the bin directory when that is not on PATH.
+---A tool on PATH counts, and so does one in the bin directory when that is not on PATH. A tool in
+---the bin directory whose receipt names another version or sum than the pin prints `[!]`, with
+---the installed and pinned versions, and the code is 1.
 ---@param row dev.pkg.Row the tool, with the pin's name as its package
----@return integer code 0 when present
-function M.check(row)
+---@param opts the pins file
+---@return code 0 when present and current
+function M.check(row, opts)
+    local dir = bin_dir()
+    local pins = dir and opts and M.read(opts.releases)
+    local pin = pins and pins[row.package]
+    local why = pin and drift(row, pin, dir)
+    if why then
+        stdout:write("[!] ", row.name, "\t", why, "\n")
+        return 1
+    end
     return lib.report(row, {
         registered = function()
             return false
@@ -366,7 +427,10 @@ function M.check(row)
     })
 end
 
----Install a pinned release asset into the bin directory unless the tool is present.
+---Install a pinned release asset into the bin directory unless the tool is current or on PATH.
+---
+---A receipt under the dev state folder records the version and sha256 of each install. A tool in
+---the bin directory without a receipt for the pin is replaced.
 ---
 ---The bin directory is `DEV_TOOLS_BIN`, else `~/.local/bin`. The download is checked against the
 ---pin's sha256 before anything is extracted, a mismatch removes it and the bin directory is
@@ -384,12 +448,9 @@ function M.install(row, opts)
     if fs.is_dir(dest) then
         return fail(row, "A directory sits at " .. dest .. ".")
     end
-    if not opts.force then
-        if lib.skip_on_path(row) then
-            return 0
-        elseif fs.is_exec(dest) then
-            return lib.skip(row, "already installed in " .. dir)
-        end
+    local found = not opts.force and lib.on_path(row.binary)
+    if found and not same_file(found, dest) then
+        return lib.skip(row, `already on PATH at {found}, outside {dir}`)
     end
     local pins, err = M.read(opts.releases)
     if not pins then
@@ -398,6 +459,9 @@ function M.install(row, opts)
     local pin = pins[row.package]
     if not pin then
         return fail(row, "No pin named " .. row.package .. " in " .. opts.releases .. ".")
+    end
+    if not opts.force and fs.is_exec(dest) and matches(pin, read_receipt(pin)) then
+        return lib.skip(row, "already installed in " .. dir)
     end
     if opts.dry_run then
         return dry_run(row, pin, dest)

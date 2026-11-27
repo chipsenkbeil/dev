@@ -188,7 +188,7 @@ local function check_row(ctx, row)
         package = parsed.package,
         channel = parsed.channel,
         repo = parsed.repo,
-    }) == 0
+    }, driver_opts(opts)) == 0
 end
 
 ---Report which of the manifest's tools are present.

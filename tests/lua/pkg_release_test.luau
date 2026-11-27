@@ -104,7 +104,17 @@ local function env(dir, path)
         PATH = path,
         DEV_TOOLS_BIN = dir .. "/bin",
         TMPDIR = dir .. "/tmp",
+        XDG_STATE_HOME = dir .. "/state",
     }
+end
+
+local function receipt_file(dir)
+    return dir .. "/state/dev/tools/tool"
+end
+
+local function write_receipt(dir, version, sum)
+    assert(fs.mkdir(dir .. "/state/dev/tools", { parents = true }))
+    assert(fs.write(receipt_file(dir), "tool " .. version .. " " .. sum .. "\n"))
 end
 
 local function drive(dir, fn, spec)
@@ -151,7 +161,8 @@ for _, case in ipairs({
     testing.test(case[1] .. " installs into the bin directory and passes check", function()
         -- Pin the asset and install it
         local dir = sandbox()
-        pins(dir, { pin_asset(dir, case[2], case[3]) })
+        local row = pin_asset(dir, case[2], case[3])
+        pins(dir, { row })
         local out, code = drive(dir, "install")
 
         -- Expect an executable tool and no temporary leftovers
@@ -160,6 +171,7 @@ for _, case in ipairs({
         testing.eq(installed_tool(dir), TOOL_TEXT)
         testing.ok(fs.is_exec(dir .. "/bin/tool"), "the binary must be executable")
         testing.eq(leftovers(dir), {})
+        testing.eq(fs.read(receipt_file(dir)), "tool 1.2.3 " .. row[3] .. "\n")
 
         -- Expect the download to reach the server
         local logged = SERVERS[dir]:requests()
@@ -356,10 +368,17 @@ testing.test("a tool on PATH is skipped, and force reinstalls it", function()
     assert(fs.mkdir(dir .. "/pathbin"))
     write_executable(dir .. "/pathbin/tool", "#!/bin/sh\n")
 
-    -- Expect the install to skip it and install nothing
+    -- Expect the install to skip it, name where it is and install nothing
     local skipped, code = drive(dir, "install")
     testing.eq(code, 0)
-    testing.eq(skipped, "  = tool already on PATH, skipping\n")
+    testing.eq(
+        skipped,
+        "  = tool already on PATH at "
+            .. dir
+            .. "/pathbin/tool, outside "
+            .. dir
+            .. "/bin, skipping\n"
+    )
     testing.ok(not fs.exists(dir .. "/bin/tool"), "a skipped tool installs nothing")
 
     -- Expect force to install it anyway
@@ -369,12 +388,14 @@ testing.test("a tool on PATH is skipped, and force reinstalls it", function()
     cleanup(dir)
 end)
 
-testing.test("a tool already in the bin directory is skipped, and force replaces it", function()
-    -- Put an old copy of the tool in the bin directory
+testing.test("a tool whose receipt matches its pin is skipped, and force replaces it", function()
+    -- Put a copy of the tool in the bin directory under a receipt that matches the pin
     local dir = sandbox()
-    pins(dir, { pin_asset(dir, "tool-VERSION", "-") })
+    local row = pin_asset(dir, "tool-VERSION", "-")
+    pins(dir, { row })
     assert(fs.mkdir(dir .. "/bin"))
     write_executable(dir .. "/bin/tool", "old\n")
+    write_receipt(dir, "1.2.3", row[3])
 
     -- Expect the install to skip it and keep the old copy
     local skipped, code = drive(dir, "install")
@@ -389,6 +410,132 @@ testing.test("a tool already in the bin directory is skipped, and force replaces
     testing.eq(fs.list(dir .. "/bin"), { "tool" })
     cleanup(dir)
 end)
+
+testing.test("a tool whose receipt names an older version is replaced without force", function()
+    local dir = sandbox()
+    local row = pin_asset(dir, "tool-VERSION", "-")
+    pins(dir, { row })
+    assert(fs.mkdir(dir .. "/bin"))
+    write_executable(dir .. "/bin/tool", "old\n")
+    write_receipt(dir, "1.2.2", row[3])
+
+    local out, code = drive(dir, "install")
+    testing.eq(code, 0)
+    testing.ok(out:find("installing tool (release 1.2.3)", 1, true), out)
+    testing.eq(installed_tool(dir), TOOL_TEXT)
+    testing.eq(fs.read(receipt_file(dir)), "tool 1.2.3 " .. row[3] .. "\n")
+    cleanup(dir)
+end)
+
+testing.test("a tool whose receipt names another sha256 is replaced without force", function()
+    local dir = sandbox()
+    local row = pin_asset(dir, "tool-VERSION", "-")
+    pins(dir, { row })
+    assert(fs.mkdir(dir .. "/bin"))
+    write_executable(dir .. "/bin/tool", "old\n")
+    write_receipt(dir, "1.2.3", ("0"):rep(64))
+
+    local _, code = drive(dir, "install")
+    testing.eq(code, 0)
+    testing.eq(installed_tool(dir), TOOL_TEXT)
+    cleanup(dir)
+end)
+
+testing.test("a tool in the bin directory with no receipt is replaced without force", function()
+    local dir = sandbox()
+    local row = pin_asset(dir, "tool-VERSION", "-")
+    pins(dir, { row })
+    assert(fs.mkdir(dir .. "/bin"))
+    write_executable(dir .. "/bin/tool", "old\n")
+
+    local _, code = drive(dir, "install")
+    testing.eq(code, 0)
+    testing.eq(installed_tool(dir), TOOL_TEXT)
+    testing.eq(fs.read(receipt_file(dir)), "tool 1.2.3 " .. row[3] .. "\n")
+    cleanup(dir)
+end)
+
+testing.test("a bin directory tool that PATH reaches through a link is not outside it", function()
+    -- Link the bin directory's tool into a directory on PATH, as a home bin directory on PATH is
+    local dir = sandbox()
+    pins(dir, { pin_asset(dir, "tool-VERSION", "-") })
+    assert(fs.mkdir(dir .. "/bin"))
+    assert(fs.mkdir(dir .. "/pathbin"))
+    write_executable(dir .. "/bin/tool", "old\n")
+    assert(fs.symlink(dir .. "/bin/tool", dir .. "/pathbin/tool"))
+
+    -- Expect the stale copy to be replaced, not skipped as a PATH tool
+    local out, code = drive(dir, "install")
+    testing.eq(code, 0)
+    testing.ok(out:find("installing tool (release 1.2.3)", 1, true), out)
+    testing.eq(installed_tool(dir), TOOL_TEXT)
+    cleanup(dir)
+end)
+
+testing.test("a failed install leaves the receipt of the tool it kept", function()
+    local dir = sandbox()
+    local row = pin_asset(dir, "tool-VERSION", "-")
+    row[3] = ("0"):rep(64)
+    pins(dir, { row })
+    assert(fs.mkdir(dir .. "/bin"))
+    write_executable(dir .. "/bin/tool", "old\n")
+    write_receipt(dir, "1.2.2", ("b"):rep(64))
+
+    local _, code = drive(dir, "install")
+    testing.eq(code, 1)
+    testing.eq(installed_tool(dir), "old\n")
+    testing.eq(fs.read(receipt_file(dir)), "tool 1.2.2 " .. ("b"):rep(64) .. "\n")
+    cleanup(dir)
+end)
+
+testing.test("check prints [!] with both versions for a drifted tool and exits 1", function()
+    local dir = sandbox()
+    local row = pin_asset(dir, "tool-VERSION", "-")
+    pins(dir, { row })
+    assert(fs.mkdir(dir .. "/bin"))
+    write_executable(dir .. "/bin/tool", "old\n")
+    write_receipt(dir, "1.2.2", row[3])
+
+    local out, code = drive(dir, "check")
+    testing.eq(code, 1)
+    testing.eq(out, "[!] tool\t(installed 1.2.2, pinned 1.2.3)\n")
+    cleanup(dir)
+end)
+
+testing.test("check prints [!] with no receipt for a binary dev did not record", function()
+    local dir = sandbox()
+    pins(dir, { pin_asset(dir, "tool-VERSION", "-") })
+    assert(fs.mkdir(dir .. "/bin"))
+    write_executable(dir .. "/bin/tool", "old\n")
+
+    local out, code = drive(dir, "check")
+    testing.eq(code, 1)
+    testing.eq(out, "[!] tool\t(no receipt, pinned 1.2.3)\n")
+    cleanup(dir)
+end)
+
+testing.test(
+    "check passes a tool whose receipt matches and a tool on PATH outside the bin",
+    function()
+        -- Expect a matching receipt to pass
+        local dir = sandbox()
+        local row = pin_asset(dir, "tool-VERSION", "-")
+        pins(dir, { row })
+        assert(fs.mkdir(dir .. "/bin"))
+        write_executable(dir .. "/bin/tool", "old\n")
+        write_receipt(dir, "1.2.3", row[3])
+        local out, code = drive(dir, "check")
+        testing.eq({ out, code }, { "[x] tool\t(" .. dir .. "/bin/tool)\n", 0 })
+
+        -- Expect a PATH copy elsewhere to pass whatever the receipt says
+        assert(fs.mkdir(dir .. "/pathbin"))
+        write_executable(dir .. "/pathbin/tool", "#!/bin/sh\n")
+        write_receipt(dir, "1.2.2", row[3])
+        out, code = drive(dir, "check")
+        testing.eq({ out, code }, { "[x] tool\t(" .. dir .. "/pathbin/tool)\n", 0 })
+        cleanup(dir)
+    end
+)
 
 testing.test("the binary column names the installed file", function()
     local dir = sandbox()

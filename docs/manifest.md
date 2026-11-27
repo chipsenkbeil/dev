@@ -230,10 +230,25 @@ The binary is installed with `install -m 755` to a staging name and `mv`d into
 `~/.local/bin` (`DEV_TOOLS_BIN` overrides). It is named by the row's binary
 column, else the pin's name.
 
-A tool on PATH or already in that directory is skipped unless `--force`.
+After each install the driver writes a receipt to
+`$XDG_STATE_HOME/dev/tools/NAME` (default `~/.local/state/dev/tools/NAME`)
+holding the pin's name, version and sha256. A tool in the bin directory is
+skipped when its receipt names the pin's version and sha256, and replaced
+without `--force` when the receipt is missing or names another. A tool installed
+before receipts existed has none, so the first install after the upgrade
+reinstalls it once.
+
+A tool on PATH outside the bin directory is skipped unless `--force` (dev
+did not put it there), and the skip line names its path. A PATH hit that
+resolves to the bin directory's own file counts as the bin directory's tool.
+
+`check` prints `[!] NAME (installed X, pinned Y)` for a tool in the bin
+directory whose receipt differs from the pin, or `(no receipt, pinned Y)`, and
+exits 1. Otherwise it reports through `lib.report` and counts the bin directory
+when it is not on PATH.
+
 `--dry-run` prints the curl, checksum, unpack and install lines, with
-`<download>` and `<extract>` for the temporary paths. `check` reports through
-`lib.report` and counts the bin directory when it is not on PATH.
+`<download>` and `<extract>` for the temporary paths.
 
 `release` is user scope, like `script` and `cargo`. The driver appends the bin
 directory and `~/.cargo/bin` to its own PATH as described under PATH.
