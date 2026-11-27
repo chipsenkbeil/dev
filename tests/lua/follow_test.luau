@@ -319,6 +319,74 @@ testing.test("follow.jj.moves.the.main.checkout.from.a.workspace", function()
     cleanup(root, remote, workspace)
 end)
 
+local function fetch_stub(fails: number, message: string): (string, { [string]: string })
+    local real = dev_os.capture({ "sh", "-c", "command -v jj" }, { stderr = "null" })
+    real = real:gsub("\n$", "")
+    local stubs = dir()
+    local count = stubs .. "/count"
+    assert(fs.write(
+        stubs .. "/jj",
+        table.concat({
+            "#!/bin/sh",
+            'case " $* " in *" fetch "*)',
+            '  n=$(cat "' .. count .. '" 2>/dev/null || echo 0)',
+            "  n=$((n + 1))",
+            '  echo "$n" > "' .. count .. '"',
+            '  if [ "$n" -le ' .. fails .. " ]; then",
+            "    echo '" .. message .. "' >&2",
+            "    exit 1",
+            "  fi",
+            "  ;;",
+            "esac",
+            'exec "' .. real .. '" "$@"',
+            "",
+        }, "\n")
+    ))
+    assert(dev_os.run({ "chmod", "755", stubs .. "/jj" }) == 0, "chmod failed")
+    local env = { PATH = stubs .. ":" .. dev_os.getenv("PATH") }
+    for key, value in pairs(ENV) do
+        env[key] = value
+    end
+    return stubs, env
+end
+
+local function fetches(stubs: string): number
+    return tonumber((fs.read(stubs .. "/count") or "0"):match("%d+"))
+end
+
+testing.test("follow retries a jj fetch that fails to update refs", function()
+    local root, remote = jj_main()
+    local head = advance(remote)
+    local stubs, env = fetch_stub(1, "Error: Failed to update refs: refs/remotes/origin/master")
+    local out, code = support.dev(root, { "follow" }, { env = env })
+    testing.eq(code, 0, out)
+    testing.ok(out:find(root .. " is on trunk " .. head:sub(1, 12), 1, true), out)
+    testing.eq(fetches(stubs), 2)
+    testing.eq(jj(root, "log", "-r", "@-", "--no-graph", "-T", "commit_id"), head)
+    cleanup(root, remote, stubs)
+end)
+
+testing.test("follow reports the second fetch when the retry fails too", function()
+    local root, remote = jj_main()
+    local stubs, env = fetch_stub(2, "Error: Failed to update refs: refs/remotes/origin/master")
+    local out, code = support.dev(root, { "follow" }, { env = env })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("The jj git fetch command failed in " .. root, 1, true), out)
+    testing.ok(out:find("Failed to update refs", 1, true), out)
+    testing.eq(fetches(stubs), 2)
+    cleanup(root, remote, stubs)
+end)
+
+testing.test("follow reports another fetch failure at once", function()
+    local root, remote = jj_main()
+    local stubs, env = fetch_stub(1, "Error: remote hung up")
+    local out, code = support.dev(root, { "follow" }, { env = env })
+    testing.eq(code, 1, out)
+    testing.ok(out:find("remote hung up", 1, true), out)
+    testing.eq(fetches(stubs), 1)
+    cleanup(root, remote, stubs)
+end)
+
 testing.test("follow.names.a.jj.repo.with.no.default.workspace", function()
     local root, remote = jj_main()
     jj(root, "workspace", "rename", "other")

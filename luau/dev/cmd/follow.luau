@@ -8,6 +8,8 @@ local SHORT_CHARS = 12
 local MAIN_WORKSPACE = "default"
 local ROOT_MARK = "root"
 local REV_ENV = "DEV_FOLLOW_REV"
+local REF_RACE = "Failed to update refs"
+local RETRY_PAUSE_SECS = 1
 
 ---The reasons the main checkout lookup finds none
 ---@enum dev.cmd.follow.Reason
@@ -116,6 +118,10 @@ local function jj_follow(main, rev)
     end
     if #vcs.remotes(main, vcs.JJ) > 0 then
         out, code = jj("git", "fetch", "--all-remotes")
+        if code ~= 0 and out:find(REF_RACE, 1, true) then
+            dev_os.nap(RETRY_PAUSE_SECS)
+            out, code = jj("git", "fetch", "--all-remotes")
+        end
         if code ~= 0 then
             return failed(main, "jj git fetch", out)
         end
