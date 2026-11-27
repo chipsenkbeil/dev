@@ -2033,8 +2033,11 @@ if has_jj then
         -- Bring a card to Review with its reviews and a check
         local project = jj_project()
         local id = new_card(project)
-        tick_all(project, id)
         to_review(project, id)
+        for number = 1, 2 do
+            local args = { "board", "outcome", id, "--tick", tostring(number), "--as", "verifier" }
+            must(dev(project, args))
+        end
         approve_reviews(project, id)
         must(dev(project, { "board", "check", id }))
 

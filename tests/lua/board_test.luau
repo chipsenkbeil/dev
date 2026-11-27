@@ -5194,6 +5194,71 @@ testing.test("ticking the last open outcome moves the card to Verify", function(
     testing.eq(backend.calls[2], { "move", ID_C, support.COLUMN_NAME.VERIFY, nil })
 end)
 
+testing.test("moving an all-ticked card to Review carries it on to Verify", function()
+    -- Give an In Progress card every outcome ticked
+    local card = colored("green")
+    card.column = support.COLUMN_NAME.PROGRESS
+    card.outcomes = outcomes(2, 2)
+    card.claimant = "project-run/a"
+    local backend = fake({ card })
+
+    -- Move it to Review
+    local result = cmd_board.run("move", { "cccccccc", support.Column.REVIEW }, backend)
+
+    -- Print both moves and send both
+    testing.eq(result.message, nil)
+    testing.eq(
+        result.output,
+        table.concat({ "moved cccccccc to Review", "moved cccccccc to Verify" }, "\n")
+    )
+    testing.eq(backend.calls[#backend.calls - 1], { "move", ID_C, support.COLUMN_NAME.REVIEW })
+    testing.eq(backend.calls[#backend.calls], { "move", ID_C, support.COLUMN_NAME.VERIFY, nil })
+end)
+
+testing.test("moving a card with an open outcome to Review leaves it in Review", function()
+    -- Give an In Progress card one open outcome
+    local card = colored("green")
+    card.column = support.COLUMN_NAME.PROGRESS
+    card.outcomes = outcomes(2, 1)
+    card.claimant = "project-run/a"
+    local backend = fake({ card })
+
+    -- Move it to Review
+    local result = cmd_board.run("move", { "cccccccc", support.Column.REVIEW }, backend)
+
+    -- Print one move and send one
+    testing.eq(result.message, nil)
+    testing.eq(result.output, "moved cccccccc to Review")
+    testing.eq(backend.calls[#backend.calls], { "move", ID_C, support.COLUMN_NAME.REVIEW })
+end)
+
+testing.test("a refused carry to Verify names the move and leaves the card in Review", function()
+    -- Give an In Progress card every outcome ticked and a backend that refuses Verify
+    local card = colored("green")
+    card.column = support.COLUMN_NAME.PROGRESS
+    card.outcomes = outcomes(2, 2)
+    card.claimant = "project-run/a"
+    local backend = fake({ card })
+    local move = backend.move
+    function backend:move(id, column, opts)
+        if column == support.COLUMN_NAME.VERIFY then
+            return false, "The board has no Verify column."
+        end
+        return move(self, id, column, opts)
+    end
+
+    -- Move it to Review
+    local result = cmd_board.run("move", { "cccccccc", support.Column.REVIEW }, backend)
+
+    -- Refuse with the second move named
+    testing.eq(result.code, 1)
+    testing.ok(
+        result.message:find("Moved cccccccc to Review, but the move to Verify failed.", 1, true),
+        result.message
+    )
+    testing.eq(backend.calls[#backend.calls], { "move", ID_C, support.COLUMN_NAME.REVIEW })
+end)
+
 testing.test("a refused move to Verify writes the missing column from its reason", function()
     -- Give a Review card one open outcome and a board with no Verify column
     local card = colored("green")
@@ -10980,6 +11045,7 @@ end)
 testing.test("an epic move is refused by the board settings", function()
     -- Seed an epic on a board with a WIP-limited Backlog
     local detail = DETAIL:gsub('"name":"Backlog"', '"name":"Backlog","wip_limit":2', 1)
+        :gsub('{"id":"col%-blocked"', '{"id":"col-verify","name":"Verify"},%0', 1)
     local export = WORKING_EXPORT:gsub('"done":false', '"done":true'):gsub(
         '"name":"First"',
         '"name":"First","kind":"epic","children_total":3,"children_done":1',

@@ -2192,6 +2192,28 @@ local function move_once(backend, flags, words, opts)
         local refused = board.move_refusal(refusal, message, column, lane)
         return to_done and unqueued(failure(refused)) or failure(refused)
     end
+    local carried: boolean?
+    local carry_failed: string?
+    if column == stages.review and card.column == stages.progress and #card.outcomes > 0 then
+        local open = false
+        for _, outcome in ipairs(card.outcomes) do
+            open = open or not outcome.done
+        end
+        if not open then
+            local moved, why, refusal =
+                backend:move(card.id, stages.verify, { fence = held and held.fence })
+            if moved then
+                carried = true
+            else
+                carry_failed = "moved "
+                    .. card.id:sub(1, board.MIN_PREFIX)
+                    .. " to "
+                    .. column
+                    .. ", but the move to Verify failed. "
+                    .. board.move_refusal(refusal, why, stages.verify)
+            end
+        end
+    end
     if no_change_close then
         local noted, why = backend:note(
             card.id,
@@ -2206,7 +2228,12 @@ local function move_once(backend, flags, words, opts)
         end
     end
     if own_claim then
-        local reason, detail = role_clock.follow(backend, card, column, claimant((agent_name())))
+        local reason, detail = role_clock.follow(
+            backend,
+            card,
+            carried and stages.verify or column,
+            claimant((agent_name()))
+        )
         if reason then
             dev_command.note(clock_note("Moved, but its clock did not follow.", reason, detail))
         end
@@ -2222,7 +2249,17 @@ local function move_once(backend, flags, words, opts)
             )
         end
     end
+    if carry_failed then
+        return failure(carry_failed)
+    end
     local result = { output = "moved " .. card.id:sub(1, board.MIN_PREFIX) .. " to " .. column }
+    if carried then
+        result.output = result.output
+            .. "\nmoved "
+            .. card.id:sub(1, board.MIN_PREFIX)
+            .. " to "
+            .. stages.verify
+    end
     if closes then
         result.output = result.output
             .. "\nEpic "
