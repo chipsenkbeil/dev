@@ -69,7 +69,8 @@ A table of the parsed global flags: `args`, `after`, `dashed`, `remote`,
   output. A path in `stdout` or `stderr` is opened for append and created when
   missing, so an existing file keeps its content, and a caller that wants a
   fresh file makes it first with `dev.fs.mktemp`.
-- `exec(argv, opts)` replaces dev and returns only on failure.
+- `exec(argv, opts)` replaces dev and returns only on failure. Once a call has
+  failed, later calls run the command as a child and exit with its status.
 - `spawn(argv, opts)` starts a child without waiting and returns a process
   with `pid`, `wait(secs?)` and `kill(sig)`. `opts.detach` starts a new
   session that outlives dev.
