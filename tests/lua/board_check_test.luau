@@ -2670,7 +2670,10 @@ if has_jj then
 
             -- Check the refusal names the label, gives no jj edit advice and nothing was recorded
             testing.eq(code, 1, out)
-            testing.ok(out:find("dev board label CARD " .. board.NO_CHANGE, 1, true), out)
+            testing.ok(
+                out:find(`dev board label {id:sub(1, board.MIN_PREFIX)} {board.NO_CHANGE}`, 1, true),
+                out
+            )
             testing.eq(out:find("jj edit", 1, true), nil, out)
             testing.eq(#comments(home), 0)
         end

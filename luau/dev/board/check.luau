@@ -448,9 +448,10 @@ end
 ---Refuse a jj working-copy commit that holds no change.
 ---
 ---A result recorded on an empty commit cannot land. `land` refuses that commit.
----@param root string the project root
----@return string? message why the check cannot run there, nil when it can
-function M.empty_refusal(root)
+---@param root the project root
+---@param short the card's short id, named in the label command
+---@return message why the check cannot run there, nil when it can
+function M.empty_refusal(root: string, short: string): string?
     local backend = vcs.require(root)
     if backend ~= vcs.JJ then
         return nil
@@ -473,7 +474,7 @@ function M.empty_refusal(root)
     end
     local message = "The working-copy commit is empty, so a result recorded on it cannot land."
     if immutable ~= "" then
-        message ..= ` Its parent is immutable, so a card with nothing to land carries the {board.NO_CHANGE} label: run \`dev board label CARD {board.NO_CHANGE}\`, and check records on the empty commit after that.`
+        message ..= ` Its parent is immutable, so a card with nothing to land carries the {board.NO_CHANGE} label: run \`dev board label {short} {board.NO_CHANGE}\`, and check records on the empty commit after that.`
     elseif parent ~= "" then
         message = message .. " Run `jj edit " .. parent .. "` and check that change."
     end

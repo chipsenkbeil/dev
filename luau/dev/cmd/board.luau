@@ -3648,7 +3648,7 @@ function commands.check(backend, given, args)
         dev_command.note(stack)
     end
     local exempt = opts.expect_fail or board.labelled(card, board.NO_CHANGE)
-    local empty = not exempt and check.empty_refusal(backend.root)
+    local empty = not exempt and check.empty_refusal(backend.root, short)
     if empty then
         return failure(empty)
     end
