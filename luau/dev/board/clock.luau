@@ -196,7 +196,9 @@ function M.stop(backend, card, note, at: number?)
             end
             return guards.failure(message .. " The clock could not be put back: " .. why)
         end
-        return guards.failure(message)
+        local failure = guards.failure(message)
+        failure.refused = minutes > 0
+        return failure
     end
     fs.remove(claimed)
     fs.remove(M.beat_path(card.id))
@@ -271,7 +273,8 @@ end
 
 ---Move a card's clock to a column: log the running stretch and start the column's role.
 ---
----A stop the board refuses drops the clock with a warning, so a card never keeps a stale clock.
+---A stop the board refuses drops the clock with a warning and a status note on the card naming
+---the lost minutes, so a card never keeps a stale clock.
 ---@param backend dev.board.Backend the board
 ---@param card dev.board.Card the card
 ---@param column string? the column the card is in now, nil to only stop
@@ -291,8 +294,18 @@ function M.follow(backend, card, column, claimant)
     if running then
         local stopped = M.stop(backend, card)
         if stopped.code then
+            local lost = M.minutes(M.now() - running.start)
             fs.remove(M.path(card.id))
             reason, detail = M.Reason.DROPPED, stopped.message
+            if stopped.refused and lost > 0 then
+                local refusal = stopped.message:gsub("%.$", "")
+                backend:note(
+                    card.id,
+                    `The {running.role} clock dropped {lost} minutes. The board refused the log: {refusal}.`,
+                    nil,
+                    { kind = board.NoteKind.STATUS }
+                )
+            end
         end
     end
     if role and not board.labelled(card, board.NEEDS_HUMAN) then

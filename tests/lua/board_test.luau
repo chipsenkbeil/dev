@@ -199,7 +199,8 @@ local function fake(cards, times, finished)
     end
     function backend:log_time(id, minutes, role, note)
         calls[#calls + 1] = { "log_time", id, minutes, role, note }
-        return backend.refusal == nil, backend.refusal
+        local refusal = backend.time_refusal or backend.refusal
+        return refusal == nil, refusal
     end
     function backend:ask(id, question, fence)
         calls[#calls + 1] = { "ask", id, question, fence }
@@ -19797,6 +19798,91 @@ testing.test("follow returns the dropped reason when the stop is refused", funct
     testing.eq(reason, role_clock.Reason.DROPPED)
     testing.eq(detail, "Pomb is down.")
     testing.eq(left.role, support.ROLE.REVIEWER)
+end)
+
+testing.test("follow posts a status note naming the role, minutes and refusal", function()
+    -- Point the state at a fresh directory
+    local previous = dev_os.getenv("XDG_STATE_HOME") or ""
+    dev_os.setenv("XDG_STATE_HOME", support.tempdir())
+
+    -- Hold a card in progress with a 42 minute implementer clock
+    local card = colored("green")
+    card.outcomes = outcomes(2)
+    card.column = PROGRESS_NAME
+    local backend = fake({ card })
+    backend.stages = board.stages()
+    local restore, started = support.start_aged(card, support.ROLE.IMPLEMENTER, 42 * 60)
+
+    -- Follow the card to Review while the board refuses only the time entry
+    backend.time_refusal = "Limit reached (at most 500 time entries started per day)"
+    local reason, detail = role_clock.follow(backend, card, support.COLUMN_NAME.REVIEW, LEAD)
+    restore()
+    dev_os.setenv("XDG_STATE_HOME", previous)
+
+    -- Expect one status note after the refused log
+    testing.eq(started.code, nil, started.message)
+    testing.eq(reason, role_clock.Reason.DROPPED)
+    testing.eq(detail, backend.time_refusal .. ".")
+    testing.eq(#backend.calls, 2)
+    testing.eq(backend.calls[2], {
+        "note",
+        card.id,
+        "The implementer clock dropped 42 minutes. The board refused the log: "
+            .. backend.time_refusal
+            .. ".",
+        { kind = board.NoteKind.STATUS },
+    })
+end)
+
+testing.test("follow posts no note when a refused stop drops under a minute", function()
+    -- Point the state at a fresh directory
+    local previous = dev_os.getenv("XDG_STATE_HOME") or ""
+    dev_os.setenv("XDG_STATE_HOME", support.tempdir())
+
+    -- Hold a card with a 30 second clock and a stop another run already claimed
+    local card = colored("green")
+    card.outcomes = outcomes(2)
+    card.column = PROGRESS_NAME
+    local backend = fake({ card })
+    backend.stages = board.stages()
+    local restore, started = support.start_aged(card, support.ROLE.IMPLEMENTER, 30)
+    local claimed = role_clock.stopping_path(card.id)
+    fs.write(claimed, "taken")
+
+    -- Follow the card to Review
+    local reason = role_clock.follow(backend, card, support.COLUMN_NAME.REVIEW, LEAD)
+    restore()
+    dev_os.setenv("XDG_STATE_HOME", previous)
+
+    -- Expect the drop and no note
+    testing.eq(started.code, nil, started.message)
+    testing.eq(reason, role_clock.Reason.DROPPED)
+    testing.eq(backend.calls, {})
+end)
+
+testing.test("follow posts no note when another stop already claimed the clock", function()
+    -- Point the state at a fresh directory
+    local previous = dev_os.getenv("XDG_STATE_HOME") or ""
+    dev_os.setenv("XDG_STATE_HOME", support.tempdir())
+
+    -- Hold a card with a 42 minute clock and a stop another run already claimed
+    local card = colored("green")
+    card.outcomes = outcomes(2)
+    card.column = PROGRESS_NAME
+    local backend = fake({ card })
+    backend.stages = board.stages()
+    local restore, started = support.start_aged(card, support.ROLE.IMPLEMENTER, 42 * 60)
+    fs.write(role_clock.stopping_path(card.id), "taken")
+
+    -- Follow the card to Review
+    local reason = role_clock.follow(backend, card, support.COLUMN_NAME.REVIEW, LEAD)
+    restore()
+    dev_os.setenv("XDG_STATE_HOME", previous)
+
+    -- Expect the drop and no note, since the other stop logs the minutes
+    testing.eq(started.code, nil, started.message)
+    testing.eq(reason, role_clock.Reason.DROPPED)
+    testing.eq(backend.calls, {})
 end)
 
 testing.test("follow logs nothing for a stretch under a minute and starts the next role", function()

@@ -189,6 +189,7 @@ local MULTI_TEXT_USAGE = "The outcome text is more than one argument. "
 ---@field landed boolean? true when the change is on trunk although the result is a failure
 ---@field unresolved boolean? true when a card word named no one card, as opposed to a board that
 ---   failed to answer
+---@field refused boolean? true when the board refused the time entry of a clock stop
 
 ---@class dev.cmd.board
 ---@field open fun(settings: dev.cmd.board.Settings): dev.board.Backend?, string? builds the backend

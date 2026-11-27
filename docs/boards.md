@@ -4181,7 +4181,9 @@ it. A take and a move or a release by the claim's holder follow one rule:
   Verify take the middle word of the claimant's name `repo/role/card`, and
   every other column counts no time.
 - A log the board refuses drops the clock and prints a warning, so no card keeps
-  a stale clock. A local board holds no time entries and runs no clock.
+  a stale clock. A dropped stretch of a minute or more also leaves a status
+  note on the card naming the role, the lost minutes and the refusal.
+  A local board holds no time entries and runs no clock.
 
 A clock never outlives its work. The keep-alive loop writes the time of each
 renewal beside the claim in `<card>.beat`, and `dev board stale` stops every
