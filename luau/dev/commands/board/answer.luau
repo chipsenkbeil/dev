@@ -7,6 +7,7 @@ return dev_command({
     flags = {
         { name = "choice", kind = "string", help = "The number of the chosen choice" },
         { name = "quote", kind = "string", help = "The owner words" },
+        { name = "question", kind = "string", help = "An open question's id prefix" },
     },
     args = {
         { name = "card", help = "The card", complete = "board-card" },

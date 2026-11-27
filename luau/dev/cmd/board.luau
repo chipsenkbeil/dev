@@ -2898,6 +2898,11 @@ function commands.answer(backend, opts, args)
     if not quote:find("%S") then
         return usage("The --quote flag needs the owner's words.")
     end
+    if opts.question and #opts.question < board.MIN_PREFIX then
+        return usage(
+            "The --question flag needs at least " .. board.MIN_PREFIX .. " characters of an id."
+        )
+    end
     local card, err = find_card(backend, args.card)
     if not card then
         return err
@@ -2909,8 +2914,13 @@ function commands.answer(backend, opts, args)
         )
     end
     local held = claims.read(card.id)
-    local ok, message =
-        backend:answer(card.id, tonumber(choice), quote:match("^%s*(.-)%s*$"), held and held.fence)
+    local ok, message = backend:answer(
+        card.id,
+        tonumber(choice),
+        quote:match("^%s*(.-)%s*$"),
+        held and held.fence,
+        opts.question
+    )
     if not ok then
         return failure(message)
     end

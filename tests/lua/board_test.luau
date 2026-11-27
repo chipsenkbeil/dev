@@ -12187,7 +12187,85 @@ do
 
         -- Check the answer was refused and sent nothing
         testing.eq(code, 1, out)
-        testing.ok(out:find('"Which way?", "Which order?"', 1, true), out)
+        testing.ok(out:find('qqqqqqqq "Which way?", rrrrrrrr "Which order?"', 1, true), out)
+        testing.ok(out:find("--question ID", 1, true), out)
+        testing.ok(not requests(root):find("/answer", 1, true), requests(root))
+    end)
+
+    local function two_menus()
+        local root, home = owner_card_sandbox()
+        local other = open_question(
+            "rrrrrrrr-1111-4111-8111-111111111111",
+            "Which order?",
+            '[{"label":"Ship it","column_id":"'
+                .. READY_COLUMN
+                .. '"},{"label":"Park it","column_id":"'
+                .. READY_COLUMN
+                .. '"}]'
+        )
+        local first = QUESTION_COMMENT:format("null"):sub(2, -2)
+        assert(fs.write(root .. "/comments.json", "[" .. first .. "," .. other .. "]"))
+        return root, home
+    end
+
+    testing.test("answer --question answers only that question on Pomb", function()
+        local root, home = two_menus()
+        local out, code = dev(root, home, {
+            "board",
+            "answer",
+            "11111111-a",
+            "--choice",
+            "2",
+            "--quote",
+            "go with two",
+            "--question",
+            "RRRRRRRR",
+        })
+        testing.eq(code, 0, out)
+        local calls = requests(root)
+        testing.ok(
+            calls:find("/comments/rrrrrrrr-1111-4111-8111-111111111111/answer", 1, true),
+            calls
+        )
+        testing.ok(
+            not calls:find("/comments/qqqqqqqq-1111-4111-8111-111111111111/answer", 1, true),
+            calls
+        )
+    end)
+
+    testing.test("answer --question refuses a prefix that matches none or several", function()
+        local root, home = two_menus()
+        local function attempt(prefix)
+            return dev(root, home, {
+                "board",
+                "answer",
+                "11111111-a",
+                "--choice",
+                "2",
+                "--quote",
+                "go with two",
+                "--question",
+                prefix,
+            })
+        end
+
+        -- Check an unknown prefix lists the open ids
+        local out, code = attempt("zzzzzzzz")
+        testing.eq(code, 1, out)
+        testing.ok(out:find('qqqqqqqq "Which way?", rrrrrrrr "Which order?"', 1, true), out)
+
+        -- Check two ids sharing the prefix are refused as ambiguous
+        local twin =
+            open_question("qqqqqqqq-2222-4222-8222-222222222222", "Which twin?", SHIP_OR_PARK)
+        local first = QUESTION_COMMENT:format("null"):sub(2, -2)
+        assert(fs.write(root .. "/comments.json", "[" .. first .. "," .. twin .. "]"))
+        out, code = attempt("qqqqqqqq")
+        testing.eq(code, 1, out)
+        testing.ok(out:find("More than one open question matches qqqqqqqq", 1, true), out)
+
+        -- Check a prefix shorter than a card prefix is a usage error
+        out, code = attempt("qqq")
+        testing.eq(code, 2, out)
         testing.ok(not requests(root):find("/answer", 1, true), requests(root))
     end)
 end

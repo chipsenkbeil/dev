@@ -1644,7 +1644,21 @@ local function same_menu(first, other)
     return true
 end
 
-function Backend:answer(id, choice, quote, fence)
+---List each open question's id prefix and text.
+---@param open dev.board.Comment[] the open question comments
+---@return string listed the entries, comma separated
+local function listed_questions(open)
+    local texts = {}
+    for index, comment in ipairs(open) do
+        texts[index] = comment.id:sub(1, board.MIN_PREFIX)
+            .. ' "'
+            .. tostring(comment.question.text)
+            .. '"'
+    end
+    return table.concat(texts, ", ")
+end
+
+function Backend:answer(id, choice, quote, fence, question)
     local comments, message = self:comments(id)
     if not comments then
         return nil, message
@@ -1658,15 +1672,27 @@ function Backend:answer(id, choice, quote, fence)
     if #open == 0 then
         return nil, "The card holds no open question to answer."
     end
-    local texts = {}
-    for index, comment in ipairs(open) do
-        texts[index] = '"' .. tostring(comment.question.text) .. '"'
+    if question then
+        local wanted = question:lower()
+        local matched = {}
+        for _, comment in ipairs(open) do
+            if comment.id:lower():sub(1, #wanted) == wanted then
+                matched[#matched + 1] = comment
+            end
+        end
+        if #matched ~= 1 then
+            local lead = if #matched == 0
+                then "No open question matches "
+                else "More than one open question matches "
+            return nil, lead .. question .. ". Open questions: " .. listed_questions(open) .. "."
+        end
+        open = matched
     end
     for _, comment in ipairs(open) do
         if not same_menu(open[1].question, comment.question) then
             return nil,
-                "The card holds open questions with different menus. Answer each in the browser: "
-                    .. table.concat(texts, ", ")
+                "The card holds open questions with different menus. Answer one with --question ID: "
+                    .. listed_questions(open)
                     .. "."
         end
     end

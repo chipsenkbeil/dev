@@ -860,7 +860,14 @@ On Pomb, dev answers every open question on the card with choice N and the
 quote, in the order Pomb lists them. Before it writes anything, dev checks that
 the open questions offer the same menu, with the same choices in the same order,
 labels and columns. When they differ, or no question is open, dev refuses with
-exit 1, writes nothing, and names each open question in quotes.
+exit 1 and writes nothing. The refusal for different menus lists each open
+question's first 8 id characters and text, and names `--question ID`.
+
+`--question ID` answers one question only. `ID` is a prefix of an open
+question's id, at least 8 characters, and a shorter one is refused (exit 2). A
+prefix that matches no open question, or more than one, is refused (exit 1) with
+the open ids listed. The other questions stay open. A local board refuses the
+flag.
 
 Pomb keeps `needs:human` and the column while another question stays open, and
 on the last open answer it removes the label and moves the card to the

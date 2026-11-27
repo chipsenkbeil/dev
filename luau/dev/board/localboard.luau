@@ -880,7 +880,10 @@ function Backend:log_time()
     return nil, "A local board holds no time entries. Log time on a Pomb board."
 end
 
-function Backend:answer(id, choice, quote, fence)
+function Backend:answer(id, choice, quote, fence, question)
+    if question then
+        return nil, "A local board holds no structured questions to pick from."
+    end
     return self:__update(function(doc)
         local card, message = card_of(doc, id, fence)
         if not card then

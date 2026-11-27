@@ -196,8 +196,9 @@ end
 ---   boolean?, string? a structured question posted on the card, which Pomb moves to Blocked with
 ---   needs:human, or nil and Pomb's refusal
 ---@field answer fun(self: dev.board.Backend, id: string, choice: integer, quote: string,
----   fence: integer?): boolean?, string? the card's open question answered with the choice and the
----   owner's quote, so Pomb moves the card to that choice's column, or nil and a message
+---   fence: integer?, question: string?): boolean?, string? the card's open question answered with
+---   the choice and the owner's quote, so Pomb moves the card to that choice's column, or nil and a
+---   message. With `question`, a prefix of one open question's id, only that question is answered
 ---@field comments fun(self: dev.board.Backend, id: string): dev.board.Comment[]?, string? the
 ---   card's comments, oldest first
 ---@field history fun(self: dev.board.Backend, id: string): dev.board.HistoryEvent[]?, string? the
