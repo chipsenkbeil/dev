@@ -88,8 +88,8 @@ local RG_VALUE_FLAGS = {
 ---The rg flags that supply the pattern
 local RG_PATTERN_FLAGS = { ["-e"] = true, ["-f"] = true, ["--regexp"] = true, ["--file"] = true }
 local JJ_TEMPLATE = 'commit_id ++ " " ++ change_id ++ " " ++ if(conflict, "conflict", "clean")'
-local JJ_EMPTY_TEMPLATE =
-    'if(empty, "empty", "full") ++ " " ++ parents.map(|parent| parent.change_id()).join(" ")'
+local JJ_EMPTY_TEMPLATE = 'if(empty, "empty", "full") ++ " " ++ parents.map(|parent| parent.change_id()'
+    .. ' ++ if(parent.immutable(), ":immutable", "")).join(" ")'
 local SHOWN_LINES = 12
 local NO_RUN = "-"
 local RUN_LINE = "^run (%x+)$"
@@ -467,12 +467,14 @@ function M.empty_refusal(root)
         ),
         { stderr = "null" }
     )
-    local shape, parent = out:match("^(%a+) ?(%a*)\n?$")
+    local shape, parent, immutable = out:match("^(%a+) ?(%a*)(:?%a*)\n?$")
     if code ~= 0 or shape ~= "empty" then
         return nil
     end
     local message = "The working-copy commit is empty, so a result recorded on it cannot land."
-    if parent ~= "" then
+    if immutable ~= "" then
+        message ..= ` Its parent is immutable, so a card with nothing to land carries the {board.NO_CHANGE} label: run \`dev board label CARD {board.NO_CHANGE}\`, and check records on the empty commit after that.`
+    elseif parent ~= "" then
         message = message .. " Run `jj edit " .. parent .. "` and check that change."
     end
     return message

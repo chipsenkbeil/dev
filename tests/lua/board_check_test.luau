@@ -2647,8 +2647,34 @@ if has_jj then
         -- Check the refusal names the parent and nothing was recorded
         testing.eq(code, 1, out)
         testing.ok(out:find("jj edit " .. parent, 1, true), out)
+        testing.eq(out:find(board.NO_CHANGE, 1, true), nil, out)
         testing.eq(#comments(home), 0)
     end)
+
+    testing.test(
+        "check names the no-change label when the empty commit's parent is immutable",
+        function()
+            -- Give a card a workspace named for it, with an empty working copy on immutable trunk
+            local root, home, ws = workspace()
+            local id = card_with(root, home, { "true" })
+            jj(ws, "workspace", "rename", id)
+            local bare = support.tempdir()
+            local quiet = { stdout = "null", stderr = "null", env = IDENT }
+            must(dev_os.run({ "git", "init", "--bare", "-q", "-b", "master", bare }, quiet))
+            jj(root, "git", "remote", "add", "origin", bare)
+            jj(root, "bookmark", "create", "master", "-r", "@-")
+            jj(root, "git", "push", "--remote", "origin", "--bookmark", "master")
+
+            -- Check the card from that workspace
+            local out, code = dev(root, home, { "board", "check", id }, ws)
+
+            -- Check the refusal names the label, gives no jj edit advice and nothing was recorded
+            testing.eq(code, 1, out)
+            testing.ok(out:find("dev board label CARD " .. board.NO_CHANGE, 1, true), out)
+            testing.eq(out:find("jj edit", 1, true), nil, out)
+            testing.eq(#comments(home), 0)
+        end
+    )
 
     testing.test("check records a no-change card on an empty jj working-copy commit", function()
         -- Give a card a workspace named for it, with an empty working copy
