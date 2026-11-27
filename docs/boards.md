@@ -3693,6 +3693,13 @@ The settings:
   a change run still going and a rebased commit with no run. It is off by
   default, and then only a failed run refuses, and a commit with no run passes
   without a line.
+- `require_recheck = true` under `[board.land]` makes `land` refuse until a
+  clean or minor recheck of the code kind and of the style kind is recorded at
+  the landing commit, or at an earlier commit whose interdiff with it is empty.
+  Each refusal line names the recheck command, `dev board review --kind
+  recheck --of KIND --rev @`. It is off by default, and then a recheck is asked
+  for only when a review is of a commit whose patch differs from the landing
+  commit's.
 - `board.land.command` names the repo's own land command, as the words to type.
   When it is a non-empty string, `dev board land` and `dev land`
   refuse before any turn, push or move and print that command, to keep a

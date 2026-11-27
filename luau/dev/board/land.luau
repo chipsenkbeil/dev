@@ -428,6 +428,38 @@ local function rechecked_kinds(comments: { { body: string } }, same: (commit: st
     return met, refused
 end
 
+---List the review kinds that lack a clean or minor recheck at the commit or an identical earlier one.
+---
+---A kind whose recheck command an earlier problem line already names adds no line.
+---@param comments the card's comments, oldest first
+---@param state the commit that would land
+---@param root the project root, which lets an identical earlier patch count
+---@param reported the problem lines already found
+---@return one line per kind with no clean or minor recheck
+function M.required_rechecks(
+    comments: { { body: string } },
+    state: { commit: string, change: string },
+    root: string?,
+    reported: { string }?
+): { string }
+    local met = rechecked_kinds(comments, same_patch(root, state))
+    local missing = {}
+    for _, kind in ipairs(review.OF_KINDS) do
+        local command = `dev board review --kind recheck --of {kind} --rev @`
+        local named = false
+        for _, line in ipairs(reported or {}) do
+            named = named or line:find(command, 1, true) ~= nil
+        end
+        if not met[kind] and not named then
+            missing[#missing + 1] =
+                `The project requires a clean or minor recheck of every review kind before land, and the {kind} one is absent at commit {M.short(
+                    state.commit
+                )}. Record it with \`{command}\`.`
+        end
+    end
+    return missing
+end
+
 ---@class dev.board.land.seats_problem.Opts
 ---@field carried string? an earlier commit whose reviews carry over to the commit
 ---@field comments {body: string}[] the card's comments, oldest first

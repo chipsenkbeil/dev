@@ -691,6 +691,38 @@ local function rechecked_as(of, commit, verdict)
     }
 end
 
+testing.test(
+    "required_rechecks wants a clean or minor recheck of each kind at the commit",
+    function()
+        -- Name both kinds and the command when no recheck exists
+        local none =
+            land.required_rechecks({ reviewed("code", COMMIT), reviewed("style", COMMIT) }, STATE)
+        testing.eq(#none, 2)
+        testing.ok(none[1]:find("--kind recheck --of code --rev @", 1, true), none[1])
+        testing.ok(none[2]:find("--kind recheck --of style --rev @", 1, true), none[2])
+
+        -- Want nothing once each kind has a clean or minor recheck here
+        testing.eq(
+            land.required_rechecks({
+                rechecked_as("code", COMMIT, "clean"),
+                rechecked_as("style", COMMIT, "minor"),
+            }, STATE),
+            {}
+        )
+
+        -- Name the kind whose recheck needs work
+        local partial = land.required_rechecks({
+            rechecked_as("code", COMMIT, "clean"),
+            rechecked_as("style", COMMIT, "needs-work"),
+        }, STATE)
+        testing.eq(#partial, 1)
+        testing.ok(partial[1]:find("--of style", 1, true), partial[1])
+
+        -- Ignore a recheck at another commit when no root can prove the patch matches
+        testing.eq(#land.required_rechecks({ rechecked_as("code", OTHER, "clean") }, STATE), 2)
+    end
+)
+
 testing.test("land.accepts.a.seat.a.recheck.covers", function()
     -- Seat reviewers that answered at an older commit
     local seats = {
@@ -1606,6 +1638,37 @@ if has_jj then
         testing.eq(code, 0, out)
         testing.ok(out:find("Gave back the landing turn held for " .. id .. ".", 1, true), out)
         testing.eq(turn_holder(project.home), nil)
+    end)
+
+    local REQUIRE_RECHECK = table.concat({ "", "[board.land]", "require_recheck = true", "" }, "\n")
+
+    testing.test(
+        "with require_recheck, land refuses a card with no recheck at the commit",
+        function()
+            -- Verify a card whose reviews are current but never rechecked
+            local project = jj_project(REQUIRE_RECHECK)
+            local id = verified_card(project)
+
+            -- Refuse and name the recheck command of each kind
+            refused(project, id, {
+                "`dev board review --kind recheck --of code --rev @`",
+                "`dev board review --kind recheck --of style --rev @`",
+            })
+        end
+    )
+
+    testing.test("with require_recheck, land goes ahead once each kind is rechecked", function()
+        -- Verify a card, then recheck both kinds at its commit
+        local project = jj_project(REQUIRE_RECHECK)
+        local id = verified_card(project)
+        for _, of in ipairs({ "code", "style" }) do
+            must(record_review(project, id, { kind = "recheck", of = of, by = "rc-" .. of }))
+        end
+
+        -- Land it through the stub
+        local out, code = dev(project, { "board", "land", id }, { LAND_TRUNK = LAND_TRUNK_KEEP })
+        testing.eq(code, 0, out)
+        testing.ok(out:find("landed " .. id, 1, true), out)
     end)
 
     testing.test(
@@ -4444,6 +4507,25 @@ if has_jj then
         -- Leave the seats stale when no root lets the patch compare
         opts.root = nil
         testing.eq(#land.seats_problem(seats, landing, opts), 2)
+    end)
+
+    testing.test("required_rechecks counts a recheck on an identical earlier commit", function()
+        -- Recheck both kinds, then reword the commit
+        local project = jj_project()
+        local rechecked = head(project.root)
+        jj(project.root, "describe", "-m", "feat: work again")
+        local landing = head(project.root)
+        local comments = recheck_both(rechecked, review.Verdict.CLEAN)
+        local state = { commit = landing, change = "chg" }
+
+        -- Count the earlier recheck when the root lets the patch compare
+        testing.eq(land.required_rechecks(comments, state, project.root), {})
+
+        -- Skip a kind whose command an earlier line already names
+        testing.eq(#land.required_rechecks({}, state, project.root), 2)
+        local reported =
+            { "Record a recheck with `dev board review --kind recheck --of code --rev @`." }
+        testing.eq(#land.required_rechecks({}, state, project.root, reported), 1)
     end)
 
     testing.test("a recheck on a commit with a different patch does not cover a seat", function()

@@ -26,6 +26,7 @@ local TIMEOUT_FLAG = "--timeout"
 local RUN_FLAG = "--run"
 local MIN_RUN_COMMIT = 7
 local REQUIRE_CHANGE_RUN = "board.land.require_change_run"
+local REQUIRE_RECHECK = "board.land.require_recheck"
 local REVIEWER_TOKEN_SETTING = "board.pomb.reviewer_token"
 
 ---Check the parsed flags and card of `board check`.
@@ -950,6 +951,11 @@ local function land_problems(backend, card, who)
     })
     for _, line in ipairs(seat_lines) do
         problems[#problems + 1] = line
+    end
+    if config.get(backend.root, REQUIRE_RECHECK) == true then
+        for _, line in ipairs(land.required_rechecks(who.comments, state, backend.root, problems)) do
+            problems[#problems + 1] = line
+        end
     end
     if unproven then
         problems[#problems + 1] = unproven
