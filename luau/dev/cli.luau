@@ -410,7 +410,7 @@ local function run_as_root(parsed)
     if not (row and row.script) then
         help.usage_error(ctx, reg, "unknown command " .. ctx.name)
     end
-    if parsed.remote then
+    if parsed.remote and not help_flag(rest, parsed.after) then
         local never_remote = reg:declared(words)
         dev_os.exit(remote.run(ctx, words, tail(rest, math.max(1, #rest - parsed.after + 1)), {
             detach = parsed.detach,
@@ -549,7 +549,7 @@ function M.main(parsed)
     local patch_job = spec and spec.patch
     local runs_local = spec ~= nil
         and (spec.runs_local == true or fetch_job ~= nil or patch_job ~= nil)
-    if flag and (not parsed.remote or patch_job) then
+    if flag then
         return help.command(ctx, reg, { words = words, short = flag == "-h" })
     end
     if name == "help" and not parsed.remote and not (row and row.script) then

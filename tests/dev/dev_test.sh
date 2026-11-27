@@ -658,6 +658,19 @@ printf '#!/usr/bin/env bash\necho x\n' >"$cip/.dev/commands/widget/save.sh"
 chmod +x "$cip/.dev/commands/widget/save.sh"
 cirun "$cip" --remote widget save >/dev/null 2>&1
 assert_contains "--remote maps a subcommand to the job noun-sub" "$(log)" "[--job] [widget-save]"
+want_help="$(cirun "$cip" widget save --help 2>&1)"
+assert_contains "widget save --help prints its usage" "$want_help" "dev widget save"
+for flag in -h --help; do
+    out="$(cirun "$cip" --remote widget save "$flag" 2>&1)"
+    assert_eq "--remote widget save $flag exits 0" "$?" "0"
+    assert_contains "--remote widget save $flag prints the command's usage" "$out" "dev widget save"
+    assert_eq "--remote widget save $flag starts no ci run" "$(log)" ""
+    cirun "$cip" --remote lint "$flag" >/dev/null 2>&1
+    assert_eq "--remote lint $flag starts no ci run" "$(log)" ""
+done
+assert_eq "--remote widget save --help prints what help prints without --remote" "$(cirun "$cip" --remote widget save --help 2>&1)" "$want_help"
+cirun "$cip" --remote widget save -- --help >/dev/null 2>&1
+assert_eq "--remote widget save -- --help sends --help through to the job" "$(log)" "ci -C $cip [run] [--local] [--follow] [--job] [widget-save] [--] [--help]"
 out="$(cirun "$cip" --remote widget zap 2>&1)"
 assert_eq "--remote with an unknown subcommand exits 2" "$?" "2"
 assert_contains "--remote with an unknown subcommand names it" "$out" "unknown subcommand zap"
