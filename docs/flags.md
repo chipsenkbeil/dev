@@ -136,6 +136,9 @@ The refusal exits 2 with a sentence naming the flag or argument:
 dev <command>: Unknown flag <flag>.
 ```
 
+An unknown letter in a cluster of short flags names the word as typed, as in
+`Unknown flag -b in -bad.`
+
 ## Command specs and headers
 
 Each command is a `.luau` file returning a `dev.command` spec, or a `.sh` or

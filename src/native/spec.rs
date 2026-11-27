@@ -698,7 +698,12 @@ fn parse_with(lua: &Lua, def: &Def, argv: &[String]) -> mlua::Result<StdResult<P
                 let shown = format!("-{letter}");
                 let Some(position) = def.flags.iter().position(|flag| flag.short == Some(letter))
                 else {
-                    return Ok(Err(unknown_flag(def, &shown)));
+                    let named = if letters.len() > 1 {
+                        format!("{shown} in {word}")
+                    } else {
+                        shown
+                    };
+                    return Ok(Err(unknown_flag(def, &named)));
                 };
                 let flag = &def.flags[position];
                 if flag.kind == Kind::Boolean {
@@ -1113,6 +1118,34 @@ mod tests {
         assert_eq!(
             parsed("{}", "x"),
             Err("Unknown argument x. This command takes no positional arguments.".to_owned())
+        );
+    }
+
+    #[test]
+    fn parse_should_name_the_cluster_for_an_unknown_letter_in_it() {
+        assert_eq!(
+            parsed("{}", "-bad"),
+            Err("Unknown flag -b in -bad.".to_owned())
+        );
+        assert_eq!(
+            parsed(
+                "{ flags = { { name = 'all', short = 'a', kind = 'boolean' } } }",
+                "-ax"
+            ),
+            Err("Unknown flag -x in -ax.".to_owned())
+        );
+    }
+
+    #[test]
+    fn parse_should_name_a_lone_unknown_short_flag_by_itself() {
+        assert_eq!(parsed("{}", "-b"), Err("Unknown flag -b.".to_owned()));
+    }
+
+    #[test]
+    fn parse_should_keep_the_dashes_sentence_when_naming_a_cluster() {
+        assert_eq!(
+            parsed("{ passthrough = true }", "-bad"),
+            Err("Unknown flag -b in -bad. Pass it after -- to reach the command.".to_owned())
         );
     }
 
