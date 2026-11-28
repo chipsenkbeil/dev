@@ -703,6 +703,51 @@ mod tests {
     }
 
     #[test]
+    fn native_struct_should_return_the_fields_its_shape_records() {
+        // Return an entry from Luau as a raw table
+        let lua = Lua::new();
+        module(&lua);
+        let table: mlua::Table = lua
+            .load(
+                r#"return test.grow({ name = "a.txt", kind = "file", size = 4, tags = { "x" } })"#,
+            )
+            .eval()
+            .unwrap();
+        // Split the recorded shape into name and type pairs
+        let shape = Entry::luau_type();
+        let inner = shape
+            .strip_prefix("{ ")
+            .and_then(|rest| rest.strip_suffix(" }"))
+            .expect("shape is a braced record");
+        let fields: Vec<(&str, &str)> = inner
+            .split(", ")
+            .map(|field| field.split_once(": ").expect("field is name: type"))
+            .collect();
+        assert_eq!(table.pairs::<String, mlua::Value>().count(), fields.len());
+        // Check each field's Luau type against the recorded one
+        for (name, luau_type) in fields {
+            let balanced = |open: char, close: char| {
+                luau_type.matches(open).count() == luau_type.matches(close).count()
+            };
+            assert!(
+                balanced('{', '}') && balanced('(', ')'),
+                "field {name} has a type this splitter cannot read: {luau_type}"
+            );
+            let expected = match luau_type.trim_end_matches('?') {
+                kind if kind.starts_with('{') => "table",
+                kind if kind.starts_with('"') => "string",
+                kind => kind,
+            };
+            let value: mlua::Value = table.get(name).unwrap();
+            let actual = match value {
+                mlua::Value::Integer(_) | mlua::Value::Number(_) => "number",
+                other => other.type_name(),
+            };
+            assert_eq!(actual, expected, "field {name}");
+        }
+    }
+
+    #[test]
     fn native_struct_should_record_its_shape() {
         assert_eq!(
             Entry::luau_type(),
