@@ -161,3 +161,42 @@ testing.test("upgrade leaves the install alone when the old one cannot be moved 
     runs_as_before(path, before)
     testing.eq(fs.list(dir), { "dev", "dev.old" })
 end)
+
+local function swap_fixture()
+    local dir = support.tempdir() .. "/bin"
+    assert(fs.mkdir(dir, { parents = true }))
+    assert(fs.write(dir .. "/dev", "old"))
+    assert(fs.write(dir .. "/new", "new"))
+    return dir
+end
+
+local function refuse_placing(dir, also_back)
+    return function(from, to)
+        if from == dir .. "/dev.new" and to == dir .. "/dev" then
+            return nil, "placing refused"
+        end
+        if also_back and from == dir .. "/dev.old" then
+            return nil, "moving back refused"
+        end
+        return fs.move(from, to)
+    end
+end
+
+testing.test("swap moves the old binary back when the new one cannot be placed", function()
+    local dir = swap_fixture()
+    local problem = upgrade_cmd.swap(dir .. "/new", dir .. "/dev", refuse_placing(dir, false))
+    testing.ok(problem:find("The old binary stays", 1, true), problem)
+    testing.ok(problem:find("placing refused", 1, true), problem)
+    testing.eq(fs.read(dir .. "/dev"), "old")
+    testing.eq(fs.list(dir), { "dev" })
+end)
+
+testing.test("swap names the .old path when moving the old binary back fails too", function()
+    local dir = swap_fixture()
+    local problem = upgrade_cmd.swap(dir .. "/new", dir .. "/dev", refuse_placing(dir, true))
+    testing.ok(problem:find("moving back refused", 1, true), problem)
+    testing.ok(problem:find("Restore it by hand from " .. dir .. "/dev.old", 1, true), problem)
+    testing.ok(not problem:find("The old binary stays", 1, true), problem)
+    testing.eq(fs.read(dir .. "/dev.old"), "old")
+    testing.eq(fs.exists(dir .. "/dev"), false)
+end)

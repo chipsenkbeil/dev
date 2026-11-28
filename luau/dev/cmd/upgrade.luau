@@ -71,32 +71,43 @@ local function latest()
 end
 
 ---Put `binary` in place of `exe`, keeping the old one as `exe.old` until the swap works.
----@param binary string the checked new binary
----@param exe string canonical path of the running binary
-local function swap(binary, exe)
+---@param binary the checked new binary
+---@param exe canonical path of the running binary
+---@param move how to move a file, `fs.move` by default
+---@return problem why the swap failed, nil when it worked
+function M.swap(
+    binary: string,
+    exe: string,
+    move: ((from: string, to: string) -> (boolean?, string?))?
+): string?
+    move = move or fs.move
     local staged, old = exe .. ".new", exe .. ".old"
     fs.remove(staged)
     fs.remove(old)
-    local moved, why = fs.move(binary, staged)
+    local moved, why = move(binary, staged)
     if not moved then
-        dev_command.die(dev_text.sentence(`Could not place the new binary beside {exe}: {why}`))
+        return dev_text.sentence(`Could not place the new binary beside {exe}: {why}`)
     end
     releasefile.make_runnable(staged)
 
-    local aside, aside_why = fs.move(exe, old)
+    local aside, aside_why = move(exe, old)
     if not aside then
         fs.remove(staged)
-        dev_command.die(dev_text.sentence(`Could not move {exe} aside: {aside_why}`))
+        return dev_text.sentence(`Could not move {exe} aside: {aside_why}`)
     end
-    local placed, placed_why = fs.move(staged, exe)
+    local placed, placed_why = move(staged, exe)
     if not placed then
-        fs.move(old, exe)
+        local restored, restored_why = move(old, exe)
         fs.remove(staged)
-        dev_command.die(
-            dev_text.sentence(`Could not replace {exe}. The old binary stays: {placed_why}`)
-        )
+        if not restored then
+            return dev_text.sentence(
+                `Could not replace {exe}: {placed_why}. Moving the old binary back failed too: {restored_why}. Restore it by hand from {old}`
+            )
+        end
+        return dev_text.sentence(`Could not replace {exe}. The old binary stays: {placed_why}`)
     end
     fs.remove(old)
+    return nil
 end
 
 ---Replace the running binary with the latest release.
@@ -134,7 +145,10 @@ function M.run()
         dev_command.die(`The binary prints {new} from --version, not dev {tag}.`)
     end
 
-    swap(binary, exe)
+    local problem = M.swap(binary, exe)
+    if problem then
+        dev_command.die(problem)
+    end
     dev_command.say(`{printed} upgraded to {new} at {exe}.`)
     return 0
 end
