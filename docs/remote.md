@@ -86,6 +86,11 @@ beside a job of the same name.
 `--remote` still sends it. `dev help <command>` says the command runs here
 under the default.
 
+A global command file (`~/.config/dev/commands/`) that replaces a built-in
+with a job also runs here under the default (the runner never has the global
+folder and would run the built-in). A project command file travels with the
+checkout and still goes to ci.
+
 ### Commands that fetch a built file
 
 A command whose spec has `fetch`, or whose header has a `# fetch JOB FILE`
@@ -192,7 +197,9 @@ ci job is refused. It makes no difference what chose the laptop (`--local`,
 `DEV_REMOTE=0` or `[remote] default = "local"`).
 
 The refusal exits 2, prints a line that names the command and `--remote`, and
-runs nothing. The default remote run and `--remote` still go to ci.
+runs nothing. The default remote run and `--remote` still go to ci. For a
+global command file that replaces the built-in, the line says the command is
+the user's global script and runs only here, with no `--remote` hint.
 
 The refusal does not apply to a `runs_local` command, to a command that sets
 `remote = false`, or inside a ci job or dev box (`CI=true` or the box

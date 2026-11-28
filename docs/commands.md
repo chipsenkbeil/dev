@@ -52,9 +52,11 @@ the project you are in as its root, and `-v` prints its path relative to the
 global folder.
 
 A command file replaces a built-in of the same name, and `dev help` marks it
-`(override)`. A command that matches no built-in is a local command. A built-in
-command with subcommands (`dev tools`) is never replaced by a file, but a file
-replaces one of its subcommands and can add new ones.
+`(override)`. A global file that replaces a built-in with a ci job runs here
+under the remote default (ci never has the global folder). A command that
+matches no built-in is a local command. A built-in command with subcommands
+(`dev tools`) is never replaced by a file, but a file replaces one of its
+subcommands and can add new ones.
 
 ## Commands with subcommands
 

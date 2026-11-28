@@ -711,6 +711,35 @@ testing.test(
     end
 )
 
+testing.test("a global script replacing a built-in with a job runs here", function()
+    -- Install a global script that shadows the built-in test
+    local root, base = setup()
+    write_exec(
+        base .. "/home/.config/dev/commands/test.sh",
+        table.concat({
+            "#!/usr/bin/env bash",
+            "# Run the tests.",
+            "echo ran-global",
+            "",
+        }, "\n")
+    )
+    local env = { XDG_CONFIG_HOME = "" }
+
+    -- Run the script here with nothing sent to ci
+    local out, code, log = dev(root, base, { "test" }, env)
+    testing.eq(out, "ran-global\n")
+    testing.eq(code, 0)
+    testing.eq(log, "")
+
+    -- Refuse an agent without pointing it at the built-in on ci
+    env.DEV_AGENT = "dev/implementer/x"
+    out, code, log = dev(root, base, { "test" }, env)
+    testing.eq(code, 2)
+    testing.ok(out:find("is your global script and runs only here", 1, true), out)
+    testing.ok(not out:find("--remote", 1, true), out)
+    testing.eq(log, "")
+end)
+
 testing.test("a command script without runs_local keeps routing to its job", function()
     local root, base = setup({
         ["test.sh"] = table.concat({
