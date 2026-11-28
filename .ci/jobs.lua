@@ -3,7 +3,7 @@ local CARGO = "export PATH=$HOME/.cargo/bin:$PATH; "
 local NIGHTLY_RUSTFMT =
     "cargo +nightly fmt --version || rustup toolchain install nightly --profile minimal -c rustfmt"
 local PACMAN_PACKAGES =
-    "git jujutsu bats shellcheck shfmt stylua selene luau ast-grep jq go-yq dash stow ripgrep fd sd man-db zsh unzip"
+    "git jujutsu bats shellcheck shfmt stylua selene luau ast-grep jq go-yq dash stow ripgrep fd sd man-db zsh fish unzip"
 local ROOT_CLONE = "/root/dev"
 
 local function real_root(file, name)

@@ -330,6 +330,56 @@ testing.test("the bash script joins a flag value split at the equals sign", func
     testing.eq(values(out), { "fast" })
 end)
 
+local function script_for(root: string, shell: string): string
+    local path = `{root}/dev-completion.{shell}`
+    assert(fs.write(path, require("@dev/complete/scripts").for_shell(shell)))
+    return path
+end
+
+local function shell_run(root: string, argv: { string }): (string, number)
+    local bin = shim(root)
+    return dev_os.capture(argv, {
+        cwd = root,
+        env = { PATH = `{bin}:{dev_os.getenv("PATH")}`, HOME = root },
+        stderr = "stdout",
+    })
+end
+
+testing.test("the zsh script completes board mo to move after compinit", function()
+    -- Load the script under zsh with compinit and stub the menu to print the candidates
+    local root = project({})
+    local program = table.concat({
+        "autoload -Uz compinit && compinit -u -D",
+        "_describe() { print -l -- ${(P)4%%:*} }",
+        "words=(dev board mo)",
+        "CURRENT=3",
+        `source '{script_for(root, "zsh")}'`,
+    }, "\n")
+    local out, code = shell_run(root, { "zsh", "-f", "-c", program })
+
+    -- Offer move
+    testing.eq(code, 0, out)
+    testing.ok(values(out)[1] == "move", out)
+end)
+
+testing.test("the fish script completes board mo to move", function()
+    -- Source the script under fish and complete the line
+    local root = project({})
+    local program = `source '{script_for(root, "fish")}'; complete -C 'dev board mo'`
+    local out, code = shell_run(root, { "fish", "--no-config", "-c", program })
+
+    -- Offer move
+    testing.eq(code, 0, out)
+    testing.ok(values(out)[1] == "move", out)
+end)
+
+testing.test("the powershell script calls dev __complete and is not loaded", function()
+    -- No ci image has pwsh, so the script is checked by its text only
+    local script = require("@dev/complete/scripts").for_shell("powershell")
+    testing.ok(script:find("dev __complete", 1, true), script)
+    testing.ok(script:find("Register-ArgumentCompleter -Native -CommandName dev", 1, true), script)
+end)
+
 testing.test("the bash script quotes a candidate that holds a space", function()
     -- Make a file with a space in its name
     local root = project({ ["w.luau"] = FILE_SPEC })
