@@ -11,6 +11,8 @@ local wiring = require("@dev/board/wiring")
 local usage = guards.usage
 local failure = guards.failure
 
+local REV_ENV = "DEV_SHIP_REV"
+
 ---The ship command, which moves every Release card a tested revision holds to Done.
 ---@class dev.board.ship
 local M = {}
@@ -60,20 +62,25 @@ end
 ---Run each command once and stop at the first that fails.
 ---@param backend dev.board.Backend the board
 ---@param runs dev.board.ship.Run[] the commands
+---@param pin { root: string, commit: string } the workspace the rows run in and the commit it holds
 ---@param name_suspects fun(row: dev.board.check.Row): string[] the lines naming the cards behind a
 ---failed row
 ---@return dev.cmd.board.Result? err the failure naming the command, nil when every one passed
-local function ship_ran(backend, runs, name_suspects)
+local function ship_ran(backend, runs, pin, name_suspects)
     local remote = require("@dev/remote")
     local rows = {}
     for i, one in ipairs(runs) do
         dev_command.note(string.format("Running row %d of %d with `%s`.", i, #runs, one.run))
         rows[i] = check.run({
-            root = backend.root,
+            root = pin.root,
             run = one.run,
             argv = one.argv,
             seconds = check.row_seconds(backend.root),
-            env = { [remote.COMMAND_ENV] = remote.Command.RELEASE, [remote.PRIORITY_ENV] = "1" },
+            env = {
+                [remote.COMMAND_ENV] = remote.Command.RELEASE,
+                [remote.PRIORITY_ENV] = "1",
+                [REV_ENV] = pin.commit,
+            },
         })
         if rows[i].result ~= check.Result.PASS then
             local lines = wiring.check_lines(rows)
@@ -397,20 +404,33 @@ function M.ship(backend, opts, deps)
     if not commit then
         return failure("Revision " .. rev .. " does not name one commit. No card moved.")
     end
-    if not land.same_tree(backend.root, commit) then
+    local ws = require("@dev/cmd/ws")
+    local name = `ship-{land.short(commit)}-{os.time()}`
+    local path, why, code = ws.make(backend.root, name, function() end, { at = commit })
+    if not path then
         return failure(
             string.format(
-                "The working copy is not at %s, so a release command would test another tree. "
-                    .. "Run `dev board ship` from a workspace at that revision. No card moved.",
-                land.short(commit)
+                "The workspace for the rows could not be made at %s. %s No card moved.",
+                land.short(commit),
+                why or `The vcs command exited {code}.`
             )
         )
     end
-    local failed = ship_ran(backend, runs, function(row)
+    local failed = ship_ran(backend, runs, { root = path, commit = commit }, function(row)
         local failing = { files = row.failed or {}, cases = row.cases, rev = rev, commit = commit }
         return Ship.suspects(backend, failing)
     end)
+    local removed = ws.remove(backend.root, name, {})
+    local left = if removed.ok
+        then ""
+        else string.format(
+            "\nThe workspace %s was left at %s: %s.",
+            name,
+            path,
+            ws.describe(removed)
+        )
     if failed then
+        failed.message = (failed.message or "") .. left
         return failed
     end
     local cards, message = backend:cards()
@@ -428,7 +448,7 @@ function M.ship(backend, opts, deps)
     if main then
         lines[#lines + 1] = follow.launch(main, commit)
     end
-    local text = table.concat(lines, "\n")
+    local text = table.concat(lines, "\n") .. left
     if not ok then
         return failure(text)
     end

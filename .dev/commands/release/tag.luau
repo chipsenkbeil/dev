@@ -59,7 +59,9 @@ local function execute(_, args, ctx)
     if not backend then
         dev_command.die(err)
     end
-    local rev = args.rev or (if backend == vcs.JJ then "trunk()" else "HEAD")
+    local rev = args.rev
+        or dev_os.getenv("DEV_SHIP_REV")
+        or (if backend == vcs.JJ then "trunk()" else "HEAD")
     local best = newest(release_tags(ctx.root, backend))
     if not best then
         local by_hand = if backend == vcs.JJ
@@ -99,7 +101,8 @@ return dev_command({
         "and pushes it with `dev push --tag`. A pre-release tag such as ",
         "`v0.1.12-pre.1` is skipped.",
         "",
-        "- REV defaults to `trunk()` with jj and `HEAD` with git.",
+        "- REV defaults to the commit `DEV_SHIP_REV` names, which `dev board ship` sets, ",
+        "else `trunk()` with jj and `HEAD` with git.",
         "- A minor or major bump is a tag set by hand, and the next run counts from it.",
         "- It prints the new tag. With no release tag it exits 1 and names the first ",
         "tag to set by hand.",

@@ -3728,8 +3728,8 @@ The settings:
   a matching path, and to Done otherwise. A change whose files cannot be read
   goes to Release.
 - The done note then ends with `It waits in Release for the deploy.`
-- The lead runs `dev board ship` from a workspace at trunk, and rolls the
-  checkout only onto the revision that ship passed.
+- The lead runs `dev board ship` from any checkout, and rolls the checkout only
+  onto the revision that ship passed.
 - `checks` under `[board.release]` lists the commands `dev board ship` runs once
   when it gets none after `--`, one plain command per row.
 - `recheck` under `[board.land]` lists the commands `land` reruns itself, one
@@ -4022,7 +4022,8 @@ The commands:
   `ship -- dev release --batch 12 --summary TEXT`.
 - With no command, each row of the `checks` list under `[board.release]` runs
   once.
-- Every command is a plain command run from the project root.
+- Every command is a plain command run from the pinned workspace, described
+  under The revision.
 - With no command and no `checks` key under `[board.release]`, `ship` exits 2
   and names `[board.release]`.
 - With no command and a `checks` key that is malformed, `ship` exits 1 and
@@ -4036,10 +4037,17 @@ The revision:
 - REV is a jj revset that names one commit, and it defaults to trunk. In a git
   project REV is a git revision, and the default is the fetched remote trunk.
 - When REV cannot be read, `ship` runs nothing and moves no card.
-- A `dev --remote` row tests the working tree of the project root. When that
-  tree differs from the tree of the commit REV names (a jj `@` that differs, a
-  git `HEAD` that differs or a dirty git tree), `ship` exits 1, runs no command
-  and moves no card. Run it from a workspace at that revision.
+- `ship` makes a workspace pinned at the commit REV names (a jj workspace, or
+  a detached git worktree), runs every command in it and removes it when the
+  last one ends. So every row, `dev --remote lint` and `dev --remote test`
+  included, reads that commit and never the checkout, which may move to
+  another revision or hold changes while the rows run.
+- Each command gets `DEV_SHIP_REV` set to that commit's full id.
+  `dev release tag` tags it when it is given no revision, so the tag lands on
+  the shipped commit.
+- A workspace that holds changes after the rows is left in place, and `ship`
+  names it in its output.
+- When the workspace cannot be made, `ship` runs nothing and moves no card.
 
 A failed command:
 

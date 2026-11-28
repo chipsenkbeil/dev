@@ -321,6 +321,7 @@ end
 ---@class dev.cmd.ws.plan.Opts
 ---@field start string? nil when unset, the git start point of the worktree
 ---@field rev string? nil when unset, the jj revision the workspace starts on, else trunk
+---@field detach boolean? whether a git worktree is detached with no branch
 
 local function plan(root, name, path, opts)
     local backend = vcs.backend(root)
@@ -339,6 +340,16 @@ local function plan(root, name, path, opts)
     if backend == vcs.GIT then
         if opts.start == nil then
             error("a git worktree needs a start point")
+        end
+        if opts.detach then
+            return vcs.with(
+                vcs.base(root, backend),
+                "worktree",
+                "add",
+                "--detach",
+                path,
+                opts.start
+            )
         end
         return vcs.with(
             vcs.base(root, backend),
@@ -403,6 +414,8 @@ end
 
 ---@class dev.cmd.ws.make.Opts
 ---@field on string? nil when unset, the name of the workspace whose change the new one starts on
+---@field at string? nil when unset, the commit the workspace is pinned at, which a git worktree
+---holds detached
 
 ---Make the workspace NAME of the project at `root`, as `dev ws new` does, and print nothing.
 ---
@@ -491,7 +504,13 @@ function M.make(root, name, show, opts)
         rev = string.format('"%s"@', (on:gsub('[\\"]', "\\%0")))
         start = on
     end
-    local argv = plan(root, name, path, { start = start, rev = rev })
+    local detach = false
+    if opts and opts.at then
+        rev = opts.at
+        start = opts.at
+        detach = true
+    end
+    local argv = plan(root, name, path, { start = start, rev = rev, detach = detach })
     if argv == nil then
         made, why = fs.mkdir(path)
         if not made then

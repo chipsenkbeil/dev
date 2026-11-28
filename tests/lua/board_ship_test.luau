@@ -255,7 +255,9 @@ if dev_os.which("jj") then
         end
 
         -- Ship through the wrapped board and read the report
+        dev_os.setenv("DEV_WS_ROOT", support.tempdir())
         local result = cmd_board.run("ship", { "--", "true" }, backend)
+        dev_os.setenv("DEV_WS_ROOT", nil)
         testing.eq(result.code, 1, result.message)
         testing.ok(
             result.message:find(
@@ -1068,26 +1070,74 @@ if dev_os.which("jj") then
         testing.eq((state(home, id)), support.COLUMN_NAME.DONE)
     end)
 
-    testing.test("ship refuses a working copy that differs from the rev", function()
+    testing.test("ship runs the rows in a workspace at the rev and removes it", function()
         -- Start a project with a ticked card in Release
         local root, home = project(PASSING_RELEASE)
         must(dev(root, home, { "board", "init" }))
         local id = release_card(root, home, "First", { "It works" })
         tick(root, home, id)
 
-        -- Dirty the working copy
+        -- Dirty the checkout
         assert(fs.write(root .. "/extra.txt", "extra\n"), "write failed")
 
-        -- Ship with a command and check it never ran
+        -- Ship with a command that records where it ran
         local log = support.tempdir() .. "/ran"
-        local out, code = dev(root, home, { "board", "ship", "--", "sh", "-c", "echo x >>" .. log })
-        testing.eq(code, 1, out)
-        testing.ok(out:find("working copy is not at", 1, true), out)
-        testing.ok(not fs.exists(log), "the command ran")
-        testing.eq((state(home, id)), support.COLUMN_NAME.RELEASE)
+        local record = `pwd >{log}; ls >>{log}; echo "$DEV_SHIP_REV" >>{log}`
+        local out, code = dev(root, home, { "board", "ship", "--", "sh", "-c", record })
+        testing.eq(code, 0, out)
+        local ran = assert(fs.read(log), "read failed")
+        local where = ran:match("^[^\n]+")
+        testing.ok(where ~= root and where:find("/ship-", 1, true), ran)
+        testing.ok(ran:find("seed.txt", 1, true), ran)
+        testing.ok(not ran:find("extra.txt", 1, true), ran)
+        testing.ok(ran:find(trunk_commit(root), 1, true), ran)
+        testing.ok(not fs.exists(where), "the workspace stayed")
+        testing.eq((state(home, id)), support.COLUMN_NAME.DONE)
     end)
 
-    testing.test("ship refuses a working copy on an older trunk", function()
+    testing.test("ship tags the rev when the checkout moves between rows", function()
+        -- Write a row that moves the checkout onto a new commit and one that tags the rev
+        local dir = support.tempdir()
+        local mover = dir .. "/move.sh"
+        local tagger = dir .. "/tag.sh"
+        local root, home
+        local function script(path, lines)
+            assert(fs.write(path, table.concat(lines, "\n") .. "\n"), "write failed")
+            must(dev_os.run({ "chmod", "755", path }))
+        end
+        local config = table.concat({
+            "",
+            "[board.release]",
+            'checks = ["' .. mover .. '", "' .. tagger .. '"]',
+            "",
+        }, "\n")
+        root, home = project(config)
+        must(dev(root, home, { "board", "init" }))
+        script(mover, {
+            "#!/bin/sh",
+            'echo moved >"' .. root .. '/moved.txt"',
+            'jj --no-pager -R "' .. root .. '" commit -m moved',
+        })
+        script(tagger, {
+            "#!/bin/sh",
+            'jj --no-pager tag set v9.9.9 -r "$DEV_SHIP_REV"',
+        })
+
+        -- Ship a ticked card
+        local pinned = trunk_commit(root)
+        local id = release_card(root, home, "First", { "It works" })
+        tick(root, home, id)
+        local out, code = dev(root, home, { "board", "ship" })
+        testing.eq(code, 0, out)
+
+        -- Check the checkout moved and the tag still names the rev
+        testing.ok(fs.exists(root .. "/moved.txt"), "the checkout did not move")
+        local tagged = jj(root, "log", "-r", "v9.9.9", "--no-graph", "-T", "commit_id")
+        testing.eq(tagged, pinned)
+        testing.eq((state(home, id)), support.COLUMN_NAME.DONE)
+    end)
+
+    testing.test("ship runs the rows on an older rev while trunk is newer", function()
         -- Start a project with a passing release row
         local root, home = project(PASSING_RELEASE)
         must(dev(root, home, { "board", "init" }))
@@ -1098,11 +1148,10 @@ if dev_os.which("jj") then
         tick(root, home, id)
         jj(root, "new", pinned)
 
-        -- Ship the board
+        -- Ship the board at its default rev
         local out, code = dev(root, home, { "board", "ship" })
-        testing.eq(code, 1, out)
-        testing.ok(out:find("working copy is not at", 1, true), out)
-        testing.eq((state(home, id)), support.COLUMN_NAME.RELEASE)
+        testing.eq(code, 0, out)
+        testing.eq((state(home, id)), support.COLUMN_NAME.DONE)
     end)
 
     testing.test("ship leaves a card with no landed commit in release and says why", function()
@@ -1427,17 +1476,25 @@ testing.test("ship.names.no.suspect.when.every.card.matches", function()
     testing.eq(red_notes(home, b_id), 0)
 end)
 
-testing.test("ship.in.a.git.project.refuses.a.head.off.the.rev", function()
+testing.test("ship in a git project runs the rows at the rev when HEAD is elsewhere", function()
     -- Start a git project with a card landed after the pinned commit
     local root, home = git_project()
     must(dev(root, home, { "board", "init" }))
     local pinned = git_head(root)
-    local id = git_release_card(root, home, "Late", git_push_commit(root, "later"))
+    local landed = git_push_commit(root, "later")
+    local id = git_release_card(root, home, "Late", landed)
 
-    -- Move HEAD back to the pinned commit and ship
+    -- Move HEAD back to the pinned commit and ship with a command that records its commit
     git(root, "checkout", "-q", "--detach", pinned)
-    local out, code = dev(root, home, { "board", "ship" })
-    testing.eq(code, 1, out)
-    testing.ok(out:find("working copy is not at", 1, true), out)
-    testing.eq((state(home, id)), support.COLUMN_NAME.RELEASE)
+    local log = support.tempdir() .. "/ran"
+    local record = `git rev-parse HEAD >{log}; pwd >>{log}`
+    local out, code = dev(root, home, { "board", "ship", "--", "sh", "-c", record })
+    testing.eq(code, 0, out)
+
+    -- Check the row ran at the rev in a workspace that is gone
+    local ran = assert(fs.read(log), "read failed")
+    testing.eq(ran:match("^%x+"), landed)
+    local where = ran:match("\n([^\n]+)\n$")
+    testing.ok(where ~= root and not fs.exists(where), ran)
+    testing.eq((state(home, id)), support.COLUMN_NAME.DONE)
 end)
