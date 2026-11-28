@@ -2506,7 +2506,8 @@ function commands.order(backend, opts, args)
         end
         end_place = count - 1
     end
-    local after, stray
+    local after
+    local strays: { string } = {}
     for _ = 1, 2 do
         for position, card in ipairs(named) do
             local held = claims.read(card.id)
@@ -2523,7 +2524,7 @@ function commands.order(backend, opts, args)
         if not after then
             return failure(message)
         end
-        stray = nil
+        strays = {}
         local places = {}
         for _, card in ipairs(after) do
             if card.column == column and card.lane == lane then
@@ -2534,24 +2535,20 @@ function commands.order(backend, opts, args)
         for position, card in ipairs(named) do
             local placed = places[first + position]
             if placed and placed.id ~= card.id then
-                stray = stray or placed
+                strays[#strays + 1] = placed.id:sub(1, board.MIN_PREFIX)
             end
         end
-        if not stray then
+        if #strays == 0 then
             break
         end
     end
-    if stray then
+    if #strays > 0 then
         local where = if opts.last
             then " among the named cards in "
             else " above the named cards in "
-        return failure(
-            "Order left card "
-                .. stray.id:sub(1, board.MIN_PREFIX)
-                .. where
-                .. column
-                .. " after a second pass of moves."
-        )
+        local noun = if #strays == 1 then "card" else "cards"
+        local list = table.concat(strays, ", ")
+        return failure(`Order left {noun} {list}{where}{column} after a second pass of moves.`)
     end
     local rows = {}
     for _, card in ipairs(after) do

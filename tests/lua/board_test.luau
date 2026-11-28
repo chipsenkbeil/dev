@@ -7139,6 +7139,22 @@ testing.test("order fails when an unnamed card stays on top after the repeat", f
     testing.eq(#backend.calls, 4)
 end)
 
+testing.test("order names every misplaced card when the repeat does not fix them", function()
+    -- Give a board that drops the moves of both passes
+    local backend = fake(column_of_three())
+    backend.ignore_moves = 4
+
+    -- Order the two cards that sit below the first
+    local result = cmd_board.run("order", { "11111111-b", "cccccccc" }, backend)
+
+    -- Expect one refusal that names both cards the order did not move
+    testing.eq(result.code, 1)
+    local _, named = result.message:gsub("11111111", "")
+    testing.eq(named, 2)
+    testing.ok(result.message:find("cards ", 1, true), result.message)
+    testing.eq(#backend.calls, 4)
+end)
+
 testing.test("order checks the top of the named cards' lane and not of the column", function()
     -- Put the named cards in a lane of their own and drop the first two moves
     local cards = column_of_three()
