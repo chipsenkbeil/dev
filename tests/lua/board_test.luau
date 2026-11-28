@@ -19490,6 +19490,10 @@ do
         local result = empty_move(backend, nil, trunk_holds)
         testing.eq(result.code, 1)
         testing.ok(result.message:find("There is no change to land", 1, true), result.message)
+        testing.ok(
+            result.message:find("dev board label cccccccc +no-change", 1, true),
+            result.message
+        )
     end)
 
     testing.test(
