@@ -1170,6 +1170,18 @@ testing.test("init on a board already at the standard says so and writes nothing
     testing.eq(stdin_of(root), 'header = "Authorization: Bearer ' .. TOKEN .. '"\n')
 end)
 
+testing.test("init reads a red label holding > back as written and does not rename it", function()
+    -- Run init on a board whose red colour already holds the standard label
+    local root, home, tmp = sandbox()
+    local out, code = dev(root, home, tmp, { "board", "init" })
+
+    -- Check the label held as > is left alone and nothing in the output is escaped
+    testing.eq(code, 0)
+    testing.eq(calls_of(root):find("colors/red-id", 1, true), nil)
+    testing.eq(out:find("named red", 1, true), nil)
+    testing.eq(out:find("&gt;", 1, true), nil)
+end)
+
 testing.test("init refuses a name that is not a lead", function()
     -- Run init as an implementer
     local root, home, tmp = sandbox()
@@ -1671,6 +1683,15 @@ testing.test("init sends the changes an old board needs as the API's own calls",
     )
     testing.ok(
         calls:find(
+            '--data-raw {"description":"More than three, split it first","label":">3 Pomodori"} '
+                .. "https://pomb.example/api/boards/board-1/colors/red-id",
+            1,
+            true
+        ),
+        calls
+    )
+    testing.ok(
+        calls:find(
             '--data-raw {"is_default":true} '
                 .. "https://pomb.example/api/boards/board-1/colors/white-id",
             1,
@@ -1691,6 +1712,7 @@ testing.test("init sends the changes an old board needs as the API's own calls",
     -- Check the report names each change and never the token
     testing.ok(out:find("moved column Icebox to position 0\n", 1, true), out)
     testing.ok(out:find('named yellow "1 Pomodoro"\n', 1, true), out)
+    testing.ok(out:find('named red ">3 Pomodori"\n', 1, true), out)
     testing.ok(out:find("made white the default colour\n", 1, true), out)
     testing.ok(out:find('renamed card 11111111 to "Keep it" and coloured it blue\n', 1, true), out)
     testing.eq(out:find(TOKEN, 1, true), nil)
