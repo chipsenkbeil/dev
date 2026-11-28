@@ -7,6 +7,11 @@ return dev_command({
     remote = false,
     flags = {
         { name = "dry-run", kind = "boolean", help = "Print the plan and remove nothing" },
+        {
+            name = "idle",
+            kind = "boolean",
+            help = "Also remove a workspace that holds no change and is in trunk",
+        },
     },
     run = ws.prune,
 })

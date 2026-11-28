@@ -406,11 +406,12 @@ jj workspace whose working copy is not empty, not described and not in trunk is
 refused as holding changes not in a commit, and a dry run keeps it too. An
 empty working copy is forgotten with its commit.
 
-`ws prune [--dry-run]` clears what finished work leaves behind, for a jj or a
-git project. Each action is one sentence on standard output and the last line
-counts them, for example `Pruned 2 workspaces and 1 head. Left 3 items alone.`
-A dry run says `Would forget` and `Would prune` and removes nothing. As with
-any jj command, reading a workspace snapshots its working copy.
+`ws prune [--dry-run] [--idle]` clears what finished work leaves behind, for a
+jj or a git project. Each action is one sentence on standard output and the
+last line counts them, for example `Pruned 2 workspaces and 1 head. Left 3
+items alone.` A dry run says `Would forget` and `Would prune` and removes
+nothing. As with any jj command, reading a workspace snapshots its working
+copy.
 
 A jj workspace or git worktree is pruned when its recorded folder is gone,
 through `ws.remove` with `opts.missing`. It is also pruned when its name is the
@@ -418,6 +419,15 @@ short id of a Done card on the project's board and its folder sits where
 `ws new` puts it, through the same `ws.remove` as `ws rm`, so the folder goes
 to the trash and its line ends with `Moved PATH to TRASH.` The default
 workspace and the main worktree are never listed.
+
+With `--idle`, a workspace whose name is not the id of a Done card is pruned
+too when its folder sits where `ws new` puts it and it holds nothing: a jj
+working copy that is empty with no description on a parent in trunk, or a git
+worktree that is clean with its HEAD in trunk. Its line says `It is idle.` and
+the removal is the same `ws.remove` trash move. The flag is opt-in, as dev
+cannot tell whether a live session holds the workspace. Without it, the `Left`
+line of such a workspace ends with `, but --idle would remove it`. That test
+reads a jj workspace with `--ignore-working-copy`, so it takes no snapshot.
 
 A folder with changes not in a commit, and the workspace dev runs in, are kept
 and each gets a `Kept` line, as does a git worktree that is locked or sits

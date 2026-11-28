@@ -1343,6 +1343,8 @@ local PRUNE_JJ_STUB = table.concat({
     "        done",
     "        exit 0 ;;",
     '    *"log -r @ "*)',
+    '        echo "$*" >> "${READS:-/dev/null}"',
+    '        if [ -n "$BUSY" ]; then case "$*" in *"$BUSY"*) printf changes; exit 0 ;; esac; fi',
     '        case "$*" in *--ignore-working-copy*)',
     '            if [ -n "$STALE_READ" ]; then printf \'%s\' "$DIRTY"; exit 0; fi ;;',
     "        esac",
@@ -1377,6 +1379,7 @@ local PRUNE_GIT_STUB = table.concat({
     "        printf '%s' \"$WORKTREES\"; exit 0 ;;",
     '    *"status --porcelain"*) printf \'%s\' "$DIRTY"; exit 0 ;;',
     '    *"for-each-ref"*) printf \'%s\' "$BRANCHES"; exit 0 ;;',
+    '    *"merge-base"*) echo "git $*" >> "$LOG"; if [ -n "$OFF_TRUNK" ]; then exit 1; fi; exit 0 ;;',
     "esac",
     'echo "git $*" >> "$LOG"',
     'if [ -n "$FAIL" ]; then exit 3; fi',
@@ -1522,7 +1525,9 @@ testing.test("prune forgets a jj workspace named for a done card", function()
                 .. " to "
                 .. trashed(env, root, DONE_ID)
                 .. ".",
-            "Left workspace " .. OPEN_ID .. " alone. Its name is not the id of a done card.",
+            "Left workspace "
+                .. OPEN_ID
+                .. " alone. Its name is not the id of a done card, but --idle would remove it.",
             "Pruned 1 workspace and 0 heads. Left 1 item alone."
         )
     )
@@ -1552,7 +1557,9 @@ testing.test("prune dry-run names a jj workspace that is not a done card as left
     testing.eq(
         out,
         lines(
-            "Left workspace " .. OPEN_ID .. " alone. Its name is not the id of a done card.",
+            "Left workspace "
+                .. OPEN_ID
+                .. " alone. Its name is not the id of a done card, but --idle would remove it.",
             "Would prune 0 workspaces and 0 heads. Left 1 item alone."
         )
     )
@@ -1561,6 +1568,108 @@ testing.test("prune dry-run names a jj workspace that is not a done card as left
     testing.eq(fs.read(log) or "", "")
     testing.eq(fs.exists(open .. "/file"), true)
 end)
+
+testing.test("prune dry-run with --idle lists an idle jj workspace and removes nothing", function()
+    -- Seed an open card and one idle and one busy workspace that no done card names
+    local root, dir, env, log = prune_setup("jj")
+    seed_board(root, env, { { id = OPEN_ID } })
+    local idle = folder(dir, "idle1")
+    local busy = folder(dir, "busy1")
+    env.env.WORKSPACES = table.concat({ "default", "idle1", "busy1" }, "\n")
+    env.env.ROOTS = table.concat({ "idle1 " .. idle, "busy1 " .. busy }, "\n")
+    env.env.BUSY = busy
+
+    -- Dry-run the prune with --idle
+    local out, code = support.dev(root, { "ws", "prune", "--dry-run", "--idle" }, env)
+
+    -- Expect the idle workspace listed, the busy one left alone and nothing changed
+    testing.eq(code, 0, out)
+    testing.eq(
+        out,
+        lines(
+            "Would forget workspace idle1. It is idle.",
+            "Left workspace busy1 alone. Its name is not the id of a done card.",
+            "Would prune 1 workspace and 0 heads. Left 1 item alone."
+        )
+    )
+    testing.eq(fs.read(log) or "", "")
+    testing.eq(fs.exists(idle .. "/file"), true)
+    testing.eq(fs.exists(busy .. "/file"), true)
+end)
+
+testing.test(
+    "prune with --idle trashes an idle jj workspace and leaves one with a change",
+    function()
+        -- Seed an open card and one idle and one busy workspace that no done card names
+        local root, dir, env, log = prune_setup("jj")
+        seed_board(root, env, { { id = OPEN_ID } })
+        local idle = folder(dir, "idle1")
+        local busy = folder(dir, "busy1")
+        env.env.WORKSPACES = table.concat({ "default", "idle1", "busy1" }, "\n")
+        env.env.ROOTS = table.concat({ "idle1 " .. idle, "busy1 " .. busy }, "\n")
+        env.env.BUSY = busy
+
+        local reads = fs.dirname(log) .. "/reads"
+        env.env.READS = reads
+
+        -- Prune with --idle
+        local out, code = support.dev(root, { "ws", "prune", "--idle" }, env)
+
+        -- Expect the idle test to read the working copy and its parent outside trunk
+        testing.ok(
+            fs.read(reads):find("log -r @ | (@- ~ ::trunk())", 1, true) ~= nil,
+            fs.read(reads)
+        )
+
+        -- Expect the idle workspace forgotten and trashed and the busy one kept
+        testing.eq(code, 0, out)
+        testing.eq(
+            out,
+            lines(
+                "Forgot workspace idle1. It is idle. Moved "
+                    .. idle
+                    .. " to "
+                    .. trashed(env, root, "idle1")
+                    .. ".",
+                "Left workspace busy1 alone. Its name is not the id of a done card.",
+                "Pruned 1 workspace and 0 heads. Left 1 item alone."
+            )
+        )
+        testing.eq(
+            fs.read(log),
+            "jj -R " .. root .. " --ignore-working-copy workspace forget idle1\n"
+        )
+        testing.eq(fs.exists(idle), false)
+        testing.eq(fs.exists(busy .. "/file"), true)
+    end
+)
+
+testing.test(
+    "prune without --idle leaves an idle jj workspace and says --idle would remove it",
+    function()
+        -- Seed an open card and an idle workspace that no done card names
+        local root, dir, env, log = prune_setup("jj")
+        seed_board(root, env, { { id = OPEN_ID } })
+        local idle = folder(dir, "idle1")
+        env.env.WORKSPACES = table.concat({ "default", "idle1" }, "\n")
+        env.env.ROOTS = "idle1 " .. idle
+
+        -- Prune without the flag
+        local out, code = support.dev(root, { "ws", "prune" }, env)
+
+        -- Expect the workspace named with the hint and kept
+        testing.eq(code, 0, out)
+        testing.eq(
+            out,
+            lines(
+                "Left workspace idle1 alone. Its name is not the id of a done card, but --idle would remove it.",
+                "Pruned 0 workspaces and 0 heads. Left 1 item alone."
+            )
+        )
+        testing.eq(fs.read(log) or "", "")
+        testing.eq(fs.exists(idle .. "/file"), true)
+    end
+)
 
 testing.test("prune leaves a git worktree that is not a done card alone", function()
     -- Seed a board with one open card and a worktree folder for it
@@ -1575,6 +1684,130 @@ testing.test("prune leaves a git worktree that is not a done card alone", functi
     local out, code = support.dev(root, { "ws", "prune" }, env)
 
     -- Expect the worktree named as left alone and nothing removed
+    testing.eq(code, 0, out)
+    testing.eq(
+        out,
+        lines(
+            "Left worktree " .. OPEN_ID .. " alone. Its name is not the id of a done card.",
+            "Git keeps no empty heads.",
+            "Pruned 0 worktrees and 0 heads. Left 1 item alone."
+        )
+    )
+    testing.eq(fs.read(log) or "", "")
+    testing.eq(fs.exists(open .. "/.git"), true)
+end)
+
+testing.test("prune with --idle removes a clean git worktree whose HEAD is in trunk", function()
+    -- Seed an open card and a clean worktree for it with master as trunk
+    local root, dir, env, log = prune_setup("git")
+    seed_board(root, env, { { id = OPEN_ID } })
+    local open = dir .. OPEN_ID
+    assert(fs.mkdir(open, { parents = true }))
+    assert(fs.write(open .. "/.git", "gitdir: elsewhere\n"))
+    env.env.WORKTREES = worktrees(root, open)
+    env.env.BRANCHES = "master\n"
+
+    -- Prune with --idle
+    local out, code = support.dev(root, { "ws", "prune", "--idle" }, env)
+
+    -- Expect the worktree removed to the trash
+    testing.eq(code, 0, out)
+    testing.eq(
+        out,
+        lines(
+            "Removed worktree "
+                .. OPEN_ID
+                .. ". It is idle. Moved "
+                .. open
+                .. " to "
+                .. trashed(env, root, OPEN_ID)
+                .. ".",
+            "Git keeps no empty heads.",
+            "Pruned 1 worktree and 0 heads. Left 0 items alone."
+        )
+    )
+    testing.eq(fs.exists(open), false)
+
+    -- Expect the HEAD tested against trunk and the record pruned
+    testing.ok(
+        fs.read(log):find("merge-base --is-ancestor HEAD refs/heads/master", 1, true) ~= nil,
+        fs.read(log)
+    )
+    testing.ok(fs.read(log):find("worktree prune", 1, true) ~= nil, fs.read(log))
+end)
+
+testing.test("prune with --idle leaves a git worktree whose HEAD is not in trunk alone", function()
+    -- Seed an open card and a clean worktree whose HEAD is off trunk
+    local root, dir, env, log = prune_setup("git")
+    seed_board(root, env, { { id = OPEN_ID } })
+    local open = dir .. OPEN_ID
+    assert(fs.mkdir(open, { parents = true }))
+    assert(fs.write(open .. "/.git", "gitdir: elsewhere\n"))
+    env.env.WORKTREES = worktrees(root, open)
+    env.env.BRANCHES = "master\n"
+    env.env.OFF_TRUNK = "1"
+
+    -- Prune with --idle
+    local out, code = support.dev(root, { "ws", "prune", "--idle" }, env)
+
+    -- Expect the worktree left alone and the folder kept
+    testing.eq(code, 0, out)
+    testing.eq(
+        out,
+        lines(
+            "Left worktree " .. OPEN_ID .. " alone. Its name is not the id of a done card.",
+            "Git keeps no empty heads.",
+            "Pruned 0 worktrees and 0 heads. Left 1 item alone."
+        )
+    )
+    testing.ok(fs.read(log):find("worktree remove", 1, true) == nil, fs.read(log))
+    testing.eq(fs.exists(open .. "/.git"), true)
+end)
+
+testing.test("prune with --idle keeps an idle workspace it runs in", function()
+    -- Build an idle workspace folder that is not named for a card and run in it
+    local root, _, env, log = prune_setup("jj")
+    local base = assert(fs.realpath(support.tempdir())) .. "/ws"
+    local inside = base .. "/proj/idle1"
+    assert(fs.mkdir(inside .. "/.dev", { parents = true }))
+    assert(fs.mkdir(inside .. "/.jj"))
+    env.env.DEV_WS_ROOT = base
+    env.env.PATH = root .. "/bin:" .. dev_os.getenv("PATH")
+    seed_board(inside, env, { { id = OPEN_ID } })
+    env.env.WORKSPACES = table.concat({ "default", "idle1" }, "\n")
+    env.env.ROOTS = "idle1 " .. inside
+
+    -- Prune from inside the workspace with --idle
+    local out, code = support.dev(inside, { "ws", "prune", "--idle" }, env)
+
+    -- Expect it kept as the workspace dev runs in and no forget
+    testing.eq(code, 0, out)
+    testing.eq(
+        out,
+        lines(
+            "Kept workspace idle1. It is the workspace dev runs in.",
+            "Pruned 0 workspaces and 0 heads. Left 1 item alone."
+        )
+    )
+    testing.eq(fs.read(log) or "", "")
+    testing.eq(fs.exists(inside .. "/.dev"), true)
+end)
+
+testing.test("prune with --idle leaves a dirty git worktree alone", function()
+    -- Seed an open card and a dirty worktree for it
+    local root, dir, env, log = prune_setup("git")
+    seed_board(root, env, { { id = OPEN_ID } })
+    local open = dir .. OPEN_ID
+    assert(fs.mkdir(open, { parents = true }))
+    assert(fs.write(open .. "/.git", "gitdir: elsewhere\n"))
+    env.env.WORKTREES = worktrees(root, open)
+    env.env.BRANCHES = "master\n"
+    env.env.DIRTY = " M file\n"
+
+    -- Prune with --idle
+    local out, code = support.dev(root, { "ws", "prune", "--idle" }, env)
+
+    -- Expect the worktree left alone
     testing.eq(code, 0, out)
     testing.eq(
         out,

@@ -16,6 +16,7 @@ local M = {}
 
 ---@class dev.cmd.ws.prune.Opts
 ---@field dry_run boolean? whether to print the plan and remove nothing
+---@field idle boolean? whether to also remove an idle workspace that no done card names
 
 local EMPTY_HEADS = "heads(mutable()) & empty()"
 local IGNORE_WORKING_COPY = "--ignore-working-copy"
@@ -30,9 +31,12 @@ local MAX_LANDED_ROUNDS = 20
 local STAMP_FORMAT = "!%Y%m%dT%H%M%SZ"
 local TRASH_DIR = ".trash"
 local ADOPT_PARENTS = "coalesce(@ & ::trunk(), @-)"
+local IDLE_REVSET = "@ | (@- ~ ::trunk())"
+local IDLE_TEMPLATE =
+    'if(current_working_copy, if(empty && description == "", "", "changes"), "changes")'
 
 ---@enum dev.cmd.ws.Step
-local Step = { GONE = "gone", DONE = "done", KEEP = "keep" }
+local Step = { GONE = "gone", DONE = "done", IDLE = "idle", KEEP = "keep" }
 
 ---@enum dev.cmd.ws.Leave
 local Leave = { ELSEWHERE = "elsewhere" }
@@ -1201,30 +1205,91 @@ local function git_worktrees(root)
     return found
 end
 
-local function plan_workspaces(root, found, finished)
+local function git_trunk_refs(root, trunk)
+    local base = vcs.base(root, vcs.GIT, { quiet = true })
+    local refs = { `refs/heads/{trunk}` }
+    local out = dev_os.capture(
+        vcs.with(base, "for-each-ref", "--format=%(refname)", "refs/remotes"),
+        { stderr = "null" }
+    )
+    for ref in (out or ""):gmatch("[^\n]+") do
+        if ref:match(`^refs/remotes/[^/]+/{trunk}$`) then
+            refs[#refs + 1] = ref
+        end
+    end
+    return refs
+end
+
+local function on_trunk(base, rev, refs)
+    for _, ref in ipairs(refs) do
+        local argv = vcs.with(base, "merge-base", "--is-ancestor", rev, ref)
+        if dev_os.run(argv, { stdout = "null", stderr = "null" }) == 0 then
+            return true
+        end
+    end
+    return false
+end
+
+local function workspace_idle(root, path, opts)
+    local backend = vcs.backend(path)
+    if backend == vcs.JJ then
+        local base = vcs.base(path, backend, { quiet = true })
+        local log = { "log", "-r", IDLE_REVSET, "--no-graph", "-T", IDLE_TEMPLATE }
+        if opts.snapshot_free then
+            table.insert(log, 1, IGNORE_WORKING_COPY)
+        end
+        local out, code = dev_os.capture(vcs.with(base, table.unpack(log)), { stderr = "stdout" })
+        if code ~= 0 and out:find("stale", 1, true) then
+            out, code = dev_os.capture(
+                vcs.with(base, IGNORE_WORKING_COPY, table.unpack(log)),
+                { stderr = "stdout" }
+            )
+        end
+        return code == 0 and out == ""
+    end
+    if backend == vcs.GIT then
+        local base = vcs.base(path, backend, { quiet = true })
+        local out, code =
+            dev_os.capture(vcs.with(base, "status", "--porcelain"), { stderr = "null" })
+        if code ~= 0 or out ~= "" then
+            return false
+        end
+        local trunk = vcs.trunk(vcs.branches(root, vcs.GIT))
+        return trunk ~= nil and on_trunk(base, "HEAD", git_trunk_refs(root, trunk))
+    end
+    return false
+end
+
+local function plan_workspaces(root, found, finished, idle)
     local steps = {}
     local ordered = {}
     local leftover = {}
     local here = fs.realpath(root)
     for _, space in ipairs(found) do
         local step = { name = space.name, path = space.path }
+        local card = finished and finished[space.name]
         if not fs.exists(space.path) then
             step.kind = Step.GONE
             ordered[#ordered + 1] = step
-        elseif finished and finished[space.name] then
+        elseif card or finished or idle then
             local base = workspace_root()
             local own = fs.realpath(fs.join(base, repo_name(base, root), space.name))
             local there = fs.realpath(space.path)
-            if own ~= nil and own == there then
-                step.kind = there == here and Step.KEEP or Step.DONE
-                step.note = "it is the workspace dev runs in"
-                steps[#steps + 1] = step
-            else
+            local owned = own ~= nil and own == there
+            if card and not owned then
                 step.why = Leave.ELSEWHERE
                 leftover[#leftover + 1] = step
+            elseif card or (owned and idle and workspace_idle(root, space.path, {})) then
+                step.kind = there == here and Step.KEEP or (card and Step.DONE or Step.IDLE)
+                step.note = "it is the workspace dev runs in"
+                steps[#steps + 1] = step
+            elseif finished then
+                step.would = owned
+                    and there ~= here
+                    and not idle
+                    and workspace_idle(root, space.path, { snapshot_free = true })
+                leftover[#leftover + 1] = step
             end
-        elseif finished then
-            leftover[#leftover + 1] = step
         end
     end
     for _, step in ipairs(steps) do
@@ -1242,10 +1307,10 @@ local function leave_workspaces(label, leftover)
                     .. " "
                     .. step.name
                     .. " alone. "
-                    .. (
-                        step.why == Leave.ELSEWHERE and "Its folder is not where ws new puts it"
-                        or "Its name is not the id of a done card"
-                    )
+                    .. (if step.why == Leave.ELSEWHERE
+                        then "Its folder is not where ws new puts it"
+                        else "Its name is not the id of a done card")
+                    .. (if step.would then ", but --idle would remove it" else "")
             )
         )
     end
@@ -1261,6 +1326,9 @@ local function workspace_line(label, step, opts)
             step.name,
             step.path
         )
+    end
+    if step.kind == Step.IDLE then
+        return string.format("%s %s %s. It is idle.", opts.verb, label, step.name)
     end
     return string.format("%s %s %s. Its card is done.", opts.verb, label, step.name)
 end
@@ -1279,17 +1347,18 @@ local function prune_workspaces(ctx, steps, opts)
     end
     for _, step in ipairs(steps) do
         local ok, message, purged, why
+        local removes = step.kind == Step.DONE or step.kind == Step.IDLE
         if step.kind == Step.KEEP then
             ok, why = false, { reason = Refusal.KEPT, detail = step.note }
         elseif opts.dry then
             ok = true
-            if step.kind == Step.DONE and fs.is_link(step.path) then
+            if removes and fs.is_link(step.path) then
                 ok, why = false, { reason = Refusal.LINK, path = step.path }
             elseif step.kind == Step.GONE and opts.backend == vcs.JJ then
                 local held
                 held, why = unsaved_missing(ctx.root, step.name, step.path)
                 ok = not held
-            elseif step.kind == Step.DONE then
+            elseif removes then
                 ok, why =
                     M.__clean(opts.backend, step.path, { stale_ok = true, described_ok = true })
                 if ok and opts.backend == vcs.GIT then
@@ -1317,7 +1386,7 @@ local function prune_workspaces(ctx, steps, opts)
                 freed[#freed + 1] = step.name
             end
             local line = workspace_line(label, step, { verb = opts.dry and future or past })
-            if step.kind == Step.DONE and not opts.dry then
+            if removes and not opts.dry then
                 line = line .. " " .. message
             end
             dev_command.say(line)
@@ -1507,31 +1576,6 @@ local function list_strays(root, freed, planned)
     return left
 end
 
-local function git_trunk_refs(root, trunk)
-    local base = vcs.base(root, vcs.GIT, { quiet = true })
-    local refs = { `refs/heads/{trunk}` }
-    local out = dev_os.capture(
-        vcs.with(base, "for-each-ref", "--format=%(refname)", "refs/remotes"),
-        { stderr = "null" }
-    )
-    for ref in (out or ""):gmatch("[^\n]+") do
-        if ref:match(`^refs/remotes/[^/]+/{trunk}$`) then
-            refs[#refs + 1] = ref
-        end
-    end
-    return refs
-end
-
-local function on_trunk(base, branch, refs)
-    for _, ref in ipairs(refs) do
-        local argv = vcs.with(base, "merge-base", "--is-ancestor", `refs/heads/{branch}`, ref)
-        if dev_os.run(argv, { stdout = "null", stderr = "null" }) == 0 then
-            return true
-        end
-    end
-    return false
-end
-
 local function checked_out_branches(root)
     local base = vcs.base(root, vcs.GIT, { quiet = true })
     local out =
@@ -1561,7 +1605,7 @@ local function delete_merged_branches(ctx, opts)
             unmerged += 1
             continue
         end
-        if not on_trunk(base, branch, refs) then
+        if not on_trunk(base, `refs/heads/{branch}`, refs) then
             dev_command.say(sentence(`Left branch {branch} alone. It is not on trunk`))
             unmerged += 1
             continue
@@ -1601,6 +1645,11 @@ end
 ---folder sits at the path `ws new` makes. A project with no readable board
 ---skips the card test and says so.
 ---
+---With `--idle`, a workspace that no done card names is pruned too when its
+---folder sits where `ws new` makes it and it holds nothing: a jj working copy that
+---is empty with no description on a parent in trunk, or a clean git worktree whose
+---HEAD is in trunk.
+---
 ---The default workspace, the main worktree, the workspace dev runs in and any
 ---folder with changes not in a commit are never pruned. A jj project also
 ---abandons the empty heads that nothing holds and lists the rest.
@@ -1620,7 +1669,8 @@ function M.prune(opts, args, ctx)
     end
 
     local found = backend == vcs.JJ and jj_workspaces(ctx.root) or git_worktrees(ctx.root)
-    local steps, leftover = plan_workspaces(ctx.root, found, finished_cards(ctx.root))
+    local steps, leftover =
+        plan_workspaces(ctx.root, found, finished_cards(ctx.root), opts.idle == true)
     local pruned, left, failure, freed =
         prune_workspaces(ctx, steps, { backend = backend, dry = dry })
     left = left + leave_workspaces(backend == vcs.JJ and "workspace" or "worktree", leftover)
