@@ -412,7 +412,7 @@ What it lays out:
   - A missing board is made from Pomb's `agent project` template, and the
     missing columns are added and moved into place.
   - A column named In Review is renamed to Review with its cards kept,
-    through `PATCH /api/columns/{id}`, so no card is left in a column that no
+    through `PATCH /api/columns/{id}`, to leave no card in a column that no
     longer exists. It renames no column but In Review.
   - On a Pomb board, it gives the Ready, In Progress, Review, Verify and
     Release columns the stages `ready`, `in_progress`, `review`, `verify` and
