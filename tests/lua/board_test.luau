@@ -1473,12 +1473,20 @@ testing.test("label adds and removes labels and sends the whole list", function(
     testing.eq(backend.calls[3], { "set_labels", ID_A, { "y" }, nil })
 end)
 
-testing.test("label replays a queued removal given with --remove", function()
+testing.test("label applies every addition before every --remove", function()
+    -- Remove a label before and after additions that name it again
     local backend = fake(sample())
     local words = { "11111111-a", "--remove", "docs", "+new", "--remove", "new", "+docs" }
     local result = cmd_board.run("label", words, backend)
-    testing.eq(result.output, "labelled 11111111 docs")
-    result = cmd_board.run("label", { "11111111-a", "--remove", "docs" }, backend)
+
+    -- Expect the additions to go first, so both removals take their labels out
+    testing.eq(result.output, "labelled 11111111 -")
+    testing.eq(backend.calls[1], { "set_labels", ID_A, {}, nil })
+end)
+
+testing.test("label replays a queued removal given with --remove", function()
+    local backend = fake(sample())
+    local result = cmd_board.run("label", { "11111111-a", "--remove", "docs" }, backend)
     testing.eq(result.output, "labelled 11111111 -")
     testing.eq(backend.calls[1], { "set_labels", ID_A, {}, nil })
 end)
@@ -5119,7 +5127,7 @@ testing.test("outcome refuses more than one text argument", function()
         backend
     )
     testing.eq(result.code, 2)
-    testing.ok(result.message:find("run outcome once per outcome", 1, true), result.message)
+    testing.ok(result.message:find("Quote an outcome or a reason", 1, true), result.message)
 
     -- Send nothing
     testing.eq(#backend.calls, 0)
@@ -5438,8 +5446,8 @@ testing.test("outcome --rename names --reason when its reason is not quoted", fu
 
     -- Refuse it, name the flag and send nothing
     testing.eq(result.code, 2)
-    testing.ok(result.message:find("--reason flag takes one argument", 1, true), result.message)
-    testing.ok(result.message:find("Quote a reason", 1, true), result.message)
+    testing.ok(result.message:find("--reason flag each take one argument", 1, true), result.message)
+    testing.ok(result.message:find("Quote an outcome or a reason", 1, true), result.message)
     testing.eq(#backend.calls, 0)
 end)
 

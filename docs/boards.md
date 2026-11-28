@@ -1333,7 +1333,8 @@ line saying why (exit 0), so a second run changes nothing.
 
 `add --label L` gives a new card a label, and may be repeated. `label CARD L`
 (or `+L`) adds a label to a card and `--remove L` removes one, each as many
-times as you like in one call, the additions first.
+times as you like in one call. All additions apply first and then all removals,
+whatever order you typed them in, so a label named in both ends up removed.
 
 Pomb replaces a card's whole label list on a change. So `label` reads the
 current labels, applies the edits and sends the full list, with the claim's

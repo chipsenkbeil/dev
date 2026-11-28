@@ -2382,18 +2382,11 @@ end
 
 ---Move a card, and with `--wait SECONDS` try again while its column is full.
 ---@param backend dev.board.Backend the board
----@param args string[] the card, the column and the flags
+---@param flags table<string, any> the parsed flags
+---@param words table<string, any> the parsed arguments, `card` and the `column` word list
 ---@param opts dev.cmd.board.move.Opts? the options of `move_once` and the clock
 ---@return dev.cmd.board.Result result the result of the last try
-local function move_card(backend, args, opts)
-    local foreign = guards.foreign_refusal(args[1], "move")
-    if foreign then
-        return foreign
-    end
-    local flags, words = reparse("move", args)
-    if not flags then
-        return words
-    end
+local function move_parsed(backend, flags, words, opts)
     if flags.to_board then
         return move_across(backend, flags, words)
     end
@@ -2406,12 +2399,32 @@ local function move_card(backend, args, opts)
     end)
 end
 
-function commands.move(backend, _, _, _, _, raw)
-    local home, rest, refused = guards.on_board(backend, raw.argv)
+---Move a card from the words of a call, which may name another board in the card word.
+---@param backend dev.board.Backend the board
+---@param args string[] the card, the column and the flags
+---@param opts dev.cmd.board.move.Opts? the options of `move_once` and the clock
+---@return dev.cmd.board.Result result the result of the last try
+local function move_card(backend, args, opts)
+    local foreign = guards.foreign_refusal(args[1], "move")
+    if foreign then
+        return foreign
+    end
+    local flags, words = reparse("move", args)
+    if not flags then
+        return words
+    end
+    return move_parsed(backend, flags, words, opts)
+end
+
+function commands.move(backend, opts, args)
+    if args.card == nil then
+        return move_parsed(backend, opts, args)
+    end
+    local home, word, refused = home_of(backend, args.card, opts.board)
     if not home then
         return refused
     end
-    return move_card(home, rest)
+    return move_parsed(home, opts, { card = word, column = args.column })
 end
 
 ---Move a card, retrying a full column until room frees when `--wait` is given.
@@ -2734,49 +2747,23 @@ function commands.time(backend, opts, args)
     }
 end
 
----Read the label changes in the order the words gave them.
+---Read the label changes, every addition first and then every removal.
 ---@param opts table<string, any> the parsed flags
 ---@param args table<string, any> the parsed arguments
----@param words string[]? the raw words after `label`, nil to take adds before removals
 ---@return {add: boolean, word: string}[] edits the changes in order
-local function label_edits(opts, args, words)
+local function label_edits(opts, args)
     local edits = {}
-    if words == nil then
-        for _, arg in ipairs(args.rest or {}) do
-            edits[#edits + 1] = { add = true, word = (arg:gsub("^%+", "")) }
-        end
-        for _, word in ipairs(listed(opts.remove) or {}) do
-            edits[#edits + 1] = { add = false, word = word }
-        end
-        return edits
+    for _, arg in ipairs(args.rest or {}) do
+        edits[#edits + 1] = { add = true, word = (arg:gsub("^%+", "")) }
     end
-    local skipped_card = false
-    local index = 1
-    while index <= #words do
-        local word = words[index]
-        index = index + 1
-        local inline = word:match("^%-%-remove=(.*)$")
-        if word == "--" then
-            for more = index, #words do
-                edits[#edits + 1] = { add = true, word = (words[more]:gsub("^%+", "")) }
-            end
-            break
-        elseif word == "--remove" then
-            edits[#edits + 1] = { add = false, word = words[index] }
-            index = index + 1
-        elseif inline then
-            edits[#edits + 1] = { add = false, word = inline }
-        elseif not skipped_card then
-            skipped_card = true
-        else
-            edits[#edits + 1] = { add = true, word = (word:gsub("^%+", "")) }
-        end
+    for _, word in ipairs(listed(opts.remove) or {}) do
+        edits[#edits + 1] = { add = false, word = word }
     end
     return edits
 end
 
-function commands.label(backend, opts, args, _now, _screen, raw)
-    local edits = label_edits(opts, args, raw and raw.argv)
+function commands.label(backend, opts, args)
+    local edits = label_edits(opts, args)
     for _, change in ipairs(edits) do
         local ok, err = plain(change.word)
         if not ok then
@@ -3220,7 +3207,7 @@ local function misplaced_outcome_form(args)
     end
 end
 
-function commands.outcome(backend, opts, args, _now, _screen, raw)
+function commands.outcome(backend, opts, args)
     local ticker_flag = opts.as
     local mode = M.outcome_mode(opts)
     if not mode then
@@ -3277,15 +3264,11 @@ function commands.outcome(backend, opts, args, _now, _screen, raw)
             return usage("The --rename flag needs " .. REASON_FLAG .. " TEXT.")
         end
         if #rest > 0 then
-            local at = index_of(raw and raw.argv or {}, REASON_FLAG)
-            if at and (raw.argv[at + 2] == rest[1]) then
-                return usage(
-                    "The "
-                        .. REASON_FLAG
-                        .. " flag takes one argument. Quote a reason of more than one word."
-                )
-            end
-            return usage(MULTI_TEXT_USAGE)
+            return usage(
+                "The new text and the "
+                    .. REASON_FLAG
+                    .. " flag each take one argument. Quote an outcome or a reason of more than one word."
+            )
         end
         word, text = opts.rename, args.text
         reason = opts.reason
