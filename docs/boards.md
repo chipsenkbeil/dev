@@ -3238,23 +3238,20 @@ that no minted reviewer token file was found for the name, and that the lead
 mints one with `dev board token mint --role reviewer --as NAME` or sets
 `reviewer_token` in `[board.pomb]`, or `verifier_token` for a verifier name. A
 second recheck, which Pomb refuses with `seat_held` (the one recheck seat is
-taken), prints no warning and ends its
-output with
-`The recheck seat is already held, so only the card records this review.`
-The first recheck's seat verdict stands. Land reads the review comments, and a
-recheck comment can meet a seat as described next. A clean or minor recheck of
-kind `code` or `style` recorded at the
+taken), prints no warning and ends its output with `The recheck seat is
+already held, so only the card records this review.` The first recheck's seat
+verdict stands. Land reads the review comments, and a recheck comment can meet
+a seat. A clean or minor recheck of kind `code` or `style` recorded at the
 landing commit meets that kind's seat for land, even when the seat still holds
-an approval of an earlier commit, as a recheck cannot post to a seat that
-another credential holds. A recheck carries over a trunk-only rebase like a
-seat does: one recorded at an earlier commit whose patch is identical to the
-landing commit's counts the same, and the newest recheck of a kind across those
-commits decides. A needs-work recheck, a recheck of the other kind, a recheck at
-a commit with a different patch and a seat that asks for changes at the landing
-commit do not meet it. The local board has no seats and keeps only the comment.
-The `recheck` seat itself is met the same way by any clean or minor recheck of
-either kind at the landing commit or an identical earlier one, whoever recorded
-it, unless a recheck there says needs-work.
+an approval of an earlier commit. A recheck carries over a trunk-only rebase
+like a seat does: one recorded at an earlier commit whose patch is identical
+to the landing commit's counts the same, and the newest recheck of a kind
+across those commits decides. A needs-work recheck, a recheck of the other
+kind, a recheck at a commit with a different patch and a seat that asks for
+changes at the landing commit do not meet it. The local board has no seats and
+keeps only the comment. The `recheck` seat itself is met the same way by any
+clean or minor recheck of either kind at the landing commit or an identical
+earlier one, whoever recorded it, unless a recheck there says needs-work.
 
 The comment stays for landing to read. It is one `status` comment on the
 card that begins with a reserved first line and has no other:
@@ -3480,12 +3477,13 @@ lists each one that fails. A refusal can leave the change rebased onto trunk.
   answered or approved another commit refuses and is named. A seat of the code
   or style kind that approved or asked for changes at an earlier commit is met
   by a clean or minor recheck of that kind recorded at the landing commit (see
-  `review`). A seat nobody took and that never answered is skipped, and so is a
-  card with no seats, which a backend without the seat read always is. An
-  approval of the commit the carried reviews were recorded at counts, and so
-  does an answer at an earlier commit whose patch is identical to the landing
-  commit's, on any seat including the recheck seat. A failed read refuses and
-  names why.
+  `review`). A seat that asks for changes at the landing commit or at the
+  carried commit still refuses. A seat nobody took and that never answered is
+  skipped, and so is a card with no seats, which a backend without the seat
+  read always is. An approval of the commit the carried reviews were recorded
+  at counts, and so does an answer at an earlier commit whose patch is
+  identical to the landing commit's, on any seat including the recheck seat. A
+  failed read refuses and names why.
 - `dev board seat reset CARD SEAT` frees a seat that another credential holds,
   so the next review takes it. A review refused with `seat_held` names this
   command. The reset reads the seat, drops it with `DELETE` on
