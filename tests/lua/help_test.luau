@@ -532,6 +532,20 @@ testing.test("help modules lists @dev/forge and its resolve function", function(
     testing.ok(out:find("- `@dev/forge`: `resolve`.", 1, true), "the @dev/forge entry is missing")
 end)
 
+testing.test("the board link, unlink and links help name the other two commands", function()
+    local root = project({})
+    local link = dev(root, { "board", "link", "--help" })
+    local unlink = dev(root, { "board", "unlink", "--help" })
+    local links = dev(root, { "board", "links", "--help" })
+    fs.remove(root, { recursive = true })
+    testing.ok(link:find("`dev board unlink`", 1, true), link)
+    testing.ok(link:find("`dev board links`", 1, true), link)
+    testing.ok(unlink:find("`dev board link`", 1, true), unlink)
+    testing.ok(unlink:find("`dev board links`", 1, true), unlink)
+    testing.ok(links:find("`dev board link`", 1, true), links)
+    testing.ok(links:find("`dev board unlink`", 1, true), links)
+end)
+
 testing.test("-a lists a hidden command two levels down", function()
     local root = project({
         ["n/m/x.sh"] = described("Shown."),
