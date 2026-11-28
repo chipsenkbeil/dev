@@ -2447,7 +2447,7 @@ local function closes_epic(backend, args)
     return card ~= nil and (card.epic ~= nil or card.kind == board.Kind.EPIC)
 end
 
-function commands.order(backend, _, args)
+function commands.order(backend, opts, args)
     local words = args.cards or {}
     if #words == 0 then
         return usage("Needs one or more cards.")
@@ -2495,14 +2495,25 @@ function commands.order(backend, _, args)
         seen[card.id] = true
         named[#named + 1] = card
     end
-    local after, top
+    local lane = named[1].lane
+    local end_place
+    if opts.last then
+        local count = 0
+        for _, card in ipairs(cards) do
+            if card.column == column and card.lane == lane then
+                count += 1
+            end
+        end
+        end_place = count - 1
+    end
+    local after, stray
     for _ = 1, 2 do
         for position, card in ipairs(named) do
             local held = claims.read(card.id)
             local ok, why, reason = backend:move(
                 card.id,
                 column,
-                { fence = held and held.fence, position = position - 1 }
+                { fence = held and held.fence, position = end_place or position - 1 }
             )
             if not ok then
                 return failure(board.move_refusal(reason, why, column))
@@ -2512,25 +2523,32 @@ function commands.order(backend, _, args)
         if not after then
             return failure(message)
         end
-        top = nil
-        local place = 0
+        stray = nil
+        local places = {}
         for _, card in ipairs(after) do
-            if card.column == column and card.lane == named[1].lane then
-                place = place + 1
-                if place <= #named and card.id ~= named[place].id then
-                    top = top or card
-                end
+            if card.column == column and card.lane == lane then
+                places[#places + 1] = card
             end
         end
-        if not top then
+        local first = if opts.last then #places - #named else 0
+        for position, card in ipairs(named) do
+            local placed = places[first + position]
+            if placed and placed.id ~= card.id then
+                stray = stray or placed
+            end
+        end
+        if not stray then
             break
         end
     end
-    if top then
+    if stray then
+        local where = if opts.last
+            then " among the named cards in "
+            else " above the named cards in "
         return failure(
             "Order left card "
-                .. top.id:sub(1, board.MIN_PREFIX)
-                .. " above the named cards in "
+                .. stray.id:sub(1, board.MIN_PREFIX)
+                .. where
                 .. column
                 .. " after a second pass of moves."
         )

@@ -947,14 +947,21 @@ says otherwise. `move` puts the card at the top of the column.
 must sit in the same column. Each goes to position 0, 1, 2 and so on in the
 order named, and the cards not named keep their relative order below.
 
+With `--last`, `order` puts the named cards at the bottom of their column and
+lane instead, in the order named, so the last card named ends the lane. Each
+card in turn goes to the position one less than the lane's card count. Pomb and
+the local board count that position among the other cards of the column and
+lane, so it is the place after the last of them, and a column of any length
+takes it. The cards not named keep their relative order above.
+
 It prints the column's cards after the change, one row each as `ls` does. A
 queued `order` replays like a `move`. Planners keep Icebox and Backlog in
 priority order with it.
 
 After the moves, `order` reads the column again and checks that the named cards
-hold its first places in the order named. When they do not, it repeats the moves
-once. When they still do not, it exits 1 and names the first card that sits in
-the wrong place.
+hold its first places, or with `--last` its last places, in the order named.
+When they do not, it repeats the moves once. When they still do not, it exits 1
+and names the first card that sits in the wrong place.
 
 These fail with exit 1 before any move, and no card is touched:
 

@@ -337,7 +337,7 @@ local function fake(cards, times, finished)
             end
             local seen, at = 0, #cards + 1
             for i, other in ipairs(cards) do
-                if other.column == column then
+                if other.column == column and other.lane == moved.lane then
                     if seen == position then
                         at = i
                         break
@@ -7155,6 +7155,107 @@ testing.test("order checks the top of the named cards' lane and not of the colum
     testing.eq(result.code, nil)
     testing.eq(#backend.calls, 2)
 end)
+
+testing.test("order --last puts one card after every other card of its column", function()
+    -- Give a Ready column of three cards
+    local backend = fake(column_of_three())
+
+    -- Send the first card to the bottom
+    local result = cmd_board.run("order", { "--last", "11111111-a" }, backend)
+
+    -- Expect the move to the last place and the column as printed
+    testing.eq(result.code, nil)
+    testing.eq(backend.calls, { { "move", ID_A, support.COLUMN_NAME.READY, 2 } })
+    testing.eq(
+        result.output,
+        table.concat({
+            "11111111  Ready  unsized  -  Fix lint",
+            "cccccccc  Ready  unsized  needs:human  Old thing",
+            "11111111  Ready  1 Pomodoro  docs  Write docs",
+        }, "\n")
+    )
+end)
+
+testing.test("order --last counts the places of the named cards' lane only", function()
+    -- Give two cards in each of two lanes
+    local cards = column_of_three()
+    cards[4] = {
+        id = "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+        name = "Fourth",
+        column = support.COLUMN_NAME.READY,
+        size = "unsized",
+        labels = {},
+    }
+    cards[1].lane, cards[2].lane = "lane-one", "lane-one"
+    cards[3].lane, cards[4].lane = "lane-two", "lane-two"
+    local backend = fake(cards)
+
+    -- Send the first card of lane one to the bottom of its lane
+    local result = cmd_board.run("order", { "--last", "11111111-a" }, backend)
+
+    -- Expect the last place among the two cards of that lane, and the lane's last card to be it
+    testing.eq(result.code, nil)
+    testing.eq(backend.calls, { { "move", ID_A, support.COLUMN_NAME.READY, 1 } })
+    local lane_one = {}
+    for _, card in ipairs(cards) do
+        if card.lane == "lane-one" then
+            lane_one[#lane_one + 1] = card.id
+        end
+    end
+    testing.eq(lane_one, { ID_B, ID_A })
+end)
+
+testing.test("order --last keeps the order named at the bottom of over 100 cards", function()
+    -- Give a Ready column of 120 cards
+    local function id_of(n)
+        return string.format("%08x-0000-4000-8000-%012x", n, n)
+    end
+    local cards = {}
+    for n = 1, 120 do
+        cards[n] = {
+            id = id_of(n),
+            name = "Card " .. n,
+            column = support.COLUMN_NAME.READY,
+            size = "unsized",
+            labels = {},
+        }
+    end
+    local backend = fake(cards)
+
+    -- Send three cards from the top and the middle to the bottom, in a new order
+    local named = { id_of(60), id_of(1), id_of(100) }
+    local result = cmd_board.run("order", { "--last", named[1], named[2], named[3] }, backend)
+
+    -- Expect the three last places in the order named, and the others in their old order
+    testing.eq(result.code, nil)
+    testing.eq(#backend.calls, 3)
+    testing.eq(backend.calls[1][4], 119)
+    testing.eq(backend.calls[3][4], 119)
+    local ids = {}
+    for _, card in ipairs(cards) do
+        ids[#ids + 1] = card.id
+    end
+    testing.eq({ ids[118], ids[119], ids[120] }, named)
+    testing.eq(ids[1], id_of(2))
+    testing.eq(ids[117], id_of(120))
+end)
+
+testing.test(
+    "order --last fails when a card stays among the named cards after the repeat",
+    function()
+        -- Give a board that drops the moves of both passes
+        local backend = fake(column_of_three())
+        backend.ignore_moves = 2
+
+        -- Send the first card to the bottom
+        local result = cmd_board.run("order", { "--last", "11111111-a" }, backend)
+
+        -- Expect a refusal that names the column
+        testing.eq(result.code, 1)
+        testing.ok(result.message:find("Ready", 1, true), result.message)
+        testing.eq(#backend.calls, 2)
+    end
+)
 
 testing.test("order makes no second pass when the first is right", function()
     local backend = fake(column_of_three())
