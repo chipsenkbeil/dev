@@ -151,6 +151,15 @@ bookmark and the branch when the run ends, so jj never abandons the pushed
 change when the branch vanishes. `--keep` leaves them, and a timeout leaves
 them too.
 
+A green `dev board ship` cuts the next patch tag. `dev release tag` is the
+last row of `checks` under `[board.release]` in `.dev/config.toml`, so a ship
+whose earlier row fails tags nothing. It reads the newest
+`vMAJOR.MINOR.PATCH` tag, skips a pre-release tag such as `v0.1.12-pre.1`,
+sets the next patch version on REV (default `trunk()`) and pushes it with
+`dev push --tag`. It exits 1 and names the first tag to set by hand when no
+release tag exists. A minor or major bump is a tag set by hand, and the next
+run counts from it.
+
 1. Push the tag from a workspace: `jj tag set vX.Y.Z -r REV`, then
    `dev push --tag vX.Y.Z`. Gerrit mirrors it to GitHub.
 2. Four build jobs run in parallel. Each builds with `DEV_RELEASE_TAG` set to

@@ -9,4 +9,4 @@ required = ["dev --remote lint", "dev --remote test"]
 recheck = ["dev --remote lint", "dev --remote test"]
 
 [board.release]
-checks = ["dev --remote lint", "dev --remote test"]
+checks = ["dev --remote lint", "dev --remote test", "dev release tag"]
