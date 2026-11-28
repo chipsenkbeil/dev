@@ -85,8 +85,8 @@ end
 ---@field private specs table<string, dev.Spec|false> loaded specs by file path
 ---@field private reasons table<string, string> why a spec failed to load, by file path
 ---@field private codes table<string, string> the `dev.spec` `Reason` of a failed load, by file path
----@field private layers dev.Source[]? the layers a view answers from, nil for the whole registry
----@field private views table<string, dev.Registry> the views made so far by source
+---@field private __layers dev.Source[]? the layers a view answers from, nil for the whole registry
+---@field private __views table<string, dev.Registry> the views made so far by source
 local Registry = {}
 Registry.__index = Registry
 
@@ -182,8 +182,8 @@ local function join_rel(rel, word)
     return rel .. "/" .. word
 end
 
-function Registry:__layers()
-    return self.layers or LAYERS
+function Registry:__layer_list()
+    return self.__layers or LAYERS
 end
 
 local function read_dir(self, source, rel)
@@ -247,7 +247,7 @@ end
 ---A folder in a higher layer hides a script of a lower one, a script beats a folder of its own
 ---layer, and no script replaces a builtin parent command.
 function Registry:__resolve(rel)
-    local layers = self:__layers()
+    local layers = self:__layer_list()
     local builtin = false
     for _, source in ipairs(layers) do
         if source == Source.BUILTIN then
@@ -451,7 +451,7 @@ local function lower_script(self, source, rel)
     local word = rel:match("([^/]*)$")
     local below = false
     local found, builtin
-    for _, layer in ipairs(self:__layers()) do
+    for _, layer in ipairs(self:__layer_list()) do
         if layer == source then
             below = true
         elseif below then
@@ -570,12 +570,12 @@ function M.load(root, opts)
         reasons = {},
         codes = {},
         rows = {},
-        views = {},
+        __views = {},
     }, Registry)
 end
 
 local function make_view(self, key, layers)
-    local view = self.views[key]
+    local view = self.__views[key]
     if not view then
         view = setmetatable({
             root = self.root,
@@ -586,10 +586,10 @@ local function make_view(self, key, layers)
             reasons = self.reasons,
             codes = self.codes,
             rows = {},
-            views = {},
-            layers = layers,
+            __views = {},
+            __layers = layers,
         }, Registry)
-        self.views[key] = view
+        self.__views[key] = view
     end
     return view
 end
@@ -716,7 +716,7 @@ local function top_names(self)
     local names, seen = {}, {}
     for _, source in ipairs({ Source.BUILTIN, Source.PROJECT, Source.GLOBAL }) do
         local kept = false
-        for _, layer in ipairs(self:__layers()) do
+        for _, layer in ipairs(self:__layer_list()) do
             kept = kept or layer == source
         end
         local dir = kept and self:__dir(source, "")

@@ -760,6 +760,28 @@ testing.test("a global script replacing a built-in with a job runs here", functi
     testing.eq(log, "")
 end)
 
+testing.test("a prefixed built-in with a job is refused for an agent without a hint", function()
+    -- Shadow the built-in test so its prefix is the way to reach it
+    local root, base = setup()
+    write_exec(
+        base .. "/home/.config/dev/commands/test.sh",
+        table.concat({
+            "#!/usr/bin/env bash",
+            "# Run the tests.",
+            "echo ran-global",
+            "",
+        }, "\n")
+    )
+    local env = { XDG_CONFIG_HOME = "", DEV_AGENT = "dev/implementer/x" }
+
+    -- Say the prefixed command runs only here and send nothing to ci
+    local out, code, log = dev(root, base, { "builtin:test" }, env)
+    testing.eq(code, 2)
+    testing.ok(out:find("`builtin:test` runs only here", 1, true), out)
+    testing.ok(not out:find("--remote", 1, true), out)
+    testing.eq(log, "")
+end)
+
 testing.test("a command script without runs_local keeps routing to its job", function()
     local root, base = setup({
         ["test.sh"] = table.concat({

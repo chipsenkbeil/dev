@@ -64,15 +64,18 @@ local function fetches(parsed, project_root)
         and default_is_remote(project_root)
 end
 
-local function refuse_agent_local(project_root, words, never_remote, is_global)
+local function refuse_agent_local(opts)
     if (dev_os.getenv("DEV_AGENT") or "") == "" then
         return
     end
-    if remote.refuses_agent_local(project_root, words, never_remote) then
-        local name = table.concat(words, " ")
+    if remote.refuses_agent_local(opts.project_root, opts.words, opts.never_remote) then
+        local name = table.concat(opts.words, " ")
         local advice = "Use `dev --remote " .. name .. "` instead, which runs it on ci."
-        if is_global then
+        if opts.is_global then
             advice = "`" .. name .. "` is your global script and runs only here."
+        elseif opts.prefixed_name then
+            name = opts.prefixed_name
+            advice = "`" .. name .. "` runs only here."
         end
         stderr:write("dev ", name, ": DEV_AGENT is set. ", advice, "\n")
         dev_os.exit(2)
@@ -583,7 +586,13 @@ function M.main(parsed)
         return remote.run(ctx, words, rest, { detach = false, priority = false })
     end
     if not on_remote_host and not runs_local then
-        refuse_agent_local(project_root, words, never_remote == false, is_global)
+        refuse_agent_local({
+            project_root = project_root,
+            words = words,
+            never_remote = never_remote == false,
+            is_global = is_global,
+            prefixed_name = source and args[1],
+        })
     end
     if not on_remote_host then
         refuse_agent_primary(project_root, words, requires)
