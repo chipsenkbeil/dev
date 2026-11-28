@@ -20,7 +20,7 @@ testing.test("compare names the malformed argument", function()
     testing.eq(bad, "x.y.z")
 end)
 
-testing.test("current reads the version beside main.lua", function()
+testing.test("current returns a well-formed version", function()
     local current = assert(version.current())
     testing.eq(version.compare(current, current), 0)
 end)
