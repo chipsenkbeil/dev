@@ -676,10 +676,10 @@ end
 
 ---Run `dev help`.
 ---
----With no argument it prints the curated view. `-a` adds the hidden commands,
----`--topics` lists the topics, `-k TOPIC` prints one, `--check-topics` checks them, and a command or
----topic name prints its details. A topic goes through the pager when it is
----taller than the screen, unless `--no-pager` is given or `DEV_PAGER` is `0`.
+---With no argument it prints the curated view. `-a` adds the hidden commands, `--topics` lists
+---the topics, `-k TOPIC` prints one, `--check-topics` checks them, and a command or topic name
+---prints its details. A topic goes through the pager when it is taller than the screen, unless
+---`--no-pager` is given or `DEV_PAGER` is `0`.
 ---@param ctx dev.Ctx the context, whose `args` are the arguments after `help`
 ---@param reg dev.Registry? the project's registry, loaded when nil
 ---@return integer code 0, or the process exits 2 on a usage error
