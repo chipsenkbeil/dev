@@ -1304,6 +1304,13 @@ The lead (a name with no `/`) and any name that never claimed the card may
 change outcomes and checks, except that only the lead deletes an outcome. A
 session with no `DEV_AGENT` is not checked.
 
+The claimant guard compares self-declared names. The name comes from
+`DEV_AGENT`, or from `--as` on the forms that take it, and dev does not
+verify it. The guard therefore stops an honest runner from editing its own
+card's outcomes and checks, and does not stop a caller that sets a false
+name. A subagent of a runner passes a change back with a note, as the runner
+does.
+
 `outcome CARD --convert` moves a v1 `## Done when` checklist into outcomes. It
 appends one outcome per `- [ ]` or `- [x]` item and ticks the ticked ones. Only
 once all of that succeeded does it rewrite the description without the heading
