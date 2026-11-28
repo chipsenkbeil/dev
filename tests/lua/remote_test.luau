@@ -322,6 +322,26 @@ testing.test("remote.default local runs here and --remote still goes to ci", fun
     testing.ok(log:find("[--job] [test]", 1, true), log)
 end)
 
+testing.test("remote: false keeps a command with a ci job here, under an agent too", function()
+    -- Run here by default though ci lists a job named like the command
+    local root, base = setup({
+        ["test.sh"] = table.concat(
+            { "#!/usr/bin/env bash", "# remote: false", "echo hi", "" },
+            "\n"
+        ),
+    })
+    local out, code, log = dev(root, base, { "test" })
+    testing.eq(code, 0)
+    testing.eq(out, "hi\n")
+    testing.eq(log, "")
+
+    -- Skip the agent refusal for the same command
+    out, code, log = dev(root, base, { "test" }, { DEV_AGENT = "w" })
+    testing.eq(code, 0)
+    testing.eq(out, "hi\n")
+    testing.eq(log, "")
+end)
+
 testing.test("the user file beats the project file for remote.default", function()
     -- Follow the project file while the user has no setting
     local root, base = setup()
