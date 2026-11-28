@@ -60,6 +60,18 @@ in a directory on your `PATH`.
 Move-Item dev-TAG-x86_64-pc-windows-msvc.exe DIR\dev.exe
 ```
 
+## Upgrade
+
+Once a release binary is installed, `dev upgrade` replaces it with the latest
+release that is not a pre-release. It checks the download against
+`SHA256SUMS` and runs the new binary before it swaps, and it leaves the
+install as it was when any step fails. A `dev` built by cargo refuses to
+replace itself.
+
+```sh
+dev upgrade
+```
+
 ## Build from source
 
 `rust-toolchain.toml` pins the Rust toolchain, and `rustup` installs it on

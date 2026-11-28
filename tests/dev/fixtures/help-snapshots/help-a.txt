@@ -22,6 +22,7 @@ Set up a machine or project
   config             builtin               Ask for the user config keys that are unset and write them
   init               builtin               Set up a project's version control and remotes
   luautypes          builtin               Write the declarations luau-analyze reads for the dev modules
+  upgrade            builtin               Replace this dev with the latest release
   tools              builtin               Install and check the tools in .dev/tools.tsv
   ws                 builtin               Make, list and remove workspaces under one central root
 

@@ -206,6 +206,8 @@ A table of the parsed global flags: `args`, `after`, `dashed`, `remote`,
   call.
 - `@dev/cmd/config`: `config`, the first-run wizard for the user config. See
   `dev help flags`, the config command section.
+- `@dev/cmd/upgrade`: `upgrade`, which checks the latest release and swaps the
+  running binary, and `cargo_build` and `is_current`, the two checks it pins.
 - `@dev/cmd/connect`: `connect` and `box connect`.
 - `@dev/cmd/init`: `init` with `--name` and `--dry-run`. It sets up version
   control, the `[board]` section of `.dev/config.toml` named for the project
@@ -534,6 +536,9 @@ card's bookmark.
 ### System, release and terminal
 
 - `@dev/os`: native, see above.
+- `@dev/releasefile`: the asset name, download and `SHA256SUMS` check of a
+  release binary, shared by `release verify` and `upgrade`. `DEV_RELEASE_URL`
+  replaces the download folder and `DEV_RELEASE_API` the latest release call.
 - `@dev/release`: the session the release installers under `scripts/` share.
   It holds the parsing of `--dry-run [version]`, the latest-tag lookup, the
   platform names, `step` that runs or prints a command, and a scratch

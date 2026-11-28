@@ -325,6 +325,17 @@ anything, with ``This project needs dev 0.2.0 or newer, and this dev is
 0.1.0.`` (the real versions). A value that is not `MAJOR.MINOR.PATCH` exits 1
 with ``The `dev.min_version` setting must be MAJOR.MINOR.PATCH, not X.``
 
+## Upgrade
+
+`dev upgrade` replaces the running binary with the latest release that is not
+a pre-release, and says so when this version is current. A pre-release of the
+latest version counts as older. `dev help upgrade` lists the checks it makes
+before the swap.
+
+```
+dev upgrade
+```
+
 ## The remote runner
 
 `--remote` (or `DEV_REMOTE=1`) runs the command somewhere else. Dev strips
