@@ -88,13 +88,13 @@ local function convert(key, answer)
         if number and number >= 1 and number <= MAX_PORT then
             return number
         end
-        return nil, key.name .. " takes a whole number from 1 to " .. MAX_PORT .. "."
+        return nil, `The key {key.name} takes a whole number from 1 to {MAX_PORT}.`
     elseif key.kind == Kind.LIST then
         local items = split_list(answer)
         if #items > 0 then
             return items
         end
-        return nil, key.name .. " takes a comma separated list."
+        return nil, `The key {key.name} takes a comma separated list.`
     end
     return answer
 end

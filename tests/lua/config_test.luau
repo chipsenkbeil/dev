@@ -229,6 +229,24 @@ testing.test("dev config refuses a port that is not in range", function()
     testing.eq(assert(toml.parse(body)).gerrit, { host = "h", port = 22 })
 end)
 
+testing.test("dev config refusals for a bad port and a bad list open with a word", function()
+    -- Answer a bad port and a bad list, then good answers
+    local input = lines({ "", "abc", "70000", "22", ",", "src/", "" })
+    local out, code, body = wizard(REQUIRED_SET, true, input)
+    testing.eq(code, 0)
+
+    -- Open both refusals with a word, not the key name
+    testing.ok(out:find("The key gerrit.port takes a whole number from 1 to 65535.", 1, true), out)
+    testing.ok(
+        out:find("The key board.ship.source_roots takes a comma separated list.", 1, true),
+        out
+    )
+
+    -- Write the good answers
+    testing.eq(assert(toml.parse(body)).gerrit, { host = "h", port = 22 })
+    testing.eq(assert(toml.parse(body)).board.ship.source_roots, { "src/" })
+end)
+
 testing.test("dev config stops with a sentence when the key cannot be added to the file", function()
     local user = lines({ '[board."pomb"]', 'url = "u"', "" })
     local out, code = wizard(user, true, lines({ "pass:a", "h", "", "", "" }))
