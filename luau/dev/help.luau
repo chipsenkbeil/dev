@@ -652,14 +652,22 @@ function M.parent(reg, name, opts)
     return 0
 end
 
----Print each problem the topic check finds as `file:line: message` on standard error.
+---Find the problems of the topics of a project.
 ---
----It loads its own registry with the header warnings silenced.
+---It loads its own registry with the header warnings silenced, and checks the project and builtin
+---layers alone so the problems match on a machine with global commands and on ci.
+---@param root string project root
+---@return dev.topics.Problem[] problems the problems in the order they were found
+function M.topic_problems(root)
+    local reg = registry.load(root, { warn = function() end }):without_global()
+    return topics.check(reg)
+end
+
+---Print each problem the topic check finds as `file:line: message` on standard error.
 ---@param ctx dev.Ctx the context of the command
 ---@return integer code 1 when there is a problem, else 0
 function M.check_topics(ctx)
-    local reg = registry.load(ctx.root, { warn = function() end })
-    local problems = topics.check(reg)
+    local problems = M.topic_problems(ctx.root)
     for _, found in ipairs(problems) do
         dev_os.stderr:write(found.file, ":", found.line, ": ", found.message, "\n")
     end

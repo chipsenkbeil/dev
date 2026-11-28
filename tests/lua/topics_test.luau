@@ -1,6 +1,7 @@
 local testing = require("@dev/testing")
 local dev_os = require("@dev/os")
 local fs = require("@dev/fs")
+local help = require("@dev/help")
 local registry = require("@dev/registry")
 local support = require("./support")
 local topics = require("@dev/topics")
@@ -195,5 +196,41 @@ testing.test("built-in topics are not checked against another project's commands
 
     -- Check exactly one problem remains
     testing.eq(#problems(root), 1)
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("the topic check gives the same problems with and without global commands", function()
+    -- Make a project whose topic names a command only a global script holds
+    local root = project({
+        ["help/a.md"] = table.concat({ "# a: A topic", "", "`dev only`", "" }, "\n"),
+    })
+    local expected = { ".dev/help/a.md:3: `dev only`: no command only" }
+
+    -- Make a config home with that command and a command that declares -h in its flags line
+    local home = support.tempdir()
+    local dir = home .. "/dev/commands"
+    assert(fs.mkdir(dir, { parents = true }))
+    for name, text in pairs({
+        ["only.sh"] = "#!/usr/bin/env bash\n# Only global.\n",
+        ["bad.sh"] = "#!/usr/bin/env bash\n# Bad.\n# flag: help short=h -- Bad\n",
+    }) do
+        assert(fs.write(dir .. "/" .. name, text))
+        assert(dev_os.run({ "chmod", "755", dir .. "/" .. name }) == 0, "chmod failed")
+    end
+
+    -- Check the global commands change nothing, neither a hit nor a miss
+    local function found()
+        local out = {}
+        for _, problem in ipairs(help.topic_problems(root)) do
+            out[#out + 1] = problem.file .. ":" .. problem.line .. ": " .. problem.message
+        end
+        return out
+    end
+    testing.eq(found(), expected)
+    support.with_env("XDG_CONFIG_HOME", home, function()
+        testing.eq(registry.load(root):find({ "only" }).source, registry.Source.GLOBAL)
+        testing.eq(found(), expected)
+    end)
+    fs.remove(home, { recursive = true })
     fs.remove(root, { recursive = true })
 end)

@@ -85,7 +85,7 @@ end
 ---@field private specs table<string, dev.Spec|false> loaded specs by file path
 ---@field private reasons table<string, string> why a spec failed to load, by file path
 ---@field private codes table<string, string> the `dev.spec` `Reason` of a failed load, by file path
----@field private only dev.Source? the one layer a view answers from, nil for the whole registry
+---@field private layers dev.Source[]? the layers a view answers from, nil for the whole registry
 ---@field private views table<string, dev.Registry> the views made so far by source
 local Registry = {}
 Registry.__index = Registry
@@ -183,10 +183,7 @@ local function join_rel(rel, word)
 end
 
 function Registry:__layers()
-    if self.only then
-        return { self.only }
-    end
-    return LAYERS
+    return self.layers or LAYERS
 end
 
 local function read_dir(self, source, rel)
@@ -519,7 +516,7 @@ function Registry:__row(rel)
         end
         self:__place(row, placed)
         for _, source in ipairs(found.folders) do
-            if source == script.source and source ~= Source.BUILTIN then
+            if source ~= Source.BUILTIN then
                 self.warn(
                     "The script "
                         .. script.path
@@ -577,14 +574,8 @@ function M.load(root, opts)
     }, Registry)
 end
 
----Make the registry that answers from one layer alone.
----
----The builtin view holds the builtin rows and no other. The global view holds the commands of the
----global folder and no builtin row, so a global command of a builtin's name is a local row there.
----@param source dev.Source `builtin` or `global`
----@return dev.Registry view the registry of that layer
-function Registry:view(source)
-    local view = self.views[source]
+local function make_view(self, key, layers)
+    local view = self.views[key]
     if not view then
         view = setmetatable({
             root = self.root,
@@ -596,11 +587,25 @@ function Registry:view(source)
             codes = self.codes,
             rows = {},
             views = {},
-            only = source,
+            layers = layers,
         }, Registry)
-        self.views[source] = view
+        self.views[key] = view
     end
     return view
+end
+
+---The builtin view holds the builtin rows and no other. The global view holds the commands of the
+---global folder and no builtin row, so a global command of a builtin's name is a local row there.
+---@param source dev.Source `builtin` or `global`
+---@return dev.Registry view the registry of that layer
+function Registry:view(source)
+    return make_view(self, source, { source })
+end
+
+---Make the registry that answers from the project and the builtin layers and never the global one.
+---@return dev.Registry view the registry a machine without global commands would load
+function Registry:without_global()
+    return make_view(self, "without_global", { Source.PROJECT, Source.BUILTIN })
 end
 
 local PREFIXED = "^([A-Za-z0-9_-]+):([A-Za-z0-9_-]+)$"
