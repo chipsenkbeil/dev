@@ -199,6 +199,24 @@ testing.test("built-in topics are not checked against another project's commands
     fs.remove(root, { recursive = true })
 end)
 
+testing.test("a project overview page is not refused as a built-in clash", function()
+    local root = project({
+        ["help/overview.md"] = "# overview: What this project is\n",
+    })
+    testing.eq(problems(root), {})
+    fs.remove(root, { recursive = true })
+end)
+
+testing.test("a project page named after another built-in help page is refused", function()
+    local root = project({
+        ["help/boards.md"] = "# boards: A topic\n",
+    })
+    testing.eq(problems(root), {
+        ".dev/help/boards.md:1: help page boards is also a built-in help page",
+    })
+    fs.remove(root, { recursive = true })
+end)
+
 testing.test("the topic check gives the same problems with and without global commands", function()
     -- Make a project whose topic names a command only a global script holds
     local root = project({
