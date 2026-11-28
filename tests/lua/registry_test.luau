@@ -421,6 +421,9 @@ testing.test("a script replaces a built-in subcommand but not a built-in parent 
     testing.eq(reg:find({ "tools", "install" }).kind, "override")
     testing.eq(reg:flags({ "tools", "install" }), { "--fake" })
     testing.eq(reg:flags({ "tools" }), {})
+    local remote, requires = reg:declared({ "tools", "install" })
+    testing.eq(remote, nil)
+    testing.eq(requires, {})
     testing.eq(reg:find({ "tools", "extra" }).kind, "local")
     testing.eq(reg:find({ "tools" }).desc, "Install and check the tools in .dev/tools.tsv")
     fs.remove(root, { recursive = true })
@@ -431,7 +434,14 @@ testing.test("a script named like a builtin command overrides it and keeps its p
     scripted(
         root,
         ".dev/commands/lint.sh",
-        table.concat({ "#!/usr/bin/env bash", "# My lint.", "# flag: mine kind=boolean", "" }, "\n")
+        table.concat({
+            "#!/usr/bin/env bash",
+            "# My lint.",
+            "# flag: mine kind=boolean",
+            "# remote: false",
+            "# requires: workspace",
+            "",
+        }, "\n")
     )
     scripted(
         root,
@@ -444,7 +454,13 @@ testing.test("a script named like a builtin command overrides it and keeps its p
     testing.eq(lint.desc, "My lint.")
     testing.eq(lint.group, "Check your work")
     testing.eq(reg:flags({ "lint" }), { "--mine" })
+    local remote, requires = reg:declared({ "lint" })
+    testing.eq(remote, false)
+    testing.eq(requires, { "workspace" })
     testing.eq(reg:find({ "deploy" }).group, "Elsewhere")
+    local deploy_remote, deploy_requires = reg:declared({ "deploy" })
+    testing.eq(deploy_remote, nil)
+    testing.eq(deploy_requires, {})
     fs.remove(root, { recursive = true })
 end)
 

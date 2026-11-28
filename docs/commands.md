@@ -265,6 +265,8 @@ end the block, and shellcheck lines are skipped.
   `.luau` spec with no `args` still refuses extra words.
 - `# remote: false`
 - `# requires: WORD...`
+  A script that overrides a built-in declares only its own header facts, so it
+  must repeat any `remote` or `requires` line of the built-in it replaces.
 - `# passthrough`
 - `# runs_local`
 - `# positional`
