@@ -1308,8 +1308,9 @@ The claimant guard compares self-declared names. The name comes from
 `DEV_AGENT`, or from `--as` on the forms that take it, and dev does not
 verify it. The guard therefore stops an honest runner from editing its own
 card's outcomes and checks, and does not stop a caller that sets a false
-name. A subagent of a runner passes a change back with a note, as the runner
-does.
+name. A subagent of a runner is held to the runner's rule: it asks the planner
+or lead for an outcome or checks change in a card note (only the lead for a
+delete), and does not make the edit under another name.
 
 `outcome CARD --convert` moves a v1 `## Done when` checklist into outcomes. It
 appends one outcome per `- [ ]` or `- [x]` item and ticks the ticked ones. Only
