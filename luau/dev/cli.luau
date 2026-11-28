@@ -82,19 +82,6 @@ local function refuse_agent_local(opts)
     end
 end
 
----Mutating commands the lead role never runs in the primary checkout, by command name
-local LEAD_GUARDED = {}
-for _, name in ipairs({
-    "land",
-    "board land",
-    "abandon",
-    "clean",
-    "purge",
-    "fmt",
-}) do
-    LEAD_GUARDED[name] = true
-end
-
 local function repo_guarded(project_root)
     local names = config.get(project_root, "agent.primary_guarded")
     local listed = {}
@@ -116,9 +103,9 @@ local function repo_guarded(project_root)
     return listed
 end
 
-local function requires_workspace(requires)
+local function requires_word(requires, wanted)
     for _, word in ipairs(requires) do
-        if word == "workspace" then
+        if word == wanted then
             return true
         end
     end
@@ -134,10 +121,10 @@ local function refuse_agent_primary(project_root, words, requires)
     local name = table.concat(words, " ")
     local guarded, who
     if role == "lead" then
-        guarded = LEAD_GUARDED[words[1]] or LEAD_GUARDED[name]
+        guarded = requires_word(requires, "lead")
         who = "lead role"
     elseif role and command.WORKSPACE_ROLES[role] then
-        guarded = requires_workspace(requires)
+        guarded = requires_word(requires, "workspace")
         who = "workspace role " .. role
     end
     local listed = repo_guarded(project_root)

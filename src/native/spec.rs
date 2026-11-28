@@ -8,8 +8,8 @@ use crate::{Error, Result, luau, native_fn};
 /// Name of this module under `dev`.
 pub const NAME: &str = "spec";
 
-/// The only precondition word a spec's `requires` list may hold.
-const KNOWN_REQUIRES: &[&str] = &["workspace"];
+/// The precondition words a spec's `requires` list may hold.
+const KNOWN_REQUIRES: &[&str] = &["workspace", "lead"];
 
 /// The spec field that lists the help pages `dev help` points at.
 pub const SEE_ALSO_FIELD: &str = "see_also";
@@ -948,6 +948,12 @@ mod tests {
         let lua = Lua::new();
         let message = read(&spec(&lua, "{ requires = { 'primary' } }")).expect_err("requires");
         assert!(message.to_string().contains("`requires`"), "{message}");
+    }
+
+    #[test]
+    fn validate_should_accept_the_workspace_and_lead_requires_words() {
+        let lua = Lua::new();
+        read(&spec(&lua, "{ requires = { 'workspace', 'lead' } }")).expect("requires");
     }
 
     #[test]

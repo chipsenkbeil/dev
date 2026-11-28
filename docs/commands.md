@@ -189,6 +189,9 @@ The fields:
   is the main one. A tempdir with no `.jj` or `.git` is never refused. A test
   that makes a checkout there leaves `DEV_AGENT` out of the environment it
   passes, or runs the command in a workspace made with `dev ws new`.
+- `requires = { "lead" }`: refuses the command in a primary checkout when
+  `DEV_AGENT` names the lead role, under the same checkout test. A command
+  lists both words to refuse every agent role there.
 - `runs_local`: the command runs here under the remote default.
 - `positional`: keep `KEY=value` words in the arguments. Without it, every word
   shaped `KEY=value` whose key starts with an uppercase letter goes to
@@ -228,7 +231,7 @@ flag.
 named `help` or with the short `h` is refused by `dev help --check-topics`.
 An unknown field, a bad kind, `choices` on a non-string, a `list` argument
 that is not last, a required argument after an optional one and a `requires`
-word other than `workspace` fail at load.
+word other than `workspace` and `lead` fail at load.
 
 `complete` is a list of values, a provider name or a function. The providers
 are `board-card`, `board-column`, `box` and `file`. A function takes the

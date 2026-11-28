@@ -5,7 +5,7 @@ return dev_command({
     summary = "Land the workspace's card, or its change with no board",
     group = "Share it",
     remote = false,
-    requires = { "workspace" },
+    requires = { "workspace", "lead" },
     flags = {
         { name = "card", kind = "string", help = "The card to land" },
         { name = "wait", kind = "number", help = "Seconds to wait for the landing turn" },

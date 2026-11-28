@@ -155,8 +155,9 @@ A few fields change how dev calls a command:
   remote default skips it, `--remote` refuses it, and the setting of a command
   with subcommands covers its subcommands.
 - `requires = { "workspace" }` refuses the command to a `DEV_AGENT` with a
-  workspace role in the primary checkout. `workspace` is the only
-  precondition dev knows.
+  workspace role in the primary checkout, and `requires = { "lead" }` does
+  the same for the lead role. `workspace` and `lead` are the only
+  preconditions dev knows.
 - `fetch = { job, file }` runs the command here, and under the remote mode
   first builds `file` with the ci job `job` on this host's platform and hands
   the pulled path to the command in `DEV_FETCHED`. `dev help remote` has the

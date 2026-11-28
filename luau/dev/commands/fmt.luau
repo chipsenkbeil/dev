@@ -5,7 +5,7 @@ return dev_command({
     summary = "Format the source for the project type",
     group = "Check your work",
     remote = false,
-    requires = { "workspace" },
+    requires = { "workspace", "lead" },
     args = { { name = "rest", list = true, help = "Words for the last step" } },
     pass_unknown = true,
     passthrough = true,

@@ -53,7 +53,7 @@ local REFUSAL = {
 ---@field hidden boolean? whether `dev help` shows it only for `-a`
 ---@field remote boolean? false when the command never runs on a remote runner
 ---@field runs_local boolean? whether the command runs here even when remote is the default
----@field requires string[]? the preconditions, `workspace` the only one known
+---@field requires string[]? the preconditions, `workspace` and `lead`
 ---@field positional boolean? whether `KEY=value` words stay arguments
 ---@field fetch {job: string, file: string}? the ci job whose file the command fetches first
 ---@field patch {job: string, file: string}? the ci job whose patch the command applies

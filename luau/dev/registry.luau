@@ -64,7 +64,7 @@ end
 ---@field group string? heading in `dev help`
 ---@field hidden boolean? whether `dev help` keeps the row to `-a`
 ---@field remote false? false when the command never runs on a remote runner
----@field requires string[]? the preconditions the command declares, `workspace` the only one known
+---@field requires string[]? the preconditions the command declares, `workspace` and `lead`
 ---@field script string? path of the file behind the row, or its embedded asset path
 ---@field lang "luau"|"sh"|"ps1"? language of that file
 ---@field broken string? why the file's spec could not be loaded

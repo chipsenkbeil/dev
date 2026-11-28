@@ -857,21 +857,26 @@ testing.test(
 
         -- Expect these commands to require a workspace
         local guarded = {
-            "fmt",
             "init",
             "push",
             "pull",
             "follow",
-            "land",
-            "abandon",
             { "tools", "install" },
-            { "board", "land" },
         }
         for _, entry in ipairs(guarded) do
             local words = words_of(entry)
             local _, requires = reg:declared(words)
             local name = table.concat(words, " ")
             testing.eq({ name, requires }, { name, { "workspace" } })
+        end
+
+        -- Expect these commands to require a workspace and refuse the lead role
+        local lead_guarded = { "fmt", "land", "abandon", { "board", "land" } }
+        for _, entry in ipairs(lead_guarded) do
+            local words = words_of(entry)
+            local _, requires = reg:declared(words)
+            local name = table.concat(words, " ")
+            testing.eq({ name, requires }, { name, { "workspace", "lead" } })
         end
 
         -- Expect board status to require nothing

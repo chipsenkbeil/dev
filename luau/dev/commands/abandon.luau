@@ -4,7 +4,7 @@ local dev_command = require("@dev/command")
 return dev_command({
     summary = "Abandon an open Gerrit change by its number or Change-Id",
     group = "Share it",
-    requires = { "workspace" },
+    requires = { "workspace", "lead" },
     flags = {
         { name = "reason", kind = "string", help = "The message to abandon with" },
     },

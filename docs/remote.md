@@ -219,12 +219,18 @@ The refused commands are the ones that declare `requires: workspace`, in the
 spec or header, and the line of a command with subcommands
 covers its subcommands. Every other command passes.
 
-The lead role is refused only for `land`, `board land`, `abandon`, `clean`,
-`purge` and `fmt`, the commands a lead never runs in the primary checkout. It
-still runs `install`, `push`, `pull` and the rest there.
+The lead role is refused only for the commands that declare `requires: lead`.
+Built in, those are `land`, `board land`, `abandon` and `fmt`, the commands a
+lead never runs in the primary checkout. A project command such as `clean` or
+`purge` declares the same word in its spec or header. The lead still runs
+`install`, `push`, `pull` and the rest there.
 
-A repo adds commands to that refusal with `agent.primary_guarded` in its
-`.dev/config.toml`, a list of command names or command phrases such as
+`WORKSPACE_ROLES`, the set of roles that `requires: workspace` binds, stays in
+code as a fact about the agent and not about a command.
+
+`agent.primary_guarded` stays a repo setting to let a repo guard commands
+whose specs it does not own. A repo adds commands to the refusal with it in
+its `.dev/config.toml`, a list of command names or command phrases such as
 `["bump", "board land"]`. A listed command is refused for any set `DEV_AGENT`,
 the lead role included, with the same exit 2 and the same primary checkout
 test. Its line says the repo's `agent.primary_guarded` lists it. A command the

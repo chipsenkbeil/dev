@@ -762,7 +762,8 @@ mkdir -p "$prim/.dev/commands"
 git -C "$prim" init -q
 printf '#!/usr/bin/env bash\n# requires: workspace\necho install ran\n' >"$prim/.dev/commands/install.sh"
 printf '#!/usr/bin/env bash\necho notes ran\n' >"$prim/.dev/commands/notes.sh"
-chmod +x "$prim/.dev/commands/install.sh" "$prim/.dev/commands/notes.sh"
+printf '#!/usr/bin/env bash\n# requires: lead\necho clean ran\n' >"$prim/.dev/commands/clean.sh"
+chmod +x "$prim/.dev/commands/install.sh" "$prim/.dev/commands/notes.sh" "$prim/.dev/commands/clean.sh"
 git -C "$prim" add -A
 git -C "$prim" -c user.name=t -c user.email=t@t commit -q -m init
 git -C "$prim" worktree add -q "$TMP/primwt" 2>/dev/null
@@ -783,6 +784,15 @@ assert_contains "the lead role land refusal says the lead role" "$out" "dev land
 assert_not_contains "the lead role land refusal does not call lead a workspace role" "$out" "workspace role lead"
 out="$(DEV_AGENT=repo/lead/c cirun "$prim" clean 2>&1)"
 assert_eq "the lead role clean in the primary checkout exits 2" "$?" "2"
+assert_contains "the lead role clean refusal says the lead role" "$out" "dev clean: DEV_AGENT is the lead role, which never runs it in the primary checkout. Use \`dev -C WS clean\` from your own workspace."
+assert_not_contains "the lead role clean refusal runs nothing" "$out" "clean ran"
+out="$(DEV_AGENT=repo/implementer/c cirun "$prim" clean 2>&1)"
+assert_contains "a workspace role runs a lead only verb in the primary checkout" "$out" "clean ran"
+out="$(DEV_AGENT=repo/lead/c cirun "$prim" abandon 2>&1)"
+assert_eq "the lead role abandon in the primary checkout exits 2" "$?" "2"
+out="$(DEV_AGENT=repo/lead/c cirun "$prim" board land 2>&1)"
+assert_eq "the lead role board land in the primary checkout exits 2" "$?" "2"
+assert_contains "the lead role board land refusal names both words" "$out" "dev board land: DEV_AGENT is the lead role, which never runs it in the primary checkout."
 out="$(DEV_AGENT=repo/lead/c cirun "$prim" fmt 2>&1)"
 assert_eq "the lead role fmt in the primary checkout exits 2" "$?" "2"
 out="$(DEV_AGENT=repo/implementer/c cirun "$prim" tools install 2>&1)"
