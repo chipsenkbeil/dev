@@ -43,9 +43,6 @@ local FAILURE = guards.FAILURE
 local usage = guards.usage
 local failure = guards.failure
 
----The closed list of what only the owner decides, by the key `ask --list` takes
-local ASK_LISTS = { "secrets", "destroy", "spend", "restart", "taste" }
-
 local function clock_note(opening, reason, detail)
     local text = opening .. " " .. detail
     if reason == role_clock.Reason.DROPPED then
@@ -2845,15 +2842,6 @@ function commands.ask(backend, opts, args)
     question.why = opts.why
     local listed_key, searched
     if opts.list then
-        if index_of(ASK_LISTS, opts.list) == nil then
-            return usage(
-                "The --list flag takes one of "
-                    .. table.concat(ASK_LISTS, ", ")
-                    .. ", not "
-                    .. opts.list
-                    .. "."
-            )
-        end
         listed_key = opts.list
     end
     if opts.searched then

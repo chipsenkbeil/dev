@@ -9,7 +9,12 @@ return dev_command({
         { name = "choice", kind = "string", help = "A choice as COLUMN=LABEL", repeatable = true },
         { name = "recommend", kind = "string", help = "The number of the recommended choice" },
         { name = "why", kind = "string", help = "Why this choice" },
-        { name = "list", kind = "string", help = "The owner list item" },
+        {
+            name = "list",
+            kind = "string",
+            choices = { "secrets", "destroy", "spend", "restart", "taste" },
+            help = "The closed list of what only the owner decides",
+        },
         { name = "searched", kind = "string", help = "The precedent search that was run" },
     },
     args = {

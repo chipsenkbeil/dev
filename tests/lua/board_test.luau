@@ -6781,32 +6781,47 @@ testing.test(
     end
 )
 
-testing.test(
-    "ask refuses a question with neither --list nor --searched, or an unknown key",
-    function()
-        -- Give the first card a judgement outcome
-        local cards = sample()
-        cards[1].outcomes = { { id = "o1", name = "a " .. board.JUDGEMENT, done = false } }
-        local backend = fake(cards)
+testing.test("ask refuses a question with neither --list nor --searched", function()
+    -- Give the first card a judgement outcome
+    local cards = sample()
+    cards[1].outcomes = { { id = "o1", name = "a " .. board.JUDGEMENT, done = false } }
+    local backend = fake(cards)
 
-        -- Ask with each bad taste flag
-        for _, extra in ipairs({
-            {},
-            { "--list", "mood" },
-            { "--list" },
-            { "--searched", "   " },
-        }) do
-            local args = { "11111111-a", "--question", "Which?", "--choice", "Ready=Ship it" }
-            for _, word in ipairs(extra) do
-                args[#args + 1] = word
-            end
-            testing.eq(cmd_board.run("ask", args, backend).code, 2, table.concat(extra, " "))
+    -- Ask with each bad taste flag
+    for _, extra in ipairs({
+        {},
+        { "--list" },
+        { "--searched", "   " },
+    }) do
+        local args = { "11111111-a", "--question", "Which?", "--choice", "Ready=Ship it" }
+        for _, word in ipairs(extra) do
+            args[#args + 1] = word
         end
-
-        -- Expect no write
-        testing.eq(#backend.calls, 0)
+        testing.eq(cmd_board.run("ask", args, backend).code, 2, table.concat(extra, " "))
     end
-)
+
+    -- Expect no write
+    testing.eq(#backend.calls, 0)
+end)
+
+testing.test("ask lists its five --list choices in help and refuses any other", function()
+    -- Prepare a temp project and a colorless environment
+    local root = support.tempdir()
+    local env = { env = { NO_COLOR = "1" } }
+
+    -- Read the help
+    local out = support.dev(root, { "board", "ask", "--help" }, env)
+    testing.ok(out:find("one of secrets, destroy, spend, restart, taste", 1, true) ~= nil, out)
+
+    -- Ask with a list the spec does not declare
+    local refused, code = support.dev(root, { "board", "ask", "x", "--list", "mood" }, env)
+    testing.eq(code, 2)
+    testing.ok(
+        refused:find("takes one of secrets, destroy, spend, restart, taste, not mood.", 1, true)
+            ~= nil,
+        refused
+    )
+end)
 
 testing.test(
     "ask sends the question when --list names a key or --searched names a search",
