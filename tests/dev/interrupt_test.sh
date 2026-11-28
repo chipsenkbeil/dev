@@ -37,7 +37,7 @@ count_alive() {
 seed_project() {
     local dir="$1"
     mkdir -p "$dir/.dev/lib/devrepo" "$dir/.dev/commands" "$dir/tests/a"
-    sed 's/which("tmux")/which("tmux-not-installed")/' "$REPO/.dev/commands/test.luau" >"$dir/.dev/commands/test.luau"
+    cp "$REPO/.dev/commands/test.luau" "$dir/.dev/commands/test.luau"
     cp "$REPO/.dev/lib/devrepo/checks.luau" "$REPO/.dev/lib/devrepo/supervise.luau" "$dir/.dev/lib/devrepo/"
     cp "$REPO/.luaurc" "$dir/"
 }

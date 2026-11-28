@@ -35,7 +35,7 @@ assert_line() {
 }
 
 mkdir -p "$TMP/.dev/lib/devrepo" "$TMP/.dev/commands" "$TMP/tests/a"
-sed 's/which("tmux")/which("tmux-not-installed")/' "$REPO/.dev/commands/test.luau" >"$TMP/.dev/commands/test.luau"
+cp "$REPO/.dev/commands/test.luau" "$TMP/.dev/commands/test.luau"
 cp "$REPO/.dev/lib/devrepo/checks.luau" "$REPO/.dev/lib/devrepo/supervise.luau" "$TMP/.dev/lib/devrepo/"
 cp "$REPO/.luaurc" "$TMP/"
 printf 'exit 0\n' >"$TMP/tests/a/pass_test.sh"
