@@ -467,14 +467,27 @@ end)
 testing.test("new needs one plain NAME", function()
     local root, _, env = setup("none")
     for _, case in ipairs({
-        { { "ws", "new" }, "dev ws new: The argument name is required.\n" },
-        { { "ws", "new", "a", "b" }, "dev ws new: Unexpected argument b.\n" },
-        { { "ws", "new", "a/b" }, "dev ws new: NAME is one folder name, got a/b\n" },
-        { { "ws", "new", "-x" }, "dev ws new: Unknown flag -x.\n" },
+        {
+            { "ws", "new" },
+            "dev ws new: The argument name is required.\nusage: dev ws new <name>\n",
+        },
+        {
+            { "ws", "new", "a", "b" },
+            "dev ws new: Unexpected argument b.\nusage: dev ws new <name>\n",
+        },
+        {
+            { "ws", "new", "a/b" },
+            "dev ws new: NAME is one folder name, got a/b\nusage: dev ws new <name>\n",
+        },
+        { { "ws", "new", "-x" }, "dev ws new: Unknown flag -x.\nusage: dev ws new <name>\n" },
+        {
+            { "ws", "rm" },
+            "dev ws rm: The argument name is required.\nusage: dev ws rm [--forgotten] <name>\n",
+        },
     }) do
         local out, code = support.dev(root, case[1], env)
         testing.eq(code, 2)
-        testing.eq(out:match("^[^\n]*\n"), case[2])
+        testing.eq(out, case[2])
     end
 end)
 
@@ -1282,7 +1295,7 @@ testing.test("rm refuses a NAME that is not one folder name", function()
     }) do
         local out, code = support.dev(root, case[1], env)
         testing.eq(code, 2)
-        testing.eq(out:match("^[^\n]*\n"), case[2])
+        testing.eq(out, case[2] .. "usage: dev ws rm [--forgotten] <name>\n")
     end
 
     -- Expect the folder kept
@@ -2896,7 +2909,7 @@ testing.test("adopt needs one PATH", function()
     }) do
         local out, code = support.dev(root, case[1], env)
         testing.eq(code, 2)
-        testing.eq(out:match("^[^\n]*\n"), case[2])
+        testing.eq(out, case[2] .. "usage: dev ws adopt <path>\n")
     end
 end)
 

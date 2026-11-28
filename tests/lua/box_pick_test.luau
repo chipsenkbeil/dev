@@ -131,15 +131,15 @@ testing.test("a missing name without a terminal is exit 2 with a hint", function
     for _, case in ipairs({
         {
             { "box", "show" },
-            "dev box show: No box given and no terminal to pick one. Pass a name, like dev box show ci-example.\n",
+            "dev box show: No box given and no terminal to pick one. Pass a name, like dev box show ci-example.\nusage: dev box show [--json] [box]\n",
         },
         {
             { "box", "delete" },
-            "dev box delete: No box given and no terminal to pick one. Pass a name, like dev box delete ci-example -y.\n",
+            "dev box delete: No box given and no terminal to pick one. Pass a name, like dev box delete ci-example -y.\nusage: dev box delete [--yes] [--no-archive] [box]\n",
         },
         {
             { "box", "resume" },
-            "dev box resume: No box given and no terminal to pick one. Pass a name, like dev box resume ci-example.\n",
+            "dev box resume: No box given and no terminal to pick one. Pass a name, like dev box resume ci-example.\nusage: dev box resume [--ttl NAME] [--keep] [box]\n",
         },
     }) do
         local root = sandbox()

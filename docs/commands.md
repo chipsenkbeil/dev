@@ -243,7 +243,8 @@ completion context and returns values or `{ value, description }` pairs. A
 A bad flag or argument prints one sentence, then the usage line drawn from the
 spec, on standard error and exits 2. The sentence starts with the command name
 and a colon, and the usage line reads `usage: dev tools check [--group NAME]`
-for that command. No curated help follows it.
+for that command. A usage error that a command raises from its own checks, in
+`run`, prints the usage line too. No curated help follows it.
 
 ## Header lines of .sh and .ps1
 

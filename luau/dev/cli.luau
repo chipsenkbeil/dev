@@ -359,8 +359,8 @@ end
 local function run_shell(row, spec, ctx)
     local checked = open_words_spec(spec)
     local opts, args, passthrough = spec_check.parse(checked, ctx.argv)
+    ctx.usage = ctx.usage or command.usage_line(ctx.name, spec)
     if not opts then
-        ctx.usage = ctx.usage or command.usage_line(ctx.name, spec)
         command.usage_error(ctx, tostring(args))
     end
     prepare(ctx)

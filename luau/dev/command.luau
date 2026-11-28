@@ -317,8 +317,8 @@ function M.run(path, ctx, loaded)
     end
     ctx.vars = ctx.vars or {}
     local opts, args, passthrough = spec_check.parse(spec, words)
+    ctx.usage = ctx.usage or M.usage_line(ctx.name, spec)
     if not opts then
-        ctx.usage = ctx.usage or M.usage_line(ctx.name, spec)
         M.usage_error(ctx, tostring(args))
     end
     ctx.passthrough = passthrough or {}
