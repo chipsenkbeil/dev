@@ -139,6 +139,21 @@ return {
                         .. " -l tests/native/runtime_test.luau",
                     { name = "Run the native suite on the release binary" }
                 )
+                ci.sh([[sudo unshare -m sh -c '
+set -e
+for dir in /etc/ssl /etc/ca-certificates /etc/pki; do
+    if [ -d "$dir" ]; then mount -t tmpfs tmpfs "$dir"; fi
+done
+unset SSL_CERT_FILE SSL_CERT_DIR CURL_CA_BUNDLE
+rc=0
+curl -sS -o /dev/null --max-time 30 https://github.com || rc=$?
+echo "control: curl exited $rc under the mask"
+if [ "$rc" -ne 60 ] && [ "$rc" -ne 77 ]; then
+    echo "The CA bundle is still visible to curl, or the network failed."
+    exit 1
+fi
+"$0" -l tests/native/fixtures/https_get.luau
+' ]] .. binary, { name = "Fetch an HTTPS host with no CA bundle visible" })
                 ci.artifact(binary)
             end,
         },
