@@ -763,6 +763,35 @@ testing.test("land.git.run pushes HEAD to trunk and refuses a rejected push", fu
     end)
 end)
 
+testing.test("land.git.run from a worktree on main leaves it on main", function()
+    landing_env(function()
+        -- Move the main checkout off main, so a worktree can hold it
+        local root = with_origin({ ["f.txt"] = BODY })
+        git(root, "checkout", "-q", "-b", "side")
+
+        -- Check out main in a worktree and commit one change on it
+        local worktree = assert(fs.realpath(support.tempdir())) .. "/wt"
+        git(root, "worktree", "add", "-q", worktree, "main")
+        write(worktree, "w.txt", "w\n")
+        git(worktree, "add", "-A")
+        git(worktree, "commit", "-q", "-m", "feat: work")
+        local commit = head(worktree)
+
+        -- Land from the worktree and expect trunk to hold the commit
+        local landed, out, lines = land.run(worktree)
+        testing.eq(landed, true, out)
+        testing.eq(remote_main(root), commit)
+
+        -- Expect no branch to be dropped, so the worktree stays on main
+        testing.eq(#lines, 0)
+
+        -- Expect the worktree to stay on main at the landed commit
+        local ref = dev_os.capture({ "git", "-C", worktree, "symbolic-ref", "--short", "HEAD" })
+        testing.eq((ref:gsub("\n$", "")), "main")
+        testing.eq(head(worktree), commit)
+    end)
+end)
+
 testing.test("land.git.run names a bad forge kind in a sentence", function()
     landing_env(function()
         -- Start from a work branch behind trunk and remember the forge setting
