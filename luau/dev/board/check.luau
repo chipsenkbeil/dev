@@ -47,6 +47,7 @@ local SHELL_CHARS = "[|&;<>()$`\\\"'*?!\n]"
 local NEGATED = "^%s*!%s+(.*)$"
 local RG_COMMAND = "rg"
 local RG_USAGE_EXIT = 2
+local GLOB_HINT = " To filter files, pass `rg -t TYPE` or `rg -g GLOB`."
 ---The rg flags that take a value word
 local RG_VALUE_FLAGS = {
     ["--color"] = true,
@@ -240,10 +241,12 @@ function M.refusal(row: string)
     row = row:match(NEGATED) or row
     local bad = row:match(SHELL_CHARS)
     if bad then
+        local hint = if bad == "*" or bad == "?" then GLOB_HINT else ""
         return string.format(
-            "The row %q holds %q, which only a shell reads. A row runs as a plain command.",
+            "The row %q holds %q, which only a shell reads. A row runs as a plain command.%s",
             row,
-            bad == "\n" and "a line break" or bad
+            bad == "\n" and "a line break" or bad,
+            hint
         )
     end
     local first = row:match("%S+")
@@ -350,11 +353,13 @@ function M.unrunnable(row: string, root)
     for _, path in ipairs(rg_paths(words)) do
         local full = path:sub(1, 1) == "/" and path or fs.join(root, path)
         if not fs.exists(full) then
+            local hint = if path:find("[{%[]") then GLOB_HINT else ""
             return string.format(
                 "The row %q gives rg the word %q, which is not a path in the workspace. "
-                    .. "A row has no quoting, so write a pattern without a space.",
+                    .. "A row has no quoting, so write a pattern without a space.%s",
                 row,
-                path
+                path,
+                hint
             )
         end
     end

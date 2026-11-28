@@ -2990,6 +2990,9 @@ How a row runs:
   on PATH, and an rg row whose words after its pattern are not paths that exist
   in the workspace. A pattern with a space leaves a word that rg reads as a
   path. A row has no quoting, so write the pattern without a space.
+- A row has no shell to expand a glob, so filter files with rg's own flags:
+  `rg -t TYPE` for a file type and `rg -g GLOB` for a glob. The refusal for
+  `*` or `?`, and the one for a path holding `{` or `[`, name both.
 - `dev board check` reports a row whose rg exits 2 as a row error with rg's
   stderr, apart from a plain fail. The row never searched, so its result
   proves nothing.

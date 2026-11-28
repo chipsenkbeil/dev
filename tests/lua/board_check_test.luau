@@ -310,6 +310,16 @@ testing.test("an rg row with a word that is no path is unrunnable", function()
     testing.ok(check.unrunnable("rg word missing.txt", root))
 end)
 
+testing.test("a row holding a glob character is refused with a reason naming rg -g", function()
+    local root = support.tempdir()
+    local star = check.refusal("rg -n word src/*.lua")
+    testing.ok(star:find("rg -g", 1, true), star)
+    local brace = check.unrunnable("rg -n word src/{a,b}.lua", root)
+    testing.ok(brace:find("rg -g", 1, true), brace)
+    local plain = check.unrunnable("rg -n word missing.txt", root)
+    testing.ok(not plain:find("rg -g", 1, true), plain)
+end)
+
 testing.test("a row whose rg exits 2 is an error with rg's stderr", function()
     -- Make an empty directory
     local root = support.tempdir()
