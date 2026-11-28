@@ -343,6 +343,10 @@ through `ci`. A project replaces that with `.dev/helpers/remote.luau`, a chunk
 that returns `function(run)`. A command that must stay on this machine sets
 `remote = false` in its spec.
 
+`dev test --remote` became `dev --remote test`: `--remote` and `--local` go
+before the command word. Every word after the command word belongs to the
+command, so `dev test --remote` hands `--remote` to `test`.
+
 `dev help remote` has the fields of `run`, the refusals and the `dev.remote`
 helper a runner can reuse.
 

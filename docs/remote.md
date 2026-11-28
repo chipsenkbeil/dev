@@ -5,7 +5,7 @@
 A command that has a ci job runs remote by default. A forgotten flag never
 spikes the laptop.
 
-`dev test` and `dev --remote test` are the same, and `dev test --local` runs
+`dev test` and `dev --remote test` are the same, and `dev --local test` runs
 here. A set `DEV_AGENT` refuses a local run of a command that has a ci job
 (see "Agents").
 
@@ -15,7 +15,7 @@ works for every command.
 `DEV_REMOTE=1` in the environment is the same as the flag. Empty means unset,
 and `0`, `no` and `false` mean `--local`.
 
-`--remote` and `--local` work anywhere before a `--`. Together they are a usage
+`--remote` and `--local` go before the command word. Together they are a usage
 error (exit 2).
 
 `--local` sets `DEV_LOCAL=1` in the environment before any command runs, to
